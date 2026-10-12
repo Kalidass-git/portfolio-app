@@ -1,0 +1,183 @@
+import { S, mutate, nextId } from '../store.js';
+import * as C from '../calc.js';
+import { h, money, dateStr, monthLabel, section, table, btn, formDialog, dialog, canEdit, toast, num } from '../ui.js';
+import { hbars } from '../charts.js';
+
+let tab = 'accounts', fAcct = 'all', fMonth = 'all', fText = '', limit = 60;
+
+export function render() {
+  const root = h('div', { class: 'page' });
+  root.append(h('nav', { class: 'chips', 'aria-label': 'Cash sections' },
+    [['accounts', 'Bank accounts'], ['ledger', 'Transactions'], ['savings', 'Savings & chits']].map(([k, l]) =>
+      h('button', { class: tab === k ? 'chip on' : 'chip', onclick: () => { tab = k; rerender(); } }, l))));
+  root.append(tab === 'accounts' ? accounts() : tab === 'ledger' ? ledger() : savings());
+  return root;
+}
+const rerender = () => window.dispatchEvent(new Event('rerender'));
+
+// ----- accounts -----
+function accounts() {
+  const { all } = S;
+  const wrap = h('div');
+  wrap.append(section('Bank accounts & cash',
+    table([
+      { label: 'Account', get: (b) => `${b.name} · ${b.holder}` },
+      { label: 'Balance', cls: 'r', get: (b) => money(b.balance), total: () => money(all.cashTotal) },
+      { label: 'Last entry', get: (b) => dateStr(b.lastDate) },
+    ], all.banks, { footer: { label: 'Total cash' }, onRow: (b) => { fAcct = b.id; tab = 'ledger'; rerender(); } }),
+    canEdit() ? [btn('Add transaction', () => txnForm(), 'primary')] : null));
+  return wrap;
+}
+
+// ----- ledger -----
+export function txnForm(entry) {
+  const { data } = S;
+  const accts = data.accounts.map((a) => ({ value: a.id, label: `${a.name} · ${a.holder}` }));
+  const cats = [...new Set(data.categories.map((c) => c.category))].sort();
+  const known = new Map(data.categories.map((c) => [c.desc.toLowerCase(), c.category]));
+  const isNew = !entry;
+  const base = entry ? { ...entry, kind: entry.credit > 0 ? 'credit' : 'debit', amount: entry.credit > 0 ? entry.credit : entry.debit } : { acct: fAcct !== 'all' ? fAcct : accts[0].value, date: C.todayISO(), kind: 'debit' };
+  const descListId = 'desc-list';
+  let dl = document.getElementById(descListId);
+  if (!dl) { dl = h('datalist', { id: descListId }); document.body.append(dl); }
+  dl.replaceChildren(...[...new Set(data.categories.map((c) => c.desc))].map((d) => h('option', { value: d })));
+  formDialog({
+    title: isNew ? 'Add transaction' : 'Edit transaction', value: base, saveLabel: isNew ? 'Add' : 'Save',
+    fields: [
+      { key: 'acct', label: 'Account', type: 'select', options: accts, required: true },
+      { key: 'date', label: 'Date', type: 'date', required: true },
+      { key: 'kind', label: 'Money', type: 'select', options: [{ value: 'debit', label: 'Spent / paid out' }, { value: 'credit', label: 'Received' }] },
+      { key: 'amount', label: 'Amount (₹)', type: 'number', required: true },
+      { key: 'desc', label: 'Description', type: 'text', required: true, list: descListId, hint: 'Pick a known description to fill the category automatically.',
+        onInput: (el, inputs) => { const c = known.get(el.value.trim().toLowerCase()); if (c) inputs.category.value = c; } },
+      { key: 'category', label: 'Category', type: 'select', options: cats, required: true },
+    ],
+    onSave: (v) => {
+      mutate((d) => {
+        const rec = { acct: v.acct, date: v.date, desc: v.desc, debit: v.kind === 'debit' ? v.amount : 0, credit: v.kind === 'credit' ? v.amount : 0, category: v.category };
+        if (isNew) d.ledger.push({ id: Math.max(0, ...d.ledger.map((e) => e.id || 0)) + 1, ...rec });
+        else Object.assign(d.ledger.find((e) => e.id === entry.id), rec);
+        // remember new descriptions so the next entry fills in automatically
+        if (!d.categories.some((c) => c.desc.toLowerCase() === v.desc.toLowerCase())) d.categories.push({ desc: v.desc, category: v.category, type: v.kind === 'credit' ? 'Income' : 'Expense' });
+      });
+      toast(isNew ? 'Transaction added' : 'Transaction updated');
+    },
+    onDelete: isNew ? null : () => mutate((d) => { d.ledger = d.ledger.filter((e) => e.id !== entry.id); }),
+  });
+}
+
+function ledger() {
+  const { data } = S;
+  const wrap = h('div');
+  const months = [...new Set(data.ledger.map((e) => C.monthKey(e.date)))].sort().reverse();
+  const bar = h('div', { class: 'filters' },
+    h('select', { 'aria-label': 'Account', onchange: (e) => { fAcct = e.target.value; limit = 60; rerender(); } },
+      h('option', { value: 'all' }, 'All accounts'), data.accounts.map((a) => h('option', { value: a.id, selected: a.id === fAcct }, `${a.name} · ${a.holder}`))),
+    h('select', { 'aria-label': 'Month', onchange: (e) => { fMonth = e.target.value; limit = 60; rerender(); } },
+      h('option', { value: 'all' }, 'All months'), months.map((m) => h('option', { value: m, selected: m === fMonth }, monthLabel(m)))),
+    h('input', { type: 'search', placeholder: 'Search description or category', value: fText, 'aria-label': 'Search', oninput: (e) => { fText = e.target.value; clearTimeout(window.__ft); window.__ft = setTimeout(() => { limit = 60; rerender(); const i = document.querySelector('input[type=search]'); i && (i.focus(), i.setSelectionRange(fText.length, fText.length)); }, 250); } }));
+  // running balance per account
+  const bal = new Map();
+  const sorted = data.ledger.slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.id || 0) - (b.id || 0)));
+  const withBal = sorted.map((e) => { const b = (bal.get(e.acct) || 0) + (e.credit || 0) - (e.debit || 0); bal.set(e.acct, b); return { ...e, balance: b }; });
+  const q = fText.toLowerCase();
+  let rows = withBal.filter((e) => (fAcct === 'all' || e.acct === fAcct) && (fMonth === 'all' || C.monthKey(e.date) === fMonth) && (!q || (e.desc + ' ' + e.category).toLowerCase().includes(q)));
+  rows.reverse();
+  const total = rows.length, credit = rows.reduce((a, e) => a + (e.credit || 0), 0), debit = rows.reduce((a, e) => a + (e.debit || 0), 0);
+  const acctName = new Map(data.accounts.map((a) => [a.id, `${a.name} · ${a.holder}`]));
+  wrap.append(section('Transactions',
+    h('div', null, bar,
+      h('p', { class: 'summary-line' }, `${num(total)} entries · received `, h('b', { class: 'pos' }, money(credit)), ' · paid out ', h('b', null, money(debit))),
+      table([
+        { label: 'Date', get: (e) => dateStr(e.date) },
+        { label: 'Description', get: (e) => e.desc },
+        { label: 'Category', get: (e) => e.category },
+        { label: 'Account', get: (e) => acctName.get(e.acct) },
+        { label: 'Out', cls: 'r', get: (e) => (e.debit ? money(e.debit) : '') },
+        { label: 'In', cls: 'r', render: (e) => (e.credit ? h('span', { class: 'pos' }, money(e.credit)) : '') },
+        { label: 'Balance', cls: 'r', get: (e) => money(e.balance) },
+      ], rows.slice(0, limit), { onRow: canEdit() ? (e) => txnForm(data.ledger.find((x) => x.id === e.id)) : null, empty: 'No transactions match these filters.' }),
+      total > limit ? btn(`Show more (${total - limit} left)`, () => { limit += 100; rerender(); }, 'wide') : null),
+    canEdit() ? [btn('Add transaction', () => txnForm(), 'primary')] : null));
+  return wrap;
+}
+
+// ----- savings & chits -----
+const SAVING_TYPES = ['Chit', 'EPF', 'PPF', 'LIC', 'RD'];
+function savingForm(sv) {
+  const isNew = !sv;
+  formDialog({
+    title: isNew ? 'Add savings account' : 'Edit ' + sv.name, value: sv || { type: 'Chit', compound: 'Monthly', tenureType: 'Months', holder: 'Kalidass' },
+    fields: [
+      { key: 'name', label: 'Name', required: true }, { key: 'type', label: 'Type', type: 'select', options: SAVING_TYPES },
+      { key: 'holder', label: 'Account holder', required: true }, { key: 'rate', label: 'Interest rate (e.g. 0.0825 = 8.25%)', type: 'number', required: true },
+      { key: 'depositDate', label: 'Start date', type: 'date' }, { key: 'maturityDate', label: 'Maturity date', type: 'date' },
+      { key: 'tenure', label: 'Tenure', type: 'number', half: true }, { key: 'tenureType', label: 'Tenure unit', type: 'select', options: ['Months', 'Years', 'Days'], half: true },
+      { key: 'desc', label: 'Notes / who to contact', type: 'textarea' },
+    ],
+    onSave: (v) => mutate((d) => { if (isNew) d.savings.push({ id: nextId('sv', d.savings), entries: [], compound: 'Monthly', ...v }); else Object.assign(d.savings.find((x) => x.id === sv.id), v); }),
+    onDelete: isNew ? null : () => mutate((d) => { d.savings = d.savings.filter((x) => x.id !== sv.id); }),
+  });
+}
+function entryForm(sv, idx) {
+  const isEpf = sv.type === 'EPF';
+  const isNew = idx == null;
+  const e = isNew ? { date: C.todayISO(), kind: 'DEPOSIT' } : sv.entries[idx];
+  formDialog({
+    title: (isNew ? 'Add to ' : 'Edit entry in ') + sv.name, value: e,
+    fields: isEpf ? [
+      { key: 'date', label: 'Date', type: 'date', required: true }, { key: 'kind', label: 'Kind', type: 'select', options: ['DEPOSIT', 'INTEREST', 'WITHDRAWAL'] },
+      { key: 'employee', label: 'Employee share', type: 'number' }, { key: 'employer', label: 'Employer share', type: 'number' }, { key: 'pension', label: 'Pension fund (not counted)', type: 'number' },
+    ] : [
+      { key: 'date', label: 'Date', type: 'date', required: true }, { key: 'amount', label: 'Amount (₹)', type: 'number', required: true }, { key: 'remarks', label: 'Remarks', type: 'text' },
+    ],
+    onSave: (v) => mutate((d) => {
+      const s = d.savings.find((x) => x.id === sv.id);
+      const rec = isEpf ? { ...v, employee: v.employee || 0, employer: v.employer || 0, pension: v.pension || 0 } : { ...v, remarks: v.remarks || undefined };
+      if (isNew) s.entries.push(rec); else s.entries[idx] = rec;
+      s.entries.sort((a, b) => (a.date < b.date ? -1 : 1));
+    }),
+    onDelete: isNew ? null : () => mutate((d) => { d.savings.find((x) => x.id === sv.id).entries.splice(idx, 1); }),
+  });
+}
+function savings() {
+  const { all } = S;
+  const wrap = h('div');
+  const groups = [['Chits', 'Chit'], ['Provident fund & post office', ['EPF', 'PPF']], ['Insurance & recurring deposits', ['LIC', 'RD']]];
+  for (const [title, types] of groups) {
+    const list = all.savings.filter((s) => [].concat(types).includes(s.type));
+    wrap.append(section(title,
+      table([
+        { label: 'Name', get: (s) => s.name },
+        { label: 'Holder', get: (s) => s.holder },
+        { label: 'Invested', cls: 'r', get: (s) => money(s.principal), total: (rs) => money(rs.reduce((a, s) => a + s.principal, 0)) },
+        { label: 'Rate', cls: 'r', get: (s) => (s.rate * 100).toFixed(2) + '%' },
+        { label: 'Interest / day', cls: 'r', get: (s) => money(s.daily), total: (rs) => money(rs.reduce((a, s) => a + s.daily, 0)) },
+        { label: 'Matures', get: (s) => dateStr(s.maturityDate) },
+      ], list, { footer: { label: 'Total' }, onRow: openSaving, empty: 'No accounts of this kind.' }),
+      canEdit() && title === 'Chits' ? [btn('Add savings account', () => savingForm(), 'primary')] : null));
+  }
+  return wrap;
+}
+function openSaving(row) {
+  const sv = S.data.savings.find((s) => s.id === row.id);
+  const isEpf = sv.type === 'EPF';
+  const list = h('div');
+  const draw = () => {
+    const cur = S.data.savings.find((s) => s.id === sv.id);
+    list.replaceChildren(table(
+      isEpf ? [
+        { label: 'Date', get: (e) => dateStr(e.date) }, { label: 'Kind', get: (e) => e.kind },
+        { label: 'Employee', cls: 'r', get: (e) => money(e.employee) }, { label: 'Employer', cls: 'r', get: (e) => money(e.employer) },
+      ] : [
+        { label: 'Date', get: (e) => dateStr(e.date) }, { label: 'Amount', cls: 'r', get: (e) => money(e.amount) }, { label: 'Remarks', get: (e) => e.remarks || '' },
+      ],
+      cur.entries.map((e, i) => ({ ...e, _i: i })).reverse(), { onRow: canEdit() ? (e) => entryForm(cur, e._i) : null, empty: 'No entries yet.' }));
+  };
+  draw();
+  const acts = canEdit() ? [
+    { label: 'Edit account', onclick: (c) => { c(); savingForm(S.data.savings.find((s) => s.id === sv.id)); } },
+    { label: 'Add entry', class: 'primary', onclick: (c) => { c(); entryForm(S.data.savings.find((s) => s.id === sv.id)); } },
+  ] : [];
+  dialog(sv.name, h('div', null, h('p', { class: 'note' }, `${sv.type} · ${sv.holder} · balance ${money(row.principal)}`), sv.desc ? h('p', null, sv.desc) : null, list), acts);
+}

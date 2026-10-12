@@ -1,0 +1,21 @@
+# Private data: never upload
+portfolio-data.json
+*portfolio-data*.json
+*backup*.json
+*.xlsx
+*.xls
+*.csv
+
+# Not needed for the website
+tools/
+tests/
+docs/
+backend/
+node_modules/
+*.zip
+
+# Misc
+.DS_Store
+Thumbs.db
+.env
+*.key
