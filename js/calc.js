@@ -1,6 +1,7 @@
 // Pure financial calculations. No DOM, no network: runs in the browser and in Node tests.
 // Every formula here mirrors the workbook (Portfolio_2026_Lite.xlsx); sheet/cell references are noted in comments.
 
+import { kindOf } from './categories.js';
 export const DAY = 86400000;
 export const toMs = (s) => (s ? Date.parse(s + 'T00:00:00Z') : NaN);
 export const iso = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -93,23 +94,33 @@ export function priceOf(stock, quotes, useLive) {
 export function calcStocks(data, quotes, useLive) {
   const items = data.stocks.map((s) => {
     const price = priceOf(s, quotes, useLive);
+    const q = quotes && quotes[s.symbol];
+    const prev = useLive && q && q.price > 0 && q.prevClose > 0 ? q.prevClose : s.prevClose || 0;
     const invested = s.qty * s.avgPrice, current = s.qty * price;
-    return { ...s, livePrice: price, invested, current, pl: current - invested, ret: invested ? (current - invested) / invested : 0 };
+    // yesterday's close is only trusted when it came with the same refresh as the price
+    const day = prev > 0 ? s.qty * (price - prev) : null;
+    return { ...s, livePrice: price, prevClose: prev || null, invested, current, pl: current - invested, ret: invested ? (current - invested) / invested : 0, day, dayPct: prev > 0 ? price / prev - 1 : null };
   });
   const invested = sum(items, (x) => x.invested), current = sum(items, (x) => x.current);
+  const dayItems = items.filter((x) => x.day != null);
+  const day = sum(dayItems, (x) => x.day), dayBase = sum(dayItems, (x) => x.current - x.day);
   const etf = sum(items.filter((x) => x.assetClass !== 'equity'), (x) => x.current);
   const goldEtf = sum(items.filter((x) => x.assetClass === 'goldetf'), (x) => x.current);
-  return { items, invested, current, pl: current - invested, ret: invested ? (current - invested) / invested : 0, etf, goldEtf, equityOnly: current - etf };
+  return { items, invested, current, pl: current - invested, ret: invested ? (current - invested) / invested : 0, etf, goldEtf, equityOnly: current - etf, day, dayPct: dayBase ? day / dayBase : 0, dayCount: dayItems.length };
 }
 export function calcMFs(data, quotes, useLive) {
   const items = data.mutualFunds.map((m) => {
     const q = quotes && m.schemeCode && quotes['MF:' + m.schemeCode];
     const nav = useLive && q && q.price > 0 ? q.price : m.nav;
+    const prev = useLive && q && q.price > 0 && q.prev > 0 ? q.prev : m.prevNav || 0;
     const current = m.units * nav;
-    return { ...m, liveNav: nav, current, pl: current - m.invested, ret: m.invested ? (current - m.invested) / m.invested : 0 };
+    const day = prev > 0 ? m.units * (nav - prev) : null;
+    return { ...m, liveNav: nav, prevNav: prev || null, current, pl: current - m.invested, ret: m.invested ? (current - m.invested) / m.invested : 0, day, dayPct: prev > 0 ? nav / prev - 1 : null };
   });
   const invested = sum(items, (x) => x.invested), current = sum(items, (x) => x.current);
-  return { items, invested, current, pl: current - invested, ret: invested ? (current - invested) / invested : 0 };
+  const dayItems = items.filter((x) => x.day != null);
+  const day = sum(dayItems, (x) => x.day), dayBase = sum(dayItems, (x) => x.current - x.day);
+  return { items, invested, current, pl: current - invested, ret: invested ? (current - invested) / invested : 0, day, dayPct: dayBase ? day / dayBase : 0, dayCount: dayItems.length };
 }
 
 // ---------- gold ----------
@@ -242,15 +253,14 @@ export function computeAll(data, opts = {}) {
 }
 
 // ---------- ledger analytics (Home monthly cash flow + Expenses sheet) ----------
-const NON_FLOW = new Set(['transfer', 'withdrawal']);
-export const isFlow = (e) => !NON_FLOW.has((e.category || '').toLowerCase());
-export const isInvestment = (cat) => /^investment/i.test(cat || '');
-
+// Which category is spending, income, an investment or just a transfer comes from data.categoryList (see categories.js).
 export function monthLedger(data, month) {
-  return data.ledger.filter((e) => monthKey(e.date) === month && isFlow(e));
+  const kind = kindOf(data);
+  return data.ledger.filter((e) => monthKey(e.date) === month && kind(e.category) !== 'transfer');
 }
 export function ledgerMonths(data) {
-  return [...new Set(data.ledger.filter(isFlow).map((e) => monthKey(e.date)))].sort();
+  const kind = kindOf(data);
+  return [...new Set(data.ledger.filter((e) => kind(e.category) !== 'transfer').map((e) => monthKey(e.date)))].sort();
 }
 const byCat = (rows, field) => {
   const m = new Map();
@@ -267,8 +277,9 @@ export function monthSummary(data, month) {
   const rows = monthLedger(data, month);
   const income = byCat(rows, 'credit');
   const debits = byCat(rows, 'debit');
-  const invest = debits.filter((x) => isInvestment(x.category));
-  const expense = debits.filter((x) => !isInvestment(x.category));
+  const kind = kindOf(data);
+  const invest = debits.filter((x) => kind(x.category) === 'investment');
+  const expense = debits.filter((x) => kind(x.category) !== 'investment');
   const totalIncome = sum(income, (x) => x.amount), totalExpense = sum(expense, (x) => x.amount), totalInvest = sum(invest, (x) => x.amount);
   return {
     month, income, expense, invest, totalIncome, totalExpense, totalInvest,
@@ -361,7 +372,8 @@ export function actualMonthFlow(data, month) {
   const interest = cr((e) => cat(e) !== 'salary');
   const emi = db((e) => cat(e) === 'loan');
   const tax = db((e) => cat(e) === 'tax');
-  const living = db((e) => !isInvestment(e.category) && cat(e) !== 'loan' && cat(e) !== 'tax');
+  const kind = kindOf(data);
+  const living = db((e) => kind(e.category) !== 'investment' && cat(e) !== 'loan' && cat(e) !== 'tax');
   return { month, salary, interest, living: -living, emi: -emi, tax: -tax, net: salary + interest - living - emi - tax, has: rows.length > 0 };
 }
 
@@ -514,4 +526,41 @@ export function familyReport(data, all) {
     return { type, items, total: sum(items, (x) => x.value), monthly: sum(items, (x) => x.monthly) };
   });
   return { sections, total: sum(sections, (x) => x.total), monthly: sum(sections, (x) => x.monthly) };
+}
+
+// ---------- extras: coming up, net worth over time, cash runway ----------
+/** Things that fall due soon: maturities, overdue or due money to receive. */
+export function upcoming(data, all, days = 60) {
+  const from = all.asOf, to = iso(toMs(from) + days * DAY);
+  const out = [];
+  const add = (date, title, amount, kind) => out.push({ date, title, amount, kind, days: Math.round((toMs(date) - toMs(from)) / DAY) });
+  for (const b of all.bonds) if (b.maturityDate >= from && b.maturityDate <= to) add(b.maturityDate, b.name + ' matures', b.principal, 'Bond');
+  for (const f of all.fds) if (f.maturityDate >= from && f.maturityDate <= to) add(f.maturityDate, f.name + ' matures', f.value || f.principal, 'Fixed deposit');
+  for (const l of all.lending) if (l.principal > 0 && l.maturityDate >= from && l.maturityDate <= to) add(l.maturityDate, l.name + ' due back', l.principal + (l.accrued || 0), 'Lending');
+  for (const s of all.savings) if (s.maturityDate && s.maturityDate >= from && s.maturityDate <= to) add(s.maturityDate, s.name + ' matures', s.principal, s.type);
+  for (const r of data.receivables.filter((x) => x.active !== false && x.balanceDue > 0).map((x) => receivableStatus(x, from))) {
+    if (r.received || r.notStarted) continue;
+    if (r.due <= to) add(r.due, r.name + (r.overdue ? ' (overdue)' : ' to pay you'), r.expected, 'Money to receive');
+  }
+  return out.sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
+/** Net worth over time: month-end positions from the Targets sheet plus daily snapshots the app keeps. */
+export function netWorthSeries(data, all) {
+  const pts = new Map();
+  for (const m of data.targets?.months || []) if (m.actualAsset > 0 && m.date <= all.asOf) pts.set(m.date, { date: m.date, value: m.actualAsset - (m.actualLiability || 0), src: 'month end' });
+  const hist = (data.history || []).filter((h) => h.date <= all.asOf);
+  for (const h of hist) pts.set(h.date, { date: h.date, value: h.net, src: 'daily' });
+  pts.set(all.asOf, { date: all.asOf, value: all.netAsset, src: 'today' });
+  return [...pts.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
+/** How many months the cash in the bank would cover, from the last three full months of spending. */
+export function runway(data, all) {
+  const cur = monthKey(all.asOf);
+  const months = ledgerMonths(data).filter((m) => m < cur).slice(-3);
+  if (!months.length) return { avg: 0, months: null, cash: all.cashTotal, basis: 0, coverage: null };
+  const avg = sum(months, (m) => monthSummary(data, m).totalExpense) / months.length;
+  // coverage: how much of the monthly spending the interest income pays for
+  return { avg, months: avg ? all.cashTotal / avg : null, cash: all.cashTotal, basis: months.length, coverage: avg ? all.cfTotal.perMonth / avg : null };
 }

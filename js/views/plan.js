@@ -1,9 +1,9 @@
 import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
-import { h, money, compact, pct, dateStr, monthLabel, gainText, section, stat, table, btn, formDialog, canEdit, toast, num } from '../ui.js';
+import { h, money, compact, pct, dateStr, monthLabel, gainText, section, stat, table, btn, formDialog, canEdit, toast, num, segTabs, subTab } from '../ui.js';
 import { lineChart, meter } from '../charts.js';
 
-let tab = 'targets';
+const TABS = [['targets', 'Targets'], ['budget', 'Plan vs actual'], ['future', 'Long-term']];
 const rerender = () => window.dispatchEvent(new Event('rerender'));
 
 function targetForm(i) {
@@ -57,7 +57,8 @@ export function render() {
   const { data, all } = S;
   const proj = C.projection(data, all);
   const root = h('div', { class: 'page' });
-  root.append(h('nav', { class: 'chips' }, [['targets', 'Year targets'], ['budget', 'Monthly plan vs actual'], ['future', 'Long-term']].map(([k, l]) => h('button', { class: tab === k ? 'chip on' : 'chip', onclick: () => { tab = k; rerender(); } }, l))));
+  const tab = subTab(TABS.map((t) => t[0]));
+  root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Plan views')));
 
   if (tab === 'targets') {
     const tg = C.targets(data, proj);

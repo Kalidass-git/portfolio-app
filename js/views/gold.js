@@ -1,15 +1,54 @@
 import { S, mutate, nextId } from '../store.js';
 import * as C from '../calc.js';
-import { h, money, dec, dateStr, gainText, section, table, btn, formDialog, canEdit, toast, stat, num } from '../ui.js';
+import { h, money, dec, dateStr, gainText, section, table, btn, formDialog, canEdit, toast, stat, num, segTabs, subTab, pct, posNeg } from '../ui.js';
 
 const rerender = () => window.dispatchEvent(new Event('rerender'));
 
-function rateForm() {
-  formDialog({
-    title: 'Gold rate', value: { rate: S.data.settings.goldRate },
-    fields: [{ key: 'rate', label: 'Price of 1 gram of gold (₹)', type: 'number', required: true, hint: 'Everything on this page and the dashboard is valued at this rate.' }],
-    onSave: (v) => { mutate((d) => { d.settings.goldRate = v.rate; d.settings.goldRateDate = C.todayISO(); }); toast('Gold rate updated'); },
+/** Rates you have set, oldest first. Older files only have the current rate. */
+export function rateHistory(data) {
+  const h0 = data.gold.rateHistory;
+  if (h0 && h0.length) return h0;
+  return data.settings.goldRate ? [{ date: data.settings.goldRateDate || C.todayISO(), rate: data.settings.goldRate }] : [];
+}
+export function setRate(rate, date = C.todayISO()) {
+  mutate((d) => {
+    const hist = rateHistory(d).map((x) => ({ ...x }));
+    const hit = hist.find((x) => x.date === date);
+    if (hit) hit.rate = rate; else hist.push({ date, rate });
+    hist.sort((a, b) => (a.date < b.date ? -1 : 1));
+    d.gold.rateHistory = hist.slice(-400);
+    const latest = hist[hist.length - 1];
+    d.settings.goldRate = latest.rate; d.settings.goldRateDate = latest.date;
   });
+}
+const daysOld = (date) => Math.max(0, Math.round((C.toMs(S.all.asOf) - C.toMs(date)) / C.DAY));
+export const ageText = (date) => { const n = daysOld(date); return n === 0 ? 'today' : n === 1 ? 'yesterday' : n + ' days ago'; };
+
+function rateCard() {
+  const { data, all } = S;
+  const hist = rateHistory(data);
+  const last = hist[hist.length - 1], prev = hist[hist.length - 2];
+  const old = daysOld(last.date);
+  const input = h('input', { type: 'number', step: 'any', inputmode: 'decimal', value: String(all.gold.rate), 'aria-label': 'Gold rate per gram', style: { width: '9em', fontSize: '1.1rem', fontWeight: 650 } });
+  const save = () => {
+    const v = Number(input.value);
+    if (!(v > 0)) return toast('Enter the price of 1 gram of gold.', 'bad');
+    setRate(v); toast('Gold rate updated. All gold values now use ₹' + dec(v, 0) + ' per gram.');
+  };
+  input.addEventListener('keydown', (e) => e.key === 'Enter' && save());
+  const change = prev ? last.rate - prev.rate : 0;
+  const worth = all.gold.value;
+  return section('Gold rate',
+    h('div', { class: 'kv', style: { width: '100%' } },
+      h('p', { style: { margin: 0 } }, h('span', { class: 'hero-num', style: { fontSize: 'clamp(1.8rem, 8vw, 2.6rem)' } }, money(last.rate)), ' per gram'),
+      h('p', { class: old > 7 ? 'warn' : 'muted', style: { margin: 0 } }, `Set ${ageText(last.date)} (${dateStr(last.date)})` + (old > 7 ? '. This rate is getting old, so your gold value may be off.' : '')
+        + (prev ? ` · ${change >= 0 ? 'up' : 'down'} ${money(Math.abs(change))} (${pct(Math.abs(change) / prev.rate, 1)}) since ${dateStr(prev.date)}` : '')),
+      canEdit() ? h('div', { class: 'row', style: { alignItems: 'center' } }, h('span', null, '₹'), input, btn('Update rate', save, 'primary')) : null,
+      canEdit() ? h('p', { class: 'note', style: { margin: 0 } }, 'Type today’s price of 1 gram and press Update. Everything (Home, reports, gold value) uses it straight away. Use the same type of gold (22K or 24K) each time. ', h('a', { href: 'https://www.goodreturns.in/gold-rates/', target: '_blank', rel: 'noopener noreferrer' }, 'See today’s rates'), '.') : h('p', { class: 'note', style: { margin: 0 } }, 'Only the owner can change the rate.'),
+      hist.length > 1 ? h('details', null, h('summary', null, `Rate history (${hist.length})`), table([
+        { label: 'Date', get: (r) => dateStr(r.date) }, { label: 'Per gram', cls: 'r', get: (r) => money(r.rate) },
+        { label: 'Change', cls: 'r', render: (r) => (r.chg == null ? '' : h('span', { class: posNeg(r.chg) }, (r.chg > 0 ? '+' : r.chg < 0 ? '−' : '') + money(Math.abs(r.chg)))) },
+      ], hist.map((r, i) => ({ ...r, chg: i ? r.rate - hist[i - 1].rate : null })).reverse().slice(0, 12))) : null));
 }
 function purchaseForm(p) {
   const isNew = !p;
@@ -58,10 +97,14 @@ export function render() {
   const { all, data } = S;
   const g = all.gold;
   const root = h('div', { class: 'page' });
+  const TABS = [['gold', 'Gold'], ['jewellery', 'Jewellery'], ['others', 'Other holdings']];
+  const tab = subTab(TABS.map((t) => t[0]));
+  root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Gold views')));
+  if (tab === 'gold') {
   root.append(h('div', { class: 'stats' },
     stat('Gold value', money(g.value), `${dec(g.grams, 2)} g · ${dec(g.grams / 8, 1)} sovereigns (8 g)`),
-    stat('Gain on gold', h('span', { class: g.value - g.invested >= 0 ? 'pos' : 'neg' }, money(g.value - g.invested)), `paid ${money(g.invested)}`),
-    h('div', { class: 'stat' }, h('span', { class: 'stat-label' }, 'Gold rate'), h('strong', { class: 'stat-value' }, money(g.rate) + ' / g'), h('span', { class: 'stat-sub' }, 'set on ' + dateStr(data.settings.goldRateDate), canEdit() ? btn('Update rate', rateForm, 'small') : null))));
+    stat('Gain on gold', h('span', { class: g.value - g.invested >= 0 ? 'pos' : 'neg' }, money(g.value - g.invested)), `paid ${money(g.invested)}`)));
+  root.append(rateCard());
 
   root.append(section('Gold purchases',
     table([
@@ -87,7 +130,8 @@ export function render() {
       canEdit() ? [btn('Add instalment', () => schemeEntryForm(sch), 'primary')] : null));
   }
 
-  root.append(section('Jewellery list',
+  }
+  if (tab === 'jewellery') root.append(section('Jewellery list',
     h('div', null, table([
       { label: 'Item', get: (j) => j.name }, { label: 'Grams', cls: 'r', get: (j) => dec(j.grams, 1), total: () => dec(g.jewellery.grams, 1) },
       { label: 'Value now', cls: 'r', get: (j) => money(j.grams * g.rate), total: () => money(g.jewellery.value) },
@@ -95,7 +139,7 @@ export function render() {
       h('p', { class: 'note' }, 'This list is for reference. As in your workbook, it is not added to net worth.')),
     canEdit() ? [btn('Add item', () => jewelForm(), 'primary')] : null));
 
-  root.append(section('Other holdings (deposits)',
+  if (tab === 'others') root.append(section('Other holdings (deposits)',
     table([{ label: 'Name', get: (o) => o.name }, { label: 'Amount', cls: 'r', get: (o) => money(o.amount), total: () => money(g.othersTotal) }],
       data.gold.others, { footer: { label: 'Total' }, onRow: canEdit() ? (o) => otherForm(data.gold.others.find((x) => x.id === o.id)) : null }),
     canEdit() ? [btn('Add', () => otherForm(), 'primary')] : null));

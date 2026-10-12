@@ -1,15 +1,18 @@
 import { S, mutate, nextId } from '../store.js';
 import * as C from '../calc.js';
-import { h, money, dateStr, monthLabel, section, table, btn, formDialog, dialog, canEdit, toast, num } from '../ui.js';
+import { h, money, dateStr, monthLabel, section, table, btn, formDialog, dialog, canEdit, toast, num, segTabs, subTab, setOptions } from '../ui.js';
+import * as CAT from '../categories.js';
 import { hbars } from '../charts.js';
 
-let tab = 'accounts', fAcct = 'all', fMonth = 'all', fText = '', limit = 60;
+let fAcct = 'all', fMonth = 'all', fText = '', limit = 60;
+const TABS = [['accounts', 'Accounts'], ['ledger', 'Transactions'], ['savings', 'Savings & chits']];
+/** Open the transactions list, optionally pre-filtered. Used by links from other screens. */
+export function openLedger({ text = '', month = 'all', acct = 'all' } = {}) { fText = text; fMonth = month; fAcct = acct; limit = 60; location.hash = '#/cash/ledger'; }
 
 export function render() {
   const root = h('div', { class: 'page' });
-  root.append(h('nav', { class: 'chips', 'aria-label': 'Cash sections' },
-    [['accounts', 'Bank accounts'], ['ledger', 'Transactions'], ['savings', 'Savings & chits']].map(([k, l]) =>
-      h('button', { class: tab === k ? 'chip on' : 'chip', onclick: () => { tab = k; rerender(); } }, l))));
+  const tab = subTab(TABS.map((t) => t[0]));
+  root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Cash views'), canEdit() && tab !== 'savings' ? btn('Add transaction', () => txnForm(), 'primary') : null));
   root.append(tab === 'accounts' ? accounts() : tab === 'ledger' ? ledger() : savings());
   return root;
 }
@@ -24,16 +27,33 @@ function accounts() {
       { label: 'Account', get: (b) => `${b.name} · ${b.holder}` },
       { label: 'Balance', cls: 'r', get: (b) => money(b.balance), total: () => money(all.cashTotal) },
       { label: 'Last entry', get: (b) => dateStr(b.lastDate) },
-    ], all.banks, { footer: { label: 'Total cash' }, onRow: (b) => { fAcct = b.id; tab = 'ledger'; rerender(); } }),
-    canEdit() ? [btn('Add transaction', () => txnForm(), 'primary')] : null));
+    ], all.banks, { footer: { label: 'Total cash' }, onRow: (b) => openLedger({ acct: b.id }) }),
+    null));
   return wrap;
 }
 
 // ----- ledger -----
+const NEW = '__new__';
+/** Category choices for the select: the likely ones for this direction first, then the rest, then "new". */
+function categoryOptions(data, direction) {
+  const list = CAT.categoryList(data);
+  const usage = CAT.usage(data);
+  const likely = (c) => {
+    const u = usage.get(c.name.toLowerCase());
+    if (direction === 'credit') return c.kind === 'income' || c.kind === 'transfer' || (u && u.credit > 0);
+    return c.kind === 'expense' || c.kind === 'investment' || c.kind === 'transfer' || (u && u.debit > 0 && c.kind !== 'income');
+  };
+  const names = (arr) => arr.map((c) => c.name).sort((a, b) => a.localeCompare(b));
+  const first = list.filter(likely), rest = list.filter((c) => !likely(c));
+  const opts = [{ group: direction === 'credit' ? 'Income and similar' : 'Spending and investments', options: names(first) }];
+  if (rest.length) opts.push({ group: 'Other categories', options: names(rest) });
+  opts.push({ group: 'Not in the list', options: [{ value: NEW, label: '+ New category…' }] });
+  return opts;
+}
+
 export function txnForm(entry) {
   const { data } = S;
   const accts = data.accounts.map((a) => ({ value: a.id, label: `${a.name} · ${a.holder}` }));
-  const cats = [...new Set(data.categories.map((c) => c.category))].sort();
   const known = new Map(data.categories.map((c) => [c.desc.toLowerCase(), c.category]));
   const isNew = !entry;
   const base = entry ? { ...entry, kind: entry.credit > 0 ? 'credit' : 'debit', amount: entry.credit > 0 ? entry.credit : entry.debit } : { acct: fAcct !== 'all' ? fAcct : accts[0].value, date: C.todayISO(), kind: 'debit' };
@@ -46,19 +66,25 @@ export function txnForm(entry) {
     fields: [
       { key: 'acct', label: 'Account', type: 'select', options: accts, required: true },
       { key: 'date', label: 'Date', type: 'date', required: true },
-      { key: 'kind', label: 'Money', type: 'select', options: [{ value: 'debit', label: 'Spent / paid out' }, { value: 'credit', label: 'Received' }] },
+      { key: 'kind', label: 'Money', type: 'select', options: [{ value: 'debit', label: 'Spent / paid out' }, { value: 'credit', label: 'Received' }],
+        onInput: (el, inputs) => setOptions(inputs.category, categoryOptions(data, el.value), inputs.category.value) },
       { key: 'amount', label: 'Amount (₹)', type: 'number', required: true },
       { key: 'desc', label: 'Description', type: 'text', required: true, list: descListId, hint: 'Pick a known description to fill the category automatically.',
-        onInput: (el, inputs) => { const c = known.get(el.value.trim().toLowerCase()); if (c) inputs.category.value = c; } },
-      { key: 'category', label: 'Category', type: 'select', options: cats, required: true },
+        onInput: (el, inputs) => { const c = known.get(el.value.trim().toLowerCase()); if (c && [...inputs.category.options].some((o) => o.value === c)) inputs.category.value = c; } },
+      { key: 'category', label: 'Category', type: 'select', options: categoryOptions(data, base.kind), required: true },
+      { key: 'newCategory', label: 'Name of the new category', type: 'text', required: true, showIf: (v) => v.category === NEW, hint: 'It is added to your categories and can be changed later under Spending → Categories.' },
+      { key: 'newKind', label: 'This category is', type: 'select', default: 'expense', showIf: (v) => v.category === NEW,
+        options: CAT.KINDS.map((k) => ({ value: k.key, label: k.one })) },
     ],
     onSave: (v) => {
       mutate((d) => {
-        const rec = { acct: v.acct, date: v.date, desc: v.desc, debit: v.kind === 'debit' ? v.amount : 0, credit: v.kind === 'credit' ? v.amount : 0, category: v.category };
+        let category = v.category;
+        if (category === NEW) category = CAT.add(d, { name: v.newCategory, kind: v.newKind || (v.kind === 'credit' ? 'income' : 'expense') });
+        const rec = { acct: v.acct, date: v.date, desc: v.desc, debit: v.kind === 'debit' ? v.amount : 0, credit: v.kind === 'credit' ? v.amount : 0, category };
         if (isNew) d.ledger.push({ id: Math.max(0, ...d.ledger.map((e) => e.id || 0)) + 1, ...rec });
         else Object.assign(d.ledger.find((e) => e.id === entry.id), rec);
         // remember new descriptions so the next entry fills in automatically
-        if (!d.categories.some((c) => c.desc.toLowerCase() === v.desc.toLowerCase())) d.categories.push({ desc: v.desc, category: v.category, type: v.kind === 'credit' ? 'Income' : 'Expense' });
+        if (!d.categories.some((c) => c.desc.toLowerCase() === v.desc.toLowerCase())) d.categories.push({ desc: v.desc, category, type: v.kind === 'credit' ? 'Income' : 'Expense' });
       });
       toast(isNew ? 'Transaction added' : 'Transaction updated');
     },
@@ -98,7 +124,7 @@ function ledger() {
         { label: 'Balance', cls: 'r', get: (e) => money(e.balance) },
       ], rows.slice(0, limit), { onRow: canEdit() ? (e) => txnForm(data.ledger.find((x) => x.id === e.id)) : null, empty: 'No transactions match these filters.' }),
       total > limit ? btn(`Show more (${total - limit} left)`, () => { limit += 100; rerender(); }, 'wide') : null),
-    canEdit() ? [btn('Add transaction', () => txnForm(), 'primary')] : null));
+    null));
   return wrap;
 }
 

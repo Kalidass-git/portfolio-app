@@ -11,14 +11,23 @@ export async function searchScheme(q) {
   if (!r.ok) throw new Error('Fund search failed');
   return r.json(); // [{schemeCode, schemeName}]
 }
+const isoDate = (s) => { const [d, m, y] = s.split('-'); return `${y}-${m}-${d}`; };
+/** Latest NAV and the one before it (that gives the day's change). The full history call is used because it lists both. */
 async function latestNav(code) {
-  const r = await fetch(`${MFAPI}/${code}/latest`);
-  if (!r.ok) throw new Error('NAV fetch failed for ' + code);
-  const j = await r.json();
-  const row = j.data && j.data[0];
+  let rows;
+  try {
+    const r = await fetch(`${MFAPI}/${code}`);
+    if (!r.ok) throw new Error('history');
+    rows = (await r.json()).data;
+  } catch {
+    const r = await fetch(`${MFAPI}/${code}/latest`);
+    if (!r.ok) throw new Error('NAV fetch failed for ' + code);
+    rows = (await r.json()).data;
+  }
+  const row = rows && rows[0];
   if (!row) throw new Error('No NAV for ' + code);
-  const [d, m, y] = row.date.split('-');
-  return { price: parseFloat(row.nav), date: `${y}-${m}-${d}` };
+  const prev = rows[1];
+  return { price: parseFloat(row.nav), date: isoDate(row.date), prev: prev ? parseFloat(prev.nav) : null, prevDate: prev ? isoDate(prev.date) : null };
 }
 
 /** Pick the most likely scheme for a fund name (direct plan, growth). Returns null when nothing matches. */
@@ -71,8 +80,8 @@ export async function refreshAll(onProgress = () => {}) {
   // The owner's refresh becomes the shared snapshot, so family devices see the same prices without fetching anything.
   if (S.role === 'owner' && (out.stocks || out.funds)) {
     mutate((d) => {
-      for (const s of d.stocks) { const q = quotes[s.symbol]; if (q) { s.price = q.price; if (q.high52) s.high52 = q.high52; if (q.low52) s.low52 = q.low52; } }
-      for (const m of d.mutualFunds) { const q = quotes['MF:' + m.schemeCode]; if (q) { m.nav = q.price; m.navDate = q.date; } }
+      for (const s of d.stocks) { const q = quotes[s.symbol]; if (q) { s.price = q.price; if (q.prevClose > 0) s.prevClose = q.prevClose; else delete s.prevClose; if (q.high52) s.high52 = q.high52; if (q.low52) s.low52 = q.low52; } }
+      for (const m of d.mutualFunds) { const q = quotes['MF:' + m.schemeCode]; if (q) { m.nav = q.price; m.navDate = q.date; if (q.prev > 0) { m.prevNav = q.prev; m.prevNavDate = q.prevDate; } else delete m.prevNav; } }
       d.settings.pricesUpdatedAt = now;
     });
   }

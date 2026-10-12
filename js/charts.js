@@ -60,6 +60,8 @@ export function hbars(rows, { fmt = (v) => v, max, colorIndex = 0, onClick } = {
     h('span', { class: 'hb-val' }, fmt(r.value)))));
 }
 
+/** Draw to about the size it will be shown at, so axis text stays readable on a phone. */
+const defaultWidth = () => (typeof window !== 'undefined' && window.innerWidth < 640 ? 380 : 640);
 const niceMax = (v) => {
   if (v <= 0) return 1;
   const p = Math.pow(10, Math.floor(Math.log10(v))), n = v / p;
@@ -76,8 +78,8 @@ const short = (v) => {
 /**
  * Line chart. series: [{name, values:[n|null], dashed}] ; labels: x labels (same length).
  */
-export function lineChart({ labels, series, fmt = (v) => v, height = 220, yMin, area = false }) {
-  const W = 640, H = height, pad = { l: 44, r: 12, t: 12, b: 24 };
+export function lineChart({ labels, series, fmt = (v) => v, height = 220, yMin, area = false, width }) {
+  const W = width || defaultWidth(), H = height, pad = { l: 44, r: 12, t: 12, b: 24 };
   const all = series.flatMap((s) => s.values).filter((v) => v != null);
   const lo = yMin ?? Math.min(0, ...all), hi = niceMax(Math.max(...all, 1));
   const x = (i) => pad.l + (labels.length < 2 ? 0 : (i / (labels.length - 1)) * (W - pad.l - pad.r));
@@ -113,8 +115,8 @@ export function lineChart({ labels, series, fmt = (v) => v, height = 220, yMin, 
 }
 
 /** Grouped column chart. groups: [{label, values:[n]}], names: series names */
-export function barChart({ groups, names, fmt = (v) => v, height = 220 }) {
-  const W = 640, H = height, pad = { l: 44, r: 8, t: 12, b: 24 };
+export function barChart({ groups, names, fmt = (v) => v, height = 220, width }) {
+  const W = width || defaultWidth(), H = height, pad = { l: 44, r: 8, t: 12, b: 24 };
   const hi = niceMax(Math.max(1, ...groups.flatMap((g) => g.values)));
   const y = (v) => pad.t + (1 - v / hi) * (H - pad.t - pad.b);
   const gw = (W - pad.l - pad.r) / groups.length;
@@ -142,3 +144,42 @@ export function barChart({ groups, names, fmt = (v) => v, height = 220 }) {
 
 /** Tiny progress bar (value 0..1) */
 export const meter = (v, ci = 0) => h('span', { class: 'meter' }, h('span', { style: { width: Math.min(100, Math.max(0, v * 100)) + '%', background: color(ci) } }));
+
+/** Donut with the grand total in the middle. items: [{label, value}] (colors follow the list order, same as legend()). */
+export function donut(items, { fmt = (v) => v, center = '', sub = '', size = 200 } = {}) {
+  const sum = items.reduce((a, x) => a + Math.max(0, x.value), 0) || 1;
+  const cx = 100, cy = 100, R = 92, r = 62;
+  const root = svg('svg', { viewBox: '0 0 200 200', class: 'donut-svg', role: 'img', 'aria-label': items.map((i) => `${i.label} ${((i.value / sum) * 100).toFixed(1)}%`).join(', '), style: `max-width:${size}px` });
+  const pt = (rad, a) => [cx + rad * Math.sin(a), cy - rad * Math.cos(a)];
+  let a0 = 0;
+  const live = items.filter((x) => x.value > 0).length;
+  items.forEach((it, i) => {
+    if (it.value <= 0) return;
+    const frac = it.value / sum, gap = live > 1 ? 0.012 : 0;
+    const s = a0 + gap, e = a0 + frac * 2 * Math.PI - gap;
+    a0 += frac * 2 * Math.PI;
+    let d;
+    if (frac > 0.9999) d = `M${cx},${cy - R}A${R},${R} 0 1 1 ${cx - 0.01},${cy - R}ZM${cx},${cy - r}A${r},${r} 0 1 0 ${cx - 0.01},${cy - r}Z`;
+    else {
+      const [x1, y1] = pt(R, s), [x2, y2] = pt(R, e), [x3, y3] = pt(r, e), [x4, y4] = pt(r, s), big = e - s > Math.PI ? 1 : 0;
+      d = `M${x1.toFixed(2)},${y1.toFixed(2)}A${R},${R} 0 ${big} 1 ${x2.toFixed(2)},${y2.toFixed(2)}L${x3.toFixed(2)},${y3.toFixed(2)}A${r},${r} 0 ${big} 0 ${x4.toFixed(2)},${y4.toFixed(2)}Z`;
+    }
+    const seg = svg('path', { d, fill: color(i), class: 'dseg', 'fill-rule': 'evenodd' });
+    hover(seg, () => [h('b', null, it.label), h('div', null, fmt(it.value) + '  ·  ' + ((it.value / sum) * 100).toFixed(1) + '%')]);
+    root.append(seg);
+  });
+  root.append(svg('text', { x: cx, y: sub ? cy - 2 : cy + 7, class: 'donut-c', 'text-anchor': 'middle' }, center));
+  if (sub) root.append(svg('text', { x: cx, y: cy + 16, class: 'donut-s', 'text-anchor': 'middle' }, sub));
+  return h('div', { class: 'donut' }, root);
+}
+
+/** Small trend line without axes, for tiles. values: numbers. */
+export function spark(values, { height = 36, width = 120, tone = 0 } = {}) {
+  if (values.length < 2) return null;
+  const lo = Math.min(...values), hi = Math.max(...values), span = hi - lo || 1;
+  const x = (i) => (i / (values.length - 1)) * (width - 4) + 2, y = (v) => height - 3 - ((v - lo) / span) * (height - 6);
+  const d = values.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('');
+  return svg('svg', { viewBox: `0 0 ${width} ${height}`, class: 'spark', 'aria-hidden': 'true', width, height },
+    svg('path', { d: d + `L${x(values.length - 1)},${height}L${x(0)},${height}Z`, fill: color(tone), opacity: '.14' }),
+    svg('path', { d, fill: 'none', stroke: color(tone), 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+}

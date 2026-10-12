@@ -61,9 +61,30 @@ export function mutate(fn) {
   fn(draft);
   draft.updatedAt = new Date().toISOString();
   S.meta.dirty = true;
+  recompute(); snapshot();
   write(K.data, draft); write(K.meta, S.meta);
-  recompute(); emit();
+  emit();
   if (S.remote) { clearTimeout(pushTimer); pushTimer = setTimeout(() => push().catch(() => {}), 1500); }
+}
+
+/** Keep one net worth reading per day so the Home screen can show a history. Owner only. */
+function snapshot() {
+  if (S.role !== 'owner' || !S.data || !S.all) return false;
+  const hist = (S.data.history = S.data.history || []);
+  const rec = { date: S.all.asOf, net: Math.round(S.all.netAsset), assets: Math.round(S.all.totalAssets), liab: Math.round(S.all.liabTotal) };
+  const last = hist[hist.length - 1];
+  if (last && last.date === rec.date) { if (last.net === rec.net && last.assets === rec.assets) return false; Object.assign(last, rec); return true; }
+  if (last && last.date > rec.date) return false;
+  hist.push(rec);
+  return true;
+}
+/** Called when the app opens on the owner's device. */
+export function startOfDaySnapshot() {
+  if (!S.data || S.role !== 'owner') return;
+  if (snapshot()) {
+    S.meta.dirty = true; write(K.data, S.data); write(K.meta, S.meta);
+    if (S.remote) { clearTimeout(pushTimer); pushTimer = setTimeout(() => push().catch(() => {}), 4000); }
+  }
 }
 
 export function saveQuotes(q) {
