@@ -16,14 +16,17 @@ const ROUTES = {
   fixed: { label: 'Fixed income', short: 'Fixed income', view: fixed, tab: 'assets', group: 'Assets', icon: 'M4 20V8l8-5 8 5v12M9 20v-6h6v6' },
   equity: { label: 'Shares & funds', short: 'Shares & funds', view: equity, tab: 'assets', group: 'Assets', icon: 'M4 19V5M4 19h16M8 15l4-5 3 3 5-6' },
   gold: { label: 'Gold & others', short: 'Gold & more', view: gold, tab: 'assets', group: 'Assets', icon: 'M12 3l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V7z' },
-  flow: { label: 'Income & spending', view: flow, tab: 'flow', icon: 'M4 6h16M4 12h10M4 18h6' },
+  flow: { label: 'Income & expenses', view: flow, tab: 'flow', icon: 'M4 6h16M4 12h10M4 18h6' },
   plan: { label: 'Plan', view: plan, tab: 'plan', icon: 'M5 19V9m7 10V5m7 14v-7' },
   report: { label: 'Family report', view: report, tab: 'report', icon: 'M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h7' },
   settings: { label: 'Settings', view: settings, tab: 'settings', icon: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM3 12h3m12 0h3M12 3v3m0 12v3' },
 };
-const TABS = [['home', 'Home', 'home'], ['assets', 'Assets', 'cash'], ['flow', 'Spending', 'flow'], ['plan', 'Plan', 'plan'], ['report', 'Report', 'report']];
+const TABS = [['home', 'Home', 'home'], ['assets', 'Assets', 'cash'], ['flow', 'Expenses', 'flow'], ['plan', 'Plan', 'plan'], ['report', 'Report', 'report']];
 const icon = (d) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'ico'); s.setAttribute('aria-hidden', 'true'); const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', d); s.append(p); return s; };
 
+const FS = [1, 1.15, 1.3, 1.5];
+const setFont = (n) => { setCfg({ fontScale: n }); document.documentElement.style.setProperty('--fs', n); renderView(); };
+const eye = (masked) => icon(masked ? 'M3 3l18 18M10.6 6.2A9.8 9.8 0 0 1 12 6c5 0 8.5 4 9.5 6a14 14 0 0 1-3 3.6M6.5 7.5C4.5 9 3.1 11 2.5 12c1 2 4.5 6 9.5 6 1.5 0 2.8-.4 4-.9M9.9 9.9a3 3 0 0 0 4.2 4.2' : 'M2.5 12C3.5 10 7 6 12 6s8.5 4 9.5 6c-1 2-4.5 6-9.5 6s-8.5-4-9.5-6zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z');
 const routeName = () => { const r = route().name; return ROUTES[r] ? r : 'home'; };
 
 function shell() {
@@ -63,6 +66,8 @@ function chrome() {
     h('div', { class: 'title' }, ROUTES[cur].group ? h('span', { class: 'crumb' }, ROUTES[cur].group) : null, h('h1', null, ROUTES[cur].label)),
     h('div', { class: 'top-right' }, chip,
       S.remote ? h('button', { class: 'icon', 'aria-label': 'Refresh from Drive', title: 'Refresh from Drive', onclick: async () => { try { await pull(); } catch (e) { toast(e.message, 'bad'); } } }, '↻') : null,
+      h('button', { class: 'icon eye', 'aria-label': S.masked ? 'Show figures' : 'Hide figures', title: S.masked ? 'Show figures' : 'Hide figures', 'aria-pressed': S.masked ? 'false' : 'true', onclick: () => { S.masked = !S.masked; renderView(); } }, eye(S.masked)),
+      h('button', { class: 'icon aa', 'aria-label': 'Text size', title: 'Text size', onclick: () => { const i = FS.findIndex((f) => f >= (S.cfg.fontScale || 1) - 0.001); const n = FS[(i + 1) % FS.length]; setFont(n); toast('Text size ' + Math.round(n * 100) + '%'); } }, h('span', { class: 'aa-t' }, 'Aa')),
       h('a', { class: 'icon', href: '#/settings', 'aria-label': 'Settings' }, icon(ROUTES.settings.icon))));
   document.documentElement.style.setProperty('--top-h', top.offsetHeight + 'px');
   document.title = ROUTES[cur].label + ' · Family Wealth';
@@ -115,6 +120,7 @@ function welcome() {
 
 // ---------- boot ----------
 init();
+document.documentElement.style.setProperty('--fs', S.cfg.fontScale || 1);
 document.documentElement.dataset.theme = S.cfg.theme === 'auto' ? '' : S.cfg.theme;
 shell();
 window.addEventListener('hashchange', renderView);

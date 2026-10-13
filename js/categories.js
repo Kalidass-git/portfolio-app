@@ -1,7 +1,7 @@
 // Category rules and maintenance. Pure functions on the data object, no DOM.
 //
 // data.categoryList: [{ name, kind, budget }]   kind: expense | income | investment | transfer
-//   expense     counts as spending
+//   expense     counts as an expense
 //   income      counts as income
 //   investment  money put into an investment (not spending)
 //   transfer    moves between your own accounts or cash withdrawals, left out of income and spending
@@ -10,7 +10,7 @@
 // Older data files have no categoryList. It is worked out from the names, exactly as the workbook did.
 
 export const KINDS = [
-  { key: 'expense', label: 'Spending', one: 'Spending' },
+  { key: 'expense', label: 'Expenses', one: 'Expense' },
   { key: 'income', label: 'Income', one: 'Income' },
   { key: 'investment', label: 'Investments', one: 'Investment' },
   { key: 'transfer', label: 'Not counted (transfers)', one: 'Not counted' },

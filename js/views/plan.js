@@ -36,7 +36,7 @@ function paramsForm() {
     fields: [
       { key: 'monthlyInvestment', label: 'New money invested each month (₹)', type: 'number' }, { key: 'interestPrediction', label: 'Interest expected on new money (0.1 = 10%)', type: 'number' },
       { key: 'startPortfolio', label: 'Long-term: starting portfolio (₹)', type: 'number' }, { key: 'kaliSalaryYear', label: 'Salary per year, Kalidass (₹)', type: 'number' }, { key: 'suguSalaryYear', label: 'Salary per year, Suganya (₹)', type: 'number' },
-      { key: 'hike', label: 'Yearly raise (0.06 = 6%)', type: 'number' }, { key: 'returns', label: 'Expected yearly return (0.08 = 8%)', type: 'number' }, { key: 'monthlyExpense', label: 'Spending each month (₹)', type: 'number' },
+      { key: 'hike', label: 'Yearly raise (0.06 = 6%)', type: 'number' }, { key: 'returns', label: 'Expected yearly return (0.08 = 8%)', type: 'number' }, { key: 'monthlyExpense', label: 'Expenses each month (₹)', type: 'number' },
       { key: 'taxPerYear', label: 'Tax per month in Feb to Apr (₹)', type: 'number' }, { key: 'taxStep', label: 'Yearly increase in that tax (₹)', type: 'number' },
     ],
     onSave: (v) => mutate((d) => {

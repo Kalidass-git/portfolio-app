@@ -8,7 +8,8 @@ const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); retu
 
 export const S = {
   data: null,
-  cfg: { backendUrl: '', key: '', useLive: true, theme: 'auto', asOf: '' },
+  cfg: { backendUrl: '', key: '', useLive: true, theme: 'auto', asOf: '', fontScale: 1 },
+  masked: true,           // hide figures until the eye icon is tapped; resets on every app open
   role: 'owner',          // 'owner' can edit, 'viewer' is read-only
   remote: false,          // true when a backend is configured
   meta: { version: 0, dirty: false, lastSync: null },

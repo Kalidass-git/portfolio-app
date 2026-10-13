@@ -1,4 +1,4 @@
-// Spending → Categories: add, rename, merge, delete categories, set monthly budgets, and manage the auto-fill rules.
+// Expenses → Categories: add, rename, merge, delete categories, set monthly budgets, and manage the auto-fill rules.
 import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
 import * as CAT from '../categories.js';
@@ -23,8 +23,8 @@ function categoryForm(cat, presetKind) {
     deleteMessage: use && use.count ? `“${cat && cat.name}” has ${use.count} entries. Next you will choose another category to move them to.` : 'Delete this category?',
     fields: [
       { key: 'name', label: 'Name', type: 'text', required: true, readonly: locked, hint: locked ? 'The Home screen groups its summary by this name, so the name cannot change. You can still change the budget.' : '' },
-      { key: 'kind', label: 'Counts as', type: 'select', options: CAT.KINDS.map((k) => ({ value: k.key, label: k.one })), hint: 'Spending is shown under spending. Investments are money you put away, not spent. “Not counted” is for moves between your own accounts and cash withdrawals.' },
-      { key: 'budget', label: 'Monthly budget (₹, optional)', type: 'number', showIf: (v) => v.kind === 'expense', hint: 'The Spending screen shows how much of this is used each month.' },
+      { key: 'kind', label: 'Counts as', type: 'select', options: CAT.KINDS.map((k) => ({ value: k.key, label: k.one })), hint: 'Expenses are what you spent. Investments are money you put away, not spent. “Not counted” is for moves between your own accounts and cash withdrawals.' },
+      { key: 'budget', label: 'Monthly budget (₹, optional)', type: 'number', showIf: (v) => v.kind === 'expense', hint: 'The Expenses screen shows how much of this is used each month.' },
       ...(!isNew && !locked && others.length ? [{ key: 'mergeInto', label: 'Merge into another category (optional)', type: 'select', options: [{ value: '', label: 'Keep as it is' }, ...others], hint: 'Moves all its entries and auto-fill rules into the chosen category and removes this one.' }] : []),
     ],
     onSave: (v) => {

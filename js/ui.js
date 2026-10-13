@@ -37,12 +37,16 @@ export const subTab = (keys) => { const s = route().sub; return keys.includes(s)
 // ---------- formatting ----------
 const inr = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
 const inr2 = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-export const money = (n) => (n == null || isNaN(n) ? '–' : (n < 0 ? '-' : '') + '₹' + inr.format(Math.abs(Math.round(n))));
+const MASK = '₹ ••••';
+/** Figures are hidden until the eye icon is tapped (S.masked is true each time the app opens). */
+export const isMasked = () => S.masked !== false;
+export const money = (n) => (n == null || isNaN(n) ? '–' : isMasked() ? MASK : (n < 0 ? '-' : '') + '₹' + inr.format(Math.abs(Math.round(n))));
 export const num = (n, d = 0) => (n == null || isNaN(n) ? '–' : d ? inr2.format(n).replace(/\.00$/, d === 2 ? '.00' : '') : inr.format(n));
 export const dec = (n, d = 2) => (n == null || isNaN(n) ? '–' : new Intl.NumberFormat('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d }).format(n));
 /** 1.23 Cr / 4.5 L / 12,300 */
 export function compact(n) {
   if (n == null || isNaN(n)) return '–';
+  if (isMasked()) return MASK;
   const a = Math.abs(n), s = n < 0 ? '-' : '';
   if (a >= 1e7) return `${s}₹${(a / 1e7).toFixed(2)} Cr`;
   if (a >= 1e5) return `${s}₹${(a / 1e5).toFixed(2)} L`;

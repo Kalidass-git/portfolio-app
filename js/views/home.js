@@ -4,8 +4,6 @@ import * as C from '../calc.js';
 import { h, money, compact, pct, dateStr, monthLabel, section, monthPicker, rowList, kpi, dateChip, btn, canEdit, dec, toast } from '../ui.js';
 import { strip, legend, hbars, lineChart, donut, spark } from '../charts.js';
 import { rateHistory, ageText } from './gold.js';
-import { txnForm } from './cash.js';
-import { refresh as refreshPrices } from './equity.js';
 
 let selMonth = null;
 const rerender = () => window.dispatchEvent(new Event('rerender'));
@@ -33,16 +31,6 @@ function hero(all, series) {
           h('div', null, h('dt', null, 'Loans'), h('dd', null, compact(all.liabTotal)))))));
 }
 
-function actions() {
-  if (!canEdit()) return null;
-  const refreshBtn = h('button', { class: 'chip-btn', onclick: async (e) => { const b = e.currentTarget; b.disabled = true; try { await refreshPrices(b); } finally { b.disabled = false; rerender(); } } }, '↻ Refresh prices');
-  return h('div', { class: 'quick span-12' },
-    h('button', { class: 'chip-btn primary', onclick: () => txnForm() }, '+ Add transaction'),
-    refreshBtn,
-    h('a', { class: 'chip-btn', href: '#/gold' }, '₹ Gold rate'),
-    h('a', { class: 'chip-btn', href: '#/flow/categories' }, 'Categories'));
-}
-
 function tiles(all, data) {
   const dayN = all.stocks.dayCount + all.mf.dayCount, day = all.stocks.day + all.mf.day;
   const dayBase = all.stocks.current + all.mf.current - day;
@@ -53,7 +41,7 @@ function tiles(all, data) {
     kpi('Earning every month', money(all.cfTotal.perMonth), `${money(all.cfTotal.perDay)} a day · ${pct(all.cfTotal.yield, 1)} a year`, { href: '#/fixed' }),
     kpi('Shares & funds today', dayN ? sgn(day) : '–', dayN ? `${day >= 0 ? '▲' : '▼'} ${pct(Math.abs(dayBase ? day / dayBase : 0), 2)}` : 'refresh prices to see', { tone: dayN ? tone(day) : '', href: '#/equity' }),
     kpi('Gold rate', last ? money(last.rate) + '/g' : '–', last ? (oldGold ? 'old, ' : 'set ') + ageText(last.date) : '', { tone: oldGold ? 'warn' : '', href: '#/gold' }),
-    kpi('Bank cash lasts', rw.months == null ? '–' : dec(rw.months, 1) + ' months', rw.coverage != null ? `interest pays ${pct(rw.coverage, 0)} of spending` : '', { href: '#/flow' }));
+    kpi('Bank cash lasts', rw.months == null ? '–' : dec(rw.months, 1) + ' months', rw.coverage != null ? `interest pays ${pct(rw.coverage, 0)} of expenses` : '', { href: '#/flow' }));
 }
 
 function allocation(all) {
@@ -127,10 +115,10 @@ function thisMonth(data, all, months) {
         valueSub: r.expected - r.received > 0 ? h('span', { class: 'warn' }, money(r.expected - r.received) + ' pending') : '✓ received',
       })))),
     h('div', null,
-      h('p', { class: 'mini-title' }, 'Spending'),
+      h('p', { class: 'mini-title' }, 'Expenses'),
       h('p', { class: 'big-line' }, h('b', null, money(spent)), h('span', { class: 'muted' }, ' spent')),
-      spend.length ? hbars(spend.map((s) => ({ label: s.name, value: s.amount })), { fmt: money, colorIndex: 1 }) : h('p', { class: 'empty' }, 'No spending recorded in this month.'),
-      h('p', { class: 'summary-line' }, 'Expected income left after spending ', h('b', { class: tone(mc.totalExpected - spent) }, money(mc.totalExpected - spent))))),
+      spend.length ? hbars(spend.map((s) => ({ label: s.name, value: s.amount })), { fmt: money, colorIndex: 1 }) : h('p', { class: 'empty' }, 'No expenses recorded in this month.'),
+      h('p', { class: 'summary-line' }, 'Expected income left after expenses ', h('b', { class: tone(mc.totalExpected - spent) }, money(mc.totalExpected - spent))))),
     [monthPicker(months, selMonth, (m) => { selMonth = m; rerender(); })]);
 }
 
@@ -151,7 +139,7 @@ export function render() {
   const place = (el, cls) => { if (el) el.classList.add(cls); return el; };
   const root = h('div', { class: 'page dash' });
   root.append(
-    hero(all, series), actions(), tiles(all, data),
+    hero(all, series), tiles(all, data),
     place(thisMonth(data, all, months), 'span-7'), place(comingUp(data, all), 'span-5'),
     place(allocation(all), 'span-7'), place(earning(all), 'span-5'),
     place(returnsCard(data, all), 'span-7'), place(networthChart(series, data), 'span-5'));

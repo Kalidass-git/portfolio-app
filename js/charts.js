@@ -1,5 +1,5 @@
 // Dependency-free SVG/HTML charts. Colors come from CSS variables --s1..--s8 (validated categorical palette, light and dark).
-import { h } from './ui.js';
+import { h, isMasked } from './ui.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const svg = (tag, attrs = {}, ...kids) => {
@@ -68,6 +68,7 @@ const niceMax = (v) => {
   return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p;
 };
 const short = (v) => {
+  if (isMasked()) return '';
   const a = Math.abs(v), s = v < 0 ? '-' : '';
   if (a >= 1e7) return s + +(a / 1e7).toFixed(2) + 'Cr';
   if (a >= 1e5) return s + +(a / 1e5).toFixed(2) + 'L';

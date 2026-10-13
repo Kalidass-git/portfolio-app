@@ -288,6 +288,60 @@ export function monthSummary(data, month) {
     count: rows.length,
   };
 }
+// ----- any period: this month, last month, this year, past 12 months, all time, or one named month -----
+export const LOAN_TAX = new Set(['loan', 'tax']);
+export function periodRange(key, asOf) {
+  const first = (d) => d.slice(0, 7) + '-01';
+  const y = asOf.slice(0, 4);
+  if (/^\d{4}-\d\d$/.test(key)) return { from: key + '-01', to: iso(toMs(addMonths(key + '-01', 1)) - DAY), label: key, months: 1 };
+  if (key === 'last') { const f = addMonths(first(asOf), -1); return { from: f, to: iso(toMs(first(asOf)) - DAY), label: 'last month', months: 1 }; }
+  if (key === 'ytd') return { from: y + '-01-01', to: asOf, label: 'this year', months: Number(asOf.slice(5, 7)) };
+  if (key === '12m') return { from: addMonths(first(asOf), -11), to: asOf, label: 'past 12 months', months: 12 };
+  if (key === 'all') return { from: '0000-01-01', to: '9999-12-31', label: 'all time', months: null };
+  return { from: first(asOf), to: asOf, label: 'this month', months: 1 };
+}
+export function rangeLedger(data, from, to) {
+  const kind = kindOf(data);
+  return data.ledger.filter((e) => e.date >= from && e.date <= to && kind(e.category) !== 'transfer');
+}
+/** filter: { mode: 'all' | 'only' | 'except', cats: [names] } applies to money going out (expenses and investments). */
+export const passesFilter = (f, category) => {
+  if (!f || f.mode === 'all' || !f.cats || !f.cats.length) return true;
+  const hit = f.cats.some((c) => c.toLowerCase() === (category || '').toLowerCase());
+  return f.mode === 'only' ? hit : !hit;
+};
+export function rangeSummary(data, from, to, filter) {
+  const kind = kindOf(data);
+  const all = rangeLedger(data, from, to);
+  const out = all.filter((e) => (e.debit || 0) > 0);
+  const incomeRows = all.filter((e) => (e.credit || 0) > 0);
+  const expenseRows = out.filter((e) => kind(e.category) !== 'investment' && passesFilter(filter, e.category));
+  const investRows = out.filter((e) => kind(e.category) === 'investment' && passesFilter(filter, e.category));
+  const income = byCat(incomeRows, 'credit'), expense = byCat(expenseRows, 'debit'), invest = byCat(investRows, 'debit');
+  const totalIncome = sum(income, (x) => x.amount);
+  const totalExpense = sum(expense, (x) => x.amount);
+  const loanTax = sum(expense.filter((x) => LOAN_TAX.has(x.category.toLowerCase())), (x) => x.amount);
+  const totalInvest = sum(invest, (x) => x.amount);
+  const everything = out.reduce((a, e) => a + e.debit, 0);
+  return {
+    from, to, income, expense, invest, expenseRows, investRows, incomeRows,
+    totalIncome, totalExpense, loanTax, everyday: totalExpense - loanTax, totalInvest,
+    left: totalIncome - everything, count: all.length,
+  };
+}
+/** Group rows by description: count, total, average, last date. field is 'debit' or 'credit'. */
+export function byDescription(rows, field) {
+  const m = new Map();
+  for (const e of rows) {
+    const k = (e.desc || '(no description)').trim().toLowerCase();
+    const r = m.get(k) || { desc: (e.desc || '(no description)').trim(), count: 0, amount: 0, last: '' };
+    r.count++; r.amount += e[field] || 0; if (e.date > r.last) r.last = e.date;
+    m.set(k, r);
+  }
+  const list = [...m.values()].sort((a, b) => b.amount - a.amount);
+  const total = list.reduce((a, r) => a + r.amount, 0);
+  return list.map((r) => ({ ...r, avg: r.count ? r.amount / r.count : 0, share: total ? r.amount / total : 0 }));
+}
 export function monthlyTrend(data, months) {
   return months.map((m) => {
     const s = monthSummary(data, m);
