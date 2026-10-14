@@ -1,7 +1,7 @@
 // Shares & funds → Insights (exposure, sector, size, stocks vs ETFs) and Sold (what selling earned vs holding on).
-import { S } from '../store.js';
+import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
-import { h, money, compact, pct, dateStr, section, table, stat, btn, canEdit, num, dec, posNeg, rowList } from '../ui.js';
+import { h, formDialog, money, compact, pct, dateStr, section, table, stat, btn, canEdit, num, dec, posNeg, rowList } from '../ui.js';
 import { hbars, donut, legend, strip } from '../charts.js';
 import { classify, fundCategory } from '../classify.js';
 import { symKey } from '../trades.js';
@@ -65,6 +65,27 @@ export function insights(root) {
 }
 
 // ---------- Sold ----------
+/** Fix the symbol a sold share is priced with, or stop fetching its price (for shares that were delisted or merged). */
+function soldSymbolForm(x) {
+  const o = (S.data.soldSettings || {})[x.symbol] || {};
+  formDialog({
+    title: x.name + ' · price settings', saveLabel: 'Save',
+    value: { nowSymbol: o.nowSymbol || x.nowSymbol, yahoo: o.yahoo || '', suppress: !!o.suppress, manualPrice: o.manualPrice || '' },
+    fields: [
+      { key: 'nowSymbol', label: 'Current symbol on the exchange', hint: `Sold as ${x.symbol}. Change it if the company was renamed or merged.`, required: true },
+      { key: 'yahoo', label: 'Yahoo ticker (optional)', hint: 'Only if the usual NSE or BSE lookup fails, for example TATAMOTORS.NS.' },
+      { key: 'suppress', label: 'Stop fetching the price for this sold share', type: 'checkbox', hint: 'Use this when the symbol no longer trades. It will not be asked for again when you refresh prices.' },
+      { key: 'manualPrice', label: 'Price to use instead (₹, optional)', type: 'number', showIf: (v) => v.suppress, hint: 'Used for “if you had kept them”. Leave empty to show no price.' },
+    ],
+    onSave: (v) => mutate((d) => {
+      d.soldSettings = d.soldSettings || {};
+      const rec = { nowSymbol: v.nowSymbol.trim().toUpperCase() };
+      if (v.yahoo) rec.yahoo = v.yahoo.trim();
+      if (v.suppress) { rec.suppress = true; if (v.manualPrice > 0) rec.manualPrice = v.manualPrice; }
+      if (rec.nowSymbol === x.nowSymbol && !rec.yahoo && !rec.suppress) delete d.soldSettings[x.symbol]; else d.soldSettings[x.symbol] = rec;
+    }),
+  });
+}
 export function sold(root) {
   const { data, all } = S;
   const eq = all.stocks.eq;
@@ -73,9 +94,10 @@ export function sold(root) {
     return;
   }
   const list = eq.sold.map((s) => {
-    const px = priceOfSymbol(s.nowSymbol);
+    const o = (data.soldSettings || {})[s.symbol] || {};
+    const px = o.suppress ? (o.manualPrice > 0 ? o.manualPrice : null) : priceOfSymbol((o.nowSymbol || s.nowSymbol).toUpperCase());
     const nowValue = px ? s.nowQty * px : null;
-    return { ...s, px, nowValue, diff: nowValue == null ? null : nowValue - s.proceeds, ret: s.cost ? s.realized / s.cost : null, split: Math.abs(s.nowQty - s.qty) > 1e-6 };
+    return { ...s, o, px, nowValue, diff: nowValue == null ? null : nowValue - s.proceeds, ret: s.cost ? s.realized / s.cost : null, split: Math.abs(s.nowQty - s.qty) > 1e-6 };
   }).sort((a, b) => (a.date < b.date ? 1 : -1));
   const priced = list.filter((x) => x.nowValue != null);
   const proceeds = list.reduce((a, x) => a + x.proceeds, 0), cost = list.reduce((a, x) => a + x.cost, 0), realized = proceeds - cost;
@@ -87,13 +109,13 @@ export function sold(root) {
     stat(diff >= 0 ? 'Holding on would have given' : 'Selling saved you', priced.length ? h('span', { class: diff >= 0 ? 'warn' : 'pos' }, money(Math.abs(diff))) : '–', diff >= 0 ? 'more than you sold for' : 'compared with holding on')));
   root.append(section('Every sale', h('div', null, table([
     { label: 'Sold on', get: (x) => dateStr(x.date) },
-    { label: 'Share', render: (x) => h('span', null, x.name, x.split ? h('small', { class: 'tag' }, `now ${num(x.nowQty)} sh`) : null) },
+    { label: 'Share', render: (x) => h('span', null, x.name, x.split ? h('small', { class: 'tag' }, `now ${num(x.nowQty)} sh`) : null, x.o.suppress ? h('small', { class: 'tag' }, 'price off') : null, x.o.nowSymbol ? h('small', { class: 'sub' }, ' → ' + x.o.nowSymbol) : null) },
     { label: 'Qty', cls: 'r', get: (x) => num(x.qty) },
     { label: 'Sold for', cls: 'r', get: (x) => money(x.proceeds), total: () => money(proceeds) },
     { label: 'Bought for', cls: 'r', get: (x) => money(x.cost), total: () => money(cost) },
     { label: 'Profit / loss', cls: 'r', render: (x) => h('span', { class: posNeg(x.realized) }, money(x.realized), x.ret != null ? h('small', { class: 'sub' }, ' ' + pct(x.ret, 0)) : null), total: () => h('span', { class: posNeg(realized) }, money(realized)) },
-    { label: 'Value today if kept', cls: 'r', get: (x) => (x.nowValue == null ? 'no price' : money(x.nowValue)), total: () => (priced.length ? money(kept) : '') },
+    { label: 'Value today if kept', cls: 'r', get: (x) => (x.nowValue == null ? h('span', { class: 'muted' }, x.o.suppress ? 'price off' : 'no price') : money(x.nowValue) + (x.o.suppress && x.o.manualPrice ? ' (set by you)' : '')), total: () => (priced.length ? money(kept) : '') },
     { label: 'Kept vs sold', cls: 'r', render: (x) => (x.diff == null ? '–' : h('span', { class: x.diff > 0 ? 'warn' : 'pos' }, (x.diff > 0 ? '+' : '−') + money(Math.abs(x.diff)), h('small', { class: 'sub' }, x.diff > 0 ? ' missed' : ' saved'))) },
-  ], list, { footer: { label: 'Total' } }),
+  ], list, { footer: { label: 'Total' }, onRow: canEdit() ? (x) => soldSymbolForm(x) : null }),
     h('p', { class: 'note' }, 'Profit uses first-in-first-out cost, which is how the tax department matches sales to purchases. “Kept vs sold” is the value today of the shares you sold (after any later split or bonus) minus what you received. Fully sold shares get a price when you press Refresh prices. Shares that no longer trade (merged or unlisted) have no price. Brokerage and taxes are included only if they were in the file or the sale entry.'))));
 }

@@ -1,5 +1,5 @@
 // Expenses → Archive: move old bank entries out of the way (balances stay right) and bring them back if needed.
-import { S, mutate } from '../store.js';
+import { S, mutate, allowShrink } from '../store.js';
 import * as C from '../calc.js';
 import { archiveBefore, restoreArchive, preview, toCsv } from '../archive.js';
 import { autoPoint } from './backups.js';
@@ -22,6 +22,7 @@ function archiveForm() {
       const ok = await confirmDialog(`Archive ${p.count} entries from ${dateStr(p.from)} to ${dateStr(p.to)} across ${p.accounts} accounts? Bank balances will not change. A restore point is saved first, and you can bring the entries back from this page.`, 'Archive');
       if (!ok) return;
       await autoPoint('Before archiving to ' + v.cutoff);
+      allowShrink();
       mutate((d) => { archiveBefore(d, v.cutoff); });
       toast(p.count + ' entries archived');
     },

@@ -1,4 +1,4 @@
-import { S, init, subscribe, pull, setData, setCfg, connect, recompute, startOfDaySnapshot, resolveConflict } from './store.js';
+import { S, resolveGuard, dailyPoint, init, subscribe, pull, setData, setCfg, connect, recompute, startOfDaySnapshot, resolveConflict } from './store.js';
 import { h, $, toast, dialog, btn, formDialog, route } from './ui.js';
 import { autoPoint } from './views/backups.js';
 import * as home from './views/home.js';
@@ -58,7 +58,9 @@ function chrome() {
 
   const top = $('#top');
   const st = S.status;
-  const chip = !S.remote ? h('span', { class: 'chip-status' }, 'This device only')
+  const chip = S.saveFailed ? h('a', { class: 'chip-status bad', href: '#/settings', title: 'Storage on this device is full or blocked' }, 'Not saved on this device')
+    : S.status === 'guard' ? h('button', { class: 'chip-status bad', onclick: guardDialog }, 'Check big change')
+    : !S.remote ? h('span', { class: 'chip-status' }, 'This device only')
     : st === 'syncing' ? h('span', { class: 'chip-status' }, 'Syncing…')
     : st === 'conflict' ? h('button', { class: 'chip-status bad', onclick: conflictDialog }, 'Fix sync')
     : st === 'error' || st === 'offline' ? h('a', { class: 'chip-status bad', href: '#/settings' }, st === 'offline' ? 'Offline' : 'Sync problem')
@@ -72,6 +74,18 @@ function chrome() {
       h('a', { class: 'icon', href: '#/settings', 'aria-label': 'Settings' }, icon(ROUTES.settings.icon))));
   document.documentElement.style.setProperty('--top-h', top.offsetHeight + 'px');
   document.title = ROUTES[cur].label + ' · Family Wealth';
+}
+
+function guardDialog() {
+  const g = S.guard; if (!g) return;
+  const names = { ledger: 'bank entries', trades: 'buy and sell records', mfTxns: 'fund transactions', stocks: 'shares', funds: 'funds', bonds: 'bonds', lending: 'lending items', savings: 'savings items' };
+  dialog('A big deletion was held back', h('div', null,
+    h('p', null, 'Before uploading to Drive, the app noticed that this device now has far fewer records than the last synced copy:'),
+    h('ul', null, g.shrunk.map((x) => h('li', null, `${names[x.what] || x.what}: ${x.from} → ${x.to}`))),
+    h('p', null, 'If you archived, replaced a history or deleted these on purpose, upload it. If not, go back to the last synced copy. A restore point is saved either way.')),
+    [{ label: 'Upload this change', class: 'primary', onclick: async (c) => { c(); await autoPoint('Before uploading a big change'); try { await resolveGuard('sync'); toast('Uploaded'); } catch (e) { toast(e.message, 'bad'); } renderView(); } },
+     { label: 'Go back to the last synced copy', class: 'danger', onclick: async (c) => { c(); await autoPoint('Before going back to the synced copy'); try { await resolveGuard('undo'); toast('Restored the last synced copy'); } catch (e) { toast(e.message, 'bad'); } renderView(); } },
+     { label: 'Decide later', onclick: (c) => c() }]);
 }
 
 function conflictDialog() {
@@ -158,6 +172,8 @@ let t;
 subscribe(() => { mergeNotice(); clearTimeout(t); t = setTimeout(() => { if (S.data) renderView(); }, 30); });
 renderView();
 startOfDaySnapshot();
+dailyPoint();
+window.addEventListener('beforeunload', (e) => { if (S.meta && S.meta.dirty && S.remote && S.role === 'owner') { e.preventDefault(); e.returnValue = ''; } });
 if (S.remote) pull().catch(() => {});
 window.addEventListener('online', () => S.remote && pull().catch(() => {}));
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.remote && !S.meta.dirty) pull().catch(() => {}); });

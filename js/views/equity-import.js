@@ -1,5 +1,5 @@
 // Shares & funds → Import: Groww files, trade history, corporate actions and dividends.
-import { S, mutate, setData } from '../store.js';
+import { S, mutate, setData, allowShrink } from '../store.js';
 import * as C from '../calc.js';
 import { h, money, dec, num, dateStr, section, table, btn, dialog, confirmDialog, toast, stat, canEdit } from '../ui.js';
 import { readTable } from '../xlsx.js';
@@ -18,7 +18,7 @@ function saveBackup(d) {
 }
 function undoImport() {
   const b = readBackup(); if (!b) return;
-  mutate((d) => { d.stocks = b.stocks; d.trades = b.trades; d.corporateActions = b.corporateActions; d.mutualFunds = b.mutualFunds; d.mfTxns = b.mfTxns; });
+  allowShrink(); mutate((d) => { d.stocks = b.stocks; d.trades = b.trades; d.corporateActions = b.corporateActions; d.mutualFunds = b.mutualFunds; d.mfTxns = b.mfTxns; });
   localStorage.removeItem(BACKUP);
   toast('Import undone');
 }
@@ -84,7 +84,7 @@ async function importStocks() {
     { label: full ? 'Replace everything' : 'Add trades', class: full ? 'danger' : 'primary', onclick: (c) => {
       saveBackup(S.data);
       const chosen = suggestions.filter((_, i) => ticks[i].checked);
-      mutate((d) => {
+      allowShrink(); mutate((d) => {
         const m = mergeList(d.trades && d.trades.length ? d.trades : (opening ? openingTrades(d) : []), parsed.trades, stockKey, { mode: full ? 'replace' : 'add', overwrite: over.checked });
         d.trades = m.list;
         d.corporateActions = d.corporateActions || [];
@@ -118,7 +118,7 @@ async function importFunds() {
     { label: 'Cancel', onclick: (c) => c() },
     { label: full ? 'Replace everything' : 'Add transactions', class: full ? 'danger' : 'primary', onclick: (c) => {
       saveBackup(S.data);
-      mutate((d) => {
+      allowShrink(); mutate((d) => {
         const m = mergeList(d.mfTxns || [], parsed.txns, mfKey, { mode: full ? 'replace' : 'add', overwrite: over.checked }); d.mfTxns = m.list;
         const inFile = new Set(parsed.txns.map((t) => fundKey(t.scheme)));
         if (full) d.mutualFunds = d.mutualFunds.filter((x) => inFile.has(fundKey(x.name)));

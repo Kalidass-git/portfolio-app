@@ -50,12 +50,50 @@ function tiles(all, data, mc) {
   const mk = marketGroups(all), gd = all.gold.day;
   const dayAll = mk.total.day + (gd ? gd.total : 0);
   const anyDay = mk.total.hasDay || !!gd;
-  const saved = mc.totalReceived - (mc.totalSpent + mc.lifestyle.amount);
+  const spent = mc.totalSpent + mc.lifestyle.amount;
   return h('div', { class: 'kpis span-12' },
     kpi('Net monthly inflow', money(all.netMonthly), `${money(all.cfTotal.perMonth)} earned − ${money(all.loans.monthlyInterest)} loan interest`, { tone: tone(all.netMonthly), href: '#/fixed/loans' }),
     kpi('Earning every day', money(all.cfTotal.perDay), `${money(all.cfTotal.perDay - all.loans.monthlyInterest / 30)} after loan interest`),
     kpi('Markets today', anyDay ? sgn(dayAll) : '–', anyDay ? 'shares, funds, ETFs and gold' : 'refresh prices to see', { tone: anyDay ? tone(dayAll) : '', href: '#/equity' }),
-    kpi('Kept this month', sgn(saved), mc.totalReceived ? `${pct(Math.max(-9.99, saved / mc.totalReceived), 0)} of income received` : 'no income recorded yet', { tone: tone(saved), href: '#/flow' }));
+    kpi('Spent this month', money(spent), mc.totalExpected ? `${pct(spent / mc.totalExpected, 0)} of ${money(mc.totalExpected)} budget` : 'no budget income yet', { tone: mc.totalExpected && spent > mc.totalReceived ? 'neg' : '', href: '#/flow' }));
+}
+
+/** This month's budget: your regular interest income is the budget. Expected, received, spent, left. */
+function budgetCard(data, all) {
+  const mc = C.monthCashflow(data, all, C.monthKey(all.asOf));
+  const spent = mc.totalSpent + mc.lifestyle.amount, exp = mc.totalExpected, rec = mc.totalReceived;
+  const pend = Math.max(0, exp - rec), left = exp - spent;
+  const bar = (v, of, cls) => h('div', { class: 'pbar ' + (cls || '') }, h('span', { style: { width: (of > 0 ? Math.min(100, Math.max(0, (v / of) * 100)) : 0).toFixed(1) + '%' } }));
+  const day = new Date(all.asOf).getUTCDate(), dim = new Date(Date.UTC(new Date(all.asOf).getUTCFullYear(), new Date(all.asOf).getUTCMonth() + 1, 0)).getUTCDate();
+  const pace = exp ? exp * (day / dim) : 0;
+  return section(monthLabel(C.monthKey(all.asOf)) + ' budget', h('div', null,
+    h('div', { class: 'trio' },
+      h('div', null, h('span', { class: 'mini-title' }, 'Expected'), h('b', null, money(exp))),
+      h('div', null, h('span', { class: 'mini-title' }, 'Received'), h('b', { class: 'pos' }, money(rec))),
+      h('div', null, h('span', { class: 'mini-title' }, 'Spent'), h('b', { class: spent > rec ? 'neg' : '' }, money(spent)))),
+    h('p', { class: 'mini-title' }, `Received ${money(rec)} of ${money(exp)} expected`), bar(rec, exp, 'good'),
+    h('p', { class: 'mini-title' }, `Spent ${money(spent)} of ${money(exp)} budget` + (exp ? ` (${pct(spent / exp, 0)})` : '')), bar(spent, exp, spent > exp ? 'bad' : spent > rec ? 'warn' : ''),
+    h('p', { class: 'summary-line' }, 'Left to spend from budget ', h('b', { class: tone(left) }, sgn(left)), pend > 0 ? h('span', { class: 'muted' }, ` · ${money(pend)} still to receive`) : null),
+    exp && spent > pace * 1.15 && day < dim - 3 ? h('p', { class: 'note warn' }, `Spending is ahead of the month: ${money(spent)} spent by day ${day}, an even pace would be about ${money(pace)}.`) : null,
+    h('p', null, h('a', { href: '#/flow' }, 'See where it went'))));
+}
+
+/** Money you are waiting for this month, and anything overdue. */
+function toReceiveCard(data, all) {
+  const monthEnd = C.addMonths(C.monthStart(all.asOf), 1);
+  const rows = data.receivables.filter((x) => x.active !== false && x.balanceDue > 0).map((x) => C.receivableStatus(x, all.asOf))
+    .filter((r) => !r.received && !r.notStarted && r.due < monthEnd).sort((a, b) => (a.due < b.due ? -1 : 1));
+  const mc = C.monthCashflow(data, all, C.monthKey(all.asOf));
+  const pend = mc.income.filter((x) => x.expected - x.received > 1).map((x) => ({ due: null, name: x.name, expected: x.expected - x.received, income: true, sub: `expected ${money(x.expected)}, received ${money(x.received)}` }));
+  const total = rows.reduce((a, r) => a + (r.expected || 0), 0) + pend.reduce((a, r) => a + r.expected, 0), over = rows.filter((r) => r.overdue);
+  const all2 = rows.concat(pend);
+  return section('Money to receive this month', h('div', null,
+    all2.length ? rowList(all2.map((r) => r.income ? { title: r.name, sub: r.sub, value: money(r.expected), valueSub: h('span', { class: 'warn' }, 'pending') } : ({
+      lead: dateChip(r.due), title: r.name, sub: r.overdue ? h('span', { class: 'neg' }, 'Overdue since ' + shortDate(r.due)) : 'Due ' + shortDate(r.due),
+      value: money(r.expected || 0), tone: r.overdue ? 'neg' : '',
+    }))) : h('p', { class: 'empty' }, 'Everything due this month has been received.'),
+    all2.length ? h('p', { class: 'summary-line' }, `Waiting for ${money(total)}`, over.length ? h('span', { class: 'neg' }, ` · ${over.length} overdue`) : null) : null,
+    h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income'))));
 }
 
 function todayCard(all) {
@@ -156,7 +194,7 @@ function thisMonth(data, all, months) {
   const spend = mc.spend.concat([mc.lifestyle]).filter((x) => x.amount > 0).sort((a, b) => b.amount - a.amount);
   const spent = mc.totalSpent + mc.lifestyle.amount;
   const got = mc.totalExpected ? Math.min(1, mc.totalReceived / mc.totalExpected) : 0;
-  return section('This month', h('div', { class: 'month' },
+  return section('This month in detail', h('div', { class: 'month' },
     h('div', null,
       h('p', { class: 'mini-title' }, 'Income'),
       h('p', { class: 'big-line' }, h('b', null, money(mc.totalReceived)), h('span', { class: 'muted' }, ` of ${money(mc.totalExpected)} expected`)),
@@ -189,13 +227,15 @@ export function render() {
   const series = C.netWorthSeries(data, all);
   const place = (el, cls) => { if (el) el.classList.add(cls); return el; };
   const root = h('div', { class: 'page dash' });
-  root.append(
+  const parts = [
     hero(all, series), tiles(all, data, C.monthCashflow(data, all, C.monthKey(all.asOf))),
     place(attention(data, all), 'span-12'),
+    place(budgetCard(data, all), 'span-7'), place(toReceiveCard(data, all), 'span-5'),
     place(todayCard(all), 'span-5'), place(breakupCard(all), 'span-7'),
     place(earning(all), 'span-7'), place(loansCard(all), 'span-5'),
     place(thisMonth(data, all, months), 'span-7'), place(comingUp(data, all), 'span-5'),
-    place(allocation(all), 'span-7'),
-    place(returnsCard(data, all), 'span-7'), place(networthChart(series, data), 'span-5'));
+    place(allocation(all), 'span-7'), place(networthChart(series, data), 'span-5'),
+    place(returnsCard(data, all), 'span-12')];
+  root.append(...parts.filter(Boolean));
   return root;
 }

@@ -3,7 +3,7 @@
 
 import { kindOf } from './categories.js';
 import { liveParity } from './goldlive.js';
-import { buildEquity, buildFunds, xirrFor, fundKey } from './trades.js';
+import { buildEquity, buildFunds, xirrFor, fundKey, flowsFor, symKey } from './trades.js';
 export const DAY = 86400000;
 export const toMs = (s) => (s ? Date.parse(s + 'T00:00:00Z') : NaN);
 export const iso = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -241,6 +241,21 @@ export function computeAll(data, opts = {}) {
     if (val > 0) f.push({ t: toMs(asOf), amount: val });
     mf.xirr = data.mutualFunds.some((m) => m.opening) ? null : xirr(f);
     mf.realized = mf.book.holdings.reduce((a, h) => a + h.realized, 0);
+  }
+  // XIRR for each holding that has dated buys (hidden when the first buy is under a month old: it would be a wild number)
+  const young = (flows) => !flows || !flows.length || flows.every((x) => asOf < addDays(x.date, 30));
+  const addDays = (d, n) => iso(toMs(d) + n * DAY);
+  if (stocks.eq) for (const it of stocks.items) {
+    const fl = stocks.eq.flows.get(symKey(it.symbol));
+    if (!fl || young(fl) || (data.trades || []).some((t) => t.src === 'opening' && symKey(t.symbol) === symKey(it.symbol))) continue;
+    it.xirr = xirr(flowsFor(stocks.eq, [symKey(it.symbol)], it.current, asOf));
+  }
+  if (mf.book) for (const it of mf.items) {
+    const fl = mf.book.flows.get(fundKey(it.name));
+    if (!fl || young(fl) || data.mutualFunds.some((m) => m.id === it.id && m.opening)) continue;
+    const f = fl.map((x) => ({ t: toMs(x.date), amount: x.amount }));
+    if (it.current > 0) f.push({ t: toMs(asOf), amount: it.current });
+    it.xirr = xirr(f);
   }
   const gold = calcGold(data);
 
@@ -644,6 +659,9 @@ export function familyReport(data, all) {
   g('Gold', 'Jewellery & gold', 'Suganya', all.gold.value, 0);
   for (const b of all.banks) g('Bank accounts', `${b.name}`, b.holder, b.balance, 0);
   for (const o of all.gold.others) g('Others', o.name, '', o.amount, 0);
+  // Items with the same name (for example three chits called the same) must stay separate: the 2nd and later get their own key.
+  const seen = new Map();
+  for (const x of groups) { const n = (seen.get(x.key) || 0) + 1; seen.set(x.key, n); if (n > 1) x.key = x.key + '#' + n; }
   const order = ['Bonds', 'Private lending', 'Fixed deposits', 'EPF, PPF & LIC', 'Chits', 'Equity, ETFs & funds', 'Gold', 'Bank accounts', 'Others'];
   const sections = order.map((type) => {
     const items = groups.filter((x) => x.type === type);

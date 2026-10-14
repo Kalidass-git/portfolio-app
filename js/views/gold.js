@@ -145,24 +145,46 @@ function openChit(row) {
 function chitsTab(root) {
   const { all, data } = S;
   const g = all.gold.chits;
+  // Monthly gold savings that track grams (GRT Savings Account - 5 and its earlier accounts) belong here too.
+  const schemes = data.gold.schemes || [];
+  const runSch = schemes.filter((x) => x.active), oldSch = schemes.filter((x) => !x.active);
+  const schRow = (x) => { const paid = x.entries.reduce((a, e) => a + e.amount, 0); return { name: x.name, shop: 'GRT', startDate: x.entries[0] && x.entries[0].date, months: x.entries.length, paid, grams: x.entries.reduce((a, e) => a + (e.grams || (e.rate ? e.amount / e.rate : 0)), 0), last: x.entries.length ? x.entries[x.entries.length - 1].date : '', scheme: x }; };
+  const running = g.active.map((c) => ({ name: c.name, shop: c.shop, startDate: c.startDate || (c.entries[0] && c.entries[0].date), months: c.months, paid: c.paid, ends: c.maturityDate, chit: c })).concat(runSch.map((x) => ({ ...schRow(x), ends: '' })));
+  const runPaid = running.reduce((a, r) => a + r.paid, 0);
   root.append(h('div', { class: 'stats' },
-    stat('Invested in gold chits', money(g.invested), `${g.active.length} running chit${g.active.length === 1 ? '' : 's'}`),
-    stat('Closed chits', String(g.closed.length), g.closed.length ? `${dec(g.closed.reduce((a, c) => a + c.closed.grams, 0), 1)} g received in total` : 'none yet')));
+    stat('Invested in gold chits', money(runPaid), `${running.length} running chit${running.length === 1 ? '' : 's'}`),
+    stat('Closed chits', String(g.closed.length + oldSch.length), g.closed.length + oldSch.length ? `${dec(g.closed.reduce((a, c) => a + c.closed.grams, 0), 1)} g received through chits closed here` : 'none yet')));
   root.append(section('Running chits', h('div', null, table([
     { label: 'Chit', get: (c) => c.name }, { label: 'Jeweller', get: (c) => c.shop || '' },
-    { label: 'Started', get: (c) => dateStr(c.startDate || (c.entries[0] && c.entries[0].date)) },
+    { label: 'Started', get: (c) => dateStr(c.startDate) },
     { label: 'Payments', cls: 'r', get: (c) => String(c.months) },
-    { label: 'Paid so far', cls: 'r', get: (c) => money(c.paid), total: () => money(g.invested) },
-    { label: 'Ends', get: (c) => dateStr(c.maturityDate) },
-  ], g.active, { footer: { label: 'Total' }, onRow: openChit, empty: 'No running gold chits.' }),
-    h('p', { class: 'note' }, 'Money paid into a running chit counts as gold at cost. When the chit ends, press “Close it”, enter the grams you received, and the gold is added to your purchases.')),
+    { label: 'Paid so far', cls: 'r', get: (c) => money(c.paid), total: () => money(runPaid) },
+    { label: 'Gold so far', cls: 'r', get: (c) => (c.grams ? dec(c.grams, 2) + ' g' : '–') },
+    { label: 'Ends', get: (c) => (c.ends ? dateStr(c.ends) : '') },
+  ], running, { footer: { label: 'Total' }, onRow: (c) => (c.chit ? openChit(c.chit) : document.getElementById('scheme-' + c.scheme.id)?.scrollIntoView({ behavior: 'smooth' })), empty: 'No running gold chits.' }),
+    h('p', { class: 'note' }, 'Money paid into a running chit counts as gold at cost. When the chit ends, press “Close it”, enter the grams you received, and the gold is added to your purchases. Monthly gold savings that already record grams (like GRT Savings Account - 5) show their gold so far and are valued at today’s rate.')),
     canEdit() ? [btn('Add gold chit', () => chitForm(), 'primary')] : null));
-  root.append(section(`Closed chits (${g.closed.length})`, table([
-    { label: 'Chit', get: (c) => c.name }, { label: 'Started', get: (c) => dateStr(c.startDate || (c.entries[0] && c.entries[0].date)) }, { label: 'Closed', get: (c) => dateStr(c.closed.date) },
-    { label: 'Paid', cls: 'r', get: (c) => money(c.paid) }, { label: 'Gold received', cls: 'r', get: (c) => dec(c.closed.grams, 2) + ' g' },
-    { label: 'Value now', cls: 'r', get: (c) => money(c.closed.grams * all.gold.rate) },
-    { label: 'Gain', cls: 'r', render: (c) => gainText(c.closed.grams * all.gold.rate - c.paid) },
-  ], g.closed.slice().sort((a, b) => (a.closed.date < b.closed.date ? 1 : -1)), { onRow: openChit, empty: 'Nothing closed yet.' })));
+  for (const x of runSch) {
+    const ents = x.entries.map((e, i) => ({ ...e, grams: e.grams || (e.rate ? e.amount / e.rate : 0), _i: i })).reverse();
+    const paid = ents.reduce((a, e) => a + e.amount, 0), grams = ents.reduce((a, e) => a + e.grams, 0);
+    const sec = section(x.name + ' · instalments', h('div', null, table([
+      { label: 'Date', get: (e) => dateStr(e.date) }, { label: 'Paid', cls: 'r', get: (e) => money(e.amount), total: () => money(paid) },
+      { label: 'Rate / g', cls: 'r', get: (e) => money(e.rate) }, { label: 'Grams', cls: 'r', get: (e) => dec(e.grams, 3), total: () => dec(grams, 3) },
+      { label: 'Value now', cls: 'r', get: (e) => money(e.grams * all.gold.rate), total: () => money(grams * all.gold.rate) },
+    ], ents, { footer: { label: 'Total' }, onRow: canEdit() ? (e) => schemeEntryForm(x, e._i) : null })),
+      canEdit() ? [btn('Add instalment', () => schemeEntryForm(x), 'primary')] : null);
+    sec.id = 'scheme-' + x.id; root.append(sec);
+  }
+  const closedRows = g.closed.map((c) => ({ name: c.name, startDate: c.startDate || (c.entries[0] && c.entries[0].date), closedOn: c.closed.date, paid: c.paid, grams: c.closed.grams, chit: c }))
+    .concat(oldSch.map((x) => { const r = schRow(x); return { name: x.name, startDate: r.startDate, closedOn: r.last, paid: r.paid, grams: null, converted: true }; }));
+  closedRows.sort((a, b) => (a.closedOn < b.closedOn ? 1 : -1));
+  root.append(section(`Closed chits (${closedRows.length})`, h('div', null, table([
+    { label: 'Chit', get: (c) => c.name }, { label: 'Started', get: (c) => dateStr(c.startDate) }, { label: 'Closed', get: (c) => dateStr(c.closedOn) },
+    { label: 'Paid', cls: 'r', get: (c) => money(c.paid) }, { label: 'Gold received', cls: 'r', get: (c) => (c.grams == null ? 'in purchases' : dec(c.grams, 2) + ' g') },
+    { label: 'Value now', cls: 'r', get: (c) => (c.grams == null ? '–' : money(c.grams * all.gold.rate)) },
+    { label: 'Gain', cls: 'r', render: (c) => (c.grams == null ? '–' : gainText(c.grams * all.gold.rate - c.paid)) },
+  ], closedRows, { onRow: (c) => c.chit && openChit(c.chit), empty: 'Nothing closed yet.' }),
+    oldSch.length ? h('p', { class: 'note' }, 'Earlier GRT accounts were turned into the gold purchases on the Gold tab, so their gold is counted there and not twice.') : null)));
 }
 function jewelForm(j) {
   const isNew = !j;
@@ -195,7 +217,7 @@ export function render() {
   root.append(h('div', { class: 'stats' },
     stat('Gold value', money(g.value), `${dec(g.grams, 2)} g · ${dec(g.grams / 8, 1)} sovereigns (8 g)`),
     stat('Gain on gold', h('span', { class: g.value - g.invested >= 0 ? 'pos' : 'neg' }, money(g.value - g.invested)), `paid ${money(g.invested)}`),
-    h('a', { class: 'stat', href: '#/gold/chits', style: { textDecoration: 'none', color: 'inherit' } }, h('span', { class: 'stat-label' }, 'Invested in gold chits'), h('strong', { class: 'stat-value' }, money(g.chits.invested)), h('span', { class: 'stat-sub' }, `${g.chits.active.length} running · tap to see`))));
+    h('a', { class: 'stat', href: '#/gold/chits', style: { textDecoration: 'none', color: 'inherit' } }, h('span', { class: 'stat-label' }, 'Invested in gold chits'), h('strong', { class: 'stat-value' }, money(g.chits.invested + (g.scheme.invested || 0))), h('span', { class: 'stat-sub' }, `${g.chits.active.length + (g.scheme.name ? 1 : 0)} running · tap to see`))));
   root.append(rateCard());
 
   root.append(section('Gold purchases',

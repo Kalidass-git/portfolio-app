@@ -28,3 +28,13 @@ export async function getPoint(id) { const r = await run('readonly', (s) => s.ge
 export const deletePoint = (id) => run('readwrite', (s) => s.delete(id));
 /** Keep the newest `keep` restore points, delete the rest. Returns how many were deleted. */
 export async function pruneKeep(keep) { const l = await listPoints(); const old = l.slice(keep); for (const r of old) await deletePoint(r.id); return old.length; }
+
+/** Keep the newest `keep` automatic restore points; never touches the ones you made. */
+export async function pruneAuto(keep) {
+  const l = (await listPoints()).filter((r) => r.kind === 'auto');
+  for (const r of l.slice(keep)) await deletePoint(r.id);
+}
+export async function hasPointToday(kind = 'auto', prefix = 'Daily') {
+  const today = new Date().toISOString().slice(0, 10);
+  return (await listPoints()).some((r) => r.kind === kind && r.name.startsWith(prefix) && r.createdAt.slice(0, 10) === today);
+}

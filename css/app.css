@@ -311,12 +311,37 @@ button.danger.primary-ish, dialog.sheet footer button.danger { border-color: var
   body, #app { background: #fff !important; display: block !important; }
   main, .page { padding: 0 !important; max-width: none !important; margin: 0 !important; }
   .rpts { display: block; }
-  .rpt { border: 0; border-radius: 0; min-height: 262mm; break-after: page; page-break-after: always; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .rpt-2 { break-after: avoid; page-break-after: avoid; min-height: 0; }
-  #main, .main-col { min-height: 0 !important; height: auto !important; }
+  .rpt { border: 0; border-radius: 0; min-height: 255mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .rpt-2 { break-before: page; page-break-before: always; min-height: 0; }
+  #main, .main-col { min-height: 0 !important; height: auto !important; padding: 0 !important; }
+  html, body { height: auto !important; overflow: visible !important; }
+  .rpt-2 { margin-bottom: -2px; }
   .rpt *, .rpt { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .rpt-two { grid-template-columns: 1fr 1fr; }
 }
 .stat.out { border-left: 4px solid var(--neg); }
 .trio b.neg { color: var(--neg); } .trio b.pos { color: var(--pos); }
 .chip-status { background: none; cursor: pointer; font-family: inherit; }
+.pbar.good span { background: var(--pos); } .pbar.warn span { background: var(--warn); } .pbar.bad span { background: var(--neg); }
+.note.warn { color: var(--warn); }
+.ct-list { display: grid; gap: 2px; } .ct { line-height: 1.3; } .ct b { color: var(--ink); } .ct span { color: var(--muted); }
+@media print { .ct { font-size: 9.5px; } .rpt-tbl td { padding: 3px 5px; } }
+/* compact holdings */
+.tbl.compact td { padding: 8px 6px; vertical-align: top; } .tbl.compact th { padding: 6px 6px; }
+.tbl.compact td:first-child { min-width: 0; width: 38%; } .tbl.compact .nm { font-weight: 600; line-height: 1.25; } .tbl.compact .nm .tag { margin-left: 6px; }
+.sub2 { font-size: .74rem; color: var(--muted); margin-top: 2px; line-height: 1.3; } .sub2 .xi { white-space: nowrap; }
+.tbl.compact .b { font-weight: 650; } .tbl.compact .pos, .sub2 .pos { color: var(--pos); } .tbl.compact .neg, .sub2 .neg { color: var(--neg); }
+@media (max-width: 700px) { .hide-sm { display: none !important; } .tbl.compact { font-size: .82rem; } .tbl.compact td:first-child { position: static; } .tbl-wrap:has(.compact) { overflow-x: visible; } }
+.totalbar { display: flex; flex-wrap: wrap; gap: 6px 18px; justify-content: space-between; padding: 10px 6px; margin-top: 4px; border-top: 2px solid var(--ink); font-weight: 650; } .totalbar small { font-weight: 500; color: var(--muted); }
+.totalbar .pos { color: var(--pos); } .totalbar .neg { color: var(--neg); }
+.eq-search { position: relative; margin: 0 0 12px; } .eq-search input { width: 100%; padding: 10px 12px; font-size: 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); }
+.search-results { list-style: none; margin: 4px 0 0; padding: 0; background: var(--surface); border-radius: 10px; box-shadow: var(--shadow); } .search-results:empty { display: none; }
+.search-results li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line-2); cursor: pointer; } .search-results li:hover { background: var(--surface-2); } .search-results li:last-child { border: 0; }
+.sr-main { flex: 1; display: grid; min-width: 0; } .sr-main small { color: var(--muted); } .search-results .pos { color: var(--pos); } .search-results .neg { color: var(--neg); }
+.tag.k-sold { background: color-mix(in srgb, var(--warn) 20%, transparent); }
+@media (max-width: 700px) {
+  .tbl.compact th.r, .tbl.compact td.r { white-space: normal; padding-left: 4px; padding-right: 4px; }
+  .tbl.compact td:first-child { width: 36%; } .tbl.compact th { font-size: .7rem; }
+  .tbl.compact .b { white-space: nowrap; } .tbl.compact td.r, .tbl.compact th.r { min-width: 72px; } .tbl.compact td:first-child { overflow-wrap: anywhere; }
+  .seg { max-width: 100%; overflow-x: auto; }
+}

@@ -39,3 +39,29 @@ export function byName(items) {
   for (const x of items) { const k = x.group + '|' + x.name; const r = m.get(k) || { name: x.name, group: x.group, amount: 0, count: 0, last: '' }; r.amount += x.amount; r.count++; if (x.date > r.last) r.last = x.date; m.set(k, r); }
   return [...m.values()].sort((a, b) => b.amount - a.amount);
 }
+
+const GENERIC = new Set(['fund', 'direct', 'growth', 'plan', 'regular', 'option', 'idcw', 'the', 'and', 'of', 'scheme']);
+const words = (s) => (s || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length > 1 && !GENERIC.has(w));
+
+/** Does a buy (name, group) belong to a plan line? `p.match` (comma separated words) wins; "individual stocks" means all shares. */
+export function planMatches(p, item) {
+  if (p.match && p.match.trim()) return p.match.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean).some((m) => item.name.toLowerCase().includes(m));
+  if (/individual|stocks?\b|shares?\b|equity/i.test(p.name) && !/fund|etf|bees/i.test(p.name)) return item.group === 'shares';
+  const pw = words(p.name), iw = new Set(words(item.name));
+  if (!pw.length) return false;
+  return pw.every((w) => iw.has(w) || [...iw].some((x) => x.startsWith(w) || w.startsWith(x)));
+}
+
+/** What was bought in `month` for each plan line (each buy counts once, for the first line that matches). */
+export function planDone(plans, buys, month) {
+  const items = (buys[month] || { items: [] }).items;
+  const used = new Set(), out = new Map();
+  // lines with an explicit match or a specific name go first, "individual stocks" last
+  const order = plans.slice().sort((a, b) => (/individual|stocks?\b/i.test(a.name) ? 1 : 0) - (/individual|stocks?\b/i.test(b.name) ? 1 : 0));
+  for (const p of order) {
+    let sum = 0;
+    items.forEach((it, i) => { if (!used.has(i) && planMatches(p, it)) { used.add(i); sum += it.amount; } });
+    out.set(p.id, Math.round(sum));
+  }
+  return { byPlan: out, other: Math.round(items.reduce((a, it, i) => a + (used.has(i) ? 0 : it.amount), 0)) };
+}

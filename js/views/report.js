@@ -33,6 +33,19 @@ function printReport() {
   setTimeout(() => window.print(), 150);
 }
 
+const oneLine = (t) => String(t || '').split('\n').map((x) => x.trim()).filter(Boolean).join(' · ');
+const clip = (t, n) => (t.length > n ? t.slice(0, n - 1).trimEnd() + '…' : t);
+/** Same-named items (and the same note) become one line with a count. */
+function mergeSame(items, notes) {
+  const m = new Map();
+  for (const x of items) {
+    const note = oneLine(notes[x.key]);
+    const k = x.label + '|' + note;
+    const r = m.get(k) || { label: x.label, note, count: 0, value: 0, type: x.type, holder: x.holder };
+    r.count++; r.value += x.value; m.set(k, r);
+  }
+  return [...m.values()];
+}
 const pctOf = (v, t) => (t > 0 ? Math.round((v / t) * 100) + '%' : '');
 
 export function render() {
@@ -64,7 +77,10 @@ export function render() {
     h('table', { class: 'rpt-tbl' },
       h('thead', null, h('tr', null, ['', 'What', 'Amount', 'Share', 'Held with / contact'].map((t, i) => h('th', { class: i === 2 || i === 3 ? 'r' : '' }, t)))),
       h('tbody', null, secs.map((s, i) => {
-        const where = [...new Set(s.items.map((x) => (notes[x.key] ? x.label : x.label)))].slice(0, 4).join(', ') + (s.items.length > 4 ? ` +${s.items.length - 4} more` : '');
+        const lines = mergeSame(s.items, notes).sort((x, y) => (y.note ? 1 : 0) - (x.note ? 1 : 0) || y.value - x.value);
+        const MAX = 5, shown = lines.slice(0, MAX);
+        const where = h('div', { class: 'ct-list' }, shown.map((l) => h('div', { class: 'ct' }, h('b', null, l.label + (l.count > 1 ? ' ×' + l.count : '')), l.note ? h('span', null, ' — ' + clip(l.note, 110)) : null)),
+          lines.length > MAX ? h('div', { class: 'ct muted' }, `+${lines.length - MAX} more, see page 2`) : null);
         return h('tr', null, h('td', null, h('i', { class: 'dot', style: { background: color(i) } })), h('td', null, h('b', null, s.type)), h('td', { class: 'r' }, money(s.total)), h('td', { class: 'r' }, pctOf(s.total, rep.total)), h('td', { class: 'small' }, where));
       })),
       h('tfoot', null, h('tr', null, h('td'), h('td', null, 'Total'), h('td', { class: 'r' }, money(rep.total)), h('td', { class: 'r' }, '100%'), h('td')))),
@@ -80,7 +96,7 @@ export function render() {
   for (const s of secs) for (const it of s.items) { const k = (it.holder || 'Joint / other').trim() || 'Joint / other'; holders.set(k, (holders.get(k) || 0) + it.value); }
   const holderRows = [...holders].map(([label, value], i) => ({ label, value, ci: i })).sort((a, b) => b.value - a.value);
   const allocation = secs.map((s) => ({ label: s.type, value: s.total }));
-  const withNotes = secs.flatMap((s) => s.items.filter((x) => notes[x.key]).map((x) => ({ ...x, type: s.type })));
+  const withNotes = mergeSame(secs.flatMap((s) => s.items.filter((x) => notes[x.key]).map((x) => ({ ...x, type: s.type }))), notes);
   const biggest = secs.flatMap((s) => s.items.map((x) => ({ ...x, type: s.type }))).sort((a, b) => b.value - a.value).slice(0, 8);
   const income = secs.flatMap((s) => s.items.filter((x) => x.monthly > 0).map((x) => ({ label: x.label, value: x.monthly })));
   const p2 = h('section', { class: 'rpt rpt-2' },
@@ -92,7 +108,7 @@ export function render() {
     h('div', { class: 'box wide' }, h('h3', { class: 'rpt-h' }, 'Biggest holdings'),
       h('table', { class: 'rpt-tbl' }, h('tbody', null, biggest.map((x) => h('tr', null, h('td', null, h('b', null, x.label)), h('td', { class: 'small' }, x.type + (x.holder ? ' · ' + x.holder : '')), h('td', { class: 'r' }, money(x.value)), h('td', { class: 'small' }, notes[x.key] || '')))))),
     withNotes.length ? h('div', { class: 'box wide' }, h('h3', { class: 'rpt-h' }, 'Who to reach for each investment'),
-      h('table', { class: 'rpt-tbl' }, h('tbody', null, withNotes.map((x) => h('tr', null, h('td', null, h('b', null, x.label)), h('td', { class: 'small' }, x.type), h('td', { class: 'small pre' }, notes[x.key])))))) : null,
+      h('table', { class: 'rpt-tbl' }, h('tbody', null, withNotes.map((x) => h('tr', null, h('td', null, h('b', null, x.label + (x.count > 1 ? ' ×' + x.count : ''))), h('td', { class: 'small' }, x.type), h('td', { class: 'small' }, x.note)))))) : null,
     h('footer', { class: 'rpt-foot' }, 'Do not keep passwords or PINs on this page.'));
 
   root.append(h('div', { class: 'rpts' }, p1, p2));

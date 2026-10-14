@@ -1,4 +1,4 @@
-import { S, setData } from '../store.js';
+import { S, setData, allowShrink } from '../store.js';
 import { h, section, table, btn, formDialog, confirmDialog, toast, canEdit, dateStr } from '../ui.js';
 import * as B from '../backups.js';
 
@@ -29,7 +29,7 @@ export function section_() {
       { label: 'Name', get: (r) => r.name }, { label: 'Made', get: (r) => when(r.createdAt) }, { label: 'Type', get: (r) => KIND[r.kind] || r.kind },
       { label: 'Size', cls: 'r', get: (r) => kb(r.size) }, { label: 'Entries', cls: 'r', get: (r) => String(r.counts.ledger) },
       { label: '', render: (r) => h('span', { class: 'btn-row' },
-        h('button', { class: 'small', onclick: async (e) => { e.stopPropagation(); if (!await confirmDialog(`Go back to "${r.name}" (${when(r.createdAt)})? Your current data is saved as a new restore point first.`, 'Restore')) return; const p = await B.getPoint(r.id); await B.createPoint(S.data, 'Before restoring ' + r.name, 'auto'); setData(p.data, { dirty: true }); toast('Restored'); refresh(); } }, 'Restore'),
+        h('button', { class: 'small', onclick: async (e) => { e.stopPropagation(); if (!await confirmDialog(`Go back to "${r.name}" (${when(r.createdAt)})? Your current data is saved as a new restore point first.`, 'Restore')) return; const p = await B.getPoint(r.id); await B.createPoint(S.data, 'Before restoring ' + r.name, 'auto'); allowShrink(); setData(p.data, { dirty: true }); toast('Restored'); refresh(); } }, 'Restore'),
         h('button', { class: 'small', onclick: async (e) => { e.stopPropagation(); const p = await B.getPoint(r.id); download(`portfolio-restore-${r.createdAt.slice(0, 10)}.json`, JSON.stringify(p.data, null, 1)); } }, 'Download'),
         h('button', { class: 'small danger', onclick: async (e) => { e.stopPropagation(); if (await confirmDialog(`Delete "${r.name}"? This cannot be undone.`, 'Delete')) { await B.deletePoint(r.id); toast('Deleted'); refresh(); } } }, 'Delete')) },
     ], list) : h('p', { class: 'empty' }, 'No restore points yet.'));

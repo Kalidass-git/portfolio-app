@@ -1,6 +1,7 @@
 import { S, setCfg, setData, connect, pull, push, disconnect, resetAll, mutate, nextId } from '../store.js';
 import * as C from '../calc.js';
 import { section_ as restorePoints } from './backups.js';
+import { section_ as storageInfo } from './storage.js';
 import { loanForm as liabilityForm } from './loans.js';
 import { h, money, dateStr, section, btn, formDialog, dialog, confirmDialog, toast, canEdit, table } from '../ui.js';
 
@@ -68,6 +69,7 @@ export function render() {
   }
 
   { const rp = restorePoints(); if (rp) root.append(rp); }
+  root.append(storageInfo());
   root.append(section('Data file',
     h('div', null, h('p', { class: 'note' }, 'A backup is a single JSON file. Keep one somewhere safe, for example in Google Drive.'),
       h('div', { class: 'row' },

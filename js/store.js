@@ -1,4 +1,5 @@
 // App state, local persistence and sync with the Google Drive backend (Apps Script).
+import { createPoint, pruneAuto, hasPointToday } from './backups.js';
 import { materialize, materializeFunds } from './trades.js';
 import { computeAll, todayISO } from './calc.js';
 import * as remote from './remote.js';
@@ -6,9 +7,10 @@ import { merge } from './merge.js';
 
 const K = { data: 'pt.data', cfg: 'pt.cfg', quotes: 'pt.quotes', meta: 'pt.meta', base: 'pt.base' };
 const read = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
-const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } };
+const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); if (S.saveFailed && (k === 'pt.data')) { S.saveFailed = false; } return true; } catch { if (k === 'pt.data') S.saveFailed = true; return false; } };
 
 export const S = {
+  saveFailed: false, guard: null,
   data: null,
   cfg: { backendUrl: '', key: '', useLive: true, theme: 'auto', asOf: '', fontScale: 1 },
   masked: true,           // hide figures until the eye icon is tapped; resets on every app open
@@ -66,9 +68,14 @@ let pushTimer = null;
 /** Apply a change to the data. Owner only. Saves locally right away and syncs to Drive shortly after. */
 export function mutate(fn) {
   if (S.role !== 'owner') throw new Error('This device has read-only access.');
-  const draft = S.data;
-  fn(draft);
-  materialize(draft); materializeFunds(draft); // holdings follow the trades once a Groww history is imported
+  let draft = S.data;
+  const before = JSON.stringify(draft); // a change that fails half way must not leave half a change behind
+  try {
+    fn(draft);
+    materialize(draft); materializeFunds(draft); // holdings follow the trades once a Groww history is imported
+    const bad = sanity(draft);
+    if (bad.length) throw new Error('That change would have damaged the data (' + bad[0] + '), so it was cancelled.');
+  } catch (e) { S.data = JSON.parse(before); recompute(); emit(); throw e; }
   draft.updatedAt = new Date().toISOString();
   S.meta.dirty = true;
   recompute(); snapshot();
@@ -134,6 +141,7 @@ export async function pull({ force = false } = {}) {
       return push();
     }
     if (!res.data) { S.status = 'idle'; emit(); return { empty: true }; }
+    if (S.data && S.role === 'owner' && sizes(res.data).ledger < sizes(S.data).ledger * 0.6) await safetyPoint('Before loading a much smaller Drive copy');
     setData(res.data, { dirty: false, version: res.version });
     S.meta.lastSync = new Date().toISOString(); write(K.meta, S.meta);
     S.status = 'idle'; S.error = ''; emit();
@@ -141,14 +149,64 @@ export async function pull({ force = false } = {}) {
   } catch (e) { return fail(e); }
 }
 
+
+// ---------- safety ----------
+/** Counts that should not fall suddenly. */
+const sizes = (d) => ({ ledger: (d.ledger || []).length, trades: (d.trades || []).length, mfTxns: (d.mfTxns || []).length, stocks: (d.stocks || []).length, funds: (d.mutualFunds || []).length, bonds: (d.bonds || []).length, lending: (d.lending || []).length, savings: (d.savings || []).length });
+/** Structural check: refuse to save or upload something that is not a portfolio file. */
+export function sanity(d) {
+  const bad = [];
+  if (!d || typeof d !== 'object') return ['data is empty'];
+  for (const k of ['ledger', 'accounts', 'stocks', 'mutualFunds', 'bonds', 'fds', 'lending', 'savings', 'liabilities']) if (!Array.isArray(d[k])) bad.push(k + ' is missing');
+  if (!d.settings || typeof d.settings !== 'object') bad.push('settings are missing');
+  if (!bad.length) {
+    const ids = new Set(); let dup = 0;
+    for (const e of d.ledger) { if (ids.has(e.id)) dup++; ids.add(e.id); }
+    if (dup) bad.push(dup + ' bank entries share an id');
+    if (d.ledger.some((e) => !e.acct || !/^\d{4}-\d\d-\d\d/.test(e.date || ''))) bad.push('some bank entries have no account or date');
+  }
+  return bad;
+}
+/** Would uploading `d` throw away a lot compared with the last synced copy? Returns a list of what shrank. */
+export function shrinkReport(d) {
+  const base = loadBase(); if (!base) return [];
+  const a = sizes(base), b = sizes(d), out = [];
+  for (const k of Object.keys(a)) if (a[k] >= 10 && b[k] < a[k] * 0.6 && a[k] - b[k] >= 8) out.push({ what: k, from: a[k], to: b[k] });
+  return out;
+}
+let shrinkOk = false;
+/** Call just before a change that legitimately removes many entries (archive, full re-import). */
+export const allowShrink = () => { shrinkOk = true; };
+/** A restore point of this device's data, before something that could replace it. Keeps the newest 20 automatic ones. */
+export async function safetyPoint(reason) {
+  try { if (S.data) { await createPoint(S.data, reason, 'auto'); await pruneAuto(20); } } catch { /* storage may be unavailable: best effort */ }
+}
+/** Once a day, on the owner's device: a daily restore point. */
+export async function dailyPoint() {
+  if (!S.data || S.role !== 'owner') return;
+  try { if (!(await hasPointToday('auto', 'Daily'))) await safetyPoint('Daily ' + new Date().toISOString().slice(0, 10)); } catch { /* ignore */ }
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch { /* ignore */ }
+}
+export function resolveGuard(choice) {
+  const g = S.guard; S.guard = null;
+  if (choice === 'sync') { shrinkOk = true; return push(); }
+  if (choice === 'undo' && g && g.base) { setData(g.base, { dirty: false }); return pull({ force: true }); }
+  emit();
+}
+
 export async function push({ force = false } = {}) {
   if (!S.remote || S.role !== 'owner') return;
   S.status = 'syncing'; emit();
   try {
+    const bad = sanity(S.data);
+    if (bad.length) { S.status = 'error'; S.error = 'Not uploaded because the data looks damaged: ' + bad[0] + '. Restore from a restore point in Settings.'; emit(); return { blocked: true }; }
+    const shr = shrinkReport(S.data);
+    if (shr.length && !shrinkOk && !force) { S.status = 'guard'; S.guard = { shrunk: shr, base: loadBase() }; emit(); return { guard: true }; }
     const sent = JSON.stringify(S.data);
     const res = await remote.call(S.cfg.backendUrl, S.cfg.key, 'write', { data: S.data, baseVersion: force ? null : S.meta.version });
     if (res.conflict) return reconcile();
     try { if (!write(K.base, JSON.parse(sent))) localStorage.removeItem(K.base); } catch {}
+    shrinkOk = false; S.guard = null;
     S.meta.version = res.version; S.meta.dirty = S.data && JSON.stringify(S.data) !== sent; S.meta.lastSync = new Date().toISOString();
     write(K.meta, S.meta);
     S.status = 'idle'; S.error = ''; emit();
@@ -161,6 +219,7 @@ async function reconcile(remoteRes) {
   const res = remoteRes || await remote.call(S.cfg.backendUrl, S.cfg.key, 'read');
   const base = loadBase();
   if (!res.data || !base) { S.status = 'conflict'; emit(); return { conflict: true, remote: res }; }
+  await safetyPoint('Before combining with another device');
   const m = merge(base, S.data, res.data);
   materialize(m.data); materializeFunds(m.data);
   m.data.updatedAt = new Date().toISOString();

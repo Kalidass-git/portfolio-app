@@ -78,7 +78,7 @@ export async function refreshAll(onProgress = () => {}) {
       symbols.push({ symbol: '__GOLD_USD', yahoo: 'GC=F' }, { symbol: '__USD_INR', yahoo: 'INR=X' });
       // fully sold shares too, so the Sold tab can show what they are worth today
       const eq = S.all && S.all.stocks.eq;
-      if (eq) for (const x of eq.sold) { const sy = x.nowSymbol; if (!/\$/.test(sy) && !symbols.some((q) => q.symbol.toUpperCase() === sy)) symbols.push({ symbol: sy, yahoo: '' }); }
+      if (eq) for (const x of eq.sold) { const o = (S.data.soldSettings || {})[x.symbol] || {}; if (o.suppress) continue; const sy = (o.nowSymbol || x.nowSymbol).toUpperCase(); if (!/\$/.test(sy) && !symbols.some((q) => q.symbol.toUpperCase() === sy)) symbols.push({ symbol: sy, yahoo: o.yahoo || '' }); }
       const res = await call(S.cfg.backendUrl, S.cfg.key, 'quotes', { symbols });
       const g = res.quotes && res.quotes.__GOLD_USD, fx = res.quotes && res.quotes.__USD_INR;
       if (g && fx) goldLive = { usdOz: g.price, prevUsdOz: g.prevClose || g.price, inr: fx.price, prevInr: fx.prevClose || fx.price, at: now };
