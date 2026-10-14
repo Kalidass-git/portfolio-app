@@ -108,14 +108,14 @@ export function sold(root) {
     stat('If you had kept them', priced.length ? money(kept) : '–', priced.length < list.length ? (priced.length ? `${priced.length} of ${list.length} have a price` : 'press Refresh prices') : 'value today'),
     stat(diff >= 0 ? 'Holding on would have given' : 'Selling saved you', priced.length ? h('span', { class: diff >= 0 ? 'warn' : 'pos' }, money(Math.abs(diff))) : '–', diff >= 0 ? 'more than you sold for' : 'compared with holding on')));
   root.append(section('Every sale', h('div', null, table([
-    { label: 'Sold on', get: (x) => dateStr(x.date) },
-    { label: 'Share', render: (x) => h('span', null, x.name, x.split ? h('small', { class: 'tag' }, `now ${num(x.nowQty)} sh`) : null, x.o.suppress ? h('small', { class: 'tag' }, 'price off') : null, x.o.nowSymbol ? h('small', { class: 'sub' }, ' → ' + x.o.nowSymbol) : null) },
-    { label: 'Qty', cls: 'r', get: (x) => num(x.qty) },
+    { label: 'Sold on', mob: 'under', mlabel: 'sold ', get: (x) => dateStr(x.date) },
+    { label: 'Share', host: true, render: (x) => h('span', null, x.name, x.split ? h('small', { class: 'tag' }, `now ${num(x.nowQty)} sh`) : null, x.o.suppress ? h('small', { class: 'tag' }, 'price off') : null, x.o.nowSymbol ? h('small', { class: 'sub' }, ' → ' + x.o.nowSymbol) : null) },
+    { label: 'Qty', mob: 'under', mlabel: 'qty ', cls: 'r', get: (x) => num(x.qty) },
     { label: 'Sold for', cls: 'r', get: (x) => money(x.proceeds), total: () => money(proceeds) },
-    { label: 'Bought for', cls: 'r', get: (x) => money(x.cost), total: () => money(cost) },
+    { label: 'Bought for', mob: 'under', mlabel: 'bought ', cls: 'r', get: (x) => money(x.cost), total: () => money(cost) },
     { label: 'Profit / loss', cls: 'r', render: (x) => h('span', { class: posNeg(x.realized) }, money(x.realized), x.ret != null ? h('small', { class: 'sub' }, ' ' + pct(x.ret, 0)) : null), total: () => h('span', { class: posNeg(realized) }, money(realized)) },
-    { label: 'Value today if kept', cls: 'r', get: (x) => (x.nowValue == null ? h('span', { class: 'muted' }, x.o.suppress ? 'price off' : 'no price') : money(x.nowValue) + (x.o.suppress && x.o.manualPrice ? ' (set by you)' : '')), total: () => (priced.length ? money(kept) : '') },
-    { label: 'Kept vs sold', cls: 'r', render: (x) => (x.diff == null ? '–' : h('span', { class: x.diff > 0 ? 'warn' : 'pos' }, (x.diff > 0 ? '+' : '−') + money(Math.abs(x.diff)), h('small', { class: 'sub' }, x.diff > 0 ? ' missed' : ' saved'))) },
+    { label: 'Value today if kept', mob: 'under', mlabel: 'now ', cls: 'r', get: (x) => (x.nowValue == null ? h('span', { class: 'muted' }, x.o.suppress ? 'price off' : 'no price') : money(x.nowValue) + (x.o.suppress && x.o.manualPrice ? ' (set by you)' : '')), total: () => (priced.length ? money(kept) : '') },
+    { label: 'Kept vs sold', mob: 'under', mlabel: 'vs keeping: ', cls: 'r', render: (x) => (x.diff == null ? '–' : h('span', { class: x.diff > 0 ? 'warn' : 'pos' }, (x.diff > 0 ? '+' : '−') + money(Math.abs(x.diff)), h('small', { class: 'sub' }, x.diff > 0 ? ' missed' : ' saved'))) },
   ], list, { footer: { label: 'Total' }, onRow: canEdit() ? (x) => soldSymbolForm(x) : null }),
     h('p', { class: 'note' }, 'Profit uses first-in-first-out cost, which is how the tax department matches sales to purchases. “Kept vs sold” is the value today of the shares you sold (after any later split or bonus) minus what you received. Fully sold shares get a price when you press Refresh prices. Shares that no longer trade (merged or unlisted) have no price. Brokerage and taxes are included only if they were in the file or the sale entry.'))));
 }

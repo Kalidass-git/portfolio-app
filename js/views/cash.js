@@ -155,13 +155,13 @@ function ledger() {
     h('div', null, bar,
       h('p', { class: 'summary-line' }, `${num(total)} entries · received `, h('b', { class: 'pos' }, money(credit)), ' · paid out ', h('b', null, money(debit))),
       table([
-        { label: 'Date', get: (e) => dateStr(e.date) },
-        { label: 'Description', get: (e) => e.desc },
-        { label: 'Category', get: (e) => e.category },
-        { label: 'Account', get: (e) => acctName.get(e.acct) },
+        { label: 'Date', mob: 'under', get: (e) => dateStr(e.date) },
+        { label: 'Description', host: true, get: (e) => e.desc },
+        { label: 'Category', mob: 'under', get: (e) => e.category },
+        { label: 'Account', mob: 'under', get: (e) => acctName.get(e.acct) },
         { label: 'Out', cls: 'r', get: (e) => (e.debit ? money(e.debit) : '') },
         { label: 'In', cls: 'r', render: (e) => (e.credit ? h('span', { class: 'pos' }, money(e.credit)) : '') },
-        { label: 'Balance', cls: 'r', get: (e) => money(e.balance) },
+        { label: 'Balance', mob: 'under', mlabel: 'bal ', cls: 'r', get: (e) => money(e.balance) },
       ], rows.slice(0, limit), { onRow: canEdit() ? (e) => txnForm(data.ledger.find((x) => x.id === e.id)) : null, empty: 'No transactions match these filters.' }),
       total > limit ? btn(`Show more (${total - limit} left)`, () => { limit += 100; rerender(); }, 'wide') : null),
     null));
@@ -230,13 +230,13 @@ function savings() {
     const withX = title === 'Chits' || title === 'Insurance & recurring deposits' || title === 'Other savings';
     wrap.append(section(title,
       table([
-        { label: 'Name', get: (s) => s.name },
-        { label: 'Holder', get: (s) => s.holder },
+        { label: 'Name', host: true, get: (s) => s.name },
+        { label: 'Holder', mob: 'under', get: (s) => s.holder },
         { label: 'Invested', cls: 'r', get: (s) => money(s.principal), total: (rs) => money(rs.reduce((a, s) => a + s.principal, 0)) },
-        { label: 'Assumed rate', cls: 'r', get: (s) => (s.rate * 100).toFixed(2) + '%' },
-        ...(withX ? [{ label: 'XIRR', cls: 'r', render: xirrCell }] : []),
+        { label: 'Assumed rate', mob: 'under', mlabel: 'rate ', cls: 'r', get: (s) => (s.rate * 100).toFixed(2) + '%' },
+        ...(withX ? [{ label: 'XIRR', mob: 'under', mlabel: 'XIRR ', cls: 'r', render: xirrCell }] : []),
         { label: 'Interest / day', cls: 'r', get: (s) => money(s.daily), total: (rs) => money(rs.reduce((a, s) => a + s.daily, 0)) },
-        { label: 'Matures', get: (s) => dateStr(s.maturityDate) },
+        { label: 'Matures', mob: 'under', mlabel: 'matures ', get: (s) => dateStr(s.maturityDate) },
       ], list, { footer: { label: 'Total' }, onRow: openSaving, empty: 'No accounts of this kind.' }),
       canEdit() && title === 'Chits' ? [btn('Add savings account', () => savingForm(), 'primary')] : null));
     if (title === 'Chits') wrap.append(h('p', { class: 'note' }, 'XIRR is the real yearly return worked out from the dates and amounts you paid. For a running chit it is only an estimate and needs “Expected payout” in the account. Close a chit with the amount you actually received to see its actual XIRR.'));
@@ -260,13 +260,13 @@ function closedSavings() {
   const wrap = h('div');
   wrap.append(h('div', { class: 'stats' }, stat('Closed accounts', String(list.length), 'chits, deposits and other savings'), stat('Paid in', money(paid), ''), stat('Received', money(got), h('span', { class: posNeg(got - paid) }, (got - paid >= 0 ? 'gain ' : 'loss ') + money(Math.abs(got - paid))))));
   wrap.append(section('Closed accounts', table([
-    { label: 'Name', get: (s) => s.name }, { label: 'Type', get: (s) => s.type }, { label: 'Holder', get: (s) => s.holder },
-    { label: 'Started', get: (s) => dateStr(s.depositDate || (s.entries[0] && s.entries[0].date)) }, { label: 'Closed', get: (s) => dateStr(s.closed.date) },
+    { label: 'Name', host: true, get: (s) => s.name }, { label: 'Type', mob: 'under', get: (s) => s.type }, { label: 'Holder', mob: 'under', get: (s) => s.holder },
+    { label: 'Started', mob: 'hide', get: (s) => dateStr(s.depositDate || (s.entries[0] && s.entries[0].date)) }, { label: 'Closed', mob: 'under', mlabel: 'closed ', get: (s) => dateStr(s.closed.date) },
     { label: 'Paid in', cls: 'r', get: (s) => money(s.principal), total: () => money(paid) },
     { label: 'Received', cls: 'r', get: (s) => money(s.closed.amount), total: () => money(got) },
-    { label: 'Gain', cls: 'r', render: (s) => h('span', { class: posNeg(s.closed.amount - s.principal) }, money(s.closed.amount - s.principal)), total: () => money(got - paid) },
-    { label: 'XIRR', cls: 'r', render: xirrCell },
-    { label: 'Money went to', get: (s) => (s.closed.acct ? acct.get(s.closed.acct) || '' : 'not added') },
+    { label: 'Gain', mob: 'under', mlabel: 'gain ', cls: 'r', render: (s) => h('span', { class: posNeg(s.closed.amount - s.principal) }, money(s.closed.amount - s.principal)), total: () => money(got - paid) },
+    { label: 'XIRR', mob: 'under', mlabel: 'XIRR ', cls: 'r', render: xirrCell },
+    { label: 'Money went to', mob: 'hide', get: (s) => (s.closed.acct ? acct.get(s.closed.acct) || '' : 'not added') },
   ], list, { footer: { label: 'Total' }, onRow: (s) => openClosed(s), empty: 'Nothing closed yet. Open a chit on the Savings & chits tab and press “Close it” when it ends.' })));
   return wrap;
 }

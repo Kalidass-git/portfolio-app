@@ -104,11 +104,13 @@ export function render(root) {
     null));
 
   root.append(h('details', { class: 'card more' }, h('summary', null, 'Show all the numbers'), table([
-    { label: 'Month', get: (r) => monthLabel(r.month) },
-    { label: 'Income plan', cls: 'r', get: (r) => money(r.plan.income) }, { label: 'Income actual', cls: 'r', get: (r) => (r.actual && r.state !== 'ahead-of-us' ? money(r.actual.income) : '–') },
-    { label: 'Expenses plan', cls: 'r', get: (r) => money(r.plan.expenses) }, { label: 'Expenses actual', cls: 'r', get: (r) => (r.actual && r.state !== 'ahead-of-us' ? money(r.actual.expenses) : '–') },
-    { label: 'EMI', cls: 'r', get: (r) => money(r.plan.emi) }, { label: 'Tax', cls: 'r', get: (r) => money(r.plan.tax) },
-    { label: 'Left: plan', cls: 'r', get: (r) => money(r.plan.left) }, { label: 'Left: cautious', cls: 'r', get: (r) => money(r.plan.cLeft) },
+    { label: 'Month', host: true, get: (r) => monthLabel(r.month) },
+    { label: 'Income plan', cls: 'r', mob: 'under', mu: (r) => 'income ' + money(r.plan.income) + (r.actual && r.state !== 'ahead-of-us' ? ' → ' + money(r.actual.income) : ''), get: (r) => money(r.plan.income) },
+    { label: 'Income actual', cls: 'r', mob: 'hide', get: (r) => (r.actual && r.state !== 'ahead-of-us' ? money(r.actual.income) : '–') },
+    { label: 'Expenses plan', cls: 'r', mob: 'under', mu: (r) => 'expenses ' + money(r.plan.expenses) + (r.actual && r.state !== 'ahead-of-us' ? ' → ' + money(r.actual.expenses) : ''), get: (r) => money(r.plan.expenses) },
+    { label: 'Expenses actual', cls: 'r', mob: 'hide', get: (r) => (r.actual && r.state !== 'ahead-of-us' ? money(r.actual.expenses) : '–') },
+    { label: 'EMI', cls: 'r', mob: 'under', mlabel: 'EMI ', get: (r) => money(r.plan.emi) }, { label: 'Tax', cls: 'r', mob: 'under', mlabel: 'tax ', get: (r) => money(r.plan.tax) },
+    { label: 'Left: plan', cls: 'r', get: (r) => money(r.plan.left) }, { label: 'Left: cautious', cls: 'r', mob: 'under', mlabel: 'cautious ', get: (r) => money(r.plan.cLeft) },
     { label: 'Left: actual', cls: 'r', render: (r) => (r.actual && r.state !== 'ahead-of-us' ? h('span', { class: posNeg(r.actual.left) }, money(r.actual.left)) : '–') },
   ], rowsC, { onRow: canEdit() ? (r) => monthForm(plan, r.month) : null })));
 

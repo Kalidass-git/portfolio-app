@@ -113,7 +113,8 @@ export function formDialog({ title, fields, value = {}, onSave, onDelete, extraA
   const form = h('form', { class: 'form', novalidate: true });
   for (const f of fields) {
     let input;
-    const v = value[f.key] ?? f.default ?? '';
+    let v = value[f.key] ?? f.default ?? '';
+    if (f.type === 'date' && v === '' && f.required) { const n = new Date(); v = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`; }
     if (f.type === 'select') {
       input = h('select', { name: f.key });
       setOptions(input, f.options || [], v);
@@ -124,6 +125,7 @@ export function formDialog({ title, fields, value = {}, onSave, onDelete, extraA
     } else {
       input = h('input', { name: f.key, type: f.type === 'number' ? 'number' : f.type || 'text', step: f.step || (f.type === 'number' ? 'any' : null), inputmode: f.type === 'number' ? 'decimal' : null, value: v, autocomplete: 'off', list: f.list || null, readonly: f.readonly || null });
     }
+    if (f.type === 'date' && v) input.value = v;
     inputs[f.key] = input;
     if (f.onInput) input.addEventListener('input', () => f.onInput(input, inputs));
     labels[f.key] = h('label', { class: 'field' + (f.type === 'checkbox' ? ' check' : '') + (f.half ? ' half' : '') },
@@ -173,14 +175,37 @@ export const btn = (label, onclick, cls = '') => h('button', { class: cls, oncli
 export const empty = (msg) => h('p', { class: 'empty' }, msg);
 
 /** Table. cols: [{label, get(row), cls, render(row)->node|string, total}] */
+/**
+ * A table that stays readable on a phone.
+ * Column options for small screens (under 700px):
+ *   mob: 'under'  the value moves to a small grey line under the main (first or `host`) column
+ *   mob: 'hide'   the column is left out (the "All columns" button brings it back)
+ *   mlabel        short text put before an 'under' value, such as 'rate '
+ *   mu(row)       what to show in the small line when it should differ from the cell
+ *   host: true    the column that carries the small line (default: the first)
+ */
 export function table(cols, rows, { onRow, footer, rowClass, empty: emptyMsg = 'Nothing here yet.' } = {}) {
   if (!rows.length) return empty(emptyMsg);
-  const t = h('table', { class: 'tbl' },
-    h('thead', null, h('tr', null, cols.map((c) => h('th', { class: c.cls || '' }, c.label)))),
+  const small = (c) => (c.mob === 'under' || c.mob === 'hide' ? ' hide-sm' : '');
+  let hostI = cols.findIndex((c) => c.host); if (hostI < 0) hostI = 0;
+  const unders = cols.filter((c) => c.mob === 'under');
+  const fit = cols.some((c) => c.mob);
+  const cell = (c, r) => (c.render ? c.render(r) : c.get(r));
+  const underLine = (r) => {
+    const parts = unders.map((c) => { const v = c.mu ? c.mu(r) : cell(c, r); return v == null || v === '' || v === '–' ? null : [c.mlabel || '', v]; }).filter(Boolean);
+    return parts.length ? h('div', { class: 'm-under sub2' }, parts.map((p, i) => [i ? ' · ' : '', p[0], p[1]])) : null;
+  };
+  const t = h('table', { class: 'tbl' + (fit ? ' fit' : '') },
+    h('thead', null, h('tr', null, cols.map((c, i) => h('th', { class: (c.cls || '') + small(c) + (i === hostI ? ' host' : '') }, c.label)))),
     h('tbody', null, rows.map((r) => h('tr', { class: (onRow ? 'click ' : '') + (rowClass ? rowClass(r) || '' : ''), tabindex: onRow ? 0 : null, onclick: onRow ? () => onRow(r) : null, onkeydown: onRow ? (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onRow(r)) : null },
-      cols.map((c) => h('td', { class: c.cls || '', 'data-label': c.label }, c.render ? c.render(r) : c.get(r)))))),
-    footer ? h('tfoot', null, h('tr', null, cols.map((c, i) => h('td', { class: c.cls || '' }, i === 0 ? footer.label || 'Total' : c.total ? c.total(rows) : '')))) : null);
-  return h('div', { class: 'tbl-wrap' }, t);
+      cols.map((c, i) => h('td', { class: (c.cls || '') + small(c) + (i === hostI ? ' host' : ''), 'data-label': c.label }, cell(c, r), i === hostI ? underLine(r) : null))))),
+    footer ? h('tfoot', null, h('tr', null, cols.map((c, i) => h('td', { class: (c.cls || '') + small(c) + (i === hostI ? ' host' : '') }, i === hostI ? footer.label || 'Total' : c.total ? c.total(rows) : '')))) : null);
+  const wrap = h('div', { class: 'tbl-wrap' }, t);
+  if (!fit) return wrap;
+  const outer = h('div', { class: 'tbl-outer' });
+  const tog = h('button', { type: 'button', class: 'small m-toggle', 'aria-pressed': 'false', onclick: () => { const on = outer.classList.toggle('show-all'); tog.textContent = on ? 'Fewer columns' : 'All columns'; tog.setAttribute('aria-pressed', String(on)); } }, 'All columns');
+  outer.append(tog, wrap);
+  return outer;
 }
 
 export function monthPicker(months, value, onChange) {

@@ -13,7 +13,7 @@ const shortDate = (d) => dateStr(d).replace(/ (\d\d)(\d\d)$/, " '$2");
 const tone = (n) => (n > 0 ? 'pos' : n < 0 ? 'neg' : '');
 const RISK_ORDER = ['Safe', 'Medium', 'Medium High', 'High'];
 
-function hero(all, series) {
+function hero(all, series, ox) {
   const monthStartIso = C.monthStart(all.asOf);
   const base = series.filter((p) => p.date < monthStartIso).pop();
   const delta = base ? all.netAsset - base.value : null;
@@ -29,7 +29,8 @@ function hero(all, series) {
         spark(trend, { width: 150, height: 44, tone: 2 }),
         h('dl', { class: 'hero-side' },
           h('div', null, h('dt', null, 'Assets'), h('dd', null, compact(all.totalAssets))),
-          h('div', null, h('dt', null, 'Loans'), h('dd', null, compact(all.liabTotal)))))));
+          h('div', null, h('dt', null, 'Loans'), h('dd', null, compact(all.liabTotal))),
+          ox && ox.xirr != null ? h('div', { title: `Yearly return that counts when each rupee went in. Covers ${pct(ox.coverage, 0)} of your assets.` }, h('dt', null, 'Overall XIRR'), h('dd', { class: tone(ox.xirr) }, pct(ox.xirr, 1))) : null))));
 }
 
 const isEtf = (x) => x.assetClass && x.assetClass !== 'equity';
@@ -46,36 +47,48 @@ function marketGroups(all) {
   return { rows, total };
 }
 
+const mqDesk = () => window.matchMedia('(min-width: 900px)').matches;
+const closeTiles = () => document.querySelectorAll('.kpi.open').forEach((k) => k.classList.remove('open'));
+if (!window.__tileClose) {
+  window.__tileClose = true;
+  document.addEventListener('click', (e) => { document.querySelectorAll('.kpi.open').forEach((k) => { if (!k.contains(e.target)) k.classList.remove('open'); }); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeTiles(); });
+}
+/** A summary tile. On a computer it opens a drop-down with the detail; on a phone it goes to the page. */
+function tile(label, value, sub, { tone: t = '', href = null, pop = null, right = false } = {}) {
+  const el = kpi(label, value, sub, { tone: t });
+  el.classList.add('tap'); el.tabIndex = 0; el.setAttribute('role', pop ? 'button' : 'link');
+  const go = () => {
+    if (pop && mqDesk()) { const open = !el.classList.contains('open'); closeTiles(); el.classList.toggle('open', open); el.setAttribute('aria-expanded', String(open)); }
+    else if (href) location.hash = href;
+  };
+  el.addEventListener('click', (e) => { if (!e.target.closest('.kpi-pop')) go(); });
+  el.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('.kpi-pop')) { e.preventDefault(); go(); } });
+  if (pop) { el.classList.add('has-pop'); if (right) el.classList.add('pop-right'); el.append(h('span', { class: 'kpi-caret', 'aria-hidden': 'true' }, '▾'), h('div', { class: 'kpi-pop' }, pop)); }
+  return el;
+}
+
 function tiles(all, data, mc) {
   const mk = marketGroups(all), gd = all.gold.day;
   const dayAll = mk.total.day + (gd ? gd.total : 0);
   const anyDay = mk.total.hasDay || !!gd;
   const spent = mc.totalSpent + mc.lifestyle.amount;
   return h('div', { class: 'kpis span-12' },
-    kpi('Net monthly inflow', money(all.netMonthly), `${money(all.cfTotal.perMonth)} earned − ${money(all.loans.monthlyInterest)} loan interest`, { tone: tone(all.netMonthly), href: '#/fixed/loans' }),
-    kpi('Earning every day', money(all.cfTotal.perDay), `${money(all.cfTotal.perDay - all.loans.monthlyInterest / 30)} after loan interest`),
-    kpi('Markets today', anyDay ? sgn(dayAll) : '–', anyDay ? 'shares, funds, ETFs and gold' : 'refresh prices to see', { tone: anyDay ? tone(dayAll) : '', href: '#/equity' }),
-    kpi('Spent this month', money(spent), mc.totalExpected ? `${pct(spent / mc.totalExpected, 0)} of ${money(mc.totalExpected)} budget` : 'no budget income yet', { tone: mc.totalExpected && spent > mc.totalReceived ? 'neg' : '', href: '#/flow' }));
+    tile('Net monthly inflow', money(all.netMonthly), `${money(all.cfTotal.perMonth)} earned − ${money(all.loans.monthlyInterest)} loan interest`, { tone: tone(all.netMonthly), href: '#/fixed/loans' }),
+    tile('Earning every day', money(all.cfTotal.perDay), `${money(all.cfTotal.perDay - all.loans.monthlyInterest / 30)} after loan interest`, { href: '#/fixed', pop: h('div', null, earningBody(all, false), h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income'))) }),
+    tile('Markets today', anyDay ? sgn(dayAll) : '–', anyDay ? 'shares, funds, ETFs and gold' : 'refresh prices to see', { tone: anyDay ? tone(dayAll) : '', href: '#/equity', pop: h('div', null, todayBody(all), h('p', null, h('a', { href: '#/equity' }, 'Open Shares & funds'))) }),
+    tile('Spent this month', money(spent), mc.totalExpected ? `${pct(spent / mc.totalExpected, 0)} of ${money(mc.totalExpected)} budget` : 'no budget income yet', { tone: mc.totalExpected && spent > mc.totalReceived ? 'neg' : '', href: '#/flow', pop: spentBody(mc, spent), right: true }));
 }
 
-/** This month's budget: your regular interest income is the budget. Expected, received, spent, left. */
-function budgetCard(data, all) {
-  const mc = C.monthCashflow(data, all, C.monthKey(all.asOf));
-  const spent = mc.totalSpent + mc.lifestyle.amount, exp = mc.totalExpected, rec = mc.totalReceived;
-  const pend = Math.max(0, exp - rec), left = exp - spent;
-  const bar = (v, of, cls) => h('div', { class: 'pbar ' + (cls || '') }, h('span', { style: { width: (of > 0 ? Math.min(100, Math.max(0, (v / of) * 100)) : 0).toFixed(1) + '%' } }));
-  const day = new Date(all.asOf).getUTCDate(), dim = new Date(Date.UTC(new Date(all.asOf).getUTCFullYear(), new Date(all.asOf).getUTCMonth() + 1, 0)).getUTCDate();
-  const pace = exp ? exp * (day / dim) : 0;
-  return section(monthLabel(C.monthKey(all.asOf)) + ' budget', h('div', null,
-    h('div', { class: 'trio' },
-      h('div', null, h('span', { class: 'mini-title' }, 'Expected'), h('b', null, money(exp))),
-      h('div', null, h('span', { class: 'mini-title' }, 'Received'), h('b', { class: 'pos' }, money(rec))),
-      h('div', null, h('span', { class: 'mini-title' }, 'Spent'), h('b', { class: spent > rec ? 'neg' : '' }, money(spent)))),
-    h('p', { class: 'mini-title' }, `Received ${money(rec)} of ${money(exp)} expected`), bar(rec, exp, 'good'),
-    h('p', { class: 'mini-title' }, `Spent ${money(spent)} of ${money(exp)} budget` + (exp ? ` (${pct(spent / exp, 0)})` : '')), bar(spent, exp, spent > exp ? 'bad' : spent > rec ? 'warn' : ''),
-    h('p', { class: 'summary-line' }, 'Left to spend from budget ', h('b', { class: tone(left) }, sgn(left)), pend > 0 ? h('span', { class: 'muted' }, ` · ${money(pend)} still to receive`) : null),
-    exp && spent > pace * 1.15 && day < dim - 3 ? h('p', { class: 'note warn' }, `Spending is ahead of the month: ${money(spent)} spent by day ${day}, an even pace would be about ${money(pace)}.`) : null,
-    h('p', null, h('a', { href: '#/flow' }, 'See where it went'))));
+/** Short expense summary for the drop-down. */
+function spentBody(mc, spent) {
+  const top = mc.spend.concat([mc.lifestyle]).filter((x) => x.amount > 0).sort((a, b) => b.amount - a.amount).slice(0, 5);
+  const exp = mc.totalExpected;
+  return h('div', null,
+    h('p', { class: 'mini-title' }, 'Biggest spends so far'),
+    top.length ? rowList(top.map((x) => ({ title: x.name, value: money(x.amount), valueSub: spent ? pct(x.amount / spent, 0) : null }))) : h('p', { class: 'empty' }, 'No expenses recorded this month.'),
+    h('p', { class: 'summary-line' }, 'Spent ', h('b', null, money(spent)), exp ? ' of ' + money(exp) + ' budget · left ' : null, exp ? h('b', { class: tone(exp - spent) }, sgn(exp - spent)) : null),
+    h('p', null, h('a', { href: '#/flow' }, 'See where it went')));
 }
 
 /** Money you are waiting for this month, and anything overdue. */
@@ -96,16 +109,18 @@ function toReceiveCard(data, all) {
     h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income'))));
 }
 
-function todayCard(all) {
+function todayBody(all) {
   const mk = marketGroups(all), gd = all.gold.day;
   const rows = mk.rows.filter((r) => r.hasDay).map((r) => ({ title: r.name, sub: pct(Math.abs(r.dayPct), 2) + (r.dayPct >= 0 ? ' up' : ' down'), value: h('span', { class: tone(r.day) }, sgn(r.day)) }));
   if (gd) rows.push({ title: 'Gold', sub: `${pct(Math.abs(gd.pct), 2)} ${gd.pct >= 0 ? 'up' : 'down'} · ${money(all.gold.rate)}/g (${sgn(gd.perGram)})`, value: h('span', { class: tone(gd.total) }, sgn(gd.total)) });
   const total = rows.length ? mk.total.day + (gd ? gd.total : 0) : null;
-  return section('Today', h('div', null,
+  return h('div', null,
     rows.length ? rowList(rows) : h('p', { class: 'empty' }, 'Press Refresh prices on Shares & funds to see today’s change.'),
     total != null ? h('p', { class: 'summary-line' }, 'All together ', h('b', { class: tone(total) }, sgn(total))) : null,
-    gd ? null : h('p', { class: 'note' }, 'Gold today appears after a price refresh.')));
+    gd ? null : h('p', { class: 'note' }, 'Gold today appears after a price refresh.'));
 }
+/** Phone only: on a computer this lives in the "Markets today" tile. */
+const todayCard = (all) => section('Today', todayBody(all));
 
 function breakupCard(all) {
   const { rows, total } = marketGroups(all);
@@ -142,29 +157,29 @@ function allocation(all) {
       }))))));
 }
 
-function earning(all) {
+function earningBody(all, fold) {
   const cf = all.cfTotal, ln = all.loans;
   const rows = all.cashflow.filter((r) => r.capital > 0).sort((a, b) => b.perDay - a.perDay);
   const max = Math.max(1, ...rows.map((r) => r.perDay));
   const out = ln.monthlyInterest / 30;
-  const el = section('Earning every day', h('div', { id: 'home-earning' },
+  const list = rowList(rows.map((r) => ({
+    title: r.name, sub: `${compact(r.capital)} invested · ${pct(r.yield, 1)} a year`,
+    value: money(r.perDay) + ' /day', valueSub: money(r.perMonth) + ' a month',
+    extra: h('span', { class: 'rl-bar' }, h('span', { style: { width: Math.max(2, (r.perDay / max) * 100) + '%' } })),
+  })).concat(out > 0 ? [{ title: 'Loan interest you pay', sub: `${money(ln.total)} borrowed · ${pct(ln.avgRate, 1)} a year`, value: h('span', { class: 'neg' }, '− ' + money(out) + ' /day'), valueSub: h('span', { class: 'neg' }, '− ' + money(ln.monthlyInterest) + ' a month') }] : []));
+  return h('div', null,
     h('div', { class: 'trio' },
       h('div', null, h('span', { class: 'mini-title' }, 'a day'), h('b', { class: 'pos' }, money(cf.perDay))),
       h('div', null, h('span', { class: 'mini-title' }, 'a month'), h('b', { class: 'pos' }, money(cf.perMonth))),
       h('div', null, h('span', { class: 'mini-title' }, 'a year'), h('b', { class: 'pos' }, compact(cf.perYear)))),
-    rowList(rows.map((r) => ({
-      title: r.name, sub: `${compact(r.capital)} invested · ${pct(r.yield, 1)} a year`,
-      value: money(r.perDay) + ' /day', valueSub: money(r.perMonth) + ' a month',
-      extra: h('span', { class: 'rl-bar' }, h('span', { style: { width: Math.max(2, (r.perDay / max) * 100) + '%' } })),
-    })).concat(out > 0 ? [{ title: 'Loan interest you pay', sub: `${money(ln.total)} borrowed · ${pct(ln.avgRate, 1)} a year`, value: h('span', { class: 'neg' }, '− ' + money(out) + ' /day'), valueSub: h('span', { class: 'neg' }, '− ' + money(ln.monthlyInterest) + ' a month') }] : [])),
     h('p', { class: 'summary-line' }, 'After loan interest ', h('b', { class: tone(cf.perDay - out) }, money(cf.perDay - out) + ' a day')),
-    h('p', { class: 'note' }, 'Covers EPF, PPF, chits, RD and LIC, bonds, fixed deposits and private lending. Shares, funds and gold are not counted because they pay no fixed interest.')));
-  return el;
+    fold ? h('details', { class: 'more' }, h('summary', null, `Show the ${rows.length} sources`), list) : list,
+    h('p', { class: 'note' }, 'Covers EPF, PPF, chits, RD and LIC, bonds, fixed deposits and private lending. Shares, funds and gold pay no fixed interest, so they are not counted.'));
 }
+/** Phone only: on a computer this lives in the "Earning every day" tile. Sources are folded away to keep it short. */
+const earning = (all) => section('Earning every day', earningBody(all, true));
 
-function returnsCard(data, all) {
-  const rets = C.returns(data, all);
-  const cov = C.overallXirr(data, all, rets);
+function returnsCard(data, all, rets, cov) {
   const items = rets.map((r) => {
     const showRet = !(r.ret == null || r.name.includes('lending') || r.name === 'Bonds');
     return {
@@ -174,7 +189,7 @@ function returnsCard(data, all) {
     };
   });
   return section('How your investments did', h('div', null, rowList(items),
-    h('p', { class: 'note' }, 'XIRR is the yearly return that accounts for when each rupee went in. It needs dated cash flows, so shares and funds show plain return until buy dates are added. XIRR rows cover ' + pct(cov.coverage, 0) + ' of your assets. Bond and lending XIRR assume coupons arrive on schedule.')));
+    h('p', { class: 'note' }, 'XIRR is the yearly return that accounts for when each rupee went in. It needs dated cash flows, so shares and funds show plain return until buy dates are added. XIRR rows cover ' + pct(cov.coverage, 0) + ' of your assets.' + (cov.xirr != null ? ' Overall XIRR across them is ' + pct(cov.xirr, 1) + '.' : '') + ' Bond and lending XIRR assume coupons arrive on schedule.')));
 }
 
 function comingUp(data, all) {
@@ -191,23 +206,38 @@ function comingUp(data, all) {
 
 function thisMonth(data, all, months) {
   const mc = C.monthCashflow(data, all, selMonth);
+  const isCur = selMonth === C.monthKey(all.asOf);
   const spend = mc.spend.concat([mc.lifestyle]).filter((x) => x.amount > 0).sort((a, b) => b.amount - a.amount);
-  const spent = mc.totalSpent + mc.lifestyle.amount;
-  const got = mc.totalExpected ? Math.min(1, mc.totalReceived / mc.totalExpected) : 0;
-  return section('This month in detail', h('div', { class: 'month' },
-    h('div', null,
-      h('p', { class: 'mini-title' }, 'Income'),
-      h('p', { class: 'big-line' }, h('b', null, money(mc.totalReceived)), h('span', { class: 'muted' }, ` of ${money(mc.totalExpected)} expected`)),
-      h('div', { class: 'pbar' }, h('span', { style: { width: (got * 100).toFixed(1) + '%' } })),
-      rowList(mc.income.map((r) => ({
-        title: r.name, sub: 'expected ' + money(r.expected), value: money(r.received),
-        valueSub: r.expected - r.received > 0 ? h('span', { class: 'warn' }, money(r.expected - r.received) + ' pending') : '✓ received',
-      })))),
-    h('div', null,
-      h('p', { class: 'mini-title' }, 'Expenses'),
-      h('p', { class: 'big-line' }, h('b', null, money(spent)), h('span', { class: 'muted' }, ' spent')),
-      spend.length ? hbars(spend.map((s) => ({ label: s.name, value: s.amount })), { fmt: money, colorIndex: 1 }) : h('p', { class: 'empty' }, 'No expenses recorded in this month.'),
-      h('p', { class: 'summary-line' }, 'Expected income left after expenses ', h('b', { class: tone(mc.totalExpected - spent) }, money(mc.totalExpected - spent))))),
+  const spent = mc.totalSpent + mc.lifestyle.amount, exp = mc.totalExpected, rec = mc.totalReceived;
+  const pend = Math.max(0, exp - rec), left = exp - spent;
+  const got = exp ? Math.min(1, rec / exp) : 0;
+  const bar = (v, of, cls) => h('div', { class: 'pbar ' + (cls || '') }, h('span', { style: { width: (of > 0 ? Math.min(100, Math.max(0, (v / of) * 100)) : 0).toFixed(1) + '%' } }));
+  const asOf = new Date(all.asOf), day = asOf.getUTCDate(), dim = new Date(Date.UTC(asOf.getUTCFullYear(), asOf.getUTCMonth() + 1, 0)).getUTCDate();
+  const pace = exp ? exp * (day / dim) : 0;
+  const budget = h('div', { class: 'budget-box' },
+    h('div', { class: 'trio' },
+      h('div', null, h('span', { class: 'mini-title' }, 'Budget (expected)'), h('b', null, money(exp))),
+      h('div', null, h('span', { class: 'mini-title' }, 'Received'), h('b', { class: 'pos' }, money(rec))),
+      h('div', null, h('span', { class: 'mini-title' }, 'Spent'), h('b', { class: spent > rec ? 'neg' : '' }, money(spent)))),
+    h('p', { class: 'mini-title' }, `Spent ${money(spent)} of ${money(exp)} budget` + (exp ? ` (${pct(spent / exp, 0)})` : '')), bar(spent, exp, spent > exp ? 'bad' : spent > rec ? 'warn' : ''),
+    h('p', { class: 'summary-line' }, 'Left to spend from budget ', h('b', { class: tone(left) }, sgn(left)), pend > 0 ? h('span', { class: 'muted' }, ` · ${money(pend)} still to receive`) : null),
+    isCur && exp && spent > pace * 1.15 && day < dim - 3 ? h('p', { class: 'note warn' }, `Spending is ahead of the month: ${money(spent)} spent by day ${day}, an even pace would be about ${money(pace)}.`) : null);
+  return section(isCur ? 'This month in detail' : monthLabel(selMonth) + ' in detail', h('div', null,
+    budget,
+    h('div', { class: 'month' },
+      h('div', null,
+        h('p', { class: 'mini-title' }, 'Income'),
+        h('p', { class: 'big-line' }, h('b', null, money(rec)), h('span', { class: 'muted' }, ` of ${money(exp)} expected`)),
+        bar(rec, exp, 'good'),
+        rowList(mc.income.map((r) => ({
+          title: r.name, sub: 'expected ' + money(r.expected), value: money(r.received),
+          valueSub: r.expected - r.received > 0 ? h('span', { class: 'warn' }, money(r.expected - r.received) + ' pending') : '✓ received',
+        })))),
+      h('div', null,
+        h('p', { class: 'mini-title' }, 'Expenses'),
+        h('p', { class: 'big-line' }, h('b', null, money(spent)), h('span', { class: 'muted' }, ' spent')),
+        spend.length ? hbars(spend.map((s) => ({ label: s.name, value: s.amount })), { fmt: money, colorIndex: 1 }) : h('p', { class: 'empty' }, 'No expenses recorded in this month.'),
+        h('p', null, h('a', { href: '#/flow' }, 'See where it went'))))),
     [monthPicker(months, selMonth, (m) => { selMonth = m; rerender(); })]);
 }
 
@@ -225,17 +255,18 @@ export function render() {
   const cur = C.monthKey(all.asOf);
   if (!selMonth || !months.includes(selMonth)) selMonth = months.includes(cur) ? cur : months[months.length - 1];
   const series = C.netWorthSeries(data, all);
-  const place = (el, cls) => { if (el) el.classList.add(cls); return el; };
+  const rets = C.returns(data, all), ox = C.overallXirr(data, all, rets);
+  const place = (el, ...cls) => { if (el) el.classList.add(...cls); return el; };
   const root = h('div', { class: 'page dash' });
   const parts = [
-    hero(all, series), tiles(all, data, C.monthCashflow(data, all, C.monthKey(all.asOf))),
+    hero(all, series, ox), tiles(all, data, C.monthCashflow(data, all, C.monthKey(all.asOf))),
     place(attention(data, all), 'span-12'),
-    place(budgetCard(data, all), 'span-7'), place(toReceiveCard(data, all), 'span-5'),
-    place(todayCard(all), 'span-5'), place(breakupCard(all), 'span-7'),
-    place(earning(all), 'span-7'), place(loansCard(all), 'span-5'),
-    place(thisMonth(data, all, months), 'span-7'), place(comingUp(data, all), 'span-5'),
+    place(toReceiveCard(data, all), 'span-6'), place(comingUp(data, all), 'span-6'),
+    place(thisMonth(data, all, months), 'span-12'),
+    place(todayCard(all), 'm-only'), place(earning(all), 'm-only'),
+    place(breakupCard(all), 'span-7'), place(loansCard(all), 'span-5'),
     place(allocation(all), 'span-7'), place(networthChart(series, data), 'span-5'),
-    place(returnsCard(data, all), 'span-12')];
+    place(returnsCard(data, all, rets, ox), 'span-12')];
   root.append(...parts.filter(Boolean));
   return root;
 }

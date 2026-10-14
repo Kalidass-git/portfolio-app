@@ -43,15 +43,15 @@ export function render(root) {
   if (eq) {
     const h0 = eq.holdings.find((x) => x.symbol === sym);
     if (h0) root.append(section('Purchase lots', h('div', null, table([
-      { label: 'Bought', get: (l) => dateStr(l.date) }, { label: 'Qty', cls: 'r', get: (l) => num(l.qty) },
-      { label: 'Cost / share', cls: 'r', get: (l) => dec(l.cost / l.qty) }, { label: 'Cost', cls: 'r', get: (l) => money(l.cost) },
+      { label: 'Bought', host: true, get: (l) => dateStr(l.date) }, { label: 'Qty', cls: 'r', get: (l) => num(l.qty) },
+      { label: 'Cost / share', mob: 'under', mlabel: 'at ', cls: 'r', get: (l) => dec(l.cost / l.qty) }, { label: 'Cost', cls: 'r', get: (l) => money(l.cost) },
       { label: 'Gain', cls: 'r', render: (l) => gainText(l.qty * s.livePrice - l.cost) },
     ], h0.lots.slice().sort((a, b) => (a.date < b.date ? -1 : 1)), { footer: { label: 'Total' } }),
       h('p', { class: 'note' }, 'Quantities already include splits and bonus shares. A sale uses the oldest lot first. Bonus shares have no cost of their own.'))));
     const tr = (data.trades || []).filter((t) => symKey(t.symbol) === sym).sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1));
     root.append(section(`Trades (${tr.length})`, table([
-      { label: 'Date', get: (t) => dateStr(t.date) }, { label: 'Type', render: (t) => h('span', { class: t.type === 'SELL' ? 'neg' : '' }, t.type === 'SELL' ? 'Sell' : 'Buy') },
-      { label: 'Qty', cls: 'r', get: (t) => num(t.qty) }, { label: 'Price', cls: 'r', get: (t) => dec(t.amount / t.qty) }, { label: 'Value', cls: 'r', get: (t) => money(t.amount) },
+      { label: 'Date', host: true, get: (t) => dateStr(t.date) }, { label: 'Type', render: (t) => h('span', { class: t.type === 'SELL' ? 'neg' : '' }, t.type === 'SELL' ? 'Sell' : 'Buy') },
+      { label: 'Qty', cls: 'r', get: (t) => num(t.qty) }, { label: 'Price', mob: 'under', mlabel: 'at ', cls: 'r', get: (t) => dec(t.amount / t.qty) }, { label: 'Value', cls: 'r', get: (t) => money(t.amount) },
     ], tr, { onRow: canEdit() ? (t) => tradeForm(data.trades.find((x) => x.id === t.id)) : null, empty: 'No trades for this share.' })));
     const ac = (data.corporateActions || []).filter((a) => [symKey(a.symbol), symKey(a.to || '')].includes(sym)).sort((a, b) => (a.date < b.date ? 1 : -1));
     if (ac.length) root.append(section('Splits, bonus, dividends', table([

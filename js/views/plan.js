@@ -77,10 +77,10 @@ export function render() {
     })));
     root.append(section('Month by month',
       h('div', null, table([
-        { label: 'Month end', get: (t) => monthLabel(t.date.slice(0, 7)) },
-        { label: 'Plan: net worth', cls: 'r', get: (t) => money(t.plannedNet) },
-        { label: 'Actual: assets', cls: 'r', get: (t) => (t.actualAsset != null ? money(t.actualAsset) : '–') },
-        { label: 'Actual: loans', cls: 'r', get: (t) => (t.actualLiab != null ? money(t.actualLiab) : '–') },
+        { label: 'Month end', host: true, get: (t) => monthLabel(t.date.slice(0, 7)) },
+        { label: 'Plan: net worth', mob: 'under', mlabel: 'plan ', cls: 'r', get: (t) => money(t.plannedNet) },
+        { label: 'Actual: assets', mob: 'under', mlabel: 'assets ', cls: 'r', get: (t) => (t.actualAsset != null ? money(t.actualAsset) : '–') },
+        { label: 'Actual: loans', mob: 'under', mlabel: 'loans ', cls: 'r', get: (t) => (t.actualLiab != null ? money(t.actualLiab) : '–') },
         { label: 'Actual: net worth', cls: 'r', get: (t) => (t.actualNet != null ? money(t.actualNet) : '–') },
         { label: 'Ahead / behind', cls: 'r', render: (t) => (t.slippage != null ? gainText(t.slippage) : '–') },
       ], tg.map((t, i) => ({ ...t, _i: i })), { onRow: canEdit() ? (t) => t._i > 0 && targetForm(t._i) : null }),
@@ -88,9 +88,9 @@ export function render() {
     const it = C.investmentTargets(data, all);
     root.append(section('Where new money should go this year',
       h('div', null, table([
-        { label: 'Type', get: (r) => r.name }, { label: 'Planned to add', cls: 'r', get: (r) => money(r.plan), total: () => money(it.totalPlan) },
-        { label: 'Share of plan', cls: 'r', get: (r) => pct(r.planPct, 0) }, { label: 'Held now', cls: 'r', get: (r) => money(r.current) },
-        { label: 'Share of assets', cls: 'r', get: (r) => pct(r.currentPct, 1) }, { label: 'Risk', get: (r) => r.risk },
+        { label: 'Type', host: true, get: (r) => r.name }, { label: 'Planned to add', cls: 'r', get: (r) => money(r.plan), total: () => money(it.totalPlan) },
+        { label: 'Share of plan', mob: 'under', mlabel: 'plan share ', cls: 'r', get: (r) => pct(r.planPct, 0) }, { label: 'Held now', cls: 'r', get: (r) => money(r.current) },
+        { label: 'Share of assets', mob: 'under', mlabel: 'assets share ', cls: 'r', get: (r) => pct(r.currentPct, 1) }, { label: 'Risk', mob: 'under', mlabel: 'risk ', get: (r) => r.risk },
       ], it.rows.map((r, i) => ({ ...r, _i: i })), { footer: { label: 'Total' }, onRow: canEdit() ? (r) => planForm(r._i) : null }),
         h('p', { class: 'note' }, 'Extra yearly return expected on gold and shares: ' + money(it.extraReturns) + '.'))));
   }
@@ -125,7 +125,7 @@ export function render() {
     root.append(section('Year-end view',
       h('div', null, table([
         { label: 'Year end', get: (r) => r.date.slice(0, 4) }, { label: 'Portfolio', cls: 'r', get: (r) => money(r.after) },
-        { label: 'In lakhs / crores', cls: 'r', get: (r) => compact(r.after) }, { label: 'Yearly return', cls: 'r', get: (r) => money(lt.filter((x) => x.date.slice(0, 4) === r.date.slice(0, 4)).reduce((a, x) => a + x.returns, 0)) },
+        { label: 'In lakhs / crores', mob: 'hide', cls: 'r', get: (r) => compact(r.after) }, { label: 'Yearly return', cls: 'r', get: (r) => money(lt.filter((x) => x.date.slice(0, 4) === r.date.slice(0, 4)).reduce((a, x) => a + x.returns, 0)) },
       ], yearEnds),
         h('p', { class: 'note' }, `Assumes ${pct(data.proj.longTerm.returns, 1)} yearly return, ${pct(data.proj.longTerm.hike, 1)} yearly raise, spending ${money(data.proj.longTerm.monthlyExpense)} a month and tax in February to April. This is an estimate to plan with, not a forecast.`))));
   }

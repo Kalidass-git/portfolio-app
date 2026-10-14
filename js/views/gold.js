@@ -155,12 +155,12 @@ function chitsTab(root) {
     stat('Invested in gold chits', money(runPaid), `${running.length} running chit${running.length === 1 ? '' : 's'}`),
     stat('Closed chits', String(g.closed.length + oldSch.length), g.closed.length + oldSch.length ? `${dec(g.closed.reduce((a, c) => a + c.closed.grams, 0), 1)} g received through chits closed here` : 'none yet')));
   root.append(section('Running chits', h('div', null, table([
-    { label: 'Chit', get: (c) => c.name }, { label: 'Jeweller', get: (c) => c.shop || '' },
-    { label: 'Started', get: (c) => dateStr(c.startDate) },
-    { label: 'Payments', cls: 'r', get: (c) => String(c.months) },
+    { label: 'Chit', host: true, get: (c) => c.name }, { label: 'Jeweller', mob: 'under', get: (c) => c.shop || '' },
+    { label: 'Started', mob: 'under', mlabel: 'started ', get: (c) => dateStr(c.startDate) },
+    { label: 'Payments', mob: 'under', mlabel: 'payments ', cls: 'r', get: (c) => String(c.months) },
     { label: 'Paid so far', cls: 'r', get: (c) => money(c.paid), total: () => money(runPaid) },
     { label: 'Gold so far', cls: 'r', get: (c) => (c.grams ? dec(c.grams, 2) + ' g' : '–') },
-    { label: 'Ends', get: (c) => (c.ends ? dateStr(c.ends) : '') },
+    { label: 'Ends', mob: 'under', mlabel: 'ends ', get: (c) => (c.ends ? dateStr(c.ends) : '') },
   ], running, { footer: { label: 'Total' }, onRow: (c) => (c.chit ? openChit(c.chit) : document.getElementById('scheme-' + c.scheme.id)?.scrollIntoView({ behavior: 'smooth' })), empty: 'No running gold chits.' }),
     h('p', { class: 'note' }, 'Money paid into a running chit counts as gold at cost. When the chit ends, press “Close it”, enter the grams you received, and the gold is added to your purchases. Monthly gold savings that already record grams (like GRT Savings Account - 5) show their gold so far and are valued at today’s rate.')),
     canEdit() ? [btn('Add gold chit', () => chitForm(), 'primary')] : null));
@@ -168,9 +168,9 @@ function chitsTab(root) {
     const ents = x.entries.map((e, i) => ({ ...e, grams: e.grams || (e.rate ? e.amount / e.rate : 0), _i: i })).reverse();
     const paid = ents.reduce((a, e) => a + e.amount, 0), grams = ents.reduce((a, e) => a + e.grams, 0);
     const sec = section(x.name + ' · instalments', h('div', null, table([
-      { label: 'Date', get: (e) => dateStr(e.date) }, { label: 'Paid', cls: 'r', get: (e) => money(e.amount), total: () => money(paid) },
-      { label: 'Rate / g', cls: 'r', get: (e) => money(e.rate) }, { label: 'Grams', cls: 'r', get: (e) => dec(e.grams, 3), total: () => dec(grams, 3) },
-      { label: 'Value now', cls: 'r', get: (e) => money(e.grams * all.gold.rate), total: () => money(grams * all.gold.rate) },
+      { label: 'Date', host: true, get: (e) => dateStr(e.date) }, { label: 'Paid', cls: 'r', get: (e) => money(e.amount), total: () => money(paid) },
+      { label: 'Rate / g', mob: 'under', mlabel: 'rate ', cls: 'r', get: (e) => money(e.rate) }, { label: 'Grams', cls: 'r', get: (e) => dec(e.grams, 3), total: () => dec(grams, 3) },
+      { label: 'Value now', mob: 'under', mlabel: 'now ', cls: 'r', get: (e) => money(e.grams * all.gold.rate), total: () => money(grams * all.gold.rate) },
     ], ents, { footer: { label: 'Total' }, onRow: canEdit() ? (e) => schemeEntryForm(x, e._i) : null })),
       canEdit() ? [btn('Add instalment', () => schemeEntryForm(x), 'primary')] : null);
     sec.id = 'scheme-' + x.id; root.append(sec);
@@ -179,10 +179,10 @@ function chitsTab(root) {
     .concat(oldSch.map((x) => { const r = schRow(x); return { name: x.name, startDate: r.startDate, closedOn: r.last, paid: r.paid, grams: null, converted: true }; }));
   closedRows.sort((a, b) => (a.closedOn < b.closedOn ? 1 : -1));
   root.append(section(`Closed chits (${closedRows.length})`, h('div', null, table([
-    { label: 'Chit', get: (c) => c.name }, { label: 'Started', get: (c) => dateStr(c.startDate) }, { label: 'Closed', get: (c) => dateStr(c.closedOn) },
-    { label: 'Paid', cls: 'r', get: (c) => money(c.paid) }, { label: 'Gold received', cls: 'r', get: (c) => (c.grams == null ? 'in purchases' : dec(c.grams, 2) + ' g') },
+    { label: 'Chit', host: true, get: (c) => c.name }, { label: 'Started', mob: 'under', mlabel: 'started ', get: (c) => dateStr(c.startDate) }, { label: 'Closed', mob: 'under', mlabel: 'closed ', get: (c) => dateStr(c.closedOn) },
+    { label: 'Paid', cls: 'r', get: (c) => money(c.paid) }, { label: 'Gold received', mob: 'under', mlabel: 'gold ', cls: 'r', get: (c) => (c.grams == null ? 'in purchases' : dec(c.grams, 2) + ' g') },
     { label: 'Value now', cls: 'r', get: (c) => (c.grams == null ? '–' : money(c.grams * all.gold.rate)) },
-    { label: 'Gain', cls: 'r', render: (c) => (c.grams == null ? '–' : gainText(c.grams * all.gold.rate - c.paid)) },
+    { label: 'Gain', mob: 'under', mlabel: 'gain ', cls: 'r', render: (c) => (c.grams == null ? '–' : gainText(c.grams * all.gold.rate - c.paid)) },
   ], closedRows, { onRow: (c) => c.chit && openChit(c.chit), empty: 'Nothing closed yet.' }),
     oldSch.length ? h('p', { class: 'note' }, 'Earlier GRT accounts were turned into the gold purchases on the Gold tab, so their gold is counted there and not twice.') : null)));
 }
@@ -222,12 +222,12 @@ export function render() {
 
   root.append(section('Gold purchases',
     table([
-      { label: 'Date', get: (p) => dateStr(p.date) }, { label: 'What', get: (p) => p.desc },
+      { label: 'Date', mob: 'under', get: (p) => dateStr(p.date) }, { label: 'What', host: true, get: (p) => p.desc },
       { label: 'Grams', cls: 'r', get: (p) => dec(p.grams, 2), total: () => dec(g.main.grams, 2) },
-      { label: 'Paid', cls: 'r', get: (p) => money(p.amount), total: () => money(g.main.invested) },
-      { label: 'Rate paid / g', cls: 'r', get: (p) => (p.grams ? money(p.amount / p.grams) : '–') },
+      { label: 'Paid', mob: 'under', mlabel: 'paid ', cls: 'r', get: (p) => money(p.amount), total: () => money(g.main.invested) },
+      { label: 'Rate paid / g', mob: 'under', mlabel: 'rate ', cls: 'r', get: (p) => (p.grams ? money(p.amount / p.grams) : '–') },
       { label: 'Value now', cls: 'r', get: (p) => money(p.grams * g.rate), total: () => money(g.main.value) },
-      { label: 'Gain', cls: 'r', render: (p) => gainText(p.grams * g.rate - p.amount), total: () => money(g.main.gain) },
+      { label: 'Gain', mob: 'under', mlabel: 'gain ', cls: 'r', render: (p) => gainText(p.grams * g.rate - p.amount), total: () => money(g.main.gain) },
     ], data.gold.purchases.slice().reverse().map((p) => p), { footer: { label: 'Total' }, onRow: canEdit() ? (p) => purchaseForm(data.gold.purchases.find((x) => x.id === p.id)) : null }),
     canEdit() ? [btn('Add purchase', () => purchaseForm(), 'primary')] : null));
 
@@ -236,9 +236,9 @@ export function render() {
     const ents = g.scheme.entries;
     root.append(section(sch.name + ' (monthly gold savings)',
       h('div', null, table([
-        { label: 'Date', get: (e) => dateStr(e.date) }, { label: 'Paid', cls: 'r', get: (e) => money(e.amount), total: () => money(g.scheme.invested) },
-        { label: 'Rate / g', cls: 'r', get: (e) => money(e.rate) }, { label: 'Grams', cls: 'r', get: (e) => dec(e.grams, 3), total: () => dec(g.scheme.grams, 3) },
-        { label: 'Value now', cls: 'r', get: (e) => money(e.grams * g.rate), total: () => money(g.scheme.value) },
+        { label: 'Date', host: true, get: (e) => dateStr(e.date) }, { label: 'Paid', cls: 'r', get: (e) => money(e.amount), total: () => money(g.scheme.invested) },
+        { label: 'Rate / g', mob: 'under', mlabel: 'rate ', cls: 'r', get: (e) => money(e.rate) }, { label: 'Grams', cls: 'r', get: (e) => dec(e.grams, 3), total: () => dec(g.scheme.grams, 3) },
+        { label: 'Value now', mob: 'under', mlabel: 'now ', cls: 'r', get: (e) => money(e.grams * g.rate), total: () => money(g.scheme.value) },
       ], ents.map((e, i) => ({ ...e, _i: i })).reverse(), { footer: { label: 'Total' }, onRow: canEdit() ? (e) => schemeEntryForm(sch, e._i) : null }),
         h('p', { class: 'note' }, 'Earlier GRT accounts (2, 3 and 4) were converted into the purchases above, so they are not counted twice.')),
       canEdit() ? [btn('Add instalment', () => schemeEntryForm(sch), 'primary')] : null));

@@ -240,6 +240,7 @@ export function computeAll(data, opts = {}) {
     const val = covered.reduce((a, m) => a + m.current, 0);
     if (val > 0) f.push({ t: toMs(asOf), amount: val });
     mf.xirr = data.mutualFunds.some((m) => m.opening) ? null : xirr(f);
+    mf.xflows = mf.xirr == null ? null : f;
     mf.realized = mf.book.holdings.reduce((a, h) => a + h.realized, 0);
   }
   // XIRR for each holding that has dated buys (hidden when the first buy is under a month old: it would be a wild number)
@@ -594,7 +595,7 @@ export function returns(data, all) {
   const add = (name, flows, value, invested, note) => {
     const f = flows.slice();
     if (value) f.push({ t: asOf, amount: value });
-    out.push({ name, invested, value, gain: value - invested, ret: invested ? (value - invested) / invested : null, xirr: xirr(f), note });
+    out.push({ name, invested, value, gain: value - invested, ret: invested ? (value - invested) / invested : null, xirr: xirr(f), note, flows: f });
   };
   // Gold
   const gf = data.gold.purchases.filter((p) => p.amount && p.date).map((p) => ({ t: toMs(p.date), amount: -p.amount }));
@@ -624,14 +625,15 @@ export function returns(data, all) {
   const eInvested = -sum(ef, (x) => x.amount);
   add('EPF & PPF', ef, sum(ep, (x) => x.principal), eInvested, 'Deposits vs balance including interest');
   // Equity: no purchase dates in the workbook, so only absolute return
-  out.push({ name: 'Stocks & ETFs', invested: all.stocks.invested, value: all.stocks.current, gain: all.stocks.pl, ret: all.stocks.ret, xirr: all.stocks.xirr ?? null, note: all.stocks.eq ? 'XIRR from your imported trades, including sold shares and dividends' : 'Import your Groww history to get XIRR' });
-  out.push({ name: 'Mutual funds', invested: all.mf.invested, value: all.mf.current, gain: all.mf.pl, ret: all.mf.ret, xirr: all.mf.xirr ?? null, note: all.mf.book ? 'XIRR from your imported transactions' : 'Import your Groww history to get XIRR' });
+  out.push({ name: 'Stocks & ETFs', invested: all.stocks.invested, value: all.stocks.current, gain: all.stocks.pl, ret: all.stocks.ret, xirr: all.stocks.xirr ?? null, flows: all.stocks.xirr != null ? flowsFor(all.stocks.eq, [...all.stocks.eq.flows.keys()], all.stocks.current, asOf) : null, note: all.stocks.eq ? 'XIRR from your imported trades, including sold shares and dividends' : 'Import your Groww history to get XIRR' });
+  out.push({ name: 'Mutual funds', invested: all.mf.invested, value: all.mf.current, gain: all.mf.pl, ret: all.mf.ret, xirr: all.mf.xirr ?? null, flows: all.mf.xflows || null, note: all.mf.book ? 'XIRR from your imported transactions' : 'Import your Groww history to get XIRR' });
   return out;
 }
 
 export function overallXirr(data, all, rets) {
-  const covered = rets.filter((r) => r.xirr != null);
-  return { covered: covered.map((r) => r.name), coverage: all.totalAssets ? sum(covered, (r) => r.value) / all.totalAssets : 0 };
+  const covered = rets.filter((r) => r.xirr != null && r.flows);
+  const merged = covered.flatMap((r) => r.flows);
+  return { xirr: covered.length ? xirr(merged) : null, covered: covered.map((r) => r.name), coverage: all.totalAssets ? sum(covered, (r) => r.value) / all.totalAssets : 0 };
 }
 
 // ---------- family report (Report sheet) ----------

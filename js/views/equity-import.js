@@ -63,7 +63,7 @@ async function importStocks() {
     diffBox.replaceChildren(...[
       dr.warnings.length ? h('div', { class: 'warn-box' }, h('b', null, 'Check these'), h('ul', null, dr.warnings.slice(0, 6).map((w) => h('li', null, w)))) : null,
       dr.rows.length ? h('div', null, h('p', { class: 'mini-title' }, 'Holdings that will change'), table([
-        { label: 'Share', get: (r) => r.name }, { label: 'Change', get: (r) => (r.kind === 'new' ? 'added' : r.kind === 'removed' ? 'removed' : 'changed') },
+        { label: 'Share', host: true, get: (r) => r.name }, { label: 'Change', mob: 'under', get: (r) => (r.kind === 'new' ? 'added' : r.kind === 'removed' ? 'removed' : 'changed') },
         { label: 'Qty', cls: 'r', get: (r) => (r.kind === 'changed' ? `${num(r.oldQty)} → ${num(r.qty)}` : r.kind === 'removed' ? `${num(r.oldQty)} → 0` : num(r.qty)) },
         { label: 'Cost', cls: 'r', get: (r) => (r.kind === 'changed' ? `${money(r.oldCost)} → ${money(r.cost)}` : money(r.kind === 'removed' ? r.oldCost : r.cost)) },
       ], dr.rows, {})) : h('p', { class: 'note' }, `All ${dr.count} holdings match what you have now.`)].filter(Boolean));
@@ -149,7 +149,7 @@ export function render(root) {
 
   root.append(section('Splits, bonus, demergers and dividends', h('div', null,
     table([
-      { label: 'Date', get: (a) => dateStr(a.date) }, { label: 'Share', get: (a) => a.symbol }, { label: 'What', get: (a) => ACTION_LABEL[a.type] },
+      { label: 'Date', mob: 'under', get: (a) => dateStr(a.date) }, { label: 'Share', host: true, get: (a) => a.symbol }, { label: 'What', mob: 'under', get: (a) => ACTION_LABEL[a.type] },
       { label: 'Details', get: (a) => describeAction(a) },
     ], actions.slice().sort((a, b) => (a.date < b.date ? 1 : -1)), { onRow: canEdit() ? (a) => actionForm(actions.find((x) => x.id === a.id)) : null, empty: 'None yet. Add a dividend you received, or a split or bonus that changed your quantity.' })),
     canEdit() ? [btn('Add', () => actionForm(), 'primary')] : null));
@@ -159,9 +159,9 @@ export function render(root) {
   root.append(section(`Stock trades (${trades.length})`, h('div', null,
     h('div', { class: 'filters' }, h('input', { type: 'search', placeholder: 'Search a share', value: tradeFilter, 'aria-label': 'Search trades', oninput: (e) => { tradeFilter = e.target.value; tradeLimit = 30; clearTimeout(window.__tf); window.__tf = setTimeout(() => { rerender(); const i = document.querySelector('input[aria-label="Search trades"]'); i && (i.focus(), i.setSelectionRange(tradeFilter.length, tradeFilter.length)); }, 250); } })),
     table([
-      { label: 'Date', get: (t) => dateStr(t.date) }, { label: 'Share', get: (t) => t.name || t.symbol },
+      { label: 'Date', mob: 'under', get: (t) => dateStr(t.date) }, { label: 'Share', host: true, get: (t) => t.name || t.symbol },
       { label: 'Type', render: (t) => h('span', { class: t.type === 'SELL' ? 'neg' : '' }, t.type === 'SELL' ? 'Sell' : 'Buy') },
-      { label: 'Qty', cls: 'r', get: (t) => num(t.qty) }, { label: 'Price', cls: 'r', get: (t) => dec(t.amount / t.qty) }, { label: 'Value', cls: 'r', get: (t) => money(t.amount) },
+      { label: 'Qty', mob: 'under', mlabel: 'qty ', cls: 'r', get: (t) => num(t.qty) }, { label: 'Price', mob: 'under', mlabel: 'at ', cls: 'r', get: (t) => dec(t.amount / t.qty) }, { label: 'Value', cls: 'r', get: (t) => money(t.amount) },
     ], list.slice(0, tradeLimit), { onRow: canEdit() ? (t) => tradeForm(trades.find((x) => x.id === t.id)) : null, empty: 'No trades yet. Import your Groww history above.' }),
     list.length > tradeLimit ? btn(`Show more (${list.length - tradeLimit} left)`, () => { tradeLimit += 60; rerender(); }, 'wide') : null),
     canEdit() ? [btn('Record a buy or sell', () => tradeForm(), 'primary')] : null));

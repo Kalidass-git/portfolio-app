@@ -117,11 +117,11 @@ export function render() {
   root.append(h('div', { class: 'no-print' }, h('h2', { class: 'sec-title' }, 'All holdings and contact notes'), ...rep.sections.filter((s) => s.items.length).map((sec) =>
     section(sec.type + ' · ' + money(sec.total),
       table([
-        { label: 'Details', get: (i) => i.label },
-        { label: 'Holder', get: (i) => i.holder },
+        { label: 'Details', host: true, get: (i) => i.label },
+        { label: 'Holder', mob: 'under', get: (i) => i.holder },
         { label: 'Current value', cls: 'r', get: (i) => money(i.value), total: () => money(sec.total) },
         { label: 'Monthly income', cls: 'r', get: (i) => (i.monthly ? money(i.monthly) : ''), total: () => (sec.monthly ? money(sec.monthly) : '') },
-        { label: 'Contact / notes', render: (i) => h('span', { class: 'note-cell' }, notes[i.key] || (canEdit() ? h('span', { class: 'muted' }, 'Add note') : '')) },
+        { label: 'Contact / notes', mob: 'under', render: (i) => h('span', { class: 'note-cell' }, notes[i.key] || (canEdit() ? h('span', { class: 'muted' }, 'Add note') : '')) },
       ], sec.items, { footer: { label: 'Total' }, onRow: canEdit() ? noteForm : null })))));
   return root;
 }

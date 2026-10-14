@@ -97,10 +97,10 @@ function overview() {
       const tb = lines.reduce((a, l) => a + l.budget, 0), ts = lines.reduce((a, l) => a + l.spent, 0);
       root.append(section('Budget · ' + name, h('div', null,
         table([
-          { label: 'Category', get: (l) => l.name },
+          { label: 'Category', host: true, get: (l) => l.name },
           { label: 'Spent', cls: 'r', get: (l) => money(l.spent), total: () => money(ts) },
-          { label: 'Budget', cls: 'r', get: (l) => money(l.budget), total: () => money(tb) },
-          { label: 'Used', cls: 'r', render: (l) => h('span', { class: 'with-meter' }, meter(Math.min(1, l.used), l.used > 1 ? 7 : l.used > .85 ? 3 : 2), h('span', { class: l.used > 1 ? 'neg' : '' }, pct(l.used, 0))), total: () => pct(tb ? ts / tb : 0, 0) },
+          { label: 'Budget', mob: 'under', mlabel: 'budget ', cls: 'r', get: (l) => money(l.budget), total: () => money(tb) },
+          { label: 'Used', mob: 'under', mlabel: 'used ', cls: 'r', render: (l) => h('span', { class: 'with-meter' }, meter(Math.min(1, l.used), l.used > 1 ? 7 : l.used > .85 ? 3 : 2), h('span', { class: l.used > 1 ? 'neg' : '' }, pct(l.used, 0))), total: () => pct(tb ? ts / tb : 0, 0) },
           { label: 'Left', cls: 'r', render: (l) => h('span', { class: l.left < 0 ? 'neg' : 'pos' }, money(l.left)), total: () => h('span', { class: tb - ts < 0 ? 'neg' : '' }, money(tb - ts)) },
         ], lines, { footer: { label: 'Total' } }),
         h('p', { class: 'note' }, 'Budgets are set per category each month. Categories without a budget are not listed.')),
@@ -171,21 +171,21 @@ function detail(q) {
   if (view === 'desc') {
     const list = C.byDescription(rows, dir);
     root.append(h('div', { class: 'card' }, table([
-      { label: 'Description', get: (r) => r.desc },
+      { label: 'Description', host: true, get: (r) => r.desc },
       { label: 'Entries', cls: 'r', get: (r) => String(r.count), total: () => String(rows.length) },
       { label: 'Total', cls: 'r', get: (r) => money(r.amount), total: () => money(total) },
-      { label: 'Average', cls: 'r', get: (r) => money(r.avg) },
-      { label: 'Share', cls: 'r', get: (r) => pct(r.share, 0) },
-      { label: 'Last', get: (r) => dateStr(r.last) },
+      { label: 'Average', mob: 'under', mlabel: 'avg ', cls: 'r', get: (r) => money(r.avg) },
+      { label: 'Share', mob: 'under', mlabel: 'share ', cls: 'r', get: (r) => pct(r.share, 0) },
+      { label: 'Last', mob: 'under', mlabel: 'last ', get: (r) => dateStr(r.last) },
     ], list, { footer: { label: 'Total' }, onRow: (r) => { location.hash = `${base}&view=all&desc=${encodeURIComponent(r.desc)}`; }, empty: 'No entries for this period and filter.' }),
       h('p', { class: 'note' }, 'Tap a description to see its entries.')));
   } else {
     const acct = new Map(data.accounts.map((a) => [a.id, `${a.name} · ${a.holder}`]));
     const sorted = rows.slice().sort((a, b) => (a.date < b.date ? 1 : -1));
     root.append(h('div', { class: 'card' }, descFilter ? h('p', null, h('a', { href: `${base}&view=desc` }, '← all descriptions')) : null, table([
-      { label: 'Date', get: (e) => dateStr(e.date) }, { label: 'Description', get: (e) => e.desc },
-      ...(cat === '*' ? [{ label: 'Category', get: (e) => e.category }] : []),
-      { label: 'Account', get: (e) => acct.get(e.acct) },
+      { label: 'Date', mob: 'under', get: (e) => dateStr(e.date) }, { label: 'Description', host: true, get: (e) => e.desc },
+      ...(cat === '*' ? [{ label: 'Category', mob: 'under', get: (e) => e.category }] : []),
+      { label: 'Account', mob: 'under', get: (e) => acct.get(e.acct) },
       { label: 'Amount', cls: 'r', get: (e) => money(e[dir]), total: () => money(total) },
     ], sorted, { footer: { label: 'Total' }, onRow: canEdit() ? (e) => txnForm(data.ledger.find((x) => x.id === e.id)) : null, empty: 'No entries for this period and filter.' })));
   }

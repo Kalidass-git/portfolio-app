@@ -86,8 +86,8 @@ export function render() {
     const budgetTotal = rows.reduce((a, c) => a + (c.budget || 0), 0);
     root.append(section(`${k.label} (${rows.length})`,
       table([
-        { label: 'Category', render: (c) => h('span', { title: CAT.isProtected(c.name) ? 'Name is fixed because the Home screen summary uses it' : null }, c.name + (CAT.isProtected(c.name) ? ' 🔒' : '')) },
-        { label: 'Entries', cls: 'r', get: (c) => num(c.u.count) },
+        { label: 'Category', host: true, render: (c) => h('span', { title: CAT.isProtected(c.name) ? 'Name is fixed because the Home screen summary uses it' : null }, c.name + (CAT.isProtected(c.name) ? ' 🔒' : '')) },
+        { label: 'Entries', mob: 'under', mlabel: 'entries ', cls: 'r', get: (c) => num(c.u.count) },
         { label: 'Last 12 months', cls: 'r', get: (c) => (c.u.recent ? money(c.u.recent) : '–') },
         ...(showBudget ? [{ label: 'Budget / month', cls: 'r', get: (c) => (c.budget ? money(c.budget) : '–'), total: () => (budgetTotal ? money(budgetTotal) : '') }] : []),
       ], rows, { footer: showBudget && budgetTotal ? { label: 'Total budget' } : null, onRow: editable ? (c) => categoryForm(list.find((x) => x.name === c.name)) : null, empty: 'No categories of this kind yet.' }),

@@ -153,12 +153,12 @@ function holdCols(kind, tot) {
   return [
     { label: fund ? 'Fund' : 'Holding', render: (x) => h('div', null, h('div', { class: 'nm' }, x.name, x.assetClass === 'goldetf' ? h('small', { class: 'tag' }, 'Gold') : (!fund && isEtf(x) ? h('small', { class: 'tag' }, 'ETF') : null)),
       sub2(fund ? `${dec(x.units, 3)} units · avg ${dec(x.units ? x.invested / x.units : 0, 2)}` : `${num(x.qty)} sh · avg ${dec(x.avgPrice)}`, fund ? (x.folio ? ' · ' + x.folio : '') : ' · ' + x.symbol), fund && canEdit() && !x.schemeCode ? h('button', { class: 'small', style: { marginTop: '4px' }, onclick: (e) => { e.stopPropagation(); linkFund(x); } }, 'Link live NAV') : null) },
-    { label: fund ? 'NAV · today' : 'Price · today', cls: 'r', render: (x) => h('div', null, h('div', null, dec(fund ? x.liveNav : x.livePrice, fund ? 4 : 2)),
+    { label: fund ? 'NAV · today' : 'Price · today', cls: 'r', mob: 'under', mu: (x) => (x.day == null ? null : h('span', { class: posNeg(x.day) }, 'today ' + signed(x.day) + ' (' + pct(Math.abs(x.dayPct || 0), 2) + ')')), render: (x) => h('div', null, h('div', null, dec(fund ? x.liveNav : x.livePrice, fund ? 4 : 2)),
       x.day == null ? sub2('–') : sub2(h('span', { class: posNeg(x.day) }, signed(x.day) + ' (' + pct(Math.abs(x.dayPct || 0), 2) + ')'))) },
     { label: 'Value (invested)', cls: 'r', render: (x) => h('div', null, h('div', { class: 'b' }, money(x.current)), sub2('(' + money(x.invested) + ')')) },
     { label: 'Gain · return', cls: 'r', render: (x) => h('div', null, h('div', { class: 'b ' + posNeg(x.pl) }, arrow(x.pl) + money(Math.abs(x.pl))),
       sub2(h('span', { class: posNeg(x.pl) }, (x.ret > 0 ? '+' : x.ret < 0 ? '−' : '') + pct(Math.abs(x.ret), 1)), x.xirr != null ? h('span', { class: 'xi' }, ' · XIRR ', h('span', { class: posNeg(x.xirr) }, pct(x.xirr, 1))) : null)) },
-    { label: 'Share', cls: 'r hide-sm', render: (x) => h('span', { class: 'with-meter' }, meter(tot ? (x.current / tot) * 8 : 0, 0), pct(tot ? x.current / tot : 0)) },
+    { label: 'Share', cls: 'r', mob: 'hide', render: (x) => h('span', { class: 'with-meter' }, meter(tot ? (x.current / tot) * 8 : 0, 0), pct(tot ? x.current / tot : 0)) },
   ];
 }
 const compactTable = (wrap) => { const t = wrap.querySelector('table'); if (t) t.classList.add('compact'); return wrap; };
@@ -250,8 +250,8 @@ function plannerBuys(data) {
     h('p', { class: 'note' }, 'Average per month over this period: ' + money(months.reduce((a, m) => a + ((buys[m] || {}).total || 0), 0) / months.length)));
   const rows = byName(b.items);
   wrap.append(table([
-    { label: 'Bought', get: (r) => r.name }, { label: 'Type', get: (r) => GROUP_NAME[r.group] }, { label: 'Times', cls: 'r', get: (r) => String(r.count) },
-    { label: 'Last on', get: (r) => dateStr(r.last) }, { label: 'Amount', cls: 'r', get: (r) => money(r.amount), total: () => money(b.total) },
+    { label: 'Bought', host: true, get: (r) => r.name }, { label: 'Type', mob: 'under', get: (r) => GROUP_NAME[r.group] }, { label: 'Times', mob: 'under', mlabel: 'times ', cls: 'r', get: (r) => String(r.count) },
+    { label: 'Last on', mob: 'under', mlabel: 'last ', get: (r) => dateStr(r.last) }, { label: 'Amount', cls: 'r', get: (r) => money(r.amount), total: () => money(b.total) },
   ], rows, { footer: { label: 'Total' }, empty: 'No purchases recorded in this month.' }));
   return section('Invested in ' + monthLabel(planMonth), wrap);
 }
@@ -285,11 +285,11 @@ export function render() {
     const tot = plans.reduce((a, p) => a + p.monthly, 0), done = plans.reduce((a, p) => a + sipDone(p), 0);
     root.append(section('Plan for the month',
       h('div', null, table([
-        { label: 'Where', get: (p) => p.name },
+        { label: 'Where', host: true, get: (p) => p.name },
         { label: 'Each month', cls: 'r', get: (p) => money(p.monthly), total: () => money(tot) },
-        { label: 'Each year', cls: 'r', get: (p) => money(p.monthly * 12), total: () => money(tot * 12) },
+        { label: 'Each year', mob: 'hide', cls: 'r', get: (p) => money(p.monthly * 12), total: () => money(tot * 12) },
         { label: 'Done this month', cls: 'r', render: (p) => h('span', null, money(sipDone(p)), fromHistory(p) ? h('small', { class: 'sub' }, ' from history') : null), total: () => money(done) },
-        { label: 'Left this month', cls: 'r', get: (p) => money(Math.max(0, p.monthly - sipDone(p))), total: () => money(Math.max(0, tot - done)) },
+        { label: 'Left this month', mob: 'under', mlabel: 'left ', cls: 'r', get: (p) => money(Math.max(0, p.monthly - sipDone(p))), total: () => money(Math.max(0, tot - done)) },
         { label: '', render: (p) => (canEdit() && sipDone(p) < p.monthly ? h('button', { class: 'small', onclick: (e) => { e.stopPropagation(); mutate((d) => { const t = d.sipPlans.find((x) => x.id === p.id); t.doneThisMonth = t.monthly; t.manual = true; t.doneMonth = C.monthKey(S.all.asOf); }); toast('Marked as invested'); } }, 'Mark done') : h('span', { class: 'tag good' }, 'Done')) },
       ], plans, { footer: { label: 'Total' }, onRow: canEdit() ? (p) => sipForm(plans.find((x) => x.id === p.id)) : null }),
         h('p', { class: 'note' }, Object.keys(monthlyBuys(data)).length ? 'Done this month is read from your buy history (shares, ETFs and funds), so it follows every purchase you import or record. It resets by itself each month. Lines you set to manual keep the amount you typed.' : 'Done this month is the amount you type or mark. Once your buy history exists (Groww import), it is filled in from that automatically.'),
