@@ -1,7 +1,7 @@
 import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
-import { h, money, compact, dateStr, section, table, formDialog, canEdit, toast, btn } from '../ui.js';
-import { strip, legend } from '../charts.js';
+import { h, money, compact, dateStr, section, table, formDialog, canEdit, toast } from '../ui.js';
+import { donut, hbars, legend, color } from '../charts.js';
 
 function noteForm(item) {
   formDialog({
@@ -11,26 +11,101 @@ function noteForm(item) {
   });
 }
 
+function metaForm() {
+  const m = S.data.reportMeta || {};
+  formDialog({
+    title: 'Note for the family', value: { preparedBy: m.preparedBy || '', note: m.note || '', contacts: m.contacts || '' },
+    fields: [
+      { key: 'preparedBy', label: 'Prepared by' },
+      { key: 'note', label: 'Message to the family', type: 'textarea', hint: 'For example: where the documents are kept, who to call first, what to do in the first week.' },
+      { key: 'contacts', label: 'Key contacts (one per line)', type: 'textarea', hint: 'Relationship manager, advisor, CA, bank branch. Name, role, phone. No passwords or PINs.' },
+    ],
+    onSave: (v) => mutate((d) => { d.reportMeta = { preparedBy: v.preparedBy, note: v.note, contacts: v.contacts }; }),
+  });
+}
+
+/** Print with real figures even if the screen is masked, then restore. */
+function printReport() {
+  const was = S.masked;
+  const restore = () => { if (S.masked !== was) { S.masked = was; window.dispatchEvent(new Event('rerender')); } window.removeEventListener('afterprint', restore); };
+  if (was) { S.masked = false; window.dispatchEvent(new Event('rerender')); toast('Figures are shown while printing'); }
+  window.addEventListener('afterprint', restore);
+  setTimeout(() => window.print(), 150);
+}
+
+const pctOf = (v, t) => (t > 0 ? Math.round((v / t) * 100) + '%' : '');
+
 export function render() {
   const { data, all } = S;
   const rep = C.familyReport(data, all);
   const notes = data.reportNotes || {};
+  const meta = data.reportMeta || {};
+  const secs = rep.sections.filter((s) => s.total > 0);
+  const liab = all.liabTotal || 0;
+  const net = rep.total - liab;
   const root = h('div', { class: 'page report' });
-  root.append(h('div', { class: 'toolbar' },
-    h('div', null, h('h2', { class: 'page-title' }, 'Family portfolio report'), h('p', { class: 'note' }, 'Where the money is held and whom to contact · as on ' + dateStr(all.asOf))),
-    h('button', { class: 'primary no-print', onclick: () => window.print() }, 'Print or save as PDF')));
-  const spine = rep.sections.filter((s) => s.total > 0).map((s) => ({ label: s.type, value: s.total }));
-  root.append(h('section', { class: 'card' }, h('div', { class: 'report-total' }, h('div', null, h('span', { class: 'stat-label' }, 'Total held'), h('strong', { class: 'stat-value' }, money(rep.total))), h('div', null, h('span', { class: 'stat-label' }, 'Monthly interest income'), h('strong', { class: 'stat-value' }, money(rep.monthly)))), strip(spine, { fmt: money }), legend(spine, { fmt: money })));
-  for (const sec of rep.sections) {
-    if (!sec.items.length) continue;
-    root.append(section(sec.type + ' · ' + money(sec.total),
+
+  root.append(h('div', { class: 'toolbar no-print' },
+    h('div', null, h('h2', { class: 'page-title' }, 'Family report'), h('p', { class: 'note' }, 'Two pages for the family: page 1 is the summary, page 2 has the charts and who to contact. Print or save as PDF, back to back.')),
+    h('div', { class: 'btn-row' }, canEdit() ? h('button', { onclick: metaForm }, 'Edit family note') : null, h('button', { class: 'primary', onclick: printReport }, 'Print or save as PDF'))));
+
+  // ---------- page 1 ----------
+  const contactLines = (meta.contacts || '').split('\n').map((x) => x.trim()).filter(Boolean);
+  const p1 = h('section', { class: 'rpt rpt-1' },
+    h('header', { class: 'rpt-head' },
+      h('div', null, h('h1', null, 'Family wealth summary'), h('p', null, 'Where our money is and whom to contact')),
+      h('div', { class: 'rpt-date' }, h('span', null, 'As on'), h('strong', null, dateStr(all.asOf)), meta.preparedBy ? h('span', null, 'Prepared by ' + meta.preparedBy) : null)),
+    h('div', { class: 'rpt-kpis' },
+      h('div', { class: 'kpi k1' }, h('span', null, 'Total held'), h('strong', null, money(rep.total))),
+      h('div', { class: 'kpi k2' }, h('span', null, 'Loans to repay'), h('strong', null, money(liab))),
+      h('div', { class: 'kpi k3' }, h('span', null, 'Net worth'), h('strong', null, money(net))),
+      h('div', { class: 'kpi k4' }, h('span', null, 'Monthly interest income'), h('strong', null, money(rep.monthly)))),
+    h('h3', { class: 'rpt-h' }, 'Where the money is'),
+    h('table', { class: 'rpt-tbl' },
+      h('thead', null, h('tr', null, ['', 'What', 'Amount', 'Share', 'Held with / contact'].map((t, i) => h('th', { class: i === 2 || i === 3 ? 'r' : '' }, t)))),
+      h('tbody', null, secs.map((s, i) => {
+        const where = [...new Set(s.items.map((x) => (notes[x.key] ? x.label : x.label)))].slice(0, 4).join(', ') + (s.items.length > 4 ? ` +${s.items.length - 4} more` : '');
+        return h('tr', null, h('td', null, h('i', { class: 'dot', style: { background: color(i) } })), h('td', null, h('b', null, s.type)), h('td', { class: 'r' }, money(s.total)), h('td', { class: 'r' }, pctOf(s.total, rep.total)), h('td', { class: 'small' }, where));
+      })),
+      h('tfoot', null, h('tr', null, h('td'), h('td', null, 'Total'), h('td', { class: 'r' }, money(rep.total)), h('td', { class: 'r' }, '100%'), h('td')))),
+    h('div', { class: 'rpt-two' },
+      h('div', { class: 'box b-note' }, h('h3', { class: 'rpt-h' }, 'A note for the family'),
+        h('p', { class: 'pre' }, meta.note || (canEdit() ? 'Tap "Edit family note" to write what the family should do and where documents are kept.' : '—'))),
+      h('div', { class: 'box b-contacts' }, h('h3', { class: 'rpt-h' }, 'Key contacts'),
+        contactLines.length ? h('ul', null, contactLines.map((l) => h('li', null, l))) : h('p', { class: 'muted' }, canEdit() ? 'Add relationship manager and advisor details in "Edit family note".' : '—'))),
+    h('footer', { class: 'rpt-foot' }, 'Confidential. For family use only. Values are as recorded on the date above and may have changed since.'));
+
+  // ---------- page 2 ----------
+  const holders = new Map();
+  for (const s of secs) for (const it of s.items) { const k = (it.holder || 'Joint / other').trim() || 'Joint / other'; holders.set(k, (holders.get(k) || 0) + it.value); }
+  const holderRows = [...holders].map(([label, value], i) => ({ label, value, ci: i })).sort((a, b) => b.value - a.value);
+  const allocation = secs.map((s) => ({ label: s.type, value: s.total }));
+  const withNotes = secs.flatMap((s) => s.items.filter((x) => notes[x.key]).map((x) => ({ ...x, type: s.type })));
+  const biggest = secs.flatMap((s) => s.items.map((x) => ({ ...x, type: s.type }))).sort((a, b) => b.value - a.value).slice(0, 8);
+  const income = secs.flatMap((s) => s.items.filter((x) => x.monthly > 0).map((x) => ({ label: x.label, value: x.monthly })));
+  const p2 = h('section', { class: 'rpt rpt-2' },
+    h('header', { class: 'rpt-head slim' }, h('div', null, h('h1', null, 'Charts and contacts')), h('div', { class: 'rpt-date' }, h('strong', null, dateStr(all.asOf)))),
+    h('div', { class: 'rpt-two' },
+      h('div', { class: 'box' }, h('h3', { class: 'rpt-h' }, 'How it is spread'), donut(allocation, { fmt: money, center: compact(rep.total), sub: 'total held', size: 190 }), legend(allocation, { fmt: money })),
+      h('div', { class: 'box' }, h('h3', { class: 'rpt-h' }, 'Whose name it is in'), hbars(holderRows, { fmt: money }),
+        income.length ? [h('h3', { class: 'rpt-h' }, 'Monthly income comes from'), hbars(income.sort((a, b) => b.value - a.value).slice(0, 6).map((r, i) => ({ ...r, ci: i + 2 })), { fmt: money })] : null)),
+    h('div', { class: 'box wide' }, h('h3', { class: 'rpt-h' }, 'Biggest holdings'),
+      h('table', { class: 'rpt-tbl' }, h('tbody', null, biggest.map((x) => h('tr', null, h('td', null, h('b', null, x.label)), h('td', { class: 'small' }, x.type + (x.holder ? ' · ' + x.holder : '')), h('td', { class: 'r' }, money(x.value)), h('td', { class: 'small' }, notes[x.key] || '')))))),
+    withNotes.length ? h('div', { class: 'box wide' }, h('h3', { class: 'rpt-h' }, 'Who to reach for each investment'),
+      h('table', { class: 'rpt-tbl' }, h('tbody', null, withNotes.map((x) => h('tr', null, h('td', null, h('b', null, x.label)), h('td', { class: 'small' }, x.type), h('td', { class: 'small pre' }, notes[x.key])))))) : null,
+    h('footer', { class: 'rpt-foot' }, 'Do not keep passwords or PINs on this page.'));
+
+  root.append(h('div', { class: 'rpts' }, p1, p2));
+
+  // ---------- full list (screen only; tap to add notes) ----------
+  root.append(h('div', { class: 'no-print' }, h('h2', { class: 'sec-title' }, 'All holdings and contact notes'), ...rep.sections.filter((s) => s.items.length).map((sec) =>
+    section(sec.type + ' · ' + money(sec.total),
       table([
         { label: 'Details', get: (i) => i.label },
         { label: 'Holder', get: (i) => i.holder },
         { label: 'Current value', cls: 'r', get: (i) => money(i.value), total: () => money(sec.total) },
         { label: 'Monthly income', cls: 'r', get: (i) => (i.monthly ? money(i.monthly) : ''), total: () => (sec.monthly ? money(sec.monthly) : '') },
         { label: 'Contact / notes', render: (i) => h('span', { class: 'note-cell' }, notes[i.key] || (canEdit() ? h('span', { class: 'muted' }, 'Add note') : '')) },
-      ], sec.items, { footer: { label: 'Total' }, onRow: canEdit() ? noteForm : null })));
-  }
+      ], sec.items, { footer: { label: 'Total' }, onRow: canEdit() ? noteForm : null })))));
   return root;
 }

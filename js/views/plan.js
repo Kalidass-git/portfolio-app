@@ -2,8 +2,9 @@ import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
 import { h, money, compact, pct, dateStr, monthLabel, gainText, section, stat, table, btn, formDialog, canEdit, toast, num, segTabs, subTab } from '../ui.js';
 import { lineChart, meter } from '../charts.js';
+import * as year from './plan-year.js';
 
-const TABS = [['targets', 'Targets'], ['budget', 'Plan vs actual'], ['future', 'Long-term']];
+const TABS = [['year', 'Year plan'], ['targets', 'Net worth'], ['future', 'Long-term']];
 const rerender = () => window.dispatchEvent(new Event('rerender'));
 
 function targetForm(i) {
@@ -59,6 +60,8 @@ export function render() {
   const root = h('div', { class: 'page' });
   const tab = subTab(TABS.map((t) => t[0]));
   root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Plan views')));
+
+  if (tab === 'year') year.render(root);
 
   if (tab === 'targets') {
     const tg = C.targets(data, proj);

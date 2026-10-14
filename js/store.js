@@ -1,8 +1,10 @@
 // App state, local persistence and sync with the Google Drive backend (Apps Script).
+import { materialize, materializeFunds } from './trades.js';
 import { computeAll, todayISO } from './calc.js';
 import * as remote from './remote.js';
+import { merge } from './merge.js';
 
-const K = { data: 'pt.data', cfg: 'pt.cfg', quotes: 'pt.quotes', meta: 'pt.meta' };
+const K = { data: 'pt.data', cfg: 'pt.cfg', quotes: 'pt.quotes', meta: 'pt.meta', base: 'pt.base' };
 const read = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
 const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } };
 
@@ -34,6 +36,7 @@ export function init() {
   S.data = read(K.data, null);
   S.remote = !!(S.cfg.backendUrl && S.cfg.key);
   S.role = S.remote ? (S.meta.role || 'viewer') : 'owner';
+  if (S.data && !S.meta.dirty && !localStorage.getItem(K.base)) saveBase(S.data);
   recompute();
   return S;
 }
@@ -51,8 +54,13 @@ export function setData(data, { dirty = false, version } = {}) {
   if (version != null) S.meta.version = version;
   S.meta.dirty = dirty;
   write(K.data, data); write(K.meta, S.meta);
+  if (!dirty) saveBase(data);
   recompute(); emit();
 }
+
+/** The copy as of the last sync: what a merge compares both sides against. */
+const saveBase = (d) => { if (!write(K.base, d)) { try { localStorage.removeItem(K.base); } catch {} } };
+const loadBase = () => read(K.base, null);
 
 let pushTimer = null;
 /** Apply a change to the data. Owner only. Saves locally right away and syncs to Drive shortly after. */
@@ -60,6 +68,7 @@ export function mutate(fn) {
   if (S.role !== 'owner') throw new Error('This device has read-only access.');
   const draft = S.data;
   fn(draft);
+  materialize(draft); materializeFunds(draft); // holdings follow the trades once a Groww history is imported
   draft.updatedAt = new Date().toISOString();
   S.meta.dirty = true;
   recompute(); snapshot();
@@ -121,7 +130,7 @@ export async function pull({ force = false } = {}) {
     const res = await remote.call(S.cfg.backendUrl, S.cfg.key, 'read');
     S.role = res.role; S.meta.role = res.role;
     if (S.meta.dirty && S.role === 'owner' && !force) {
-      if (res.version !== S.meta.version) { S.status = 'conflict'; emit(); return { conflict: true, remote: res }; }
+      if (res.version !== S.meta.version) return reconcile(res);
       return push();
     }
     if (!res.data) { S.status = 'idle'; emit(); return { empty: true }; }
@@ -136,13 +145,37 @@ export async function push({ force = false } = {}) {
   if (!S.remote || S.role !== 'owner') return;
   S.status = 'syncing'; emit();
   try {
+    const sent = JSON.stringify(S.data);
     const res = await remote.call(S.cfg.backendUrl, S.cfg.key, 'write', { data: S.data, baseVersion: force ? null : S.meta.version });
-    if (res.conflict) { S.status = 'conflict'; emit(); return { conflict: true, remote: res }; }
-    S.meta.version = res.version; S.meta.dirty = false; S.meta.lastSync = new Date().toISOString();
+    if (res.conflict) return reconcile();
+    try { if (!write(K.base, JSON.parse(sent))) localStorage.removeItem(K.base); } catch {}
+    S.meta.version = res.version; S.meta.dirty = S.data && JSON.stringify(S.data) !== sent; S.meta.lastSync = new Date().toISOString();
     write(K.meta, S.meta);
     S.status = 'idle'; S.error = ''; emit();
     return { ok: true };
   } catch (e) { return fail(e); }
+}
+
+/** Another device saved first. Combine both sets of changes and upload the result. */
+async function reconcile(remoteRes) {
+  const res = remoteRes || await remote.call(S.cfg.backendUrl, S.cfg.key, 'read');
+  const base = loadBase();
+  if (!res.data || !base) { S.status = 'conflict'; emit(); return { conflict: true, remote: res }; }
+  const m = merge(base, S.data, res.data);
+  materialize(m.data); materializeFunds(m.data);
+  m.data.updatedAt = new Date().toISOString();
+  S.data = m.data; S.meta.version = res.version; S.meta.dirty = true;
+  write(K.data, S.data); write(K.meta, S.meta);
+  S.lastMerge = { at: Date.now(), clashes: m.clashes, renamed: m.renamed, fromRemote: m.fromRemote };
+  recompute(); emit();
+  const r = await push();
+  return r && r.ok ? { ok: true, merged: S.lastMerge } : r;
+}
+
+/** Owner chose how to settle a conflict that could not be merged. */
+export async function resolveConflict(choice) {
+  if (choice === 'mine') return push({ force: true });
+  return pull({ force: true });
 }
 
 export function disconnect() {

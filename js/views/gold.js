@@ -1,6 +1,8 @@
+import { premiumFrom } from '../goldlive.js';
 import { S, mutate, nextId } from '../store.js';
 import * as C from '../calc.js';
-import { h, money, dec, dateStr, gainText, section, table, btn, formDialog, canEdit, toast, stat, num, segTabs, subTab, pct, posNeg } from '../ui.js';
+import { h, money, dec, dateStr, gainText, section, table, btn, formDialog, canEdit, toast, stat, num, segTabs, subTab, pct, posNeg, dialog, confirmDialog } from '../ui.js';
+import { reopen } from './closing.js';
 
 const rerender = () => window.dispatchEvent(new Event('rerender'));
 
@@ -10,7 +12,7 @@ export function rateHistory(data) {
   if (h0 && h0.length) return h0;
   return data.settings.goldRate ? [{ date: data.settings.goldRateDate || C.todayISO(), rate: data.settings.goldRate }] : [];
 }
-export function setRate(rate, date = C.todayISO()) {
+export function setRate(rate, date = C.todayISO(), manual = true) {
   mutate((d) => {
     const hist = rateHistory(d).map((x) => ({ ...x }));
     const hit = hist.find((x) => x.date === date);
@@ -19,6 +21,7 @@ export function setRate(rate, date = C.todayISO()) {
     d.gold.rateHistory = hist.slice(-400);
     const latest = hist[hist.length - 1];
     d.settings.goldRate = latest.rate; d.settings.goldRateDate = latest.date;
+    if (manual !== false && d.settings.goldLive) { const p = premiumFrom(latest.rate, d.settings.goldLive); if (p) d.settings.goldPremium = p; }
   });
 }
 const daysOld = (date) => Math.max(0, Math.round((C.toMs(S.all.asOf) - C.toMs(date)) / C.DAY));
@@ -44,6 +47,8 @@ function rateCard() {
       h('p', { class: old > 7 ? 'warn' : 'muted', style: { margin: 0 } }, `Set ${ageText(last.date)} (${dateStr(last.date)})` + (old > 7 ? '. This rate is getting old, so your gold value may be off.' : '')
         + (prev ? ` · ${change >= 0 ? 'up' : 'down'} ${money(Math.abs(change))} (${pct(Math.abs(change) / prev.rate, 1)}) since ${dateStr(prev.date)}` : '')),
       canEdit() ? h('div', { class: 'row', style: { alignItems: 'center' } }, h('span', null, '₹'), input, btn('Update rate', save, 'primary')) : null,
+      h('p', { class: 'note', style: { margin: 0 } }, data.settings.goldLive ? `Live world gold read ${ageText((data.settings.goldLive.at || '').slice(0, 10) || C.todayISO())}. ${data.settings.goldAuto === false ? 'Automatic rate is off.' : 'The rate above follows it each time you refresh prices.'}` : 'Press Refresh prices on Shares & funds to read the live gold price.'),
+      canEdit() ? btn(data.settings.goldAuto === false ? 'Turn automatic rate on' : 'Turn automatic rate off', () => mutate((d) => { d.settings.goldAuto = d.settings.goldAuto === false; })) : null,
       canEdit() ? h('p', { class: 'note', style: { margin: 0 } }, 'Type today’s price of 1 gram and press Update. Everything (Home, reports, gold value) uses it straight away. Use the same type of gold (22K or 24K) each time. ', h('a', { href: 'https://www.goodreturns.in/gold-rates/', target: '_blank', rel: 'noopener noreferrer' }, 'See today’s rates'), '.') : h('p', { class: 'note', style: { margin: 0 } }, 'Only the owner can change the rate.'),
       hist.length > 1 ? h('details', null, h('summary', null, `Rate history (${hist.length})`), table([
         { label: 'Date', get: (r) => dateStr(r.date) }, { label: 'Per gram', cls: 'r', get: (r) => money(r.rate) },
@@ -74,6 +79,91 @@ function schemeEntryForm(scheme, idx) {
     onDelete: isNew ? null : () => mutate((d) => d.gold.schemes.find((x) => x.id === scheme.id).entries.splice(idx, 1)),
   });
 }
+// ----- gold chits: jeweller savings schemes. Closing one adds a gold purchase. -----
+function chitForm(c) {
+  const isNew = !c;
+  formDialog({
+    title: isNew ? 'Add gold chit' : 'Edit ' + c.name, value: c || { startDate: C.todayISO() },
+    fields: [
+      { key: 'name', label: 'Name', required: true, hint: 'For example GRT Gold savings 5' }, { key: 'shop', label: 'Jeweller' },
+      { key: 'monthly', label: 'Monthly instalment (₹, optional)', type: 'number' }, { key: 'months', label: 'Number of months (optional)', type: 'number', half: true },
+      { key: 'startDate', label: 'Started on', type: 'date', half: true }, { key: 'maturityDate', label: 'Ends on', type: 'date' },
+      { key: 'desc', label: 'Notes / who to contact', type: 'textarea' },
+    ],
+    onSave: (v) => mutate((d) => { d.gold.chits = d.gold.chits || []; if (isNew) d.gold.chits.push({ id: nextId('gc', d.gold.chits), entries: [], ...v }); else Object.assign(d.gold.chits.find((x) => x.id === c.id), v); }),
+    onDelete: isNew ? null : () => mutate((d) => { d.gold.chits = d.gold.chits.filter((x) => x.id !== c.id); }),
+    deleteMessage: 'Delete this chit and its payments? Use “Close it” instead when it is over, so the history is kept.',
+    extraActions: isNew || c.closed ? [] : [{ label: 'Close it', onclick: () => closeChit(c) }],
+  });
+}
+function chitEntryForm(c, idx) {
+  const isNew = idx == null;
+  const e = isNew ? { date: C.todayISO(), amount: c.monthly || '' } : c.entries[idx];
+  formDialog({
+    title: (isNew ? 'Add payment to ' : 'Edit payment in ') + c.name, value: e,
+    fields: [{ key: 'date', label: 'Date', type: 'date', required: true }, { key: 'amount', label: 'Amount paid (₹)', type: 'number', required: true }],
+    onSave: (v) => mutate((d) => { const t = d.gold.chits.find((x) => x.id === c.id); const rec = { date: v.date, amount: v.amount }; if (isNew) t.entries.push(rec); else t.entries[idx] = rec; t.entries.sort((a, b) => (a.date < b.date ? -1 : 1)); }),
+    onDelete: isNew ? null : () => mutate((d) => { d.gold.chits.find((x) => x.id === c.id).entries.splice(idx, 1); }),
+  });
+}
+function closeChit(c) {
+  const paid = c.entries.reduce((a, e) => a + e.amount, 0);
+  formDialog({
+    title: 'Close ' + c.name, saveLabel: 'Close and add the gold', value: { date: C.todayISO(), grams: '', amount: paid, note: '' },
+    fields: [
+      { key: 'date', label: 'Closed on', type: 'date', required: true },
+      { key: 'grams', label: 'Gold received (grams)', type: 'number', required: true, hint: 'Coins, jewellery or bars you took when the chit ended.' },
+      { key: 'amount', label: 'Value recorded for the gold (₹)', type: 'number', required: true, hint: `You paid ${money(paid)} in. Change it if the jeweller added a bonus or you paid extra.` },
+      { key: 'note', label: 'Note (optional)', type: 'text' },
+    ],
+    onSave: (v) => {
+      if (!(v.grams > 0)) { toast('Enter the grams of gold you received.', 'bad'); return false; }
+      mutate((d) => {
+        const t = d.gold.chits.find((x) => x.id === c.id);
+        const pid = nextId('g', d.gold.purchases);
+        d.gold.purchases.push({ id: pid, date: v.date, desc: `Gold from chit: ${c.name}`, grams: v.grams, amount: v.amount });
+        d.gold.purchases.sort((a, b) => (a.date < b.date ? -1 : 1));
+        t.closed = { date: v.date, grams: v.grams, amount: v.amount, purchaseId: pid, note: v.note || '' };
+      });
+      toast('Closed. The gold is now in your gold purchases.');
+    },
+  });
+}
+function openChit(row) {
+  const c = S.data.gold.chits.find((x) => x.id === row.id);
+  const list = h('div');
+  list.append(table([{ label: 'Date', get: (e) => dateStr(e.date) }, { label: 'Paid', cls: 'r', get: (e) => money(e.amount), total: (rs) => money(rs.reduce((a, e) => a + e.amount, 0)) }],
+    c.entries.map((e, i) => ({ ...e, _i: i })).reverse(), { footer: { label: 'Total' }, onRow: canEdit() && !c.closed ? (e) => chitEntryForm(c, e._i) : null, empty: 'No payments yet.' }));
+  const acts = [];
+  if (canEdit()) {
+    if (c.closed) acts.push({ label: 'Reopen', onclick: (cl) => { cl(); reopen(c.name, (d) => { const t = d.gold.chits.find((x) => x.id === c.id); d.gold.purchases = d.gold.purchases.filter((p) => p.id !== t.closed.purchaseId); delete t.closed; }); } });
+    else acts.push({ label: 'Edit chit', onclick: (cl) => { cl(); chitForm(c); } }, { label: 'Close it', onclick: (cl) => { cl(); closeChit(c); } }, { label: 'Add payment', class: 'primary', onclick: (cl) => { cl(); chitEntryForm(c); } });
+  }
+  acts.push({ label: 'Close window', onclick: (cl) => cl() });
+  dialog(c.name, h('div', null, h('p', { class: 'note' }, `${c.shop || 'Gold chit'}${c.monthly ? ' · ' + money(c.monthly) + ' a month' : ''}${c.closed ? ` · closed ${dateStr(c.closed.date)}, ${dec(c.closed.grams, 2)} g received` : ''}`), c.desc ? h('p', null, c.desc) : null, list), acts);
+}
+function chitsTab(root) {
+  const { all, data } = S;
+  const g = all.gold.chits;
+  root.append(h('div', { class: 'stats' },
+    stat('Invested in gold chits', money(g.invested), `${g.active.length} running chit${g.active.length === 1 ? '' : 's'}`),
+    stat('Closed chits', String(g.closed.length), g.closed.length ? `${dec(g.closed.reduce((a, c) => a + c.closed.grams, 0), 1)} g received in total` : 'none yet')));
+  root.append(section('Running chits', h('div', null, table([
+    { label: 'Chit', get: (c) => c.name }, { label: 'Jeweller', get: (c) => c.shop || '' },
+    { label: 'Started', get: (c) => dateStr(c.startDate || (c.entries[0] && c.entries[0].date)) },
+    { label: 'Payments', cls: 'r', get: (c) => String(c.months) },
+    { label: 'Paid so far', cls: 'r', get: (c) => money(c.paid), total: () => money(g.invested) },
+    { label: 'Ends', get: (c) => dateStr(c.maturityDate) },
+  ], g.active, { footer: { label: 'Total' }, onRow: openChit, empty: 'No running gold chits.' }),
+    h('p', { class: 'note' }, 'Money paid into a running chit counts as gold at cost. When the chit ends, press “Close it”, enter the grams you received, and the gold is added to your purchases.')),
+    canEdit() ? [btn('Add gold chit', () => chitForm(), 'primary')] : null));
+  root.append(section(`Closed chits (${g.closed.length})`, table([
+    { label: 'Chit', get: (c) => c.name }, { label: 'Started', get: (c) => dateStr(c.startDate || (c.entries[0] && c.entries[0].date)) }, { label: 'Closed', get: (c) => dateStr(c.closed.date) },
+    { label: 'Paid', cls: 'r', get: (c) => money(c.paid) }, { label: 'Gold received', cls: 'r', get: (c) => dec(c.closed.grams, 2) + ' g' },
+    { label: 'Value now', cls: 'r', get: (c) => money(c.closed.grams * all.gold.rate) },
+    { label: 'Gain', cls: 'r', render: (c) => gainText(c.closed.grams * all.gold.rate - c.paid) },
+  ], g.closed.slice().sort((a, b) => (a.closed.date < b.closed.date ? 1 : -1)), { onRow: openChit, empty: 'Nothing closed yet.' })));
+}
 function jewelForm(j) {
   const isNew = !j;
   formDialog({
@@ -97,13 +187,15 @@ export function render() {
   const { all, data } = S;
   const g = all.gold;
   const root = h('div', { class: 'page' });
-  const TABS = [['gold', 'Gold'], ['jewellery', 'Jewellery'], ['others', 'Other holdings']];
+  const TABS = [['gold', 'Gold'], ['chits', 'Gold chits'], ['jewellery', 'Jewellery'], ['others', 'Other holdings']];
   const tab = subTab(TABS.map((t) => t[0]));
   root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Gold views')));
+  if (tab === 'chits') chitsTab(root);
   if (tab === 'gold') {
   root.append(h('div', { class: 'stats' },
     stat('Gold value', money(g.value), `${dec(g.grams, 2)} g · ${dec(g.grams / 8, 1)} sovereigns (8 g)`),
-    stat('Gain on gold', h('span', { class: g.value - g.invested >= 0 ? 'pos' : 'neg' }, money(g.value - g.invested)), `paid ${money(g.invested)}`)));
+    stat('Gain on gold', h('span', { class: g.value - g.invested >= 0 ? 'pos' : 'neg' }, money(g.value - g.invested)), `paid ${money(g.invested)}`),
+    h('a', { class: 'stat', href: '#/gold/chits', style: { textDecoration: 'none', color: 'inherit' } }, h('span', { class: 'stat-label' }, 'Invested in gold chits'), h('strong', { class: 'stat-value' }, money(g.chits.invested)), h('span', { class: 'stat-sub' }, `${g.chits.active.length} running · tap to see`))));
   root.append(rateCard());
 
   root.append(section('Gold purchases',

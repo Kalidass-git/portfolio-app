@@ -1,5 +1,6 @@
-import { S, init, subscribe, pull, setData, setCfg, connect, recompute, startOfDaySnapshot } from './store.js';
+import { S, init, subscribe, pull, setData, setCfg, connect, recompute, startOfDaySnapshot, resolveConflict } from './store.js';
 import { h, $, toast, dialog, btn, formDialog, route } from './ui.js';
+import { autoPoint } from './views/backups.js';
 import * as home from './views/home.js';
 import * as cash from './views/cash.js';
 import * as fixed from './views/fixed.js';
@@ -59,7 +60,7 @@ function chrome() {
   const st = S.status;
   const chip = !S.remote ? h('span', { class: 'chip-status' }, 'This device only')
     : st === 'syncing' ? h('span', { class: 'chip-status' }, 'Syncing…')
-    : st === 'conflict' ? h('a', { class: 'chip-status bad', href: '#/settings' }, 'Changed elsewhere')
+    : st === 'conflict' ? h('button', { class: 'chip-status bad', onclick: conflictDialog }, 'Fix sync')
     : st === 'error' || st === 'offline' ? h('a', { class: 'chip-status bad', href: '#/settings' }, st === 'offline' ? 'Offline' : 'Sync problem')
     : S.meta.dirty ? h('span', { class: 'chip-status' }, 'Saving…') : h('span', { class: 'chip-status ok' }, S.role === 'owner' ? 'Saved to Drive' : 'View only');
   top.replaceChildren(
@@ -73,9 +74,36 @@ function chrome() {
   document.title = ROUTES[cur].label + ' · Family Wealth';
 }
 
+function conflictDialog() {
+  const done = (msg) => (c) => { c(); msg && toast(msg); };
+  dialog('Two devices changed the data', h('div', null,
+    h('p', null, 'This device and Google Drive both have changes the app could not combine on its own. Choose which copy to keep. A restore point is saved first, so you can undo this from Settings.'),
+    h('p', { class: 'note' }, 'Tip: edit on one device at a time, and let the "Saved to Drive" label show before you switch.')),
+    [{ label: 'Keep this device’s data', class: 'primary', onclick: async (c) => { c(); await autoPoint('Before keeping this device (sync conflict)'); try { await resolveConflict('mine'); toast('Drive now has this device’s data'); } catch (e) { toast(e.message, 'bad'); } renderView(); } },
+     { label: 'Use the Drive copy', class: 'danger', onclick: async (c) => { c(); await autoPoint('Before using the Drive copy (sync conflict)'); try { await resolveConflict('drive'); toast('Loaded the Drive copy'); } catch (e) { toast(e.message, 'bad'); } renderView(); } },
+     { label: 'Decide later', onclick: done() }]);
+}
+
+let shownMerge = 0;
+function mergeNotice() {
+  const m = S.lastMerge;
+  if (!m || m.at === shownMerge) return;
+  shownMerge = m.at;
+  toast(m.clashes ? `Combined with changes from your other device. ${m.clashes} item${m.clashes === 1 ? ' was' : 's were'} edited on both; this device’s version was kept.` : 'Combined with changes from your other device.');
+}
+
 function assetsSubnav(cur) {
   if (ROUTES[cur].tab !== 'assets') return null;
   return h('nav', { class: 'section-tabs', 'aria-label': 'Asset types' }, Object.entries(ROUTES).filter(([, r]) => r.group === 'Assets').map(([k, r]) => h('a', { class: k === cur ? 'on' : '', href: '#/' + k, 'aria-current': k === cur ? 'page' : null }, r.short || r.label)));
+}
+
+const NEG = /^\s*[-−–]\s?₹|^\s*[-−]\d|^\s*[-−]\s?[\d.,]+\s?(L|Cr|K|%)/;
+function markNegatives(root) {
+  for (const el of root.querySelectorAll('td, .stat-value, .rl-val, .kpi-value, .gain, strong, .chip-btn')) {
+    if (el.children.length > 1) continue;
+    const t = el.textContent || '';
+    if (t.length < 30 && NEG.test(t)) el.classList.add('neg');
+  }
 }
 
 let rendering = false;
@@ -89,6 +117,7 @@ function renderView() {
     const scroll = main.scrollTop, y = window.scrollY;
     const page = ROUTES[cur].view.render();
     main.replaceChildren(...[assetsSubnav(cur), page].filter(Boolean));
+    markNegatives(main);
     const where = cur + '/' + route().sub;
     if (window.__lastRoute === where) window.scrollTo(0, y); else { window.scrollTo(0, 0); window.__lastRoute = where; }
   } catch (e) {
@@ -126,7 +155,7 @@ shell();
 window.addEventListener('hashchange', renderView);
 window.addEventListener('rerender', renderView);
 let t;
-subscribe(() => { clearTimeout(t); t = setTimeout(() => { if (S.data) renderView(); }, 30); });
+subscribe(() => { mergeNotice(); clearTimeout(t); t = setTimeout(() => { if (S.data) renderView(); }, 30); });
 renderView();
 startOfDaySnapshot();
 if (S.remote) pull().catch(() => {});

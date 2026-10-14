@@ -108,7 +108,7 @@ export function setOptions(sel, options, value) {
  * Form dialog. fields: [{key,label,type:'text'|'number'|'date'|'select'|'textarea'|'checkbox', options, required, step, hint, half, showIf(values)}]
  * onSave(values) may return false to keep the dialog open.
  */
-export function formDialog({ title, fields, value = {}, onSave, onDelete, saveLabel = 'Save', deleteMessage = 'Delete this entry? This cannot be undone.' }) {
+export function formDialog({ title, fields, value = {}, onSave, onDelete, extraActions = [], saveLabel = 'Save', deleteMessage = 'Delete this entry? This cannot be undone.' }) {
   const inputs = {}, labels = {};
   const form = h('form', { class: 'form', novalidate: true });
   for (const f of fields) {
@@ -157,6 +157,7 @@ export function formDialog({ title, fields, value = {}, onSave, onDelete, saveLa
   };
   const actions = [{ label: 'Cancel', onclick: (c) => c() }];
   if (onDelete) actions.push({ label: 'Delete', class: 'danger', onclick: async (c) => { if (await confirmDialog(deleteMessage)) { if (onDelete() !== false) c(); } } });
+  for (const a of extraActions) actions.push({ label: a.label, class: a.class || '', onclick: (c) => { c(); a.onclick(); } });
   actions.push({ label: saveLabel, class: 'primary', onclick: submit });
   const d = dialog(title, form, actions);
   form.addEventListener('submit', (e) => { e.preventDefault(); submit(d.close); });
@@ -172,11 +173,11 @@ export const btn = (label, onclick, cls = '') => h('button', { class: cls, oncli
 export const empty = (msg) => h('p', { class: 'empty' }, msg);
 
 /** Table. cols: [{label, get(row), cls, render(row)->node|string, total}] */
-export function table(cols, rows, { onRow, footer, empty: emptyMsg = 'Nothing here yet.' } = {}) {
+export function table(cols, rows, { onRow, footer, rowClass, empty: emptyMsg = 'Nothing here yet.' } = {}) {
   if (!rows.length) return empty(emptyMsg);
   const t = h('table', { class: 'tbl' },
     h('thead', null, h('tr', null, cols.map((c) => h('th', { class: c.cls || '' }, c.label)))),
-    h('tbody', null, rows.map((r) => h('tr', { class: onRow ? 'click' : '', tabindex: onRow ? 0 : null, onclick: onRow ? () => onRow(r) : null, onkeydown: onRow ? (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onRow(r)) : null },
+    h('tbody', null, rows.map((r) => h('tr', { class: (onRow ? 'click ' : '') + (rowClass ? rowClass(r) || '' : ''), tabindex: onRow ? 0 : null, onclick: onRow ? () => onRow(r) : null, onkeydown: onRow ? (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onRow(r)) : null },
       cols.map((c) => h('td', { class: c.cls || '', 'data-label': c.label }, c.render ? c.render(r) : c.get(r)))))),
     footer ? h('tfoot', null, h('tr', null, cols.map((c, i) => h('td', { class: c.cls || '' }, i === 0 ? footer.label || 'Total' : c.total ? c.total(rows) : '')))) : null);
   return h('div', { class: 'tbl-wrap' }, t);

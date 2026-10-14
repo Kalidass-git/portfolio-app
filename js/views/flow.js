@@ -10,7 +10,8 @@ import { openLedger, txnForm } from './cash.js';
 let period = 'this';
 let filter = { mode: 'all', cats: [] };
 const rerender = () => window.dispatchEvent(new Event('rerender'));
-const TABS = [['month', 'Overview'], ['categories', 'Categories & budgets']];
+import * as archiveView from './archive.js';
+const TABS = [['month', 'Overview'], ['categories', 'Categories & budgets'], ['archive', 'Archive']];
 
 const PERIODS = [['this', 'This month'], ['last', 'Last month'], ['ytd', 'This year so far'], ['12m', 'Past 12 months'], ['all', 'All time']];
 const periodName = (key, range) => (/^\d{4}-\d\d$/.test(key) ? monthLabel(key, true) : range.label);
@@ -58,6 +59,11 @@ export function render() {
   if (r.sub === 'categories') {
     const page = categoriesView.render();
     page.prepend(h('div', { class: 'pagebar' }, segTabs(TABS, 'categories', 'Expense views')));
+    return page;
+  }
+  if (r.sub === 'archive') {
+    const page = archiveView.render();
+    page.prepend(h('div', { class: 'pagebar' }, segTabs(TABS, 'archive', 'Expense views')));
     return page;
   }
   return r.sub === 'detail' ? detail(r.query) : overview();
@@ -129,6 +135,7 @@ function overview() {
     names: ['Income', 'Expenses', 'Invested'], fmt: money,
     groups: tr.map((t) => ({ label: monthLabel(t.month).slice(0, 3), title: monthLabel(t.month), values: [t.income, t.expense, t.invest] })),
   })));
+  if (s.otherIn > 0) root.append(h('p', { class: 'note' }, `${money(s.otherIn)} was received in categories that are not marked as income (refunds, loan repayments, sales). It is not counted as income. If some of it is real income, change that category’s type under Categories.`));
   root.append(h('p', { class: 'note' }, 'Transfers between your own accounts and cash withdrawals are left out everywhere on this screen. Investments are never counted as expenses. The 12-month chart ignores the filter and counts loan EMI & tax inside expenses.'));
   return root;
 }

@@ -2,6 +2,8 @@
 // Every formula here mirrors the workbook (Portfolio_2026_Lite.xlsx); sheet/cell references are noted in comments.
 
 import { kindOf } from './categories.js';
+import { liveParity } from './goldlive.js';
+import { buildEquity, buildFunds, xirrFor, fundKey } from './trades.js';
 export const DAY = 86400000;
 export const toMs = (s) => (s ? Date.parse(s + 'T00:00:00Z') : NaN);
 export const iso = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -67,9 +69,43 @@ export function savingPrincipal(sv) {
   if (sv.type === 'EPF') return sum(sv.entries, (e) => (e.employee || 0) + (e.employer || 0));
   return sum(sv.entries, (e) => e.amount);
 }
-export function calcSaving(sv) {
+export function calcSaving(sv, asOf) {
   const principal = savingPrincipal(sv);
-  return { ...sv, principal, daily: (principal * sv.rate) / 365 };
+  return { ...sv, principal, daily: (principal * sv.rate) / 365, ...savingXirr(sv, asOf) };
+}
+const tenureMonths = (sv) => (sv.tenure ? Math.round(sv.tenure * ({ Years: 12, Months: 1, Days: 1 / 30.4 }[sv.tenureType] || 1)) : 0);
+/**
+ * Real return of a chit or recurring deposit from its dated payments.
+ *   closed: the payments plus the amount received when it was closed.
+ *   open:   only an estimate, and only when you entered the expected payout. Remaining instalments are assumed equal to the average paid so far.
+ */
+export function savingXirr(sv, asOf) {
+  if (sv.type === 'EPF' || sv.type === 'PPF') return {};
+  const ents = sv.entries.filter((e) => e.amount > 0 && e.date);
+  if (!ents.length) return {};
+  const flows = ents.map((e) => ({ t: toMs(e.date), amount: -e.amount }));
+  if (sv.closed) { const x = xirr(flows.concat([{ t: toMs(sv.closed.date), amount: sv.closed.amount }])); return { xirr: x, xirrKind: 'actual' }; }
+  if (sv.payout > 0 && sv.maturityDate) {
+    const f = flows.slice(), avg = sum(ents, (e) => e.amount) / ents.length;
+    const left = Math.max(0, tenureMonths(sv) - ents.length);
+    let d = ents[ents.length - 1].date;
+    for (let i = 0; i < left; i++) { d = addMonths(d, 1); f.push({ t: toMs(d), amount: -avg }); }
+    f.push({ t: toMs(sv.maturityDate), amount: sv.payout });
+    return { xirr: xirr(f), xirrKind: 'estimate' };
+  }
+  return {};
+}
+/** Return on a closed bond, deposit or loan: money in, coupons while it lasted (assumed paid on time), money back. */
+export function closedXirr(it, kind, asOf) {
+  if (!it.closed || !it.depositDate) return null;
+  const f = [{ t: toMs(it.depositDate), amount: -it.principal }];
+  if (kind === 'bond') {
+    const step = it.credit === 'Quarterly' ? 3 : 1;
+    let d = addMonths(it.depositDate, step);
+    while (d <= it.closed.date) { f.push({ t: toMs(d), amount: it.principal * it.rate * (step / 12) }); d = addMonths(d, step); }
+  }
+  f.push({ t: toMs(it.closed.date), amount: it.closed.amount });
+  return xirr(f);
 }
 
 // ---------- bank accounts ----------
@@ -140,11 +176,19 @@ export function calcGold(data) {
       })()
     : { name: '', grams: 0, invested: 0, value: 0, gain: 0, entries: [] };
   const jewelGrams = sum(g.jewellery, (j) => j.grams);
+  // gold chits (jeweller savings schemes): the money paid in counts at cost until the chit is closed and becomes a gold purchase
+  const chitList = (g.chits || []).map((c) => ({ ...c, paid: sum(c.entries, (e) => e.amount), months: c.entries.length }));
+  const chits = { active: chitList.filter((c) => !c.closed), closed: chitList.filter((c) => c.closed) };
+  chits.invested = sum(chits.active, (c) => c.paid);
+  const live = liveParity(data.settings.goldLive);
+  const dayPct = live && live.prev > 0 ? live.now / live.prev - 1 : null;
+  const perGramDay = dayPct == null ? null : rate - rate / (1 + dayPct);
+  const day = dayPct == null ? null : { pct: dayPct, perGram: perGramDay, total: (gold.grams + scheme.grams) * perGramDay, at: data.settings.goldLive.at };
   return {
-    rate, main: gold, scheme,
-    value: gold.value + scheme.value, // Home!C4
-    invested: gold.invested + scheme.invested,
-    grams: gold.grams + scheme.grams,
+    rate, day, main: gold, scheme, chits,
+    value: gold.value + scheme.value + chits.invested, // Home!C4
+    invested: gold.invested + scheme.invested + chits.invested,
+    grams: gold.grams + scheme.grams, // chit money has no grams until it is closed
     jewellery: { items: g.jewellery, grams: jewelGrams, value: jewelGrams * rate }, // informational (not part of Home totals)
     others: g.others, othersTotal: sum(g.others, (o) => o.amount),
   };
@@ -165,17 +209,39 @@ export function computeAll(data, opts = {}) {
   const banks = accountBalances(data);
   const cashTotal = sum(banks, (b) => b.balance);
 
-  const savings = data.savings.map(calcSaving);
+  const savings = data.savings.filter((x) => !x.closed).map((x) => calcSaving(x, asOf));
+  const closedSavings = data.savings.filter((x) => x.closed).map((x) => calcSaving(x, asOf));
   const ofType = (...t) => savings.filter((x) => t.includes(x.type));
   const chitsTotal = sum(ofType('Chit'), (x) => x.principal);
   const savingsTotal = sum(savings, (x) => x.principal);
   const smallSavings = savingsTotal - chitsTotal; // Home!C3
 
-  const bonds = data.bonds.map((b) => calcBond(b, asOf, s));
-  const fds = data.fds.map((f) => calcDeposit(f, asOf));
-  const lending = data.lending.map((l) => calcDeposit(l, asOf));
+  const bonds = data.bonds.filter((x) => !x.closed).map((b) => calcBond(b, asOf, s));
+  const fds = data.fds.filter((x) => !x.closed).map((f) => calcDeposit(f, asOf));
+  const lending = data.lending.filter((x) => !x.closed).map((l) => calcDeposit(l, asOf));
+  const closed = {
+    savings: closedSavings,
+    bonds: data.bonds.filter((x) => x.closed).map((b) => ({ ...b, xirr: closedXirr(b, 'bond', asOf) })),
+    fds: data.fds.filter((x) => x.closed).map((f) => ({ ...f, xirr: closedXirr(f, 'deposit', asOf) })),
+    lending: data.lending.filter((x) => x.closed).map((l) => ({ ...l, xirr: closedXirr(l, l.interestType === 'Payout' ? 'bond' : 'deposit', asOf) })),
+    receivables: data.receivables.filter((r) => r.active === false),
+  };
   const stocks = calcStocks(data, quotes, useLive);
   const mf = calcMFs(data, quotes, useLive);
+  // dated cash flows (from imported trades) give a real XIRR
+  stocks.eq = data.trades && data.trades.length ? buildEquity(data) : null;
+  if (stocks.eq && !data.trades.some((t) => t.src === 'opening')) stocks.xirr = xirrFor(stocks.eq, [...stocks.eq.flows.keys()], stocks.current, asOf);
+  mf.book = data.mfTxns && data.mfTxns.length ? buildFunds(data) : null;
+  if (mf.book) {
+    const keys = new Set(mf.book.flows.keys());
+    const covered = mf.items.filter((m) => keys.has(fundKey(m.name)));
+    const f = [];
+    for (const k of keys) for (const x of mf.book.flows.get(k)) f.push({ t: toMs(x.date), amount: x.amount });
+    const val = covered.reduce((a, m) => a + m.current, 0);
+    if (val > 0) f.push({ t: toMs(asOf), amount: val });
+    mf.xirr = data.mutualFunds.some((m) => m.opening) ? null : xirr(f);
+    mf.realized = mf.book.holdings.reduce((a, h) => a + h.realized, 0);
+  }
   const gold = calcGold(data);
 
   const bondPrincipal = sum(bonds, (x) => x.principal);
@@ -185,6 +251,7 @@ export function computeAll(data, opts = {}) {
 
   const othersTotal = gold.othersTotal; // Home!C8
   const liabTotal = sum(data.liabilities, (l) => l.amount);
+  const loans = loanSummary(data);
 
   // Home!C2:C9
   const rows = [
@@ -214,7 +281,7 @@ export function computeAll(data, opts = {}) {
   // Home!A26:G31 cash flow ("credit" = interest earned)
   const sd = (f) => sum(f, (x) => x.daily);
   const cf = (name, capital, perDay) => ({ name, capital, perDay, perMonth: perDay * 30, perYear: perDay * 360, yield: capital ? (perDay / capital) * 365 : 0 });
-  const epfPpf = ofType('EPF', 'PPF'), rdLic = ofType('RD', 'LIC'), chits = ofType('Chit');
+  const epfPpf = ofType('EPF', 'PPF'), rdLic = savings.filter((x) => !['EPF', 'PPF', 'Chit'].includes(x.type)), chits = ofType('Chit');
   const cashflow = [
     cf('EPF & PPF', sum(epfPpf, (x) => x.principal), sd(epfPpf)),
     cf('Chits', chitsTotal, sd(chits)),
@@ -242,13 +309,14 @@ export function computeAll(data, opts = {}) {
 
   const dailyCredit = cfTotal.perDay;
   return {
-    asOf, banks, cashTotal, savings, chitsTotal, smallSavings, savingsTotal,
-    bonds, fds, lending, stocks, mf, gold,
+    asOf, banks, cashTotal, savings, closed, chitsTotal, smallSavings, savingsTotal,
+    bonds, fds, lending, stocks, mf, gold, loans,
     fixed: { bondPrincipal, fdPrincipal, lendPrincipal, accruedDeposits, total: fdAndBonds },
     rows, groups, totalDebts, totalEquity, goldPlus, totalAssets, liabTotal,
     netAsset: totalAssets - liabTotal,
     cashflow, cfTotal, exposure, dailyCredit,
     monthlyIncomeExpected: sum(bonds, (b) => b.monthNet) + 0,
+    netMonthly: cfTotal.perMonth - loans.monthlyInterest,
   };
 }
 
@@ -314,7 +382,9 @@ export function rangeSummary(data, from, to, filter) {
   const kind = kindOf(data);
   const all = rangeLedger(data, from, to);
   const out = all.filter((e) => (e.debit || 0) > 0);
-  const incomeRows = all.filter((e) => (e.credit || 0) > 0);
+  const credits = all.filter((e) => (e.credit || 0) > 0);
+  const incomeRows = credits.filter((e) => kind(e.category) === 'income');   // refunds and loan repayments sitting in other categories are not income
+  const otherIn = credits.filter((e) => kind(e.category) !== 'income').reduce((a, e) => a + e.credit, 0);
   const expenseRows = out.filter((e) => kind(e.category) !== 'investment' && passesFilter(filter, e.category));
   const investRows = out.filter((e) => kind(e.category) === 'investment' && passesFilter(filter, e.category));
   const income = byCat(incomeRows, 'credit'), expense = byCat(expenseRows, 'debit'), invest = byCat(investRows, 'debit');
@@ -325,7 +395,7 @@ export function rangeSummary(data, from, to, filter) {
   const everything = out.reduce((a, e) => a + e.debit, 0);
   return {
     from, to, income, expense, invest, expenseRows, investRows, incomeRows,
-    totalIncome, totalExpense, loanTax, everyday: totalExpense - loanTax, totalInvest,
+    totalIncome, otherIn, totalExpense, loanTax, everyday: totalExpense - loanTax, totalInvest,
     left: totalIncome - everything, count: all.length,
   };
 }
@@ -539,8 +609,8 @@ export function returns(data, all) {
   const eInvested = -sum(ef, (x) => x.amount);
   add('EPF & PPF', ef, sum(ep, (x) => x.principal), eInvested, 'Deposits vs balance including interest');
   // Equity: no purchase dates in the workbook, so only absolute return
-  out.push({ name: 'Stocks & ETFs', invested: all.stocks.invested, value: all.stocks.current, gain: all.stocks.pl, ret: all.stocks.ret, xirr: null, note: 'Add buy dates to get XIRR' });
-  out.push({ name: 'Mutual funds', invested: all.mf.invested, value: all.mf.current, gain: all.mf.pl, ret: all.mf.ret, xirr: null, note: 'Add buy dates to get XIRR' });
+  out.push({ name: 'Stocks & ETFs', invested: all.stocks.invested, value: all.stocks.current, gain: all.stocks.pl, ret: all.stocks.ret, xirr: all.stocks.xirr ?? null, note: all.stocks.eq ? 'XIRR from your imported trades, including sold shares and dividends' : 'Import your Groww history to get XIRR' });
+  out.push({ name: 'Mutual funds', invested: all.mf.invested, value: all.mf.current, gain: all.mf.pl, ret: all.mf.ret, xirr: all.mf.xirr ?? null, note: all.mf.book ? 'XIRR from your imported transactions' : 'Import your Groww history to get XIRR' });
   return out;
 }
 
@@ -568,7 +638,7 @@ export function familyReport(data, all) {
       sum(items.filter((x) => x.interestType === 'Payout'), (x) => (x.principal * x.rate) / 12));
   }
   for (const f of all.fds) g('Fixed deposits', f.name, f.account, f.value, 0);
-  for (const sv of all.savings.filter((x) => x.type === 'EPF' || x.type === 'PPF' || x.type === 'LIC')) g('EPF, PPF & LIC', sv.name, sv.holder, sv.principal, 0);
+  for (const sv of all.savings.filter((x) => x.type !== 'Chit')) g('EPF, PPF & LIC', sv.name, sv.holder, sv.principal, 0);
   for (const sv of all.savings.filter((x) => x.type === 'Chit')) g('Chits', sv.name, sv.holder, sv.principal, 0);
   g('Equity, ETFs & funds', 'Stocks & mutual funds', 'Suganya', all.stocks.current + all.mf.current, 0);
   g('Gold', 'Jewellery & gold', 'Suganya', all.gold.value, 0);
@@ -617,4 +687,18 @@ export function runway(data, all) {
   const avg = sum(months, (m) => monthSummary(data, m).totalExpense) / months.length;
   // coverage: how much of the monthly spending the interest income pays for
   return { avg, months: avg ? all.cashTotal / avg : null, cash: all.cashTotal, basis: months.length, coverage: avg ? all.cfTotal.perMonth / avg : null };
+}
+
+
+// ---------- loans you owe ----------
+/** Interest on each loan is outstanding x rate / 12. EMI, if given, splits into interest and principal. */
+export function loanSummary(data) {
+  const items = (data.liabilities || []).map((l) => {
+    const amount = l.amount || 0, rate = l.rate || 0;
+    const monthlyInterest = (amount * rate) / 12;
+    const emi = l.emi || 0;
+    return { ...l, amount, rate, monthlyInterest, yearlyInterest: monthlyInterest * 12, emi, principalPart: emi ? Math.max(0, emi - monthlyInterest) : 0 };
+  });
+  const sumBy = (k) => items.reduce((a, x) => a + (x[k] || 0), 0);
+  return { items, total: sumBy('amount'), monthlyInterest: sumBy('monthlyInterest'), yearlyInterest: sumBy('yearlyInterest'), emi: sumBy('emi'), avgRate: sumBy('amount') ? sumBy('monthlyInterest') * 12 / sumBy('amount') : 0 };
 }

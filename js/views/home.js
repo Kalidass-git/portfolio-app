@@ -4,6 +4,7 @@ import * as C from '../calc.js';
 import { h, money, compact, pct, dateStr, monthLabel, section, monthPicker, rowList, kpi, dateChip, btn, canEdit, dec, toast } from '../ui.js';
 import { strip, legend, hbars, lineChart, donut, spark } from '../charts.js';
 import { rateHistory, ageText } from './gold.js';
+import { homeCard as loansCard } from './loans.js';
 
 let selMonth = null;
 const rerender = () => window.dispatchEvent(new Event('rerender'));
@@ -31,17 +32,62 @@ function hero(all, series) {
           h('div', null, h('dt', null, 'Loans'), h('dd', null, compact(all.liabTotal)))))));
 }
 
-function tiles(all, data) {
-  const dayN = all.stocks.dayCount + all.mf.dayCount, day = all.stocks.day + all.mf.day;
-  const dayBase = all.stocks.current + all.mf.current - day;
-  const hist = rateHistory(data), last = hist[hist.length - 1];
-  const oldGold = last && Math.round((C.toMs(all.asOf) - C.toMs(last.date)) / C.DAY) > 7;
-  const rw = C.runway(data, all);
+const isEtf = (x) => x.assetClass && x.assetClass !== 'equity';
+/** Shares, ETFs and funds as three groups with one total. */
+function marketGroups(all) {
+  const mk = (name, items) => {
+    const priced = items.filter((x) => x.day != null);
+    const day = priced.reduce((a, x) => a + x.day, 0), base = priced.reduce((a, x) => a + x.current - x.day, 0);
+    const invested = items.reduce((a, x) => a + x.invested, 0), current = items.reduce((a, x) => a + x.current, 0);
+    return { name, count: items.length, invested, current, gain: current - invested, ret: invested ? (current - invested) / invested : 0, day, dayPct: base ? day / base : 0, hasDay: priced.length > 0 };
+  };
+  const rows = [mk('Shares', all.stocks.items.filter((x) => !isEtf(x))), mk('ETFs', all.stocks.items.filter(isEtf)), mk('Mutual funds', all.mf.items)].filter((r) => r.count);
+  const total = mk('Total', all.stocks.items.concat(all.mf.items));
+  return { rows, total };
+}
+
+function tiles(all, data, mc) {
+  const mk = marketGroups(all), gd = all.gold.day;
+  const dayAll = mk.total.day + (gd ? gd.total : 0);
+  const anyDay = mk.total.hasDay || !!gd;
+  const saved = mc.totalReceived - (mc.totalSpent + mc.lifestyle.amount);
   return h('div', { class: 'kpis span-12' },
-    kpi('Earning every month', money(all.cfTotal.perMonth), `${money(all.cfTotal.perDay)} a day · ${pct(all.cfTotal.yield, 1)} a year`, { href: '#/fixed' }),
-    kpi('Shares & funds today', dayN ? sgn(day) : '–', dayN ? `${day >= 0 ? '▲' : '▼'} ${pct(Math.abs(dayBase ? day / dayBase : 0), 2)}` : 'refresh prices to see', { tone: dayN ? tone(day) : '', href: '#/equity' }),
-    kpi('Gold rate', last ? money(last.rate) + '/g' : '–', last ? (oldGold ? 'old, ' : 'set ') + ageText(last.date) : '', { tone: oldGold ? 'warn' : '', href: '#/gold' }),
-    kpi('Bank cash lasts', rw.months == null ? '–' : dec(rw.months, 1) + ' months', rw.coverage != null ? `interest pays ${pct(rw.coverage, 0)} of expenses` : '', { href: '#/flow' }));
+    kpi('Net monthly inflow', money(all.netMonthly), `${money(all.cfTotal.perMonth)} earned − ${money(all.loans.monthlyInterest)} loan interest`, { tone: tone(all.netMonthly), href: '#/fixed/loans' }),
+    kpi('Earning every day', money(all.cfTotal.perDay), `${money(all.cfTotal.perDay - all.loans.monthlyInterest / 30)} after loan interest`),
+    kpi('Markets today', anyDay ? sgn(dayAll) : '–', anyDay ? 'shares, funds, ETFs and gold' : 'refresh prices to see', { tone: anyDay ? tone(dayAll) : '', href: '#/equity' }),
+    kpi('Kept this month', sgn(saved), mc.totalReceived ? `${pct(Math.max(-9.99, saved / mc.totalReceived), 0)} of income received` : 'no income recorded yet', { tone: tone(saved), href: '#/flow' }));
+}
+
+function todayCard(all) {
+  const mk = marketGroups(all), gd = all.gold.day;
+  const rows = mk.rows.filter((r) => r.hasDay).map((r) => ({ title: r.name, sub: pct(Math.abs(r.dayPct), 2) + (r.dayPct >= 0 ? ' up' : ' down'), value: h('span', { class: tone(r.day) }, sgn(r.day)) }));
+  if (gd) rows.push({ title: 'Gold', sub: `${pct(Math.abs(gd.pct), 2)} ${gd.pct >= 0 ? 'up' : 'down'} · ${money(all.gold.rate)}/g (${sgn(gd.perGram)})`, value: h('span', { class: tone(gd.total) }, sgn(gd.total)) });
+  const total = rows.length ? mk.total.day + (gd ? gd.total : 0) : null;
+  return section('Today', h('div', null,
+    rows.length ? rowList(rows) : h('p', { class: 'empty' }, 'Press Refresh prices on Shares & funds to see today’s change.'),
+    total != null ? h('p', { class: 'summary-line' }, 'All together ', h('b', { class: tone(total) }, sgn(total))) : null,
+    gd ? null : h('p', { class: 'note' }, 'Gold today appears after a price refresh.')));
+}
+
+function breakupCard(all) {
+  const { rows, total } = marketGroups(all);
+  const line = (r, bold) => ({ title: bold ? h('b', null, r.name) : r.name, sub: `${money(r.invested)} in → ${money(r.current)} now`, value: h('span', { class: tone(r.gain) }, `${r.gain >= 0 ? '▲' : '▼'} ${money(Math.abs(r.gain))}`), valueSub: pct(r.ret) });
+  return section('Shares, ETFs & funds: how each did', h('div', null, rowList(rows.map((r) => line(r)).concat([line(total, true)])),
+    h('p', { class: 'note' }, 'Gain is today’s value minus what you put in. Details are on each tab under Shares & funds.')));
+}
+
+/** Things that need a look: overdue money, old prices, loans, behind plan. */
+function attention(data, all) {
+  const out = [];
+  const soon = C.upcoming(data, all, 30), overdue = soon.filter((u) => u.days < 0);
+  if (overdue.length) out.push({ title: `${overdue.length} payment${overdue.length === 1 ? '' : 's'} overdue`, sub: overdue.slice(0, 2).map((u) => u.title).join(', '), value: money(overdue.reduce((a, u) => a + u.amount, 0)), tone: 'neg', href: '#/fixed' });
+  const due = soon.filter((u) => u.days >= 0 && u.days <= 14);
+  if (due.length) out.push({ title: `${due.length} falling due in 14 days`, sub: due.slice(0, 2).map((u) => u.title).join(', '), value: money(due.reduce((a, u) => a + u.amount, 0)), tone: '', href: '#/home' });
+  const at = data.settings.pricesUpdatedAt;
+  const age = at ? Math.round((Date.now() - new Date(at).getTime()) / 864e5) : null;
+  if (age == null || age >= 3) out.push({ title: 'Share and fund prices are ' + (age == null ? 'not fetched yet' : age + ' days old'), sub: 'Refresh on Shares & funds', value: '', tone: 'warn', href: '#/equity' });
+  if (all.loans.monthlyInterest > all.cfTotal.perMonth) out.push({ title: 'Loan interest is more than the interest you earn', sub: `${money(all.loans.monthlyInterest)} out, ${money(all.cfTotal.perMonth)} in each month`, value: '', tone: 'neg', href: '#/fixed/loans' });
+  return out.length ? section('Needs a look', rowList(out.map((o) => ({ title: o.title, sub: o.sub, value: o.value, tone: o.tone, onClick: () => { location.hash = o.href; } })))) : null;
 }
 
 function allocation(all) {
@@ -59,18 +105,23 @@ function allocation(all) {
 }
 
 function earning(all) {
-  const cf = all.cfTotal;
-  const max = Math.max(1, ...all.cashflow.map((r) => r.perMonth));
-  return section('Interest you earn', h('div', null,
+  const cf = all.cfTotal, ln = all.loans;
+  const rows = all.cashflow.filter((r) => r.capital > 0).sort((a, b) => b.perDay - a.perDay);
+  const max = Math.max(1, ...rows.map((r) => r.perDay));
+  const out = ln.monthlyInterest / 30;
+  const el = section('Earning every day', h('div', { id: 'home-earning' },
     h('div', { class: 'trio' },
-      h('div', null, h('span', { class: 'mini-title' }, 'a day'), h('b', null, money(cf.perDay))),
-      h('div', null, h('span', { class: 'mini-title' }, 'a month'), h('b', null, money(cf.perMonth))),
-      h('div', null, h('span', { class: 'mini-title' }, 'a year'), h('b', null, compact(cf.perYear)))),
-    rowList(all.cashflow.filter((r) => r.capital > 0).sort((a, b) => b.perMonth - a.perMonth).map((r) => ({
+      h('div', null, h('span', { class: 'mini-title' }, 'a day'), h('b', { class: 'pos' }, money(cf.perDay))),
+      h('div', null, h('span', { class: 'mini-title' }, 'a month'), h('b', { class: 'pos' }, money(cf.perMonth))),
+      h('div', null, h('span', { class: 'mini-title' }, 'a year'), h('b', { class: 'pos' }, compact(cf.perYear)))),
+    rowList(rows.map((r) => ({
       title: r.name, sub: `${compact(r.capital)} invested · ${pct(r.yield, 1)} a year`,
-      value: money(r.perMonth) + ' /mo', valueSub: money(r.perDay) + ' a day',
-      extra: h('span', { class: 'rl-bar' }, h('span', { style: { width: Math.max(2, (r.perMonth / max) * 100) + '%' } })),
-    })))));
+      value: money(r.perDay) + ' /day', valueSub: money(r.perMonth) + ' a month',
+      extra: h('span', { class: 'rl-bar' }, h('span', { style: { width: Math.max(2, (r.perDay / max) * 100) + '%' } })),
+    })).concat(out > 0 ? [{ title: 'Loan interest you pay', sub: `${money(ln.total)} borrowed · ${pct(ln.avgRate, 1)} a year`, value: h('span', { class: 'neg' }, '− ' + money(out) + ' /day'), valueSub: h('span', { class: 'neg' }, '− ' + money(ln.monthlyInterest) + ' a month') }] : [])),
+    h('p', { class: 'summary-line' }, 'After loan interest ', h('b', { class: tone(cf.perDay - out) }, money(cf.perDay - out) + ' a day')),
+    h('p', { class: 'note' }, 'Covers EPF, PPF, chits, RD and LIC, bonds, fixed deposits and private lending. Shares, funds and gold are not counted because they pay no fixed interest.')));
+  return el;
 }
 
 function returnsCard(data, all) {
@@ -139,9 +190,12 @@ export function render() {
   const place = (el, cls) => { if (el) el.classList.add(cls); return el; };
   const root = h('div', { class: 'page dash' });
   root.append(
-    hero(all, series), tiles(all, data),
+    hero(all, series), tiles(all, data, C.monthCashflow(data, all, C.monthKey(all.asOf))),
+    place(attention(data, all), 'span-12'),
+    place(todayCard(all), 'span-5'), place(breakupCard(all), 'span-7'),
+    place(earning(all), 'span-7'), place(loansCard(all), 'span-5'),
     place(thisMonth(data, all, months), 'span-7'), place(comingUp(data, all), 'span-5'),
-    place(allocation(all), 'span-7'), place(earning(all), 'span-5'),
+    place(allocation(all), 'span-7'),
     place(returnsCard(data, all), 'span-7'), place(networthChart(series, data), 'span-5'));
   return root;
 }

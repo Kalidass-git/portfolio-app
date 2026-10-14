@@ -3,17 +3,19 @@ import * as C from '../calc.js';
 import { h, money, dateStr, monthLabel, section, table, btn, formDialog, dialog, canEdit, toast, num, segTabs, subTab, setOptions } from '../ui.js';
 import * as CAT from '../categories.js';
 import { hbars } from '../charts.js';
+import { closeForm, reopen } from './closing.js';
+import { confirmDialog, pct, posNeg, stat } from '../ui.js';
 
 let fAcct = 'all', fMonth = 'all', fText = '', limit = 60;
-const TABS = [['accounts', 'Accounts'], ['ledger', 'Transactions'], ['savings', 'Savings & chits']];
+const TABS = [['accounts', 'Accounts'], ['ledger', 'Transactions'], ['savings', 'Savings & chits'], ['closed', 'Closed']];
 /** Open the transactions list, optionally pre-filtered. Used by links from other screens. */
 export function openLedger({ text = '', month = 'all', acct = 'all' } = {}) { fText = text; fMonth = month; fAcct = acct; limit = 60; location.hash = '#/cash/ledger'; }
 
 export function render() {
   const root = h('div', { class: 'page' });
   const tab = subTab(TABS.map((t) => t[0]));
-  root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Cash views'), canEdit() && tab !== 'savings' ? h('span', { class: 'btn-row' }, btn('Transfer', () => transferForm()), btn('Add transaction', () => txnForm(), 'primary')) : null));
-  root.append(tab === 'accounts' ? accounts() : tab === 'ledger' ? ledger() : savings());
+  root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Cash views'), canEdit() && tab !== 'savings' && tab !== 'closed' ? h('span', { class: 'btn-row' }, btn('Transfer', () => transferForm()), btn('Add transaction', () => txnForm(), 'primary')) : null));
+  root.append(tab === 'accounts' ? accounts() : tab === 'ledger' ? ledger() : tab === 'closed' ? closedSavings() : savings());
   return root;
 }
 const rerender = () => window.dispatchEvent(new Event('rerender'));
@@ -167,20 +169,33 @@ function ledger() {
 }
 
 // ----- savings & chits -----
-const SAVING_TYPES = ['Chit', 'EPF', 'PPF', 'LIC', 'RD'];
+const BASE_TYPES = ['Chit', 'EPF', 'PPF', 'LIC', 'RD'];
+const NEWTYPE = '__new__';
+const typeList = (data) => [...BASE_TYPES, ...(data.savingTypes || []).filter((t) => !BASE_TYPES.includes(t))];
 function savingForm(sv) {
   const isNew = !sv;
+  const { data } = S;
   formDialog({
-    title: isNew ? 'Add savings account' : 'Edit ' + sv.name, value: sv || { type: 'Chit', compound: 'Monthly', tenureType: 'Months', holder: 'Kalidass' },
+    title: isNew ? 'Add savings account' : 'Edit ' + sv.name, value: sv ? { ...sv, tenureUnit: sv.tenureType } : { type: 'Chit', compound: 'Monthly', tenureUnit: 'Months', holder: 'Kalidass' },
     fields: [
-      { key: 'name', label: 'Name', required: true }, { key: 'type', label: 'Type', type: 'select', options: SAVING_TYPES },
-      { key: 'holder', label: 'Account holder', required: true }, { key: 'rate', label: 'Interest rate (e.g. 0.0825 = 8.25%)', type: 'number', required: true },
+      { key: 'name', label: 'Name', required: true },
+      { key: 'type', label: 'Type', type: 'select', options: [...typeList(data).map((t) => ({ value: t, label: t })), { value: NEWTYPE, label: '+ New type…' }] },
+      { key: 'newType', label: 'Name of the new type', type: 'text', required: true, showIf: (v) => v.type === NEWTYPE, hint: 'For example Post office, NSC, Sukanya, Gold savings. It appears in the type list from now on.' },
+      { key: 'holder', label: 'Account holder', required: true }, { key: 'rate', label: 'Assumed yearly rate (e.g. 0.0825 = 8.25%)', type: 'number', required: true, hint: 'Only used for the interest-per-day figure. The real return of a chit is the XIRR, worked out from your payments.' },
       { key: 'depositDate', label: 'Start date', type: 'date' }, { key: 'maturityDate', label: 'Maturity date', type: 'date' },
-      { key: 'tenure', label: 'Tenure', type: 'number', half: true }, { key: 'tenureType', label: 'Tenure unit', type: 'select', options: ['Months', 'Years', 'Days'], half: true },
+      { key: 'tenure', label: 'Tenure', type: 'number', half: true }, { key: 'tenureUnit', label: 'Tenure unit', type: 'select', options: ['Months', 'Years', 'Days'], half: true },
+      { key: 'payout', label: 'Expected payout at the end (₹, optional)', type: 'number', showIf: (v) => v.type === 'Chit' || v.type === 'RD', hint: 'The amount you expect to receive. It gives an estimated XIRR while the chit runs. Close the chit with the real amount to get the actual XIRR.' },
       { key: 'desc', label: 'Notes / who to contact', type: 'textarea' },
     ],
-    onSave: (v) => mutate((d) => { if (isNew) d.savings.push({ id: nextId('sv', d.savings), entries: [], compound: 'Monthly', ...v }); else Object.assign(d.savings.find((x) => x.id === sv.id), v); }),
+    onSave: (v) => mutate((d) => {
+      const rec = { ...v }; rec.tenureType = rec.tenureUnit; delete rec.tenureUnit;
+      if (rec.type === NEWTYPE) { rec.type = rec.newType; d.savingTypes = [...new Set([...(d.savingTypes || []), rec.type])]; }
+      delete rec.newType;
+      if (!rec.payout) delete rec.payout;
+      if (isNew) d.savings.push({ id: nextId('sv', d.savings), entries: [], compound: 'Monthly', ...rec }); else Object.assign(d.savings.find((x) => x.id === sv.id), rec);
+    }),
     onDelete: isNew ? null : () => mutate((d) => { d.savings = d.savings.filter((x) => x.id !== sv.id); }),
+    deleteMessage: 'Delete this account and all its entries? Use “Close it” instead to keep a history.',
   });
 }
 function entryForm(sv, idx) {
@@ -207,21 +222,63 @@ function entryForm(sv, idx) {
 function savings() {
   const { all } = S;
   const wrap = h('div');
-  const groups = [['Chits', 'Chit'], ['Provident fund & post office', ['EPF', 'PPF']], ['Insurance & recurring deposits', ['LIC', 'RD']]];
+  const known = ['Chit', 'EPF', 'PPF', 'LIC', 'RD'];
+  const groups = [['Chits', 'Chit'], ['Provident fund', ['EPF', 'PPF']], ['Insurance & recurring deposits', ['LIC', 'RD']], ['Other savings', all.savings.filter((s) => !known.includes(s.type)).map((s) => s.type)]];
   for (const [title, types] of groups) {
     const list = all.savings.filter((s) => [].concat(types).includes(s.type));
+    if (title === 'Other savings' && !list.length) continue;
+    const withX = title === 'Chits' || title === 'Insurance & recurring deposits' || title === 'Other savings';
     wrap.append(section(title,
       table([
         { label: 'Name', get: (s) => s.name },
         { label: 'Holder', get: (s) => s.holder },
         { label: 'Invested', cls: 'r', get: (s) => money(s.principal), total: (rs) => money(rs.reduce((a, s) => a + s.principal, 0)) },
-        { label: 'Rate', cls: 'r', get: (s) => (s.rate * 100).toFixed(2) + '%' },
+        { label: 'Assumed rate', cls: 'r', get: (s) => (s.rate * 100).toFixed(2) + '%' },
+        ...(withX ? [{ label: 'XIRR', cls: 'r', render: xirrCell }] : []),
         { label: 'Interest / day', cls: 'r', get: (s) => money(s.daily), total: (rs) => money(rs.reduce((a, s) => a + s.daily, 0)) },
         { label: 'Matures', get: (s) => dateStr(s.maturityDate) },
       ], list, { footer: { label: 'Total' }, onRow: openSaving, empty: 'No accounts of this kind.' }),
       canEdit() && title === 'Chits' ? [btn('Add savings account', () => savingForm(), 'primary')] : null));
+    if (title === 'Chits') wrap.append(h('p', { class: 'note' }, 'XIRR is the real yearly return worked out from the dates and amounts you paid. For a running chit it is only an estimate and needs “Expected payout” in the account. Close a chit with the amount you actually received to see its actual XIRR.'));
   }
   return wrap;
+}
+const xirrCell = (s) => (s.xirr == null ? h('span', { class: 'muted' }, '–') : h('span', { class: posNeg(s.xirr), title: s.xirrKind === 'estimate' ? 'Estimate from your expected payout' : 'Actual, from the closing amount' }, (s.xirrKind === 'estimate' ? '≈ ' : '') + pct(s.xirr, 1)));
+function closeSaving(sv) {
+  const paid = C.savingPrincipal(sv);
+  closeForm({
+    title: 'Close ' + sv.name, amount: sv.payout || paid, desc: `${sv.type} closed: ${sv.name}`,
+    hint: 'Suggested: the expected payout if you entered one, otherwise what you paid in. Change it to the amount you actually got.',
+    apply: (d, v, lid) => { const t = d.savings.find((x) => x.id === sv.id); t.closed = { date: v.date, amount: v.amount, acct: v.acct || '', ledgerId: lid, note: v.note || '' }; },
+  });
+}
+function closedSavings() {
+  const { all, data } = S;
+  const list = all.closed.savings.slice().sort((a, b) => (a.closed.date < b.closed.date ? 1 : -1));
+  const acct = new Map(data.accounts.map((a) => [a.id, `${a.name} · ${a.holder}`]));
+  const paid = list.reduce((a, s) => a + s.principal, 0), got = list.reduce((a, s) => a + s.closed.amount, 0);
+  const wrap = h('div');
+  wrap.append(h('div', { class: 'stats' }, stat('Closed accounts', String(list.length), 'chits, deposits and other savings'), stat('Paid in', money(paid), ''), stat('Received', money(got), h('span', { class: posNeg(got - paid) }, (got - paid >= 0 ? 'gain ' : 'loss ') + money(Math.abs(got - paid))))));
+  wrap.append(section('Closed accounts', table([
+    { label: 'Name', get: (s) => s.name }, { label: 'Type', get: (s) => s.type }, { label: 'Holder', get: (s) => s.holder },
+    { label: 'Started', get: (s) => dateStr(s.depositDate || (s.entries[0] && s.entries[0].date)) }, { label: 'Closed', get: (s) => dateStr(s.closed.date) },
+    { label: 'Paid in', cls: 'r', get: (s) => money(s.principal), total: () => money(paid) },
+    { label: 'Received', cls: 'r', get: (s) => money(s.closed.amount), total: () => money(got) },
+    { label: 'Gain', cls: 'r', render: (s) => h('span', { class: posNeg(s.closed.amount - s.principal) }, money(s.closed.amount - s.principal)), total: () => money(got - paid) },
+    { label: 'XIRR', cls: 'r', render: xirrCell },
+    { label: 'Money went to', get: (s) => (s.closed.acct ? acct.get(s.closed.acct) || '' : 'not added') },
+  ], list, { footer: { label: 'Total' }, onRow: (s) => openClosed(s), empty: 'Nothing closed yet. Open a chit on the Savings & chits tab and press “Close it” when it ends.' })));
+  return wrap;
+}
+function openClosed(row) {
+  const sv = S.data.savings.find((s) => s.id === row.id);
+  const body = h('div', null, h('p', { class: 'note' }, `${sv.type} · ${sv.holder}. Closed on ${dateStr(sv.closed.date)}, received ${money(sv.closed.amount)}.${sv.closed.note ? ' ' + sv.closed.note : ''}`),
+    table([{ label: 'Date', get: (e) => dateStr(e.date) }, { label: 'Amount', cls: 'r', get: (e) => money(e.amount) }], sv.entries.slice().reverse(), { empty: 'No payments recorded.' }));
+  dialog(sv.name, body, canEdit() ? [
+    { label: 'Delete', class: 'danger', onclick: async (c) => { if (await confirmDialog('Delete this closed account and its history? The bank entry stays as it is.')) { mutate((d) => { d.savings = d.savings.filter((x) => x.id !== sv.id); }); c(); } } },
+    { label: 'Reopen', onclick: (c) => { c(); reopen(sv.name, (d) => { const t = d.savings.find((x) => x.id === sv.id); const lid = t.closed && t.closed.ledgerId; delete t.closed; if (lid) d.ledger = d.ledger.filter((e) => e.id !== lid); }); } },
+    { label: 'Close', onclick: (c) => c() },
+  ] : [{ label: 'Close', onclick: (c) => c() }]);
 }
 function openSaving(row) {
   const sv = S.data.savings.find((s) => s.id === row.id);
@@ -241,6 +298,7 @@ function openSaving(row) {
   draw();
   const acts = canEdit() ? [
     { label: 'Edit account', onclick: (c) => { c(); savingForm(S.data.savings.find((s) => s.id === sv.id)); } },
+    ...(sv.type !== 'EPF' && sv.type !== 'PPF' ? [{ label: 'Close it', onclick: (c) => { c(); closeSaving(S.data.savings.find((s) => s.id === sv.id)); } }] : []),
     { label: 'Add entry', class: 'primary', onclick: (c) => { c(); entryForm(S.data.savings.find((s) => s.id === sv.id)); } },
   ] : [];
   dialog(sv.name, h('div', null, h('p', { class: 'note' }, `${sv.type} · ${sv.holder} · balance ${money(row.principal)}`), sv.desc ? h('p', null, sv.desc) : null, list), acts);

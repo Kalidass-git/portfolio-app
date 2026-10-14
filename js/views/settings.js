@@ -1,5 +1,7 @@
 import { S, setCfg, setData, connect, pull, push, disconnect, resetAll, mutate, nextId } from '../store.js';
 import * as C from '../calc.js';
+import { section_ as restorePoints } from './backups.js';
+import { loanForm as liabilityForm } from './loans.js';
 import { h, money, dateStr, section, btn, formDialog, dialog, confirmDialog, toast, canEdit, table } from '../ui.js';
 
 const rerender = () => window.dispatchEvent(new Event('rerender'));
@@ -16,16 +18,6 @@ export function pickFile() {
   });
 }
 export function validData(d) { return d && d.app === 'portfolio-tracker' && Array.isArray(d.ledger) && Array.isArray(d.stocks) && d.settings; }
-
-function liabilityForm(l) {
-  const isNew = !l;
-  formDialog({
-    title: isNew ? 'Add loan' : 'Edit ' + l.name, value: l || {},
-    fields: [{ key: 'name', label: 'Loan', required: true }, { key: 'amount', label: 'Outstanding (₹)', type: 'number', required: true }, { key: 'rate', label: 'Interest rate (0.084 = 8.4%)', type: 'number' }],
-    onSave: (v) => mutate((d) => { v.rate = v.rate || 0; if (isNew) d.liabilities.push({ id: nextId('l', d.liabilities), ...v }); else Object.assign(d.liabilities.find((x) => x.id === l.id), v); }),
-    onDelete: isNew ? null : () => mutate((d) => { d.liabilities = d.liabilities.filter((x) => x.id !== l.id); }),
-  });
-}
 
 function connectForm() {
   formDialog({
@@ -75,6 +67,7 @@ export function render() {
       btn('Copy link', async () => { if (!out.value) return toast('Paste the family key first.', 'bad'); try { await navigator.clipboard.writeText(out.value); toast('Link copied'); } catch { out.select(); toast('Press copy on the selected link'); } }, 'primary'))));
   }
 
+  { const rp = restorePoints(); if (rp) root.append(rp); }
   root.append(section('Data file',
     h('div', null, h('p', { class: 'note' }, 'A backup is a single JSON file. Keep one somewhere safe, for example in Google Drive.'),
       h('div', { class: 'row' },
@@ -82,7 +75,7 @@ export function render() {
         canEdit() ? btn('Restore from file', async () => { const d = await pickFile(); if (!d) return; if (!validData(d)) return toast('That file is not a portfolio data file.', 'bad'); if (await confirmDialog('Replace everything in the app with this file?', 'Restore')) { setData(d, { dirty: true }); if (S.remote) push({ force: true }).catch(() => {}); toast('Data restored'); rerender(); } }) : null))));
 
   if (canEdit()) {
-    root.append(section('Loans (liabilities)', table([
+    root.append(section('Loans (see Fixed income → Loans I owe)', table([
       { label: 'Loan', get: (l) => l.name }, { label: 'Outstanding', cls: 'r', get: (l) => money(l.amount) }, { label: 'Rate', cls: 'r', get: (l) => (l.rate * 100).toFixed(2) + '%' },
     ], data.liabilities, { onRow: (l) => liabilityForm(data.liabilities.find((x) => x.id === l.id)), footer: { label: 'Total' } }), [btn('Add loan', () => liabilityForm(), 'primary')]));
     root.append(section('Calculation settings', h('div', { class: 'kv' },

@@ -1,6 +1,7 @@
 // Live prices.
 //  - Mutual funds: NAV from mfapi.in (free, no key, allows browser requests).
 //  - Stocks and ETFs: asked from the backend (Apps Script), which reads Yahoo Finance on the server side.
+import { premiumFrom, applyLive } from './goldlive.js';
 import { S, mutate, saveQuotes } from './store.js';
 import { call } from './remote.js';
 
@@ -46,20 +47,47 @@ export async function guessScheme(name) {
   return list.map((s) => ({ ...s, score: score(s) })).sort((a, b) => b.score - a.score).slice(0, 5);
 }
 
+/** Store the live gold reading; learn the premium on first use; move the rate unless the owner turned that off. */
+function applyGold(d, live, out) {
+  d.settings.goldLive = live;
+  const prem = d.settings.goldPremium || premiumFrom(d.settings.goldRate, live);
+  if (!prem) return;
+  d.settings.goldPremium = prem;
+  const a = applyLive(live, prem);
+  if (!a || d.settings.goldAuto === false) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const hist = (d.gold.rateHistory && d.gold.rateHistory.length ? d.gold.rateHistory : d.settings.goldRate ? [{ date: d.settings.goldRateDate || today, rate: d.settings.goldRate }] : []).map((x) => ({ ...x }));
+  const hit = hist.find((x) => x.date === today);
+  if (hit) hit.rate = a.rate; else hist.push({ date: today, rate: a.rate, auto: true });
+  hist.sort((x, y) => (x.date < y.date ? -1 : 1));
+  d.gold.rateHistory = hist.slice(-400);
+  d.settings.goldRate = a.rate; d.settings.goldRateDate = today;
+  out.gold = a.rate;
+}
+
 export async function refreshAll(onProgress = () => {}) {
   const out = { stocks: 0, funds: 0, errors: [] };
   const quotes = {};
+  let goldLive = null;
   const now = new Date().toISOString();
   // Stocks (needs the backend)
   if (S.remote) {
     try {
       onProgress('Fetching share prices…');
       const symbols = S.data.stocks.map((s) => ({ symbol: s.symbol, yahoo: s.yahoo || '' }));
+      symbols.push({ symbol: '__GOLD_USD', yahoo: 'GC=F' }, { symbol: '__USD_INR', yahoo: 'INR=X' });
+      // fully sold shares too, so the Sold tab can show what they are worth today
+      const eq = S.all && S.all.stocks.eq;
+      if (eq) for (const x of eq.sold) { const sy = x.nowSymbol; if (!/\$/.test(sy) && !symbols.some((q) => q.symbol.toUpperCase() === sy)) symbols.push({ symbol: sy, yahoo: '' }); }
       const res = await call(S.cfg.backendUrl, S.cfg.key, 'quotes', { symbols });
+      const g = res.quotes && res.quotes.__GOLD_USD, fx = res.quotes && res.quotes.__USD_INR;
+      if (g && fx) goldLive = { usdOz: g.price, prevUsdOz: g.prevClose || g.price, inr: fx.price, prevInr: fx.prevClose || fx.price, at: now };
       for (const [sym, q] of Object.entries(res.quotes || {})) {
+        if (sym.startsWith('__')) continue;
         if (q && q.price > 0) { quotes[sym] = { ...q, ts: now }; out.stocks++; }
       }
-      for (const [sym, msg] of Object.entries(res.errors || {})) out.errors.push(`${sym}: ${msg}`);
+      for (const [sym, msg] of Object.entries(res.errors || {})) if (!sym.startsWith('__')) out.errors.push(`${sym}: ${msg}`);
+      if (!goldLive) out.errors.push('Gold: live price not available right now');
     } catch (e) { out.errors.push('Shares: ' + e.message); }
   } else {
     out.errors.push('Share prices need the Google Drive backend (Settings).');
@@ -78,10 +106,13 @@ export async function refreshAll(onProgress = () => {}) {
   if (!S.data.mutualFunds.every((m) => m.schemeCode)) out.errors.push('Some funds are not linked to a scheme code yet (Equity → Funds → Link).');
   saveQuotes(quotes);
   // The owner's refresh becomes the shared snapshot, so family devices see the same prices without fetching anything.
-  if (S.role === 'owner' && (out.stocks || out.funds)) {
+  if (S.role === 'owner' && (out.stocks || out.funds || goldLive)) {
     mutate((d) => {
+      if (goldLive) applyGold(d, goldLive, out);
       for (const s of d.stocks) { const q = quotes[s.symbol]; if (q) { s.price = q.price; if (q.prevClose > 0) s.prevClose = q.prevClose; else delete s.prevClose; if (q.high52) s.high52 = q.high52; if (q.low52) s.low52 = q.low52; } }
       for (const m of d.mutualFunds) { const q = quotes['MF:' + m.schemeCode]; if (q) { m.nav = q.price; m.navDate = q.date; if (q.prev > 0) { m.prevNav = q.prev; m.prevNavDate = q.prevDate; } else delete m.prevNav; } }
+      d.priceBook = d.priceBook || {};
+      for (const [sym, q] of Object.entries(quotes)) if (!sym.startsWith('MF:') && q.price > 0) d.priceBook[sym.toUpperCase()] = { price: q.price, at: now };
       d.settings.pricesUpdatedAt = now;
     });
   }
