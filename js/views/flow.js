@@ -1,7 +1,7 @@
 // Income & expenses: overview for any period, category filter, and a drill-down page for one category.
 import { S } from '../store.js';
 import * as C from '../calc.js';
-import { h, money, pct, dateStr, monthLabel, section, stat, table, dialog, segTabs, btn, canEdit, dec, route, setOptions } from '../ui.js';
+import { h, money, pct, dateStr, monthLabel, section, stat, table, dialog, segTabs, btn, canEdit, dec, route, setOptions, monthGroups } from '../ui.js';
 import { hbars, barChart, meter } from '../charts.js';
 import * as CAT from '../categories.js';
 import * as categoriesView from './categories.js';
@@ -18,7 +18,7 @@ const periodName = (key, range) => (/^\d{4}-\d\d$/.test(key) ? monthLabel(key, t
 
 function periodSelect(months) {
   const sel = h('select', { class: 'month-select', 'aria-label': 'Period', onchange: (e) => { period = e.target.value; rerender(); } });
-  setOptions(sel, [{ group: 'Period', options: PERIODS.map(([v, l]) => ({ value: v, label: l })) }, { group: 'A single month', options: months.slice().reverse().map((m) => ({ value: m, label: monthLabel(m, true) })) }], period);
+  setOptions(sel, [{ group: 'Period', options: PERIODS.map(([v, l]) => ({ value: v, label: l })) }, ...monthGroups(months).map((g) => ({ group: g.label || 'A single month', options: g.months.map((m) => ({ value: m, label: monthLabel(m, true) })) }))], period);
   return sel;
 }
 const filterText = () => (filter.mode === 'all' || !filter.cats.length ? '' : (filter.mode === 'only' ? 'Only ' : 'Leaving out ') + (filter.cats.length > 3 ? filter.cats.length + ' categories' : filter.cats.join(', ')));
@@ -69,6 +69,26 @@ export function render() {
   return r.sub === 'detail' ? detail(r.query) : overview();
 }
 
+const bdView = { debit: 'category', credit: 'category' };
+const descLink = (dir, desc) => `${detailLink('*', dir)}&view=all&desc=${encodeURIComponent(desc)}`;
+/** Top items as bars, switchable between category and description. "Show all" opens the entry-by-entry page. */
+function breakdown(title, dir, catRows, entryRows, ci, emptyMsg) {
+  if (!catRows.length) return section(title, h('p', { class: 'empty' }, emptyMsg));
+  const view = bdView[dir];
+  const pick = (k) => (e) => { e.preventDefault(); bdView[dir] = k; rerender(); };
+  const toggle = h('nav', { class: 'seg slim', 'aria-label': 'Break down by' },
+    [['category', 'Category'], ['description', 'Description']].map(([k, l]) => h('a', { href: 'javascript:void 0', class: k === view ? 'on' : '', 'aria-selected': String(k === view), onclick: pick(k) }, l)),
+    h('a', { href: detailLink('*', dir) + '&view=all' }, 'Show all ›'));
+  let body;
+  if (view === 'category') body = h('div', null, hbars(catRows.map((x) => ({ label: x.category, value: x.amount })), { fmt: money, colorIndex: ci, onClick: (x) => { location.hash = detailLink(x.label, dir); } }), h('p', { class: 'note' }, 'Tap a category to see it by description or entry by entry.'));
+  else {
+    const list = C.byDescription(entryRows, dir);
+    body = h('div', null, hbars(list.slice(0, 12).map((r) => ({ label: r.desc, value: r.amount })), { fmt: money, colorIndex: ci, onClick: (x) => { location.hash = descLink(dir, x.label); } }),
+      h('p', { class: 'note' }, (list.length > 12 ? `Top 12 of ${list.length} descriptions. ` : '') + 'Tap one to see its entries. “Show all” lists every entry.'));
+  }
+  return section(title, h('div', null, toggle, body));
+}
+
 function overview() {
   const { data, all } = S;
   const months = C.ledgerMonths(data);
@@ -80,15 +100,14 @@ function overview() {
   const name = periodName(period, range);
   const root = h('div', { class: 'page' });
   root.append(h('div', { class: 'pagebar' }, segTabs(TABS, 'month', 'Expense views'),
-    canEdit() ? h('span', { class: 'btn-row' }, btn('Add income', () => txnForm(null, { kind: 'credit', title: 'Add income' })), btn('Add expense', () => txnForm(null, { kind: 'debit', title: 'Add expense' }), 'primary')) : null));
+    canEdit() ? h('span', { class: 'btn-row' }, btn('Add income', () => txnForm(null, { kind: 'credit', title: 'Add income' }), '', { keep: true }), btn('Add expense', () => txnForm(null, { kind: 'debit', title: 'Add expense' }), 'primary', { keep: true })) : null));
   root.append(controls(months, data));
   root.append(h('div', { class: 'stats' },
-    stat('Income', money(s.totalIncome), name),
-    stat('Expenses', money(s.everyday), s.totalIncome ? pct(s.everyday / s.totalIncome, 0) + ' of income' : 'without loan EMI & tax'),
-    stat('Loan EMI & tax', money(s.loanTax), 'shown apart from expenses'),
-    stat('Invested', money(s.totalInvest), 'not an expense'),
-    filtered ? stat('Filter total', money(s.totalExpense), 'expenses + loan & tax in the filter')
-      : stat('Left over', h('span', { class: s.left >= 0 ? 'pos' : 'neg' }, money(s.left)), 'income − all money paid out')));
+    stat('Income', money(s.totalIncome), name, 'inc'),
+    stat('Expenses', money(s.everyday), s.totalIncome ? pct(s.everyday / s.totalIncome, 0) + ' of income' : 'without loan EMI & tax', 'exp'),
+    stat('Loan EMI & tax', money(s.loanTax), 'shown apart from expenses', 'exp'),
+    stat('Invested', money(s.totalInvest), 'not an expense', 'inv'),
+    filtered ? stat('Filter total', money(s.totalExpense), 'expenses + loan & tax in the filter', 'exp') : null));
 
   // budgets: monthly budget × months in the period
   if (range.months) {
@@ -111,12 +130,8 @@ function overview() {
   }
 
   root.append(h('div', { class: 'grid2' },
-    section('Where the money went · ' + name, s.expense.length
-      ? h('div', null, hbars(s.expense.map((x) => ({ label: x.category, value: x.amount })), { fmt: money, colorIndex: 1, onClick: (x) => { location.hash = detailLink(x.label, 'debit'); } }),
-        h('p', { class: 'note' }, 'Tap a category to see it by description or entry by entry.'),
-        h('a', { class: 'btn small', href: detailLink('*', 'debit') }, 'All of these by description'))
-      : h('p', { class: 'empty' }, 'No expenses for this period' + (filtered ? ' and filter.' : '.'))),
-    section('Income by source', s.income.length ? hbars(s.income.map((x) => ({ label: x.category, value: x.amount })), { fmt: money, colorIndex: 2, onClick: (x) => { location.hash = detailLink(x.label, 'credit'); } }) : h('p', { class: 'empty' }, 'No income in this period.'))));
+    breakdown('Where the money went · ' + name, 'debit', s.expense, s.expenseRows, 1, 'No expenses for this period' + (filtered ? ' and filter.' : '.')),
+    breakdown('Income by source', 'credit', s.income, s.incomeRows, 2, 'No income in this period.')));
   if (s.invest.length) root.append(section('Money put into investments', hbars(s.invest.map((x) => ({ label: x.category, value: x.amount })), { fmt: money, colorIndex: 0, onClick: (x) => { location.hash = detailLink(x.label, 'debit'); } })));
 
   const rw = C.runway(data, all);
@@ -132,7 +147,7 @@ function overview() {
 
   const tr = C.monthlyTrend(data, months.slice(-12));
   root.append(section('Last 12 months', barChart({
-    names: ['Income', 'Expenses', 'Invested'], fmt: money,
+    names: ['Income', 'Expenses', 'Invested'], colors: [2, 1, 0], fmt: money,
     groups: tr.map((t) => ({ label: monthLabel(t.month).slice(0, 3), title: monthLabel(t.month), values: [t.income, t.expense, t.invest] })),
   })));
   if (s.otherIn > 0) root.append(h('p', { class: 'note' }, `${money(s.otherIn)} was received in categories that are not marked as income (refunds, loan repayments, sales). It is not counted as income. If some of it is real income, change that category’s type under Categories.`));
@@ -144,8 +159,10 @@ const passes = (name) => C.passesFilter(filter, name);
 // ----- drill-down page for one category (or all expenses) -----
 function detail(q) {
   const { data, all } = S;
+  const kindOf = CAT.kindOf(data);
   const cat = q.get('cat') || '*', dir = q.get('dir') === 'credit' ? 'credit' : 'debit';
-  const view = q.get('view') === 'all' ? 'all' : 'desc';
+  const viewQ = q.get('view');
+  const view = ['cat', 'desc', 'all'].includes(viewQ) && (viewQ !== 'cat' || cat === '*') ? viewQ : (cat === '*' ? 'cat' : 'desc');
   const descFilter = q.get('desc') || '';
   const months = C.ledgerMonths(data);
   const range = C.periodRange(period, all.asOf);
@@ -159,7 +176,7 @@ function detail(q) {
   const base = `#/flow/detail?cat=${encodeURIComponent(cat)}&dir=${dir}`;
   const root = h('div', { class: 'page' });
   root.append(h('div', { class: 'pagebar' }, h('a', { class: 'back', href: '#/flow' }, '← Income & expenses'), controls(months, data)));
-  root.append(h('div', { class: 'card' },
+  root.append(h('div', { class: 'card dir-' + (dir === 'credit' ? 'in' : 'out') },
     h('h2', { style: { margin: 0 } }, label + (descFilter ? ' · ' + descFilter : '')),
     h('p', { class: 'note', style: { marginTop: 4 } }, `${name} · ${rows.length} entr${rows.length === 1 ? 'y' : 'ies'}`)));
   root.append(h('div', { class: 'stats' },
@@ -167,9 +184,17 @@ function detail(q) {
     stat('Entries', String(rows.length), rows.length ? `average ${money(total / rows.length)}` : ''),
     range.months ? stat('Per month', money(total / range.months), 'average over the period') : null));
   root.append(h('nav', { class: 'seg', 'aria-label': 'View' },
-    [['desc', 'By description'], ['all', 'All entries']].map(([k, l]) => h('a', { href: `${base}&view=${k}${descFilter && k === 'all' ? '&desc=' + encodeURIComponent(descFilter) : ''}`, class: k === view ? 'on' : '', 'aria-selected': String(k === view) }, l))));
-  if (view === 'desc') {
+    (cat === '*' ? [['cat', 'By category'], ['desc', 'By description'], ['all', 'All entries']] : [['desc', 'By description'], ['all', 'All entries']]).map(([k, l]) => h('a', { href: `${base}&view=${k}${descFilter && k === 'all' ? '&desc=' + encodeURIComponent(descFilter) : ''}`, class: k === view ? 'on' : '', 'aria-selected': String(k === view) }, l))));
+  if (view === 'cat') {
+    const m = new Map();
+    for (const e of rows) m.set(e.category || 'Other', (m.get(e.category || 'Other') || 0) + (e[dir] || 0));
+    const cats = [...m.entries()].map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount);
+    root.append(h('div', { class: 'card' }, cats.length ? hbars(cats.map((x) => ({ label: x.category, value: x.amount })), { fmt: money, colorIndex: dir === 'credit' ? 2 : 1, onClick: (x) => { location.hash = detailLink(x.label, dir); } }) : h('p', { class: 'empty' }, 'No entries for this period and filter.'),
+      h('p', { class: 'note' }, 'Tap a category to open it.')));
+  } else if (view === 'desc') {
     const list = C.byDescription(rows, dir);
+    if (list.length) root.append(h('div', { class: 'card' }, hbars(list.slice(0, 15).map((r) => ({ label: r.desc, value: r.amount })), { fmt: money, colorIndex: dir === 'credit' ? 2 : 1, onClick: (x) => { location.hash = `${base}&view=all&desc=${encodeURIComponent(x.label)}`; } }),
+      list.length > 15 ? h('p', { class: 'note' }, `Top 15 of ${list.length}. The table below has them all.`) : null));
     root.append(h('div', { class: 'card' }, table([
       { label: 'Description', host: true, get: (r) => r.desc },
       { label: 'Entries', cls: 'r', get: (r) => String(r.count), total: () => String(rows.length) },
@@ -186,7 +211,7 @@ function detail(q) {
       { label: 'Date', mob: 'under', get: (e) => dateStr(e.date) }, { label: 'Description', host: true, get: (e) => e.desc },
       ...(cat === '*' ? [{ label: 'Category', mob: 'under', get: (e) => e.category }] : []),
       { label: 'Account', mob: 'under', get: (e) => acct.get(e.acct) },
-      { label: 'Amount', cls: 'r', get: (e) => money(e[dir]), total: () => money(total) },
+      { label: 'Amount', cls: 'r', render: (e) => h('span', { class: dir === 'credit' ? 'pos' : kindOf(e.category) === 'investment' ? 'inv' : 'neg' }, money(e[dir])), total: () => money(total) },
     ], sorted, { footer: { label: 'Total' }, onRow: canEdit() ? (e) => txnForm(data.ledger.find((x) => x.id === e.id)) : null, empty: 'No entries for this period and filter.' })));
   }
   return root;

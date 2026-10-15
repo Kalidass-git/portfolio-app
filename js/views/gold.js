@@ -216,6 +216,9 @@ export function render() {
   if (tab === 'gold') {
   root.append(h('div', { class: 'stats' },
     stat('Gold value', money(g.value), `${dec(g.grams, 2)} g · ${dec(g.grams / 8, 1)} sovereigns (8 g)`),
+    (() => { const d = g.day, sg = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + money(Math.abs(n)), sp = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + pct(Math.abs(n), 2);
+      return d ? stat('Gold today', h('span', { class: posNeg(d.total) }, sg(d.total)), h('span', { class: posNeg(d.total) }, `${sp(d.pct)} · ${sg(d.perGram)} a gram`))
+        : stat('Gold today', '–', 'turns on with the automatic rate or after a price refresh'); })(),
     stat('Gain on gold', h('span', { class: g.value - g.invested >= 0 ? 'pos' : 'neg' }, money(g.value - g.invested)), `paid ${money(g.invested)}`),
     h('a', { class: 'stat', href: '#/gold/chits', style: { textDecoration: 'none', color: 'inherit' } }, h('span', { class: 'stat-label' }, 'Invested in gold chits'), h('strong', { class: 'stat-value' }, money(g.chits.invested + (g.scheme.invested || 0))), h('span', { class: 'stat-sub' }, `${g.chits.active.length + (g.scheme.name ? 1 : 0)} running · tap to see`))));
   root.append(rateCard());
@@ -230,19 +233,6 @@ export function render() {
       { label: 'Gain', mob: 'under', mlabel: 'gain ', cls: 'r', render: (p) => gainText(p.grams * g.rate - p.amount), total: () => money(g.main.gain) },
     ], data.gold.purchases.slice().reverse().map((p) => p), { footer: { label: 'Total' }, onRow: canEdit() ? (p) => purchaseForm(data.gold.purchases.find((x) => x.id === p.id)) : null }),
     canEdit() ? [btn('Add purchase', () => purchaseForm(), 'primary')] : null));
-
-  const sch = data.gold.schemes.find((s) => s.active);
-  if (sch) {
-    const ents = g.scheme.entries;
-    root.append(section(sch.name + ' (monthly gold savings)',
-      h('div', null, table([
-        { label: 'Date', host: true, get: (e) => dateStr(e.date) }, { label: 'Paid', cls: 'r', get: (e) => money(e.amount), total: () => money(g.scheme.invested) },
-        { label: 'Rate / g', mob: 'under', mlabel: 'rate ', cls: 'r', get: (e) => money(e.rate) }, { label: 'Grams', cls: 'r', get: (e) => dec(e.grams, 3), total: () => dec(g.scheme.grams, 3) },
-        { label: 'Value now', mob: 'under', mlabel: 'now ', cls: 'r', get: (e) => money(e.grams * g.rate), total: () => money(g.scheme.value) },
-      ], ents.map((e, i) => ({ ...e, _i: i })).reverse(), { footer: { label: 'Total' }, onRow: canEdit() ? (e) => schemeEntryForm(sch, e._i) : null }),
-        h('p', { class: 'note' }, 'Earlier GRT accounts (2, 3 and 4) were converted into the purchases above, so they are not counted twice.')),
-      canEdit() ? [btn('Add instalment', () => schemeEntryForm(sch), 'primary')] : null));
-  }
 
   }
   if (tab === 'jewellery') root.append(section('Jewellery list',

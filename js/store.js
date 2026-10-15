@@ -64,7 +64,25 @@ export function setData(data, { dirty = false, version } = {}) {
 const saveBase = (d) => { if (!write(K.base, d)) { try { localStorage.removeItem(K.base); } catch {} } };
 const loadBase = () => read(K.base, null);
 
-let pushTimer = null;
+let pushTimer = null, pushPending = false, retryTimer = null, retryN = 0, flight = null, again = false, pullFlight = null;
+/** Upload soon. Several changes in a row become one upload. */
+function schedulePush(ms = 1500) {
+  if (!S.remote || S.role !== 'owner') return;
+  clearTimeout(pushTimer); pushPending = true;
+  pushTimer = setTimeout(() => { pushPending = false; push().catch(() => {}); }, ms);
+}
+/** After a failed upload, try again by itself: after 10 s, 20 s, 40 s … up to 5 minutes. */
+function retryLater() {
+  clearTimeout(retryTimer);
+  if (!S.meta.dirty || !S.remote || S.role !== 'owner') return;
+  const ms = Math.min(300000, 10000 * 2 ** Math.min(retryN++, 5));
+  pushPending = true;
+  retryTimer = setTimeout(() => { pushPending = false; if (S.meta.dirty) push().catch(() => {}); }, ms);
+}
+/** True while an upload is running or about to start. */
+export const isSaving = () => !!flight || pushPending;
+/** Upload now if something is waiting. Used when the app comes back to the front or the network returns. */
+export function kick() { if (S.remote && S.role === 'owner' && S.meta.dirty && !flight) { clearTimeout(retryTimer); retryN = 0; schedulePush(300); } }
 /** Apply a change to the data. Owner only. Saves locally right away and syncs to Drive shortly after. */
 export function mutate(fn) {
   if (S.role !== 'owner') throw new Error('This device has read-only access.');
@@ -81,7 +99,7 @@ export function mutate(fn) {
   recompute(); snapshot();
   write(K.data, draft); write(K.meta, S.meta);
   emit();
-  if (S.remote) { clearTimeout(pushTimer); pushTimer = setTimeout(() => push().catch(() => {}), 1500); }
+  schedulePush(1500);
 }
 
 /** Keep one net worth reading per day so the Home screen can show a history. Owner only. */
@@ -100,7 +118,7 @@ export function startOfDaySnapshot() {
   if (!S.data || S.role !== 'owner') return;
   if (snapshot()) {
     S.meta.dirty = true; write(K.data, S.data); write(K.meta, S.meta);
-    if (S.remote) { clearTimeout(pushTimer); pushTimer = setTimeout(() => push().catch(() => {}), 4000); }
+    schedulePush(4000);
   }
 }
 
@@ -130,15 +148,21 @@ export async function connect(url, key) {
   return res.role;
 }
 
-export async function pull({ force = false } = {}) {
+export async function pull(opts = {}) {
   if (!S.remote) return;
+  if (flight) await flight.catch(() => {});      // let a running upload finish first
+  if (pullFlight) return pullFlight;
+  pullFlight = doPull(opts).finally(() => { pullFlight = null; });
+  return pullFlight;
+}
+async function doPull({ force = false } = {}) {
   S.status = 'syncing'; emit();
   try {
     const res = await remote.call(S.cfg.backendUrl, S.cfg.key, 'read');
     S.role = res.role; S.meta.role = res.role;
     if (S.meta.dirty && S.role === 'owner' && !force) {
       if (res.version !== S.meta.version) return reconcile(res);
-      return push();
+      return doPush();
     }
     if (!res.data) { S.status = 'idle'; emit(); return { empty: true }; }
     if (S.data && S.role === 'owner' && sizes(res.data).ledger < sizes(S.data).ledger * 0.6) await safetyPoint('Before loading a much smaller Drive copy');
@@ -194,8 +218,24 @@ export function resolveGuard(choice) {
   emit();
 }
 
-export async function push({ force = false } = {}) {
-  if (!S.remote || S.role !== 'owner') return;
+/** One upload at a time. A change made during an upload is sent right after it, never alongside it. */
+export function push(opts = {}) {
+  if (!S.remote || S.role !== 'owner') return Promise.resolve();
+  if (flight) { again = true; return flight; }
+  flight = (async () => {
+    let r;
+    try {
+      if (pullFlight) await pullFlight.catch(() => {});
+      r = await doPush(opts);
+      for (let n = 0; again && n < 3; n++) { again = false; r = await doPush({}); }
+    } catch (e) { retryLater(); throw e; }
+    finally { flight = null; again = false; }
+    if (r && r.ok) { retryN = 0; if (S.meta.dirty) schedulePush(1500); }
+    return r;
+  })();
+  return flight;
+}
+async function doPush({ force = false } = {}) {
   S.status = 'syncing'; emit();
   try {
     const bad = sanity(S.data);
@@ -227,7 +267,7 @@ async function reconcile(remoteRes) {
   write(K.data, S.data); write(K.meta, S.meta);
   S.lastMerge = { at: Date.now(), clashes: m.clashes, renamed: m.renamed, fromRemote: m.fromRemote };
   recompute(); emit();
-  const r = await push();
+  const r = await doPush();
   return r && r.ok ? { ok: true, merged: S.lastMerge } : r;
 }
 
@@ -235,6 +275,28 @@ async function reconcile(remoteRes) {
 export async function resolveConflict(choice) {
   if (choice === 'mine') return push({ force: true });
   return pull({ force: true });
+}
+
+/**
+ * Replace everything with a restore point and upload it. The current data is kept as a restore point first.
+ * Resolves with { ok } when Drive has it, { local } when there is no Drive, or the reason it did not upload yet.
+ */
+export async function restoreData(point) {
+  if (S.role !== 'owner') throw new Error('This device has read-only access.');
+  if (flight) await flight.catch(() => {});   // let a running upload finish, so it cannot land after the restore
+  clearTimeout(pushTimer); clearTimeout(retryTimer); pushPending = false;
+  const d = JSON.parse(JSON.stringify(point));
+  const bad = sanity(d);
+  if (bad.length) throw new Error('That restore point looks damaged (' + bad[0] + '), so nothing was changed.');
+  await safetyPoint('Before restoring a restore point');
+  materialize(d); materializeFunds(d);
+  d.updatedAt = new Date().toISOString();
+  allowShrink();
+  S.data = d; S.meta.dirty = true; S.error = ''; if (S.status === 'error' || S.status === 'guard') S.status = 'idle';
+  write(K.data, d); write(K.meta, S.meta);
+  recompute(); emit();
+  if (!S.remote) { S.meta.dirty = false; write(K.meta, S.meta); return { local: true }; }
+  try { const r = await push({ force: true }); return r || { pending: true }; } catch (e) { return { pending: true, error: e.message }; }
 }
 
 export function disconnect() {

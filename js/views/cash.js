@@ -1,21 +1,23 @@
 import { S, mutate, nextId } from '../store.js';
 import * as C from '../calc.js';
-import { h, money, dateStr, monthLabel, section, table, btn, formDialog, dialog, canEdit, toast, num, segTabs, subTab, setOptions } from '../ui.js';
+import { h, money, dateStr, monthLabel, section, table, btn, formDialog, dialog, canEdit, toast, num, segTabs, subTab, route, setOptions, monthOptions } from '../ui.js';
 import * as CAT from '../categories.js';
 import { hbars } from '../charts.js';
 import { closeForm, reopen } from './closing.js';
 import { confirmDialog, pct, posNeg, stat } from '../ui.js';
 
 let fAcct = 'all', fMonth = 'all', fText = '', limit = 60;
-const TABS = [['accounts', 'Accounts'], ['ledger', 'Transactions'], ['savings', 'Savings & chits'], ['closed', 'Closed']];
+const TABS = [['accounts', 'Accounts'], ['ledger', 'Transactions']];
 /** Open the transactions list, optionally pre-filtered. Used by links from other screens. */
 export function openLedger({ text = '', month = 'all', acct = 'all' } = {}) { fText = text; fMonth = month; fAcct = acct; limit = 60; location.hash = '#/cash/ledger'; }
 
 export function render() {
   const root = h('div', { class: 'page' });
+  const old = route().sub;
+  if (old === 'savings' || old === 'closed') location.replace('#/savings' + (old === 'closed' ? '/closed' : ''));
   const tab = subTab(TABS.map((t) => t[0]));
-  root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Cash views'), canEdit() && tab !== 'savings' && tab !== 'closed' ? h('span', { class: 'btn-row' }, btn('Transfer', () => transferForm()), btn('Add transaction', () => txnForm(), 'primary')) : null));
-  root.append(tab === 'accounts' ? accounts() : tab === 'ledger' ? ledger() : tab === 'closed' ? closedSavings() : savings());
+  root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Cash views'), canEdit() ? h('span', { class: 'btn-row' }, btn('Transfer', () => transferForm()), btn('Add transaction', () => txnForm(), 'primary')) : null));
+  root.append(tab === 'ledger' ? ledger() : accounts());
   return root;
 }
 const rerender = () => window.dispatchEvent(new Event('rerender'));
@@ -134,13 +136,14 @@ export function txnForm(entry, preset) {
 
 function ledger() {
   const { data } = S;
+  const kindOfCat = CAT.kindOf(data);
   const wrap = h('div');
   const months = [...new Set(data.ledger.map((e) => C.monthKey(e.date)))].sort().reverse();
   const bar = h('div', { class: 'filters' },
     h('select', { 'aria-label': 'Account', onchange: (e) => { fAcct = e.target.value; limit = 60; rerender(); } },
       h('option', { value: 'all' }, 'All accounts'), data.accounts.map((a) => h('option', { value: a.id, selected: a.id === fAcct }, `${a.name} · ${a.holder}`))),
     h('select', { 'aria-label': 'Month', onchange: (e) => { fMonth = e.target.value; limit = 60; rerender(); } },
-      h('option', { value: 'all' }, 'All months'), months.map((m) => h('option', { value: m, selected: m === fMonth }, monthLabel(m)))),
+      h('option', { value: 'all', selected: fMonth === 'all' }, 'All months'), monthOptions(months, fMonth, monthLabel)),
     h('input', { type: 'search', placeholder: 'Search description or category', value: fText, 'aria-label': 'Search', oninput: (e) => { fText = e.target.value; clearTimeout(window.__ft); window.__ft = setTimeout(() => { limit = 60; rerender(); const i = document.querySelector('input[type=search]'); i && (i.focus(), i.setSelectionRange(fText.length, fText.length)); }, 250); } }));
   // running balance per account
   const bal = new Map();
@@ -159,7 +162,7 @@ function ledger() {
         { label: 'Description', host: true, get: (e) => e.desc },
         { label: 'Category', mob: 'under', get: (e) => e.category },
         { label: 'Account', mob: 'under', get: (e) => acctName.get(e.acct) },
-        { label: 'Out', cls: 'r', get: (e) => (e.debit ? money(e.debit) : '') },
+        { label: 'Out', cls: 'r', render: (e) => (e.debit ? h('span', { class: kindOfCat(e.category) === 'investment' ? 'inv' : kindOfCat(e.category) === 'expense' ? 'neg' : '' }, money(e.debit)) : '') },
         { label: 'In', cls: 'r', render: (e) => (e.credit ? h('span', { class: 'pos' }, money(e.credit)) : '') },
         { label: 'Balance', mob: 'under', mlabel: 'bal ', cls: 'r', get: (e) => money(e.balance) },
       ], rows.slice(0, limit), { onRow: canEdit() ? (e) => txnForm(data.ledger.find((x) => x.id === e.id)) : null, empty: 'No transactions match these filters.' }),
@@ -219,7 +222,7 @@ function entryForm(sv, idx) {
     onDelete: isNew ? null : () => mutate((d) => { d.savings.find((x) => x.id === sv.id).entries.splice(idx, 1); }),
   });
 }
-function savings() {
+export function savingsTab() {
   const { all } = S;
   const wrap = h('div');
   const known = ['Chit', 'EPF', 'PPF', 'LIC', 'RD'];
@@ -252,7 +255,7 @@ function closeSaving(sv) {
     apply: (d, v, lid) => { const t = d.savings.find((x) => x.id === sv.id); t.closed = { date: v.date, amount: v.amount, acct: v.acct || '', ledgerId: lid, note: v.note || '' }; },
   });
 }
-function closedSavings() {
+export function closedTab() {
   const { all, data } = S;
   const list = all.closed.savings.slice().sort((a, b) => (a.closed.date < b.closed.date ? 1 : -1));
   const acct = new Map(data.accounts.map((a) => [a.id, `${a.name} · ${a.holder}`]));

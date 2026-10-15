@@ -1,9 +1,10 @@
 import { S, mutate, nextId } from '../store.js';
 import * as C from '../calc.js';
 import * as prices from '../prices.js';
-import { h, monthLabel, money, dec, pct, dateStr, gainText, section, table, btn, formDialog, dialog, canEdit, toast, stat, num, segTabs, subTab, posNeg } from '../ui.js';
+import { h, monthLabel, money, dec, pct, dateStr, gainText, section, table, btn, formDialog, dialog, canEdit, toast, stat, num, segTabs, subTab, posNeg, icon, monthOptions } from '../ui.js';
 import { meter, strip, legend } from '../charts.js';
 import { insights, sold } from './equity-insights.js';
+import * as dividends from './dividends.js';
 import * as importView from './equity-import.js';
 import * as holdingView from './equity-holding.js';
 import { stockEditForm } from './equity-holding.js';
@@ -13,7 +14,7 @@ import { monthlyBuys, lastMonths, byName, planDone } from '../buys.js';
 import { barChart } from '../charts.js';
 
 let sortKey = 'current', busy = false;
-const TABS = [['today', 'Today'], ['holdings', 'Shares & ETFs'], ['funds', 'Funds'], ['insights', 'Insights'], ['sold', 'Sold'], ['sip', 'Investment Planner'], ['import', 'Import']];
+const TABS = [['today', 'Today'], ['holdings', 'Shares & ETFs'], ['funds', 'Funds'], ['insights', 'Insights'], ['sold', 'Sold'], ['dividends', 'Dividends'], ['sip', 'Investment Planner'], ['import', 'Import']];
 const rerender = () => window.dispatchEvent(new Event('rerender'));
 
 function stockForm(s, kind) {
@@ -82,11 +83,12 @@ const fromHistory = (p) => Object.keys(monthlyBuys(S.data)).length > 0 && !p.man
 export async function refresh(btnEl) {
   if (busy) return;
   busy = true; btnEl.disabled = true;
-  const label0 = btnEl.textContent;
+  const lb = btnEl.querySelector('.lb') || btnEl, label0 = lb.textContent;
+  btnEl.classList.add('busy');
   try {
-    const res = await prices.refreshAll((m) => (btnEl.textContent = m));
+    const res = await prices.refreshAll((m) => (lb.textContent = m));
     toast(`Updated ${res.stocks} shares and ${res.funds} funds` + (res.errors.length ? `. ${res.errors.length} issue${res.errors.length > 1 ? 's' : ''}: ${res.errors[0]}` : ''), res.errors.length ? 'bad' : '');
-  } finally { busy = false; btnEl.textContent = label0; btnEl.disabled = false; rerender(); }
+  } finally { busy = false; lb.textContent = label0; btnEl.classList.remove('busy'); btnEl.disabled = false; rerender(); }
 }
 
 const dayCell = (x) => (x.day == null ? h('span', { class: 'muted' }, '–') : h('span', { class: posNeg(x.day) }, (x.day > 0 ? '+' : x.day < 0 ? '−' : '') + money(Math.abs(x.day)), h('small', { class: 'sub' }, ' ' + (x.dayPct > 0 ? '+' : '') + pct(x.dayPct, 2))));
@@ -158,13 +160,17 @@ function holdCols(kind, tot) {
     { label: 'Value (invested)', cls: 'r', render: (x) => h('div', null, h('div', { class: 'b' }, money(x.current)), sub2('(' + money(x.invested) + ')')) },
     { label: 'Gain · return', cls: 'r', render: (x) => h('div', null, h('div', { class: 'b ' + posNeg(x.pl) }, arrow(x.pl) + money(Math.abs(x.pl))),
       sub2(h('span', { class: posNeg(x.pl) }, (x.ret > 0 ? '+' : x.ret < 0 ? '−' : '') + pct(Math.abs(x.ret), 1)), x.xirr != null ? h('span', { class: 'xi' }, ' · XIRR ', h('span', { class: posNeg(x.xirr) }, pct(x.xirr, 1))) : null)) },
-    { label: 'Share', cls: 'r', mob: 'hide', render: (x) => h('span', { class: 'with-meter' }, meter(tot ? (x.current / tot) * 8 : 0, 0), pct(tot ? x.current / tot : 0)) },
+    { label: 'Exposure', cls: 'r', mob: 'under', mlabel: 'exposure ', mu: (x) => pct(S.all.totalAssets ? x.current / S.all.totalAssets : 0, 1), render: (x) => h('span', { class: 'with-meter', title: 'Share of all your assets' }, meter(S.all.totalAssets ? Math.min(8, (x.current / S.all.totalAssets) * 40) : 0, 0), pct(S.all.totalAssets ? x.current / S.all.totalAssets : 0, 1)) },
   ];
 }
 const compactTable = (wrap) => { const t = wrap.querySelector('table'); if (t) t.classList.add('compact'); return wrap; };
-const sortItems = (items) => items.slice().sort((a, b) => (sortKey === 'name' ? a.name.localeCompare(b.name) : sortKey === 'ret' ? b.ret - a.ret : sortKey === 'day' ? (b.dayPct ?? -9) - (a.dayPct ?? -9) : b.current - a.current));
+const SORTS = [['current', 'Value'], ['exposure', 'Exposure (share of all assets)'], ['day', 'Today'], ['ret', 'Return %'], ['pl', 'Gain in ₹'], ['xirr', 'XIRR'], ['name', 'Name']];
+const sortItems = (items) => items.slice().sort((a, b) => (sortKey === 'name' ? a.name.localeCompare(b.name) : sortKey === 'ret' ? b.ret - a.ret : sortKey === 'pl' ? b.pl - a.pl
+  : sortKey === 'xirr' ? (b.xirr ?? -9) - (a.xirr ?? -9) : sortKey === 'day' ? (b.dayPct ?? -9) - (a.dayPct ?? -9) : b.current - a.current));
 const sortBox = () => h('label', { class: 'inline-label' }, 'Sort by ', h('select', { onchange: (e) => { sortKey = e.target.value; rerender(); } },
-  [['current', 'Value'], ['day', 'Today'], ['ret', 'Return'], ['name', 'Name']].map(([v, l]) => h('option', { value: v, selected: v === sortKey }, l))));
+  SORTS.map(([v, l]) => h('option', { value: v, selected: v === sortKey }, l))));
+/** Sort on the left, find box on the right, just above the table. */
+const tableTools = () => h('div', { class: 'tbl-tools' }, sortBox(), searchBox());
 const totalRow = (g, label) => h('div', { class: 'totalbar' }, h('b', null, label + ' total'), h('span', null, money(g.current), h('small', null, ' (' + money(g.invested) + ')')), h('span', { class: posNeg(g.pl) }, arrow(g.pl) + money(Math.abs(g.pl)), h('small', null, ' ' + pct(Math.abs(g.ret), 1))), g.dayCount ? h('span', { class: posNeg(g.day) }, 'today ' + signed(g.day)) : null);
 
 /** Shares and ETFs together; switch to see only one. */
@@ -182,7 +188,7 @@ function holdingsTab(root) {
     stat('Today', g.dayCount ? h('span', { class: posNeg(g.day) }, signedMoney(g.day)) : '–', g.dayCount ? signedPct(g.dayPct) : 'refresh prices')));
   const items = sortItems(g.items);
   root.append(section(label, h('div', null,
-    h('div', { class: 'filters' }, seg, sortBox()),
+    h('div', { class: 'filters' }, seg), tableTools(),
     compactTable(table(holdCols('stock', g.current), items, { empty: 'Nothing here yet.', onRow: (x) => { if (tradeMode()) location.hash = '#/equity/holding?sym=' + encodeURIComponent(x.symbol); else if (canEdit()) stockForm(data.stocks.find((y) => y.id === x.id)); } })),
     totalRow(g, label),
     h('p', { class: 'note' }, tradeMode() ? 'Tap a holding to buy more, sell, see its purchase lots and XIRR, or add a split, bonus or dividend. Gain is value now minus what you put in. XIRR appears for holdings with dated buys that are over a month old.' : 'Import your Groww history (Import tab) to unlock buy and sell tracking and XIRR. Tap a holding to edit it.')),
@@ -196,7 +202,7 @@ function fundsTab(root) {
     stat('Invested', money(mf.invested), h('span', null, gainText(mf.pl), ' (', pct(mf.ret), ')')),
     stat('Today', mf.dayCount ? h('span', { class: posNeg(mf.day) }, signedMoney(mf.day)) : '–', mf.dayCount ? signedPct(mf.dayPct) : 'refresh prices')));
   root.append(section('Mutual funds', h('div', null,
-    h('div', { class: 'filters' }, sortBox()),
+    tableTools(),
     compactTable(table(holdCols('fund', mf.current), sortItems(mf.items), { onRow: canEdit() ? (m) => fundForm(data.mutualFunds.find((x) => x.id === m.id)) : null })),
     totalRow(mf, 'Funds'),
     h('p', { class: 'note' }, 'XIRR appears for funds with dated transactions imported from Groww.')),
@@ -222,7 +228,7 @@ function searchBox() {
     list.replaceChildren(...(searchQ.trim() ? (r.length ? r.map((x) => h('li', { role: 'option', tabindex: 0, onclick: () => { searchQ = ''; x.go(); rerender(); }, onkeydown: (e) => { if (e.key === 'Enter') { searchQ = ''; x.go(); rerender(); } } },
       h('span', { class: 'tag k-' + x.kind.toLowerCase() }, x.kind), h('span', { class: 'sr-main' }, h('b', null, x.title), h('small', null, x.sub)), h('span', { class: x.tone }, x.value))) : [h('li', { class: 'muted' }, 'No holding matches “' + searchQ + '”.')]) : []));
   };
-  const input = h('input', { type: 'search', placeholder: 'Find a share, ETF or fund…', 'aria-label': 'Find a holding', value: searchQ, oninput: (e) => { searchQ = e.target.value; draw(); }, onkeydown: (e) => { if (e.key === 'Enter') { const r = findAll(searchQ)[0]; if (r) { searchQ = ''; r.go(); rerender(); } } } });
+  const input = h('input', { type: 'search', placeholder: 'Find by name or symbol…', 'aria-label': 'Find a holding', value: searchQ, oninput: (e) => { searchQ = e.target.value; draw(); }, onkeydown: (e) => { if (e.key === 'Enter') { const r = findAll(searchQ)[0]; if (r) { searchQ = ''; r.go(); rerender(); } } } });
   draw();
   return h('div', { class: 'eq-search' }, input, list);
 }
@@ -236,7 +242,7 @@ function plannerBuys(data) {
   if (!planMonth || !keys.includes(planMonth)) planMonth = cur;
   const b = buys[planMonth] || { shares: 0, etfs: 0, funds: 0, total: 0, items: [] };
   const planned = data.sipPlans.reduce((a, p) => a + p.monthly, 0);
-  const mSel = h('select', { 'aria-label': 'Month', onchange: (e) => { planMonth = e.target.value; rerender(); } }, keys.map((k) => h('option', { value: k, selected: k === planMonth }, monthLabel(k) + (k === cur ? ' (this month)' : ''))));
+  const mSel = h('select', { 'aria-label': 'Month', onchange: (e) => { planMonth = e.target.value; rerender(); } }, monthOptions(keys, planMonth, (k) => monthLabel(k) + (k === cur ? ' (this month)' : '')));
   const nSel = h('select', { 'aria-label': 'Months in chart', onchange: (e) => { planSpan = +e.target.value; rerender(); } }, [3, 6, 12, 24].map((n) => h('option', { value: n, selected: n === planSpan }, 'Last ' + n + ' months')));
   const wrap = h('div', null);
   wrap.append(
@@ -264,11 +270,11 @@ export function render() {
   if (rsub === 'stocks' || rsub === 'etfs') location.replace('#/equity/holdings' + (rsub === 'etfs' ? '?f=etfs' : '?f=shares'));
   const tab = rsub === 'stocks' || rsub === 'etfs' ? 'holdings' : subTab(TABS.map((t) => t[0]));
   const st = all.stocks, mf = all.mf;
-  root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Shares and funds views'), h('button', { class: 'primary', onclick: (e) => refresh(e.currentTarget) }, 'Refresh prices')));
-  root.append(searchBox());
+  root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Shares and funds views'), h('button', { class: 'primary ib', type: 'button', title: 'Refresh prices', 'aria-label': 'Refresh prices', onclick: (e) => refresh(e.currentTarget) }, h('span', { class: 'ic' }, icon('refresh')), h('span', { class: 'lb' }, 'Refresh prices'))));
 
   if (tab === 'insights') insights(root);
   else if (tab === 'sold') sold(root);
+  else if (tab === 'dividends') dividends.render(root);
   else if (tab === 'import') importView.render(root);
   else if (tab === 'today') {
     today(root);

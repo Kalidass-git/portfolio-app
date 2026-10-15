@@ -3,6 +3,7 @@
 
 import { kindOf } from './categories.js';
 import { liveParity } from './goldlive.js';
+import { modelFlows } from './epf.js';
 import { buildEquity, buildFunds, xirrFor, fundKey, flowsFor, symKey } from './trades.js';
 export const DAY = 86400000;
 export const toMs = (s) => (s ? Date.parse(s + 'T00:00:00Z') : NaN);
@@ -618,22 +619,44 @@ export function returns(data, all) {
     sum(comp, (x) => x.value), sum(comp, (x) => x.principal));
   const pay = all.lending.filter((l) => l.interestType === 'Payout' && l.principal > 0);
   add('Private lending (monthly payout)', pay.flatMap((l) => coupons({ ...l, credit: 'Monthly' })), sum(pay, (x) => x.principal), sum(pay, (x) => x.principal), 'Coupons assumed paid on schedule');
-  // EPF / PPF: deposits out, balance (including interest credits) at the end
+  // EPF / PPF: your entries say how much went in and when; the yearly rate is the declared one (see epf.js).
   const ep = all.savings.filter((s) => s.type === 'EPF' || s.type === 'PPF');
-  const ef = ep.flatMap((s) => s.entries.filter((e) => !/interest/i.test((e.kind || '') + ' ' + (e.remarks || ''))).map((e) => ({
-    t: toMs(e.date), amount: -((e.employee || 0) + (e.employer || 0) + (e.amount || 0)) })));
-  const eInvested = -sum(ef, (x) => x.amount);
-  add('EPF & PPF', ef, sum(ep, (x) => x.principal), eInvested, 'Deposits vs balance including interest');
+  const ems = ep.map((s) => modelFlows(s, all.asOf, toMs));
+  const recorded = sum(ep, (x) => x.principal), put = sum(ems, (m) => m.put);
+  const passFlows = ep.flatMap((s) => s.entries.filter((e) => e.date && !/interest/i.test((e.kind || '') + ' ' + (e.remarks || ''))).map((e) => ({ t: toMs(e.date), amount: -((e.employee || 0) + (e.employer || 0) + (e.amount || 0)) }))).concat(recorded ? [{ t: asOf, amount: recorded }] : []);
+  const passbook = xirr(passFlows);
+  add('EPF & PPF', ems.flatMap((m) => m.flows.slice(0, -1)), sum(ems, (m) => m.value), put,
+    'At the interest rates declared each year' + (passbook != null ? `; the interest credited in your entries works out to ${(passbook * 100).toFixed(1)}%` : ''));
+  const er = out[out.length - 1]; er.value = recorded; er.gain = recorded - put; er.ret = put ? (recorded - put) / put : null; er.passbookXirr = passbook;
   // Equity: no purchase dates in the workbook, so only absolute return
   out.push({ name: 'Stocks & ETFs', invested: all.stocks.invested, value: all.stocks.current, gain: all.stocks.pl, ret: all.stocks.ret, xirr: all.stocks.xirr ?? null, flows: all.stocks.xirr != null ? flowsFor(all.stocks.eq, [...all.stocks.eq.flows.keys()], all.stocks.current, asOf) : null, note: all.stocks.eq ? 'XIRR from your imported trades, including sold shares and dividends' : 'Import your Groww history to get XIRR' });
   out.push({ name: 'Mutual funds', invested: all.mf.invested, value: all.mf.current, gain: all.mf.pl, ret: all.mf.ret, xirr: all.mf.xirr ?? null, flows: all.mf.xflows || null, note: all.mf.book ? 'XIRR from your imported transactions' : 'Import your Groww history to get XIRR' });
   return out;
 }
 
+/** Dated cash flows of investments that have ended (money in, coupons while they lasted, money back). Their returns are part of the story. */
+function closedFlows(all) {
+  const out = [];
+  const bondish = (it, step) => { const f = [{ t: toMs(it.depositDate), amount: -it.principal }]; let d = addMonths(it.depositDate, step); while (d <= it.closed.date) { f.push({ t: toMs(d), amount: it.principal * it.rate * (step / 12) }); d = addMonths(d, step); } return f; };
+  const fin = (it, f) => out.push(f.concat([{ t: toMs(it.closed.date), amount: it.closed.amount }]));
+  for (const b of all.closed.bonds) if (b.closed && b.depositDate) fin(b, bondish(b, b.credit === 'Quarterly' ? 3 : 1));
+  for (const x of all.closed.fds) if (x.closed && x.depositDate) fin(x, [{ t: toMs(x.depositDate), amount: -x.principal }]);
+  for (const l of all.closed.lending) if (l.closed && l.depositDate) fin(l, l.interestType === 'Payout' ? bondish(l, 1) : [{ t: toMs(l.depositDate), amount: -l.principal }]);
+  for (const sv of all.closed.savings || []) if (sv.closed) { const ents = (sv.entries || []).filter((e) => e.amount > 0 && e.date); if (ents.length) fin(sv, ents.map((e) => ({ t: toMs(e.date), amount: -e.amount }))); }
+  return out.flat();
+}
+/**
+ * One yearly return for everything that has dated cash flows: gold, bonds, deposits, lending, EPF and PPF, shares, funds, plus
+ * investments you have already closed. It is money-weighted, so long-held money counts for more. `xirrNoPf` leaves EPF and PPF out,
+ * because those are long, steady savings and pull the figure down.
+ */
 export function overallXirr(data, all, rets) {
   const covered = rets.filter((r) => r.xirr != null && r.flows);
-  const merged = covered.flatMap((r) => r.flows);
-  return { xirr: covered.length ? xirr(merged) : null, covered: covered.map((r) => r.name), coverage: all.totalAssets ? sum(covered, (r) => r.value) / all.totalAssets : 0 };
+  const closed = closedFlows(all);
+  const merged = covered.flatMap((r) => r.flows).concat(closed);
+  const noPf = covered.filter((r) => !/^EPF/.test(r.name)).flatMap((r) => r.flows).concat(closed);
+  return { xirr: covered.length ? xirr(merged) : null, xirrNoPf: covered.length ? xirr(noPf) : null, closedCount: all.closed.bonds.length + all.closed.fds.length + all.closed.lending.length + (all.closed.savings || []).length,
+    covered: covered.map((r) => r.name), coverage: all.totalAssets ? sum(covered, (r) => r.value) / all.totalAssets : 0 };
 }
 
 // ---------- family report (Report sheet) ----------

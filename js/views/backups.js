@@ -1,4 +1,4 @@
-import { S, setData, allowShrink } from '../store.js';
+import { S, restoreData } from '../store.js';
 import { h, section, table, btn, formDialog, confirmDialog, toast, canEdit, dateStr } from '../ui.js';
 import * as B from '../backups.js';
 
@@ -6,6 +6,19 @@ const kb = (n) => (n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, 
 const when = (iso) => { const d = new Date(iso); return dateStr(iso.slice(0, 10)) + ' ' + d.toTimeString().slice(0, 5); };
 const KIND = { manual: 'You made it', auto: 'Automatic' };
 
+const rerender = () => window.dispatchEvent(new Event('rerender'));
+/** Put a copy of the data back, upload it to Drive, and say plainly what happened. */
+export async function doRestore(data) {
+  toast('Restoring…');
+  try {
+    const r = await restoreData(data);
+    if (r.local) toast('Restored on this device');
+    else if (r.ok) toast('Restored and saved to Google Drive');
+    else if (r.blocked) toast('Not restored: ' + (S.error || 'the data looks damaged'), 'bad');
+    else toast('Restored on this device. Uploading to Google Drive failed' + (r.error ? ' (' + r.error + ')' : '') + '. It will try again by itself.', 'bad');
+  } catch (e) { toast(e.message, 'bad'); }
+  rerender();
+}
 export async function autoPoint(name) { try { await B.createPoint(S.data, name, 'auto'); } catch { /* best effort */ } }
 
 function download(name, text) {
@@ -29,7 +42,7 @@ export function section_() {
       { label: 'Name', get: (r) => r.name }, { label: 'Made', get: (r) => when(r.createdAt) }, { label: 'Type', get: (r) => KIND[r.kind] || r.kind },
       { label: 'Size', cls: 'r', get: (r) => kb(r.size) }, { label: 'Entries', cls: 'r', get: (r) => String(r.counts.ledger) },
       { label: '', render: (r) => h('span', { class: 'btn-row' },
-        h('button', { class: 'small', onclick: async (e) => { e.stopPropagation(); if (!await confirmDialog(`Go back to "${r.name}" (${when(r.createdAt)})? Your current data is saved as a new restore point first.`, 'Restore')) return; const p = await B.getPoint(r.id); await B.createPoint(S.data, 'Before restoring ' + r.name, 'auto'); allowShrink(); setData(p.data, { dirty: true }); toast('Restored'); refresh(); } }, 'Restore'),
+        h('button', { class: 'small', onclick: async (e) => { e.stopPropagation(); if (!await confirmDialog(`Go back to "${r.name}" (${when(r.createdAt)})? Your current data is saved as a new restore point first.`, 'Restore')) return; const p = await B.getPoint(r.id); if (!p) return toast('That restore point could not be read.', 'bad'); await doRestore(p.data); refresh(); } }, 'Restore'),
         h('button', { class: 'small', onclick: async (e) => { e.stopPropagation(); const p = await B.getPoint(r.id); download(`portfolio-restore-${r.createdAt.slice(0, 10)}.json`, JSON.stringify(p.data, null, 1)); } }, 'Download'),
         h('button', { class: 'small danger', onclick: async (e) => { e.stopPropagation(); if (await confirmDialog(`Delete "${r.name}"? This cannot be undone.`, 'Delete')) { await B.deletePoint(r.id); toast('Deleted'); refresh(); } } }, 'Delete')) },
     ], list) : h('p', { class: 'empty' }, 'No restore points yet.'));

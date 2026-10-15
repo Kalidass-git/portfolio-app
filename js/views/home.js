@@ -10,6 +10,7 @@ let selMonth = null;
 const rerender = () => window.dispatchEvent(new Event('rerender'));
 const sgn = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + money(Math.abs(n));
 const shortDate = (d) => dateStr(d).replace(/ (\d\d)(\d\d)$/, " '$2");
+const sgp = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + pct(Math.abs(n), 2);
 const tone = (n) => (n > 0 ? 'pos' : n < 0 ? 'neg' : '');
 const RISK_ORDER = ['Safe', 'Medium', 'Medium High', 'High'];
 
@@ -30,7 +31,9 @@ function hero(all, series, ox) {
         h('dl', { class: 'hero-side' },
           h('div', null, h('dt', null, 'Assets'), h('dd', null, compact(all.totalAssets))),
           h('div', null, h('dt', null, 'Loans'), h('dd', null, compact(all.liabTotal))),
-          ox && ox.xirr != null ? h('div', { title: `Yearly return that counts when each rupee went in. Covers ${pct(ox.coverage, 0)} of your assets.` }, h('dt', null, 'Overall XIRR'), h('dd', { class: tone(ox.xirr) }, pct(ox.xirr, 1))) : null))));
+          ox && ox.xirr != null ? h('div', { title: `Yearly return counting when each rupee went in, over gold, bonds, deposits, lending, EPF/PPF, shares, funds and anything you closed. Covers ${pct(ox.coverage, 0)} of your assets.` }, h('dt', null, 'Overall XIRR'), h('dd', { class: tone(ox.xirr) }, pct(ox.xirr, 1))) : null,
+          ox && ox.xirrNoPf != null && Math.abs(ox.xirrNoPf - ox.xirr) > 0.002 ? h('div', { title: 'The same, leaving out EPF and PPF, which are long, steady savings.' }, h('dt', null, 'Without EPF/PPF'), h('dd', { class: tone(ox.xirrNoPf) }, pct(ox.xirrNoPf, 1))) : null,
+          null))));
 }
 
 const isEtf = (x) => x.assetClass && x.assetClass !== 'equity';
@@ -72,11 +75,13 @@ function tiles(all, data, mc) {
   const mk = marketGroups(all), gd = all.gold.day;
   const dayAll = mk.total.day + (gd ? gd.total : 0);
   const anyDay = mk.total.hasDay || !!gd;
+  const baseAll = (mk.total.dayPct ? mk.total.day / mk.total.dayPct : 0) + (gd ? all.gold.value - gd.total : 0);
+  const dayPctAll = baseAll ? dayAll / baseAll : 0;
   const spent = mc.totalSpent + mc.lifestyle.amount;
   return h('div', { class: 'kpis span-12' },
     tile('Net monthly inflow', money(all.netMonthly), `${money(all.cfTotal.perMonth)} earned − ${money(all.loans.monthlyInterest)} loan interest`, { tone: tone(all.netMonthly), href: '#/fixed/loans' }),
     tile('Earning every day', money(all.cfTotal.perDay), `${money(all.cfTotal.perDay - all.loans.monthlyInterest / 30)} after loan interest`, { href: '#/fixed', pop: h('div', null, earningBody(all, false), h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income'))) }),
-    tile('Markets today', anyDay ? sgn(dayAll) : '–', anyDay ? 'shares, funds, ETFs and gold' : 'refresh prices to see', { tone: anyDay ? tone(dayAll) : '', href: '#/equity', pop: h('div', null, todayBody(all), h('p', null, h('a', { href: '#/equity' }, 'Open Shares & funds'))) }),
+    tile('Markets today', anyDay ? sgn(dayAll) : '–', anyDay ? `${sgp(dayPctAll)} · shares, funds, ETFs, gold` : 'refresh prices to see', { tone: anyDay ? tone(dayAll) : '', href: '#/equity', pop: h('div', null, todayBody(all), h('p', null, h('a', { href: '#/equity' }, 'Open Shares & funds'))) }),
     tile('Spent this month', money(spent), mc.totalExpected ? `${pct(spent / mc.totalExpected, 0)} of ${money(mc.totalExpected)} budget` : 'no budget income yet', { tone: mc.totalExpected && spent > mc.totalReceived ? 'neg' : '', href: '#/flow', pop: spentBody(mc, spent), right: true }));
 }
 
@@ -111,12 +116,12 @@ function toReceiveCard(data, all) {
 
 function todayBody(all) {
   const mk = marketGroups(all), gd = all.gold.day;
-  const rows = mk.rows.filter((r) => r.hasDay).map((r) => ({ title: r.name, sub: pct(Math.abs(r.dayPct), 2) + (r.dayPct >= 0 ? ' up' : ' down'), value: h('span', { class: tone(r.day) }, sgn(r.day)) }));
-  if (gd) rows.push({ title: 'Gold', sub: `${pct(Math.abs(gd.pct), 2)} ${gd.pct >= 0 ? 'up' : 'down'} · ${money(all.gold.rate)}/g (${sgn(gd.perGram)})`, value: h('span', { class: tone(gd.total) }, sgn(gd.total)) });
+  const rows = mk.rows.filter((r) => r.hasDay).map((r) => ({ title: r.name, sub: sgp(r.dayPct), value: h('span', { class: tone(r.day) }, sgn(r.day)) }));
+  if (gd) rows.push({ title: 'Gold', sub: `${sgp(gd.pct)} · ${money(all.gold.rate)}/g (${sgn(gd.perGram)})`, value: h('span', { class: tone(gd.total) }, sgn(gd.total)) });
   const total = rows.length ? mk.total.day + (gd ? gd.total : 0) : null;
   return h('div', null,
     rows.length ? rowList(rows) : h('p', { class: 'empty' }, 'Press Refresh prices on Shares & funds to see today’s change.'),
-    total != null ? h('p', { class: 'summary-line' }, 'All together ', h('b', { class: tone(total) }, sgn(total))) : null,
+    total != null ? h('p', { class: 'summary-line' }, 'All together ', h('b', { class: tone(total) }, sgn(total)), (() => { const b = (mk.total.dayPct ? mk.total.day / mk.total.dayPct : 0) + (gd ? all.gold.value - gd.total : 0); return b ? h('span', { class: tone(total) }, ' (' + sgp(total / b) + ')') : null; })()) : null,
     gd ? null : h('p', { class: 'note' }, 'Gold today appears after a price refresh.'));
 }
 /** Phone only: on a computer this lives in the "Markets today" tile. */
@@ -189,7 +194,7 @@ function returnsCard(data, all, rets, cov) {
     };
   });
   return section('How your investments did', h('div', null, rowList(items),
-    h('p', { class: 'note' }, 'XIRR is the yearly return that accounts for when each rupee went in. It needs dated cash flows, so shares and funds show plain return until buy dates are added. XIRR rows cover ' + pct(cov.coverage, 0) + ' of your assets.' + (cov.xirr != null ? ' Overall XIRR across them is ' + pct(cov.xirr, 1) + '.' : '') + ' Bond and lending XIRR assume coupons arrive on schedule.')));
+    h('p', { class: 'note' }, 'XIRR is the yearly return that accounts for when each rupee went in. It needs dated cash flows, so shares and funds show plain return until buy dates are added. XIRR rows cover ' + pct(cov.coverage, 0) + ' of your assets.' + (cov.xirr != null ? ' Overall XIRR across everything with dates is ' + pct(cov.xirr, 1) + (cov.xirrNoPf != null ? ' (' + pct(cov.xirrNoPf, 1) + ' without EPF and PPF)' : '') + '. It is money-weighted: long-held money, such as EPF at a steady rate, counts for more than newer money.' : '') + ' Bond and lending XIRR assume coupons arrive on schedule.')));
 }
 
 function comingUp(data, all) {

@@ -1,3 +1,4 @@
+import { VERSION } from './version.js';
 import { S, resolveGuard, dailyPoint, init, subscribe, pull, setData, setCfg, connect, recompute, startOfDaySnapshot, resolveConflict } from './store.js';
 import { h, $, toast, dialog, btn, formDialog, route } from './ui.js';
 import { autoPoint } from './views/backups.js';
@@ -6,6 +7,7 @@ import * as cash from './views/cash.js';
 import * as fixed from './views/fixed.js';
 import * as equity from './views/equity.js';
 import * as gold from './views/gold.js';
+import * as savings from './views/savings.js';
 import * as flow from './views/flow.js';
 import * as plan from './views/plan.js';
 import * as report from './views/report.js';
@@ -13,9 +15,10 @@ import * as settings from './views/settings.js';
 
 const ROUTES = {
   home: { label: 'Home', view: home, tab: 'home', icon: 'M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z' },
-  cash: { label: 'Cash & savings', short: 'Cash', view: cash, tab: 'assets', group: 'Assets', icon: 'M3 7h18v10H3zM12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z' },
+  cash: { label: 'Cash & banks', short: 'Cash', view: cash, tab: 'assets', group: 'Assets', icon: 'M3 7h18v10H3zM12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z' },
   fixed: { label: 'Fixed income', short: 'Fixed income', view: fixed, tab: 'assets', group: 'Assets', icon: 'M4 20V8l8-5 8 5v12M9 20v-6h6v6' },
   equity: { label: 'Shares & funds', short: 'Shares & funds', view: equity, tab: 'assets', group: 'Assets', icon: 'M4 19V5M4 19h16M8 15l4-5 3 3 5-6' },
+  savings: { label: 'Savings & chits', short: 'Savings', view: savings, tab: 'assets', group: 'Assets', icon: 'M12 21s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.6-7 10-7 10z' },
   gold: { label: 'Gold & others', short: 'Gold & more', view: gold, tab: 'assets', group: 'Assets', icon: 'M12 3l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V7z' },
   flow: { label: 'Income & expenses', view: flow, tab: 'flow', icon: 'M4 6h16M4 12h10M4 18h6' },
   plan: { label: 'Plan', view: plan, tab: 'plan', icon: 'M5 19V9m7 10V5m7 14v-7' },
@@ -51,7 +54,7 @@ function chrome() {
     lastGroup = r.group || null;
     list.append(h('li', null, h('a', { href: '#/' + k, class: k === cur ? 'on' : '', 'aria-current': k === cur ? 'page' : null }, icon(r.icon), r.label)));
   }
-  side.append(list);
+  side.append(list, h('p', { class: 'ver' }, 'Version ' + VERSION));
 
   const tb = $('#tabbar');
   tb.replaceChildren(...TABS.map(([t, label, to]) => h('a', { href: '#/' + to, class: ROUTES[cur].tab === t ? 'on' : '', 'aria-current': ROUTES[cur].tab === t ? 'page' : null }, icon(ROUTES[to].icon), h('span', null, label))));

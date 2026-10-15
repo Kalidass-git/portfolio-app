@@ -1,6 +1,7 @@
 import { S, setCfg, setData, connect, pull, push, disconnect, resetAll, mutate, nextId } from '../store.js';
 import * as C from '../calc.js';
-import { section_ as restorePoints } from './backups.js';
+import { VERSION, RELEASED } from '../version.js';
+import { section_ as restorePoints, doRestore } from './backups.js';
 import { section_ as storageInfo } from './storage.js';
 import { loanForm as liabilityForm } from './loans.js';
 import { h, money, dateStr, section, btn, formDialog, dialog, confirmDialog, toast, canEdit, table } from '../ui.js';
@@ -74,7 +75,7 @@ export function render() {
     h('div', null, h('p', { class: 'note' }, 'A backup is a single JSON file. Keep one somewhere safe, for example in Google Drive.'),
       h('div', { class: 'row' },
         btn('Download backup', () => { download(`portfolio-data-${C.todayISO()}.json`, JSON.stringify(data, null, 1)); toast('Backup downloaded'); }, 'primary'),
-        canEdit() ? btn('Restore from file', async () => { const d = await pickFile(); if (!d) return; if (!validData(d)) return toast('That file is not a portfolio data file.', 'bad'); if (await confirmDialog('Replace everything in the app with this file?', 'Restore')) { setData(d, { dirty: true }); if (S.remote) push({ force: true }).catch(() => {}); toast('Data restored'); rerender(); } }) : null))));
+        canEdit() ? btn('Restore from file', async () => { const d = await pickFile(); if (!d) return; if (!validData(d)) return toast('That file is not a portfolio data file.', 'bad'); if (await confirmDialog('Replace everything in the app with this file?', 'Restore')) { await doRestore(d); } }) : null))));
 
   if (canEdit()) {
     root.append(section('Loans (see Fixed income → Loans I owe)', table([
@@ -89,6 +90,7 @@ export function render() {
       })))));
   }
 
+  root.append(section('About', h('p', null, 'Family Wealth version ', h('b', null, VERSION), ' · released ' + RELEASED + '. If this number is older than the one you expect, close the app fully and open it again so the new files load.')));
   root.append(section('This device',
     h('div', { class: 'kv' },
       h('div', { class: 'inline-label' }, 'Text size ', h('span', { class: 'fs-pick' }, [['Normal', 1], ['Large', 1.15], ['Larger', 1.3], ['Largest', 1.5]].map(([l, v]) => h('button', { 'aria-pressed': String(Math.abs((S.cfg.fontScale || 1) - v) < 0.001), onclick: () => { setCfg({ fontScale: v }); document.documentElement.style.setProperty('--fs', v); rerender(); } }, l)))),

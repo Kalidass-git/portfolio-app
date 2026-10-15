@@ -171,7 +171,27 @@ export function formDialog({ title, fields, value = {}, onSave, onDelete, extraA
 export const section = (title, body, actions) => h('section', { class: 'card' },
   h('header', { class: 'card-head' }, h('h2', null, title), actions ? h('div', { class: 'card-actions' }, actions) : null), body);
 export const stat = (label, value, sub, cls = '') => h('div', { class: 'stat ' + cls }, h('span', { class: 'stat-label' }, label), h('strong', { class: 'stat-value' }, value), sub ? h('span', { class: 'stat-sub' }, sub) : null);
-export const btn = (label, onclick, cls = '') => h('button', { class: cls, onclick, type: 'button' }, label);
+const ICONS = {
+  plus: 'M12 5v14M5 12h14', minus: 'M5 12h14', refresh: 'M23 4v6h-6M20.5 15a9 9 0 1 1-2.1-9.4L23 10', edit: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
+  swap: 'M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3', download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
+  upload: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12', copy: 'M9 9h11v11H9zM5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1',
+  search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-4.3-4.3', check: 'M5 12l5 5L20 7',
+};
+export function icon(name) {
+  const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'ico'); s.setAttribute('aria-hidden', 'true');
+  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', ICONS[name] || ICONS.plus); s.append(p);
+  return s;
+}
+/** Which icon suits a button label, if any. Buttons without a clear icon stay as words. */
+const iconFor = (l) => (/^(Add|Record|Buy)\b/.test(l) ? 'plus' : /^Sell\b/.test(l) ? 'minus' : /^Transfer\b/.test(l) ? 'swap' : /^(Edit|Change)\b/.test(l) ? 'edit'
+  : /^Download\b/.test(l) ? 'download' : /^Upload\b/.test(l) ? 'upload' : /^(Refresh|Sync)\b/.test(l) ? 'refresh' : /^Copy\b/.test(l) ? 'copy' : null);
+/** Button. In page headers on a phone, buttons with an icon show only the icon (keep: true keeps the words). */
+export const btn = (label, onclick, cls = '', { keep = false } = {}) => {
+  const ic = keep ? null : iconFor(label);
+  if (!ic) return h('button', { class: cls, onclick, type: 'button' }, label);
+  return h('button', { class: (cls + ' ib').trim(), onclick, type: 'button', 'aria-label': label, title: label }, h('span', { class: 'ic' }, icon(ic)), h('span', { class: 'lb' }, label));
+};
 export const empty = (msg) => h('p', { class: 'empty' }, msg);
 
 /** Table. cols: [{label, get(row), cls, render(row)->node|string, total}] */
@@ -208,9 +228,27 @@ export function table(cols, rows, { onRow, footer, rowClass, empty: emptyMsg = '
   return outer;
 }
 
+/**
+ * Months split by year so the list starts with this year: this year's months, the last few months of last year, then everything earlier.
+ * Returns [{ label, months }] (newest first). A single group has label ''.
+ */
+export function monthGroups(months, selected) {
+  const y = Number(String((S.all && S.all.asOf) || new Date().toISOString()).slice(0, 4));
+  const nowKey = String((S.all && S.all.asOf) || new Date().toISOString()).slice(0, 7);
+  const list = [...new Set([...months, nowKey])].sort().reverse();
+  const cur = list.filter((m) => m.startsWith(String(y))), prev = list.filter((m) => m.startsWith(String(y - 1)) && m.slice(5) >= '09');
+  const rest = list.filter((m) => !cur.includes(m) && !prev.includes(m));
+  // keep whatever is chosen visible even if it is older
+  const g = [{ label: String(y), months: cur }, { label: 'Late ' + (y - 1), months: prev }, { label: 'Earlier', months: rest }].filter((x) => x.months.length);
+  return g.length > 1 ? g : g.map((x) => ({ label: '', months: x.months }));
+}
+/** <option> / <optgroup> nodes for a month select. */
+export function monthOptions(months, selected, fmt = (m) => monthLabel(m, true)) {
+  const opt = (m) => h('option', { value: m, selected: m === selected }, fmt(m));
+  return monthGroups(months, selected).map((g) => (g.label ? h('optgroup', { label: g.label }, g.months.map(opt)) : g.months.map(opt))).flat();
+}
 export function monthPicker(months, value, onChange) {
-  return h('select', { class: 'month-select', 'aria-label': 'Month', onchange: (e) => onChange(e.target.value) },
-    months.slice().reverse().map((m) => h('option', { value: m, selected: m === value }, monthLabel(m, true))));
+  return h('select', { class: 'month-select', 'aria-label': 'Month', onchange: (e) => onChange(e.target.value) }, monthOptions(months, value));
 }
 
 /**

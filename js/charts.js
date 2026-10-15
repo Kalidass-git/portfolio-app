@@ -116,7 +116,8 @@ export function lineChart({ labels, series, fmt = (v) => v, height = 220, yMin, 
 }
 
 /** Grouped column chart. groups: [{label, values:[n]}], names: series names */
-export function barChart({ groups, names, fmt = (v) => v, height = 220, width }) {
+export function barChart({ groups, names, fmt = (v) => v, height = 220, width, colors }) {
+  const col = (i) => color(colors ? colors[i] : i);
   const W = width || defaultWidth(), H = height, pad = { l: 44, r: 8, t: 12, b: 24 };
   const hi = niceMax(Math.max(1, ...groups.flatMap((g) => g.values)));
   const y = (v) => pad.t + (1 - v / hi) * (H - pad.t - pad.b);
@@ -133,14 +134,14 @@ export function barChart({ groups, names, fmt = (v) => v, height = 220, width })
     g.values.forEach((v, si) => {
       if (v <= 0) return;
       const bh = Math.max(1, H - pad.b - y(v));
-      root.append(svg('path', { d: `M${left + si * (bw + 2)},${H - pad.b}v${-(bh - Math.min(4, bh))}q0,-${Math.min(4, bh)} ${Math.min(4, bw / 2)},-${Math.min(4, bh)}h${bw - 2 * Math.min(4, bw / 2)}q${Math.min(4, bw / 2)},0 ${Math.min(4, bw / 2)},${Math.min(4, bh)}v${bh - Math.min(4, bh)}z`, fill: color(si) }));
+      root.append(svg('path', { d: `M${left + si * (bw + 2)},${H - pad.b}v${-(bh - Math.min(4, bh))}q0,-${Math.min(4, bh)} ${Math.min(4, bw / 2)},-${Math.min(4, bh)}h${bw - 2 * Math.min(4, bw / 2)}q${Math.min(4, bw / 2)},0 ${Math.min(4, bw / 2)},${Math.min(4, bh)}v${bh - Math.min(4, bh)}z`, fill: col(si) }));
     });
     root.append(svg('text', { x: cx, y: H - 6, class: 'axis', 'text-anchor': 'middle' }, g.label));
     const hit = svg('rect', { x: pad.l + gw * gi, y: pad.t, width: gw, height: H - pad.t - pad.b, fill: 'transparent' });
-    hover(hit, () => [h('b', null, g.title || g.label), ...names.map((n, si) => h('div', null, h('i', { class: 'tip-dot', style: { background: color(si) } }), `${n}: ${fmt(g.values[si])}`))]);
+    hover(hit, () => [h('b', null, g.title || g.label), ...names.map((n, si) => h('div', null, h('i', { class: 'tip-dot', style: { background: col(si) } }), `${n}: ${fmt(g.values[si])}`))]);
     root.append(hit);
   });
-  return h('div', { class: 'chart-box' }, root, h('ul', { class: 'legend inline' }, names.map((n, i) => h('li', null, h('i', { style: { background: color(i) } }), h('span', { class: 'lg-name' }, n)))));
+  return h('div', { class: 'chart-box' }, root, h('ul', { class: 'legend inline' }, names.map((n, i) => h('li', null, h('i', { style: { background: col(i) } }), h('span', { class: 'lg-name' }, n)))));
 }
 
 /** Tiny progress bar (value 0..1) */

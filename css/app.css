@@ -383,3 +383,60 @@ button.danger.primary-ish, dialog.sheet footer button.danger { border-color: var
   .kpi.open .kpi-pop { display: block; }
 }
 @media (max-width: 899px) { .dash > .span-6 { grid-column: auto; } }
+
+/* ---------- icon buttons ---------- */
+.ib .ico { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; display: block; }
+.ib .ic { display: inline-grid; } .ib .lb { margin-left: 7px; }
+.ib.busy .ico { animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
+@media (max-width: 700px) {
+  .card-actions .ib .lb, .pagebar .ib .lb, .btn-row .ib .lb, .tbl-tools .ib .lb { display: none; }
+  .card-actions .ib, .pagebar .ib, .btn-row .ib, .tbl-tools .ib { width: 40px; padding: 0; }
+}
+
+.ver { margin: 14px 12px 8px; font-size: .74rem; color: var(--muted); }
+.tbl-tools { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 0 8px; flex-wrap: wrap; }
+.tbl-tools .eq-search { margin: 0; flex: 1 1 200px; max-width: 360px; } .tbl-tools .eq-search input { padding: 7px 10px; font-size: .92rem; }
+.tbl-tools .search-results { position: absolute; left: 0; right: 0; z-index: 20; }
+@media (max-width: 700px) { .tbl-tools .inline-label { flex: 0 0 auto; } .tbl-tools .inline-label select { max-width: 150px; } .tbl-tools .eq-search { flex: 1 1 120px; } }
+
+/* home banner stays side by side on a phone */
+@media (max-width: 700px) {
+  .hero-top { flex-wrap: nowrap; gap: 10px; align-items: flex-end; }
+  .hero-top > div:first-child { min-width: 0; flex: 1 1 auto; }
+  .hero-num { font-size: clamp(1.9rem, 9vw, 2.6rem); }
+  .hero-right { flex: 0 0 auto; } .hero-right .spark { display: none; }
+  .hero-side { gap: 5px; } .hero-side div { gap: 12px; } .hero-side dt { font-size: .74rem; } .hero-side dd { font-size: .86rem; }
+  .hero-exact { overflow-wrap: anywhere; }
+}
+
+/* ---------- colour coding: income green, expenses red, investments blue ---------- */
+.inv { color: var(--s1); }
+.stat.inc, .stat.exp, .stat.inv { border-left: 4px solid var(--pos); }
+.stat.exp { border-left-color: var(--neg); } .stat.inv { border-left-color: var(--s1); }
+.stat.inc .stat-value { color: var(--pos); } .stat.exp .stat-value { color: var(--neg); } .stat.inv .stat-value { color: var(--s1); }
+.card.dir-in { border-left: 4px solid var(--pos); } .card.dir-out { border-left: 4px solid var(--neg); }
+.seg.slim { margin-bottom: 10px; } .seg.slim a { padding: 5px 12px; font-size: .85rem; }
+
+/* report: parent rows with smaller child rows */
+.rpt-scroll { overflow-x: auto; }
+.rpt-detail { table-layout: auto; }
+.rpt-detail .rpt-parent { background: color-mix(in srgb, var(--g, #1f5fb8) 13%, #fff); cursor: pointer; }
+.rpt-detail .rpt-parent td { border-bottom: 1px solid color-mix(in srgb, var(--g, #1f5fb8) 40%, #fff); padding-top: 5px; padding-bottom: 5px; }
+.rpt-detail .cnt { font-weight: 400; font-size: .72rem; color: var(--muted); }
+.rpt-detail .rpt-child td { font-size: .74rem; color: #4a5a70; padding: 2px 6px; border-bottom: 1px dotted var(--line); }
+.rpt-detail .rpt-child .ch-name { padding-left: 14px; color: #2a3b52; } .rpt-detail .ch-note { color: #6a5a2f; max-width: 260px; }
+.rpt-detail .grp.collapsed .rpt-child { display: none; }
+.rpt-detail .rpt-child .r { color: #33445c; }
+@media (max-width: 700px) { .rpt-detail .ch-note { max-width: 150px; } }
+@media print {
+  .rpt { overflow: visible !important; }
+  .rpt-1 { min-height: 0 !important; }
+  .rpt-detail .grp.collapsed .rpt-child { display: table-row !important; }
+  .rpt-detail .grp { break-inside: auto; } .rpt-detail tr { break-inside: avoid; }
+  .rpt-detail thead { display: table-header-group; }
+  .rpt-detail .rpt-parent { break-after: avoid; }
+  .rpt-detail .rpt-child td { font-size: 8.3px; padding: 1px 5px; } .rpt-detail .rpt-parent td { font-size: 10px; padding: 3px 5px; }
+  .rpt-detail .ch-note { max-width: none; }
+  .rpt-tbl { width: calc(100% - 20px); margin: 0 10px; }
+}
+@media print { .no-print-pdf { display: none !important; } }
