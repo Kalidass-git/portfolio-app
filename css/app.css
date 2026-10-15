@@ -474,3 +474,6 @@ button.danger.primary-ish, dialog.sheet footer button.danger { border-color: var
 }
 
 .del-sum { margin: 6px 0 4px; padding: 8px 12px 8px 26px; background: var(--surface-2); border-radius: 8px; font-size: .92rem; } .del-sum li { margin: 2px 0; }
+
+@media (max-width: 700px) { .only-lg { display: none !important; } }
+@media (min-width: 701px) { .only-sm { display: none !important; } }

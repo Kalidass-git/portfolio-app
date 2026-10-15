@@ -200,7 +200,9 @@ function ledger() {
   const tbl = table([
     { label: 'Date · account', render: (e) => h('div', null, h('div', { class: 'nm' }, dateStr(e.date)), h('div', { class: 'sub2' }, acctName.get(e.acct) || '')) },
     { label: 'Description · category', render: (e) => h('div', null, h('div', { class: 'nm' }, e.desc), h('div', { class: 'sub2 ' + (kindOfCat(e.category) === 'investment' ? 'inv' : kindOfCat(e.category) === 'expense' ? 'neg' : kindOfCat(e.category) === 'income' ? 'pos' : '') }, e.category || 'No category')) },
-    { label: 'Amount · balance', cls: 'r', render: (e) => h('div', null, h('div', { class: 'b ' + tone(e) }, (e.credit ? '+ ' + money(e.credit) : '− ' + money(e.debit))), h('div', { class: 'sub2' }, 'bal ' + money(e.balance))) },
+    { label: 'Amount', cls: 'r only-lg', render: (e) => h('span', { class: 'b ' + tone(e) }, e.credit ? '+ ' + money(e.credit) : '− ' + money(e.debit)) },
+    { label: 'Balance', cls: 'r only-lg', get: (e) => money(e.balance) },
+    { label: 'Amount · balance', cls: 'r only-sm', render: (e) => h('div', null, h('div', { class: 'b ' + tone(e) }, (e.credit ? '+ ' + money(e.credit) : '− ' + money(e.debit))), h('div', { class: 'sub2' }, 'bal ' + money(e.balance))) },
   ], rows.slice(0, limit), { onRow: canEdit() ? (e) => txnForm(data.ledger.find((x) => x.id === e.id)) : null, empty: 'No transactions match these filters.' });
   const t0 = tbl.querySelector('table'); if (t0) t0.classList.add('compact');
   const label = fKind === 'income' ? 'received' : fKind === 'all' ? 'paid out' : 'paid out';
