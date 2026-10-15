@@ -6,10 +6,10 @@ import { hbars } from '../charts.js';
 import { closeForm, reopen } from './closing.js';
 import { confirmDialog, pct, posNeg, stat } from '../ui.js';
 
-let fAcct = 'all', fMonth = 'all', fText = '', limit = 60;
+let fAcct = 'all', fMonth = 'all', fText = '', fKind = 'all', limit = 60;
 const TABS = [['accounts', 'Accounts'], ['ledger', 'Transactions']];
 /** Open the transactions list, optionally pre-filtered. Used by links from other screens. */
-export function openLedger({ text = '', month = 'all', acct = 'all' } = {}) { fText = text; fMonth = month; fAcct = acct; limit = 60; location.hash = '#/cash/ledger'; }
+export function openLedger({ text = '', month = 'all', acct = 'all', kind = 'all' } = {}) { fText = text; fMonth = month; fAcct = acct; fKind = kind; limit = 60; location.hash = '#/cash/ledger'; }
 
 export function render() {
   const root = h('div', { class: 'page' });
@@ -23,16 +23,55 @@ export function render() {
 const rerender = () => window.dispatchEvent(new Event('rerender'));
 
 // ----- accounts -----
+const slug = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'acct';
+function accountForm(acct) {
+  const isNew = !acct;
+  const { data } = S;
+  formDialog({
+    title: isNew ? 'Add bank account' : 'Edit ' + acct.name, saveLabel: isNew ? 'Add' : 'Save',
+    value: acct ? { name: acct.name, holder: acct.holder, title: acct.title || '' } : { holder: (data.accounts[0] && data.accounts[0].holder) || '', openingDate: C.todayISO() },
+    deleteMessage: 'Delete this account? It can only be deleted when it has no transactions.',
+    fields: [
+      { key: 'name', label: 'Bank / account name', required: true, hint: 'Short name, for example HDFC or Cash.' },
+      { key: 'holder', label: 'Account holder', required: true },
+      { key: 'title', label: 'Full title (optional)', hint: 'Shown in reports, for example Standard Chartered (Kali).' },
+      { key: 'opening', label: 'Balance today (₹)', type: 'number', showIf: () => isNew, hint: 'Optional. Added as an opening balance entry. It is not counted as income.' },
+      { key: 'openingDate', label: 'Balance as on', type: 'date', showIf: (v) => isNew && v.opening !== '' && v.opening != null },
+    ],
+    onSave: (v) => {
+      const name = v.name.trim();
+      if (data.accounts.some((x) => (!acct || x.id !== acct.id) && x.name.toLowerCase() === name.toLowerCase() && x.holder.toLowerCase() === v.holder.trim().toLowerCase())) { toast('That account already exists.', 'bad'); return false; }
+      mutate((d) => {
+        if (isNew) {
+          let id = slug(name + '_' + v.holder.split(' ')[0]); const taken = new Set(d.accounts.map((x) => x.id));
+          for (let i = 2; taken.has(id); i++) id = slug(name + '_' + v.holder.split(' ')[0]) + i;
+          d.accounts.push({ id, name, holder: v.holder.trim(), title: v.title || `${name} (${v.holder.trim()})` });
+          if (v.opening) {
+            const cat = CAT.add(d, { name: 'Opening balance', kind: 'transfer' });
+            d.ledger.push({ id: Math.max(0, ...d.ledger.map((e) => e.id || 0)) + 1, acct: id, date: v.openingDate || C.todayISO(), desc: 'Opening balance', debit: v.opening < 0 ? -v.opening : 0, credit: v.opening > 0 ? v.opening : 0, category: cat });
+          }
+        } else { const auto = !acct.title || acct.title === `${acct.name} (${acct.holder})`; Object.assign(d.accounts.find((x) => x.id === acct.id), { name, holder: v.holder.trim(), title: auto && (!v.title || v.title === acct.title) ? `${name} (${v.holder.trim()})` : v.title || `${name} (${v.holder.trim()})` }); }
+      });
+      toast(isNew ? 'Account added' : 'Account updated');
+    },
+    onDelete: isNew ? null : () => {
+      if (data.ledger.some((e) => e.acct === acct.id)) { toast('This account has transactions, so it cannot be deleted.', 'bad'); return false; }
+      mutate((d) => { d.accounts = d.accounts.filter((x) => x.id !== acct.id); });
+    },
+  });
+}
 function accounts() {
-  const { all } = S;
+  const { all, data } = S;
   const wrap = h('div');
   wrap.append(section('Bank accounts & cash',
     table([
-      { label: 'Account', get: (b) => `${b.name} · ${b.holder}` },
+      { label: 'Account', host: true, get: (b) => `${b.name} · ${b.holder}` },
       { label: 'Balance', cls: 'r', get: (b) => money(b.balance), total: () => money(all.cashTotal) },
-      { label: 'Last entry', get: (b) => dateStr(b.lastDate) },
+      { label: 'Last entry', mob: 'under', mlabel: 'last ', get: (b) => dateStr(b.lastDate) },
+      ...(canEdit() ? [{ label: '', cls: 'r', render: (b) => h('button', { class: 'small', title: 'Edit account', onclick: (e) => { e.stopPropagation(); accountForm(data.accounts.find((x) => x.id === b.id)); } }, 'Edit') }] : []),
     ], all.banks, { footer: { label: 'Total cash' }, onRow: (b) => openLedger({ acct: b.id }) }),
-    null));
+    canEdit() ? [btn('Add account', () => accountForm(), 'primary')] : null));
+  wrap.append(h('p', { class: 'note' }, 'Tap an account to see its transactions. Balances come from the transactions, so to correct a balance add or edit a transaction.'));
   return wrap;
 }
 
@@ -150,22 +189,25 @@ function ledger() {
   const sorted = data.ledger.slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.id || 0) - (b.id || 0)));
   const withBal = sorted.map((e) => { const b = (bal.get(e.acct) || 0) + (e.credit || 0) - (e.debit || 0); bal.set(e.acct, b); return { ...e, balance: b }; });
   const q = fText.toLowerCase();
-  let rows = withBal.filter((e) => (fAcct === 'all' || e.acct === fAcct) && (fMonth === 'all' || C.monthKey(e.date) === fMonth) && (!q || (e.desc + ' ' + e.category).toLowerCase().includes(q)));
+  const inKind = (e) => fKind === 'all' || (fKind === 'income' ? kindOfCat(e.category) === 'income' && e.credit > 0 : kindOfCat(e.category) === fKind && e.debit > 0);
+  let rows = withBal.filter((e) => (fAcct === 'all' || e.acct === fAcct) && (fMonth === 'all' || C.monthKey(e.date) === fMonth) && inKind(e) && (!q || (e.desc + ' ' + e.category).toLowerCase().includes(q)));
   rows.reverse();
   const total = rows.length, credit = rows.reduce((a, e) => a + (e.credit || 0), 0), debit = rows.reduce((a, e) => a + (e.debit || 0), 0);
   const acctName = new Map(data.accounts.map((a) => [a.id, `${a.name} · ${a.holder}`]));
+  const KINDS = [['all', 'All'], ['expense', 'Expenses'], ['investment', 'Investments'], ['income', 'Income']];
+  const seg = h('nav', { class: 'seg', 'aria-label': 'Show' }, KINDS.map(([k, l]) => h('a', { href: 'javascript:void 0', class: k === fKind ? 'on' : '', 'aria-selected': String(k === fKind), onclick: (e) => { e.preventDefault(); fKind = k; limit = 60; rerender(); } }, l)));
+  const tone = (e) => { const k = kindOfCat(e.category); return e.credit ? 'pos' : k === 'investment' ? 'inv' : k === 'expense' ? 'neg' : ''; };
+  const tbl = table([
+    { label: 'Date · account', render: (e) => h('div', null, h('div', { class: 'nm' }, dateStr(e.date)), h('div', { class: 'sub2' }, acctName.get(e.acct) || '')) },
+    { label: 'Description · category', render: (e) => h('div', null, h('div', { class: 'nm' }, e.desc), h('div', { class: 'sub2 ' + (kindOfCat(e.category) === 'investment' ? 'inv' : kindOfCat(e.category) === 'expense' ? 'neg' : kindOfCat(e.category) === 'income' ? 'pos' : '') }, e.category || 'No category')) },
+    { label: 'Amount · balance', cls: 'r', render: (e) => h('div', null, h('div', { class: 'b ' + tone(e) }, (e.credit ? '+ ' + money(e.credit) : '− ' + money(e.debit))), h('div', { class: 'sub2' }, 'bal ' + money(e.balance))) },
+  ], rows.slice(0, limit), { onRow: canEdit() ? (e) => txnForm(data.ledger.find((x) => x.id === e.id)) : null, empty: 'No transactions match these filters.' });
+  const t0 = tbl.querySelector('table'); if (t0) t0.classList.add('compact');
+  const label = fKind === 'income' ? 'received' : fKind === 'all' ? 'paid out' : 'paid out';
   wrap.append(section('Transactions',
-    h('div', null, bar,
-      h('p', { class: 'summary-line' }, `${num(total)} entries · received `, h('b', { class: 'pos' }, money(credit)), ' · paid out ', h('b', null, money(debit))),
-      table([
-        { label: 'Date', mob: 'under', get: (e) => dateStr(e.date) },
-        { label: 'Description', host: true, get: (e) => e.desc },
-        { label: 'Category', mob: 'under', get: (e) => e.category },
-        { label: 'Account', mob: 'under', get: (e) => acctName.get(e.acct) },
-        { label: 'Out', cls: 'r', render: (e) => (e.debit ? h('span', { class: kindOfCat(e.category) === 'investment' ? 'inv' : kindOfCat(e.category) === 'expense' ? 'neg' : '' }, money(e.debit)) : '') },
-        { label: 'In', cls: 'r', render: (e) => (e.credit ? h('span', { class: 'pos' }, money(e.credit)) : '') },
-        { label: 'Balance', mob: 'under', mlabel: 'bal ', cls: 'r', get: (e) => money(e.balance) },
-      ], rows.slice(0, limit), { onRow: canEdit() ? (e) => txnForm(data.ledger.find((x) => x.id === e.id)) : null, empty: 'No transactions match these filters.' }),
+    h('div', null, h('div', { class: 'filters' }, seg), bar,
+      h('p', { class: 'summary-line' }, `${num(total)} entries`, fKind === 'all' || fKind === 'income' ? [' · received ', h('b', { class: 'pos' }, money(credit))] : null, fKind !== 'income' ? [' · ' + (fKind === 'all' ? 'paid out ' : fKind === 'investment' ? 'invested ' : 'spent '), h('b', { class: fKind === 'investment' ? 'inv' : fKind === 'expense' ? 'neg' : '' }, money(debit))] : null),
+      tbl,
       total > limit ? btn(`Show more (${total - limit} left)`, () => { limit += 100; rerender(); }, 'wide') : null),
     null));
   return wrap;
@@ -242,16 +284,17 @@ export function savingsTab() {
         { label: 'Matures', mob: 'under', mlabel: 'matures ', get: (s) => dateStr(s.maturityDate) },
       ], list, { footer: { label: 'Total' }, onRow: openSaving, empty: 'No accounts of this kind.' }),
       canEdit() && title === 'Chits' ? [btn('Add savings account', () => savingForm(), 'primary')] : null));
-    if (title === 'Chits') wrap.append(h('p', { class: 'note' }, 'XIRR is the real yearly return worked out from the dates and amounts you paid. For a running chit it is only an estimate and needs “Expected payout” in the account. Close a chit with the amount you actually received to see its actual XIRR.'));
+    if (title === 'Chits') wrap.append(h('p', { class: 'note' }, 'For a running chit the XIRR (marked ≈) is an estimate: it uses the “Expected payout” if you entered one, otherwise the assumed yearly rate. When the chit ends, press “Close it”, enter the date you received the money and the amount you actually got after commission, and the real XIRR appears here and under Closed.'));
   }
   return wrap;
 }
-const xirrCell = (s) => (s.xirr == null ? h('span', { class: 'muted' }, '–') : h('span', { class: posNeg(s.xirr), title: s.xirrKind === 'estimate' ? 'Estimate from your expected payout' : 'Actual, from the closing amount' }, (s.xirrKind === 'estimate' ? '≈ ' : '') + pct(s.xirr, 1)));
+const xirrCell = (s) => (s.xirr == null ? h('span', { class: 'muted' }, '–') : h('span', { class: posNeg(s.xirr), title: s.xirrKind !== 'estimate' ? 'Actual, from the closing amount' : s.xirrBasis === 'rate' ? 'Estimate: the assumed yearly rate (no expected payout entered)' : 'Estimate from your expected payout' }, (s.xirrKind === 'estimate' ? '≈ ' : '') + pct(s.xirr, 1)));
 function closeSaving(sv) {
   const paid = C.savingPrincipal(sv);
   closeForm({
     title: 'Close ' + sv.name, amount: sv.payout || paid, desc: `${sv.type} closed: ${sv.name}`,
-    hint: 'Suggested: the expected payout if you entered one, otherwise what you paid in. Change it to the amount you actually got.',
+    dateLabel: 'Money received on', amountLabel: 'Amount you received, after commission (₹)',
+    hint: 'Suggested: the expected payout if you entered one, otherwise what you paid in. Change it to what actually reached you; the real XIRR is worked out from this date and amount.',
     apply: (d, v, lid) => { const t = d.savings.find((x) => x.id === sv.id); t.closed = { date: v.date, amount: v.amount, acct: v.acct || '', ledgerId: lid, note: v.note || '' }; },
   });
 }

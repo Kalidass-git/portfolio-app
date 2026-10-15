@@ -24,12 +24,12 @@ export function removeCredit(d, ledgerId) { if (ledgerId) d.ledger = d.ledger.fi
  * title, name: shown to the user. amount: suggested money received. extra: more form fields.
  * apply(d, v, ledgerId) runs inside mutate() and must set `closed` on the item.
  */
-export function closeForm({ title, amount, hint, extra = [], extraValue = {}, apply, desc }) {
+export function closeForm({ title, amount, hint, extra = [], extraValue = {}, apply, desc, dateLabel = 'Closed on', amountLabel = 'Amount received (₹)' }) {
   formDialog({
     title, saveLabel: 'Close it', value: { date: C.todayISO(), amount: Math.round(amount || 0), acct: S.data.accounts[0] ? S.data.accounts[0].id : '', note: '', ...extraValue },
     fields: [
-      { key: 'date', label: 'Closed on', type: 'date', required: true },
-      { key: 'amount', label: 'Amount received (₹)', type: 'number', required: true, hint: hint || 'Suggested from your records. Change it to what you actually got.' },
+      { key: 'date', label: dateLabel, type: 'date', required: true },
+      { key: 'amount', label: amountLabel, type: 'number', required: true, hint: hint || 'Suggested from your records. Change it to what you actually got.' },
       ...extra,
       { key: 'acct', label: 'Add the money to', type: 'select', options: bankOptions() },
       { key: 'note', label: 'Note (optional)', type: 'text' },

@@ -227,8 +227,7 @@ export function render() {
     table([
       { label: 'Date', mob: 'under', get: (p) => dateStr(p.date) }, { label: 'What', host: true, get: (p) => p.desc },
       { label: 'Grams', cls: 'r', get: (p) => dec(p.grams, 2), total: () => dec(g.main.grams, 2) },
-      { label: 'Paid', mob: 'under', mlabel: 'paid ', cls: 'r', get: (p) => money(p.amount), total: () => money(g.main.invested) },
-      { label: 'Rate paid / g', mob: 'under', mlabel: 'rate ', cls: 'r', get: (p) => (p.grams ? money(p.amount / p.grams) : '–') },
+      { label: 'Paid · rate / g', cls: 'r', render: (p) => h('div', null, h('div', { class: 'b' }, money(p.amount)), h('div', { class: 'sub2' }, p.grams ? money(p.amount / p.grams) + ' / g' : '–')), total: () => money(g.main.invested) },
       { label: 'Value now', cls: 'r', get: (p) => money(p.grams * g.rate), total: () => money(g.main.value) },
       { label: 'Gain', mob: 'under', mlabel: 'gain ', cls: 'r', render: (p) => gainText(p.grams * g.rate - p.amount), total: () => money(g.main.gain) },
     ], data.gold.purchases.slice().reverse().map((p) => p), { footer: { label: 'Total' }, onRow: canEdit() ? (p) => purchaseForm(data.gold.purchases.find((x) => x.id === p.id)) : null }),

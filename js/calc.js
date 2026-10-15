@@ -92,8 +92,10 @@ export function savingXirr(sv, asOf) {
     let d = ents[ents.length - 1].date;
     for (let i = 0; i < left; i++) { d = addMonths(d, 1); f.push({ t: toMs(d), amount: -avg }); }
     f.push({ t: toMs(sv.maturityDate), amount: sv.payout });
-    return { xirr: xirr(f), xirrKind: 'estimate' };
+    return { xirr: xirr(f), xirrKind: 'estimate', xirrBasis: 'payout' };
   }
+  // no expected payout: the assumed yearly rate stands in for the return
+  if (sv.rate > 0) return { xirr: sv.rate, xirrKind: 'estimate', xirrBasis: 'rate' };
   return {};
 }
 /** Return on a closed bond, deposit or loan: money in, coupons while it lasted (assumed paid on time), money back. */
@@ -240,7 +242,7 @@ export function computeAll(data, opts = {}) {
     for (const k of keys) for (const x of mf.book.flows.get(k)) f.push({ t: toMs(x.date), amount: x.amount });
     const val = covered.reduce((a, m) => a + m.current, 0);
     if (val > 0) f.push({ t: toMs(asOf), amount: val });
-    mf.xirr = data.mutualFunds.some((m) => m.opening) ? null : xirr(f);
+    mf.xirr = covered.some((m) => data.mutualFunds.some((o) => o.id === m.id && o.opening)) || !covered.length ? null : xirr(f);
     mf.xflows = mf.xirr == null ? null : f;
     mf.realized = mf.book.holdings.reduce((a, h) => a + h.realized, 0);
   }
@@ -628,6 +630,20 @@ export function returns(data, all) {
   add('EPF & PPF', ems.flatMap((m) => m.flows.slice(0, -1)), sum(ems, (m) => m.value), put,
     'At the interest rates declared each year' + (passbook != null ? `; the interest credited in your entries works out to ${(passbook * 100).toFixed(1)}%` : ''));
   const er = out[out.length - 1]; er.value = recorded; er.gain = recorded - put; er.ret = put ? (recorded - put) / put : null; er.passbookXirr = passbook;
+  // Chits, insurance, recurring deposits and other savings: payments out, an estimated value today.
+  // The estimate uses the XIRR from the expected payout when one is entered, otherwise the assumed yearly rate. Closing a chit gives the real figure.
+  const cs = all.savings.filter((s) => s.type !== 'EPF' && s.type !== 'PPF' && s.entries.some((e) => e.amount > 0 && e.date));
+  if (cs.length) {
+    const flows = [], rate = (s) => (s.xirr != null && isFinite(s.xirr) ? s.xirr : s.rate || 0);
+    let est = 0, paid = 0;
+    for (const s of cs) for (const e of s.entries) {
+      if (!(e.amount > 0) || !e.date) continue;
+      flows.push({ t: toMs(e.date), amount: -e.amount });
+      est += e.amount * Math.pow(1 + rate(s), Math.max(0, asOf - toMs(e.date)) / DAY / 365); paid += e.amount;
+    }
+    add('Chits & savings', flows, est, paid, 'Estimated from each expected payout, or the assumed yearly rate. Close a chit with the amount received to see its real return');
+    out[out.length - 1].estimated = true;
+  }
   // Equity: no purchase dates in the workbook, so only absolute return
   out.push({ name: 'Stocks & ETFs', invested: all.stocks.invested, value: all.stocks.current, gain: all.stocks.pl, ret: all.stocks.ret, xirr: all.stocks.xirr ?? null, flows: all.stocks.xirr != null ? flowsFor(all.stocks.eq, [...all.stocks.eq.flows.keys()], all.stocks.current, asOf) : null, note: all.stocks.eq ? 'XIRR from your imported trades, including sold shares and dividends' : 'Import your Groww history to get XIRR' });
   out.push({ name: 'Mutual funds', invested: all.mf.invested, value: all.mf.current, gain: all.mf.pl, ret: all.mf.ret, xirr: all.mf.xirr ?? null, flows: all.mf.xflows || null, note: all.mf.book ? 'XIRR from your imported transactions' : 'Import your Groww history to get XIRR' });
@@ -651,7 +667,7 @@ function closedFlows(all) {
  * because those are long, steady savings and pull the figure down.
  */
 export function overallXirr(data, all, rets) {
-  const covered = rets.filter((r) => r.xirr != null && r.flows);
+  const covered = rets.filter((r) => r.xirr != null && r.flows && !r.estimated);   // estimates built from an assumed rate stay out of the headline figure
   const closed = closedFlows(all);
   const merged = covered.flatMap((r) => r.flows).concat(closed);
   const noPf = covered.filter((r) => !/^EPF/.test(r.name)).flatMap((r) => r.flows).concat(closed);

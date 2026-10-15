@@ -190,11 +190,11 @@ function returnsCard(data, all, rets, cov) {
     return {
       title: r.name, sub: `${compact(r.invested)} in → ${compact(r.value)} now`,
       value: h('span', { class: tone(r.gain) }, `${r.gain >= 0 ? '▲' : '▼'} ${compact(Math.abs(r.gain))}`),
-      valueSub: [showRet ? pct(r.ret) : null, r.xirr == null ? null : `XIRR ${pct(r.xirr)}`].filter(Boolean).join(' · ') || null,
+      valueSub: [showRet ? pct(r.ret) : null, r.xirr == null ? null : `XIRR ${r.estimated ? '≈ ' : ''}${pct(r.xirr)}`].filter(Boolean).join(' · ') || null,
     };
   });
   return section('How your investments did', h('div', null, rowList(items),
-    h('p', { class: 'note' }, 'XIRR is the yearly return that accounts for when each rupee went in. It needs dated cash flows, so shares and funds show plain return until buy dates are added. XIRR rows cover ' + pct(cov.coverage, 0) + ' of your assets.' + (cov.xirr != null ? ' Overall XIRR across everything with dates is ' + pct(cov.xirr, 1) + (cov.xirrNoPf != null ? ' (' + pct(cov.xirrNoPf, 1) + ' without EPF and PPF)' : '') + '. It is money-weighted: long-held money, such as EPF at a steady rate, counts for more than newer money.' : '') + ' Bond and lending XIRR assume coupons arrive on schedule.')));
+    h('p', { class: 'note' }, 'XIRR is the yearly return that accounts for when each rupee went in. It needs dated cash flows, so shares and funds show plain return until buy dates are added. XIRR rows cover ' + pct(cov.coverage, 0) + ' of your assets.' + (cov.xirr != null ? ' Overall XIRR across everything with dates is ' + pct(cov.xirr, 1) + (cov.xirrNoPf != null ? ' (' + pct(cov.xirrNoPf, 1) + ' without EPF and PPF)' : '') + '. It is money-weighted: long-held money, such as EPF at a steady rate, counts for more than newer money.' : '') + ' Bond and lending XIRR assume coupons arrive on schedule. “≈” marks an estimate from an assumed rate (chits and savings); it is left out of the overall figure until the chit is closed with the real amount.')));
 }
 
 function comingUp(data, all) {

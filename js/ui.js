@@ -87,7 +87,7 @@ export function dialog(title, body, actions = []) {
 }
 export function confirmDialog(message, okLabel = 'Delete') {
   return new Promise((res) => {
-    dialog('Please confirm', h('p', null, message), [
+    dialog('Please confirm', h('div', null, message && message.nodeType ? message : h('p', null, message)), [
       { label: 'Cancel', onclick: (c) => (c(), res(false)) },
       { label: okLabel, class: 'danger', onclick: (c) => (c(), res(true)) },
     ]);
@@ -158,7 +158,20 @@ export function formDialog({ title, fields, value = {}, onSave, onDelete, extraA
     if (onSave(vals) !== false) close();
   };
   const actions = [{ label: 'Cancel', onclick: (c) => c() }];
-  if (onDelete) actions.push({ label: 'Delete', class: 'danger', onclick: async (c) => { if (await confirmDialog(deleteMessage)) { if (onDelete() !== false) c(); } } });
+  // The confirmation names what is about to go, so a wrong tap is easy to spot.
+  const summary = () => {
+    const rows = [];
+    for (const f of fields) {
+      if (f.type === 'checkbox' || !visible(f)) continue;
+      const el = inputs[f.key]; let v = el.value;
+      if (el.tagName === 'SELECT') v = el.selectedOptions[0] ? el.selectedOptions[0].textContent : '';
+      if (v === '' || v == null) continue;
+      rows.push(h('li', null, h('span', { class: 'muted' }, f.label.replace(/\s*\(.*\)\s*$/, '') + ': '), String(v).slice(0, 80)));
+      if (rows.length >= 5) break;
+    }
+    return h('div', null, h('p', null, deleteMessage), rows.length ? h('ul', { class: 'del-sum' }, rows) : null, h('p', { class: 'note' }, 'A restore point is saved every day, so a mistake can be undone from Settings.'));
+  };
+  if (onDelete) actions.push({ label: 'Delete', class: 'danger', onclick: async (c) => { if (await confirmDialog(summary(), 'Yes, delete')) { if (onDelete() !== false) c(); } } });
   for (const a of extraActions) actions.push({ label: a.label, class: a.class || '', onclick: (c) => { c(); a.onclick(); } });
   actions.push({ label: saveLabel, class: 'primary', onclick: submit });
   const d = dialog(title, form, actions);
@@ -185,7 +198,7 @@ export function icon(name) {
 }
 /** Which icon suits a button label, if any. Buttons without a clear icon stay as words. */
 const iconFor = (l) => (/^(Add|Record|Buy)\b/.test(l) ? 'plus' : /^Sell\b/.test(l) ? 'minus' : /^Transfer\b/.test(l) ? 'swap' : /^(Edit|Change)\b/.test(l) ? 'edit'
-  : /^Download\b/.test(l) ? 'download' : /^Upload\b/.test(l) ? 'upload' : /^(Refresh|Sync)\b/.test(l) ? 'refresh' : /^Copy\b/.test(l) ? 'copy' : null);
+  : /^Download\b/.test(l) ? 'download' : /^Upload\b/.test(l) ? 'upload' : /^(Refresh|Sync)\b/.test(l) ? 'refresh' : /^Fetch\b/.test(l) ? 'download' : /^Copy\b/.test(l) ? 'copy' : null);
 /** Button. In page headers on a phone, buttons with an icon show only the icon (keep: true keeps the words). */
 export const btn = (label, onclick, cls = '', { keep = false } = {}) => {
   const ic = keep ? null : iconFor(label);

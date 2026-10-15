@@ -1,12 +1,44 @@
 // Shares & funds → Dividends: what each company paid, this year and all time.
 import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
-import { h, money, dateStr, section, stat, table, btn, formDialog, canEdit, toast, setOptions } from '../ui.js';
+import { h, money, dateStr, section, stat, table, btn, formDialog, canEdit, toast, setOptions, dialog, num } from '../ui.js';
+import { findDividends } from '../divfetch.js';
 import { hbars, barChart } from '../charts.js';
 import { symKey } from '../trades.js';
 
 let yearSel = null;
 const rerender = () => window.dispatchEvent(new Event('rerender'));
+let fetching = false;
+
+/** Look up dividends automatically, show what was found, and add them on confirmation. */
+async function fetchNow(button) {
+  if (fetching) return;
+  fetching = true; button.disabled = true; button.classList.add('busy');
+  const lb = button.querySelector('.lb'), was = lb && lb.textContent;
+  try {
+    const r = await findDividends((m) => { if (lb) lb.textContent = m; });
+    mutate((d) => { d.settings.dividendsCheckedAt = new Date().toISOString(); });
+    if (!r.found.length) { toast(`Checked ${r.checked} companies. No new dividends found.`); return; }
+    const total = r.found.reduce((a, x) => a + x.amount, 0);
+    const body = h('div', null,
+      h('p', null, h('b', null, `${r.found.length} new dividend${r.found.length === 1 ? '' : 's'}`), ` worth ${money(total)} before tax, across ${new Set(r.found.map((x) => x.symbol)).size} companies.`),
+      h('p', { class: 'note' }, 'Worked out from the dividend per share on the ex-date and the shares you held then. The money reaches your bank a few weeks later, and tax may be deducted, so the amount you receive can be a little lower. Edit any entry afterwards to match your bank.'),
+      table([
+        { label: 'Company', host: true, get: (x) => x.name },
+        { label: 'Ex-date', mob: 'under', get: (x) => dateStr(x.date) },
+        { label: 'Per share', mob: 'under', mlabel: '₹', cls: 'r', get: (x) => String(x.dps) },
+        { label: 'Shares', mob: 'hide', cls: 'r', get: (x) => num(x.qty) },
+        { label: 'Amount', cls: 'r', get: (x) => money(x.amount), total: () => money(total) },
+      ], r.found.slice(0, 200), { footer: { label: 'Total' } }),
+      Object.keys(r.errors).length ? h('p', { class: 'note' }, `Not found for ${Object.keys(r.errors).length} symbol${Object.keys(r.errors).length === 1 ? '' : 's'} (for example sold long ago or renamed): ${Object.keys(r.errors).slice(0, 8).join(', ')}.`) : null);
+    dialog('Dividends found', body, [
+      { label: 'Cancel', onclick: (c) => c() },
+      { label: `Add ${r.found.length}`, class: 'primary', onclick: (c) => { c(); mutate((d) => { d.corporateActions = d.corporateActions || []; let id = Math.max(0, ...d.corporateActions.map((a) => Number(String(a.id).replace(/\D/g, '')) || 0)); for (const x of r.found) d.corporateActions.push({ id: 'a' + ++id, type: 'dividend', symbol: x.symbol, name: x.name, date: x.date, amount: x.amount, auto: true }); }); toast(`${r.found.length} dividends added`); } },
+    ]);
+  } catch (e) { toast(e.message, 'bad'); }
+  finally { fetching = false; button.disabled = false; button.classList.remove('busy'); if (lb && was) lb.textContent = was; }
+}
+const fetchBtn = () => (canEdit() ? btn('Fetch dividends', (e) => fetchNow(e.currentTarget)) : null);
 const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 
 /** Every dividend you have recorded, with a readable company name. */
@@ -63,6 +95,7 @@ export function render(root) {
   if (!yearSel || (yearSel !== 'all' && !years.includes(yearSel))) yearSel = thisYear;
   const inYear = list.filter((d) => d.year === thisYear), total = list.reduce((a, d) => a + d.amount, 0), yTotal = inYear.reduce((a, d) => a + d.amount, 0);
   const add = canEdit() ? btn('Add dividend', () => dividendForm(), 'primary') : null;
+  const checked = data.settings && data.settings.dividendsCheckedAt;
 
   root.append(h('div', { class: 'stats' },
     stat('Received in ' + thisYear, money(yTotal), `${inYear.length} payment${inYear.length === 1 ? '' : 's'}`),
@@ -71,7 +104,7 @@ export function render(root) {
 
   if (!list.length) {
     root.append(section('Dividends', h('div', null, h('p', { class: 'empty' }, 'No dividends recorded yet.'),
-      h('p', { class: 'note' }, 'Add each dividend as it reaches your bank (company, date, amount). This page then shows the totals and which companies pay you most.')), add ? [add] : null));
+      h('p', { class: 'note' }, 'Press “Fetch dividends” to find them from your buy history, or add each one by hand (company, date, amount). This page then shows the totals and which companies pay you most.')), [fetchBtn(), add].filter(Boolean)));
     return;
   }
   const chart = (rows, label) => (rows.length ? hbars(rows.slice(0, 10).map((r) => ({ label: r.name, value: r.amount })), { fmt: money, colorIndex: 2 }) : h('p', { class: 'empty' }, 'No dividends ' + label + '.'));
@@ -91,5 +124,6 @@ export function render(root) {
       { label: 'Company', host: true, get: (d) => d.name },
       { label: 'Date', mob: 'under', get: (d) => dateStr(d.date) },
       { label: 'Amount', cls: 'r', get: (d) => money(d.amount), total: () => money(sum) },
-    ], shown, { footer: { label: 'Total' }, onRow: canEdit() ? (d) => dividendForm(list.find((x) => x.id === d.id)) : null, empty: 'No dividends in this year.' })), add ? [add] : null));
+    ], shown, { footer: { label: 'Total' }, onRow: canEdit() ? (d) => dividendForm(list.find((x) => x.id === d.id)) : null, empty: 'No dividends in this year.' }),
+    h('p', { class: 'note' }, 'Dividends found automatically use the ex-date and are before tax; those you type in are as received. ' + (checked ? 'Last checked ' + new Date(checked).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) + '.' : ''))), [fetchBtn(), add].filter(Boolean)));
 }

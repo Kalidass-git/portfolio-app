@@ -7,6 +7,9 @@ import { insights, sold } from './equity-insights.js';
 import * as dividends from './dividends.js';
 import * as importView from './equity-import.js';
 import * as holdingView from './equity-holding.js';
+import * as fundView from './equity-fund.js';
+import { fundForm, linkFund } from './equity-fund.js';
+import { xirrFor, symKey } from '../trades.js';
 import { stockEditForm } from './equity-holding.js';
 import { tradeForm, tradeMode } from './eqshared.js';
 import { route } from '../ui.js';
@@ -31,28 +34,6 @@ function stockForm(s, kind) {
     onSave: (v) => { if (!v.buyDate) delete v.buyDate; mutate((d) => { if (isNew) d.stocks.push({ id: nextId('s', d.stocks), ...v }); else { const t = d.stocks.find((x) => x.id === s.id); if (v.price !== t.price) delete t.prevClose; Object.assign(t, v); } }); },
     onDelete: isNew ? null : () => mutate((d) => { d.stocks = d.stocks.filter((x) => x.id !== s.id); }),
   });
-}
-function fundForm(m) {
-  const isNew = !m;
-  formDialog({
-    title: isNew ? 'Add mutual fund' : 'Edit ' + m.name, value: m || {},
-    fields: [
-      { key: 'name', label: 'Scheme name', required: true }, { key: 'folio', label: 'Folio number' },
-      { key: 'invested', label: 'Amount invested (₹)', type: 'number', required: true }, { key: 'units', label: 'Units held', type: 'number', required: true },
-      { key: 'nav', label: 'Last NAV (₹)', type: 'number', required: true }, { key: 'schemeCode', label: 'Scheme code (for live NAV)', hint: 'Use “Link to live NAV” on the fund row to find it.' },
-    ],
-    onSave: (v) => mutate((d) => { if (isNew) d.mutualFunds.push({ id: nextId('m', d.mutualFunds), ...v }); else { const t = d.mutualFunds.find((x) => x.id === m.id); if (v.nav !== t.nav) delete t.prevNav; Object.assign(t, v); } }),
-    onDelete: isNew ? null : () => mutate((d) => { d.mutualFunds = d.mutualFunds.filter((x) => x.id !== m.id); }),
-  });
-}
-async function linkFund(m) {
-  const body = h('div', null, h('p', null, 'Looking for “' + m.name + '”…'));
-  const dlg = dialog('Link to live NAV', body, [{ label: 'Close', onclick: (c) => c() }]);
-  try {
-    const list = await prices.guessScheme(m.name);
-    body.replaceChildren(h('p', { class: 'note' }, 'Pick the scheme that matches your fund (direct plan, growth option).'),
-      list.length ? h('ul', { class: 'pick' }, list.map((s) => h('li', null, h('button', { class: 'wide', onclick: () => { mutate((d) => { d.mutualFunds.find((x) => x.id === m.id).schemeCode = String(s.schemeCode); }); dlg.close(); toast('Linked. Refresh prices to fetch the NAV.'); } }, s.schemeName, h('small', null, ' code ' + s.schemeCode))))) : h('p', { class: 'empty' }, 'No match found. Enter the scheme code by hand when editing the fund.'));
-  } catch (e) { body.replaceChildren(h('p', { class: 'form-error' }, 'Could not search funds: ' + e.message)); }
 }
 function sipForm(p) {
   const isNew = !p;
@@ -108,6 +89,16 @@ const groups = () => {
   const { all } = S;
   return { shares: totalsOf(all.stocks.items.filter((x) => !isEtf(x))), etfs: totalsOf(all.stocks.items.filter(isEtf)), funds: totalsOf(all.mf.items) };
 };
+/** Yearly return of a group of shares or ETFs, from the dated trades. Null when there are no dated trades (hand-typed holdings). */
+function groupXirr(items) {
+  const eq = S.all.stocks.eq;
+  if (!eq || !items.length) return null;
+  const syms = items.map((x) => symKey(x.symbol));
+  if ((S.data.trades || []).some((t) => t.src === 'opening' && syms.includes(symKey(t.symbol)))) return null;
+  const v = xirrFor(eq, syms, items.reduce((a, x) => a + x.current, 0), S.all.asOf);
+  return v == null || !isFinite(v) ? null : v;
+}
+const xiText = (v) => (v == null ? null : h('span', null, ' · XIRR ', h('span', { class: posNeg(v) }, pct(v, 1))));
 const GROUP_LABEL = { shares: 'Shares', etfs: 'ETFs', funds: 'Mutual funds' };
 
 function today(root) {
@@ -149,6 +140,11 @@ function today(root) {
 const signed = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + money(Math.abs(n));
 const arrow = (n) => (n > 0 ? '▲ ' : n < 0 ? '▼ ' : '');
 const sub2 = (...x) => h('div', { class: 'sub2' }, ...x);
+/** Which group an item belongs to, and its share of that group only (a share against all shares, a fund against all funds). */
+const isFund = (x) => x.units !== undefined && x.symbol === undefined;
+const groupName = (x) => (isFund(x) ? 'funds' : isEtf(x) ? 'ETFs' : 'shares');
+const groupBase = (x) => { const g = groups(); return isFund(x) ? g.funds.current : isEtf(x) ? g.etfs.current : g.shares.current; };
+const expo = (x) => { const b = groupBase(x); return b > 0 ? x.current / b : 0; };
 /** Compact cells: two lines each, colour-coded, so a row fits a phone without sideways scrolling. */
 function holdCols(kind, tot) {
   const fund = kind === 'fund';
@@ -160,12 +156,12 @@ function holdCols(kind, tot) {
     { label: 'Value (invested)', cls: 'r', render: (x) => h('div', null, h('div', { class: 'b' }, money(x.current)), sub2('(' + money(x.invested) + ')')) },
     { label: 'Gain · return', cls: 'r', render: (x) => h('div', null, h('div', { class: 'b ' + posNeg(x.pl) }, arrow(x.pl) + money(Math.abs(x.pl))),
       sub2(h('span', { class: posNeg(x.pl) }, (x.ret > 0 ? '+' : x.ret < 0 ? '−' : '') + pct(Math.abs(x.ret), 1)), x.xirr != null ? h('span', { class: 'xi' }, ' · XIRR ', h('span', { class: posNeg(x.xirr) }, pct(x.xirr, 1))) : null)) },
-    { label: 'Exposure', cls: 'r', mob: 'under', mlabel: 'exposure ', mu: (x) => pct(S.all.totalAssets ? x.current / S.all.totalAssets : 0, 1), render: (x) => h('span', { class: 'with-meter', title: 'Share of all your assets' }, meter(S.all.totalAssets ? Math.min(8, (x.current / S.all.totalAssets) * 40) : 0, 0), pct(S.all.totalAssets ? x.current / S.all.totalAssets : 0, 1)) },
+    { label: 'Exposure', cls: 'r', mob: 'under', mlabel: 'exposure ', mu: (x) => pct(expo(x), 1), render: (x) => h('span', { class: 'with-meter', title: 'Share of all your ' + groupName(x) }, meter(Math.min(8, expo(x) * 40), 0), pct(expo(x), 1)) },
   ];
 }
 const compactTable = (wrap) => { const t = wrap.querySelector('table'); if (t) t.classList.add('compact'); return wrap; };
-const SORTS = [['current', 'Value'], ['exposure', 'Exposure (share of all assets)'], ['day', 'Today'], ['ret', 'Return %'], ['pl', 'Gain in ₹'], ['xirr', 'XIRR'], ['name', 'Name']];
-const sortItems = (items) => items.slice().sort((a, b) => (sortKey === 'name' ? a.name.localeCompare(b.name) : sortKey === 'ret' ? b.ret - a.ret : sortKey === 'pl' ? b.pl - a.pl
+const SORTS = [['current', 'Value'], ['exposure', 'Exposure (share within its group)'], ['day', 'Today'], ['ret', 'Return %'], ['pl', 'Gain in ₹'], ['xirr', 'XIRR'], ['name', 'Name']];
+const sortItems = (items) => items.slice().sort((a, b) => (sortKey === 'name' ? a.name.localeCompare(b.name) : sortKey === 'exposure' ? expo(b) - expo(a) : sortKey === 'ret' ? b.ret - a.ret : sortKey === 'pl' ? b.pl - a.pl
   : sortKey === 'xirr' ? (b.xirr ?? -9) - (a.xirr ?? -9) : sortKey === 'day' ? (b.dayPct ?? -9) - (a.dayPct ?? -9) : b.current - a.current));
 const sortBox = () => h('label', { class: 'inline-label' }, 'Sort by ', h('select', { onchange: (e) => { sortKey = e.target.value; rerender(); } },
   SORTS.map(([v, l]) => h('option', { value: v, selected: v === sortKey }, l))));
@@ -184,7 +180,7 @@ function holdingsTab(root) {
   const seg = h('nav', { class: 'seg', 'aria-label': 'Show' }, [['all', 'Both'], ['shares', 'Shares only'], ['etfs', 'ETFs only']].map(([k, l]) => h('a', { href: '#/equity/holdings' + (k === 'all' ? '' : '?f=' + k), class: k === f ? 'on' : '', 'aria-selected': String(k === f) }, l + ' (' + (k === 'all' ? merged.items.length : gr[k].items.length) + ')')));
   root.append(h('div', { class: 'stats' },
     stat(label, money(g.current), `${g.items.length} holdings`),
-    stat('Invested', money(g.invested), h('span', null, gainText(g.pl), ' (', pct(g.ret), ')')),
+    stat('Invested', money(g.invested), h('span', null, gainText(g.pl), ' (', pct(g.ret), ')', xiText(groupXirr(g.items)))),
     stat('Today', g.dayCount ? h('span', { class: posNeg(g.day) }, signedMoney(g.day)) : '–', g.dayCount ? signedPct(g.dayPct) : 'refresh prices')));
   const items = sortItems(g.items);
   root.append(section(label, h('div', null,
@@ -199,13 +195,13 @@ function fundsTab(root) {
   const { data, all } = S, mf = all.mf;
   root.append(h('div', { class: 'stats' },
     stat('Mutual funds', money(mf.current), `${mf.items.length} funds`),
-    stat('Invested', money(mf.invested), h('span', null, gainText(mf.pl), ' (', pct(mf.ret), ')')),
+    stat('Invested', money(mf.invested), h('span', null, gainText(mf.pl), ' (', pct(mf.ret), ')', xiText(mf.xirr))),
     stat('Today', mf.dayCount ? h('span', { class: posNeg(mf.day) }, signedMoney(mf.day)) : '–', mf.dayCount ? signedPct(mf.dayPct) : 'refresh prices')));
   root.append(section('Mutual funds', h('div', null,
     tableTools(),
-    compactTable(table(holdCols('fund', mf.current), sortItems(mf.items), { onRow: canEdit() ? (m) => fundForm(data.mutualFunds.find((x) => x.id === m.id)) : null })),
+    compactTable(table(holdCols('fund', mf.current), sortItems(mf.items), { onRow: (m) => { location.hash = '#/equity/fund?id=' + encodeURIComponent(m.id); } })),
     totalRow(mf, 'Funds'),
-    h('p', { class: 'note' }, 'XIRR appears for funds with dated transactions imported from Groww.')),
+    h('p', { class: 'note' }, 'Tap a fund to see its buy history, record another buy or sell, and edit it. XIRR appears for funds with dated transactions (imported from Groww or recorded here).')),
     canEdit() ? [btn('Add fund', () => fundForm(), 'primary')] : null));
 }
 
@@ -250,15 +246,15 @@ function plannerBuys(data) {
     h('div', { class: 'stats' },
       stat('Bought in ' + monthLabel(planMonth), money(b.total), planned ? `plan ${money(planned)} · ${b.total >= planned ? 'on target' : money(planned - b.total) + ' to go'}` : `${b.items.length} purchases`),
       stat('Shares', money(b.shares), ''), stat('ETFs', money(b.etfs), ''), stat('Funds', money(b.funds), '')));
-  const months = lastMonths(cur, planSpan);
-  if (!Object.keys(buys).length) wrap.append(h('p', { class: 'note' }, 'Purchases appear here once your Groww files are imported or you add buys. Holdings entered by hand without dates are not counted.'));
-  else wrap.append(barChart({ names: ['Shares', 'ETFs', 'Funds'], fmt: money, groups: months.map((m) => { const x = buys[m] || {}; return { label: monthLabel(m).slice(0, 3) + (m.endsWith('-01') ? " '" + m.slice(2, 4) : ''), title: monthLabel(m) + ' · total ' + money(x.total || 0), values: [x.shares || 0, x.etfs || 0, x.funds || 0] }; }) }),
-    h('p', { class: 'note' }, 'Average per month over this period: ' + money(months.reduce((a, m) => a + ((buys[m] || {}).total || 0), 0) / months.length)));
   const rows = byName(b.items);
   wrap.append(table([
     { label: 'Bought', host: true, get: (r) => r.name }, { label: 'Type', mob: 'under', get: (r) => GROUP_NAME[r.group] }, { label: 'Times', mob: 'under', mlabel: 'times ', cls: 'r', get: (r) => String(r.count) },
     { label: 'Last on', mob: 'under', mlabel: 'last ', get: (r) => dateStr(r.last) }, { label: 'Amount', cls: 'r', get: (r) => money(r.amount), total: () => money(b.total) },
   ], rows, { footer: { label: 'Total' }, empty: 'No purchases recorded in this month.' }));
+  const months = lastMonths(cur, planSpan);
+  if (!Object.keys(buys).length) wrap.append(h('p', { class: 'note' }, 'Purchases appear here once your Groww files are imported or you add buys. Holdings entered by hand without dates are not counted.'));
+  else wrap.append(barChart({ names: ['Shares', 'ETFs', 'Funds'], fmt: money, groups: months.map((m) => { const x = buys[m] || {}; return { label: monthLabel(m).slice(0, 3) + (m.endsWith('-01') ? " '" + m.slice(2, 4) : ''), title: monthLabel(m) + ' · total ' + money(x.total || 0), values: [x.shares || 0, x.etfs || 0, x.funds || 0] }; }) }),
+    h('p', { class: 'note' }, 'Average per month over this period: ' + money(months.reduce((a, m) => a + ((buys[m] || {}).total || 0), 0) / months.length)));
   return section('Invested in ' + monthLabel(planMonth), wrap);
 }
 
@@ -266,6 +262,7 @@ export function render() {
   const { all, data } = S;
   const root = h('div', { class: 'page' });
   if (route().sub === 'holding') { holdingView.render(root); return root; }
+  if (route().sub === 'fund') { fundView.render(root); return root; }
   const rsub = route().sub;
   if (rsub === 'stocks' || rsub === 'etfs') location.replace('#/equity/holdings' + (rsub === 'etfs' ? '?f=etfs' : '?f=shares'));
   const tab = rsub === 'stocks' || rsub === 'etfs' ? 'holdings' : subTab(TABS.map((t) => t[0]));
@@ -280,14 +277,13 @@ export function render() {
     today(root);
     const g = groups();
     root.append(section('What you hold', h('div', { class: 'stats' },
-      ...['shares', 'etfs', 'funds'].map((k) => stat(GROUP_LABEL[k], money(g[k].current), h('span', null, 'invested ', money(g[k].invested), ' · ', gainText(g[k].pl), ' (', pct(g[k].ret), ')'))))));
+      ...['shares', 'etfs', 'funds'].map((k) => stat(GROUP_LABEL[k], money(g[k].current), h('span', null, 'invested ', money(g[k].invested), ' · ', gainText(g[k].pl), ' (', pct(g[k].ret), ')', xiText(k === 'funds' ? all.mf.xirr : groupXirr(g[k].items))))))));
   } else if (tab === 'holdings') {
     holdingsTab(root);
   } else if (tab === 'funds') {
     fundsTab(root);
   } else {
     const plans = data.sipPlans;
-    root.append(plannerBuys(data));
     const tot = plans.reduce((a, p) => a + p.monthly, 0), done = plans.reduce((a, p) => a + sipDone(p), 0);
     root.append(section('Plan for the month',
       h('div', null, table([
@@ -301,6 +297,7 @@ export function render() {
         h('p', { class: 'note' }, Object.keys(monthlyBuys(data)).length ? 'Done this month is read from your buy history (shares, ETFs and funds), so it follows every purchase you import or record. It resets by itself each month. Lines you set to manual keep the amount you typed.' : 'Done this month is the amount you type or mark. Once your buy history exists (Groww import), it is filled in from that automatically.'),
         (() => { const bd = planDone(plans, monthlyBuys(data), C.monthKey(S.all.asOf)); return bd.other > 0 ? h('p', { class: 'note' }, `Bought this month but not matching any line above: ${money(bd.other)}. Add a line for it, or set “Find its buys by” on the right line.`) : null; })()),
       canEdit() ? [btn('Refresh from history', () => { if (!Object.keys(monthlyBuys(data)).length) return toast('No buy history yet. Import your Groww files first.', 'bad'); mutate((d) => { const bd = planDone(d.sipPlans, monthlyBuys(d), C.monthKey(S.all.asOf)); for (const t of d.sipPlans) { t.manual = false; t.doneThisMonth = bd.byPlan.get(t.id) || 0; t.doneMonth = C.monthKey(S.all.asOf); } }); histDone = null; toast('Updated from your buy history'); }), btn('Add', () => sipForm(), 'primary')] : null));
+    root.append(plannerBuys(data));
   }
   return root;
 }

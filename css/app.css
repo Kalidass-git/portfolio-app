@@ -389,8 +389,13 @@ button.danger.primary-ish, dialog.sheet footer button.danger { border-color: var
 .ib .ic { display: inline-grid; } .ib .lb { margin-left: 7px; }
 .ib.busy .ico { animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 700px) {
-  .card-actions .ib .lb, .pagebar .ib .lb, .btn-row .ib .lb, .tbl-tools .ib .lb { display: none; }
-  .card-actions .ib, .pagebar .ib, .btn-row .ib, .tbl-tools .ib { width: 40px; padding: 0; }
+  /* only the small refresh buttons beside tabs and search stay icon-only; action buttons keep their words so they are easy to tap */
+  .pagebar > .ib .lb, .tbl-tools .ib .lb { display: none; }
+  .pagebar > .ib, .tbl-tools .ib { width: 42px; padding: 0; }
+  .card-head .card-actions { width: 100%; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; }
+  .card-actions button, .pagebar .btn-row button { min-height: 44px; justify-content: center; }
+  .card-actions .ib, .btn-row .ib { display: inline-flex; align-items: center; justify-content: center; }
+  .pagebar .btn-row { width: 100%; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; }
 }
 
 .ver { margin: 14px 12px 8px; font-size: .74rem; color: var(--muted); }
@@ -440,3 +445,32 @@ button.danger.primary-ish, dialog.sheet footer button.danger { border-color: var
   .rpt-tbl { width: calc(100% - 20px); margin: 0 10px; }
 }
 @media print { .no-print-pdf { display: none !important; } }
+
+/* ---------- collapsible side bar (desktop) ---------- */
+.side-toggle { display: none; }
+@media (min-width: 900px) {
+  #app { grid-template-columns: var(--side-w, 232px) 1fr; transition: grid-template-columns .18s ease; }
+  .brand { justify-content: space-between; }
+  .brand > span:not(.mark) { flex: 1 1 auto; }
+  .side-toggle { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; min-height: 0; border-radius: 8px; color: var(--muted); background: transparent; border: 1px solid transparent; }
+  .side-toggle:hover { background: var(--surface-2); color: var(--ink); }
+  .side a .t { white-space: nowrap; }
+  #app.side-min { --side-w: 66px; }
+  #app.side-min .side { padding: 18px 8px; overflow-x: hidden; }
+  #app.side-min .brand { flex-direction: column; gap: 10px; margin: 2px 0 14px; align-items: center; }
+  #app.side-min .brand > span:not(.mark), #app.side-min .side a .t, #app.side-min .side .grp, #app.side-min .side .ver { display: none; }
+  #app.side-min .side a { justify-content: center; padding: 10px 0; }
+  #app.side-min .side-toggle svg { transform: rotate(180deg); }
+}
+
+/* ---------- big screens: use the width ---------- */
+@media (min-width: 1500px) {
+  main { max-width: 1520px; padding-left: 36px; padding-right: 36px; }
+  .grid2 { gap: 18px; }
+}
+@media (min-width: 1800px) {
+  main { max-width: 1720px; }
+  .page > .grid2 { grid-template-columns: repeat(auto-fit, minmax(560px, 1fr)); }
+}
+
+.del-sum { margin: 6px 0 4px; padding: 8px 12px 8px 26px; background: var(--surface-2); border-radius: 8px; font-size: .92rem; } .del-sum li { margin: 2px 0; }

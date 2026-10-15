@@ -42,17 +42,22 @@ function shell() {
     h('nav', { class: 'tabbar', id: 'tabbar', 'aria-label': 'Main' }));
 }
 
+const sideMin = () => { try { return localStorage.getItem('pt.side') === 'min'; } catch { return false; } };
+function toggleSide() { const on = !document.getElementById('app').classList.contains('side-min'); document.getElementById('app').classList.toggle('side-min', on); try { localStorage.setItem('pt.side', on ? 'min' : 'full'); } catch { /* private mode */ } }
+
 function chrome() {
+  $('#app').classList.toggle('side-min', sideMin());
   const cur = routeName();
   const side = $('#side');
   const groups = [];
-  side.replaceChildren(h('div', { class: 'brand' }, h('span', { class: 'mark' }, '₹'), h('span', null, 'Family Wealth')));
+  side.replaceChildren(h('div', { class: 'brand' }, h('span', { class: 'mark' }, '₹'), h('span', null, 'Family Wealth'),
+    h('button', { class: 'side-toggle', type: 'button', 'aria-label': 'Collapse or expand the menu', title: 'Collapse or expand the menu', onclick: toggleSide }, icon('M15 6l-6 6 6 6'))));
   const list = h('ul');
   let lastGroup = null;
   for (const [k, r] of Object.entries(ROUTES)) {
     if (r.group && r.group !== lastGroup) list.append(h('li', { class: 'grp' }, r.group));
     lastGroup = r.group || null;
-    list.append(h('li', null, h('a', { href: '#/' + k, class: k === cur ? 'on' : '', 'aria-current': k === cur ? 'page' : null }, icon(r.icon), r.label)));
+    list.append(h('li', null, h('a', { href: '#/' + k, class: k === cur ? 'on' : '', title: r.label, 'aria-label': r.label, 'aria-current': k === cur ? 'page' : null }, icon(r.icon), h('span', { class: 't' }, r.label))));
   }
   side.append(list, h('p', { class: 'ver' }, 'Version ' + VERSION));
 
