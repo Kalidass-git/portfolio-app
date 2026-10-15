@@ -69,7 +69,6 @@ function holdingsTable(secs, rep, notes) {
     }
     tbl.append(tb);
   });
-  tbl.append(h('tfoot', null, h('tr', null, h('td'), h('td', null, 'Total'), h('td', { class: 'hide-sm' }), h('td', { class: 'r' }, money(rep.total)), h('td', { class: 'r hide-sm' }, '100%'), h('td', { class: 'r hide-sm' }, rep.monthly ? money(rep.monthly) : ''), h('td'))));
   return tbl;
 }
 

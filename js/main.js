@@ -10,6 +10,7 @@ import * as gold from './views/gold.js';
 import * as savings from './views/savings.js';
 import * as flow from './views/flow.js';
 import * as plan from './views/plan.js';
+import * as projector from './views/projector.js';
 import * as report from './views/report.js';
 import * as settings from './views/settings.js';
 
@@ -22,6 +23,7 @@ const ROUTES = {
   gold: { label: 'Gold & others', short: 'Gold & more', view: gold, tab: 'assets', group: 'Assets', icon: 'M12 3l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V7z' },
   flow: { label: 'Income & expenses', view: flow, tab: 'flow', icon: 'M4 6h16M4 12h10M4 18h6' },
   plan: { label: 'Plan', view: plan, tab: 'plan', icon: 'M5 19V9m7 10V5m7 14v-7' },
+  projector: { label: 'Wealth projector', short: 'Projector', view: projector, tab: 'plan', icon: 'M3 17l6-6 4 4 8-9M15 6h6v6' },
   report: { label: 'Family report', view: report, tab: 'report', icon: 'M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h7' },
   settings: { label: 'Settings', view: settings, tab: 'settings', icon: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM3 12h3m12 0h3M12 3v3m0 12v3' },
 };

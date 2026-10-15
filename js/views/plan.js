@@ -59,7 +59,7 @@ export function render() {
   const proj = C.projection(data, all);
   const root = h('div', { class: 'page' });
   const tab = subTab(TABS.map((t) => t[0]));
-  root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Plan views')));
+  root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Plan views'), h('a', { class: 'crosslink', href: '#/projector', title: 'Wealth projector' }, 'Wealth projector')));
 
   if (tab === 'year') year.render(root);
 

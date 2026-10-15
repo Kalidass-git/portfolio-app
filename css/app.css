@@ -477,3 +477,56 @@ button.danger.primary-ish, dialog.sheet footer button.danger { border-color: var
 
 @media (max-width: 700px) { .only-lg { display: none !important; } }
 @media (min-width: 701px) { .only-sm { display: none !important; } }
+
+/* ---------- Wealth projector ---------- */
+.crosslink { font-size: .85rem; color: var(--brand); text-decoration: none; padding: 6px 4px; white-space: nowrap; }
+.crosslink:hover { text-decoration: underline; }
+.outlook-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.outlook-bar .seg { flex: 1 1 320px; width: auto; }
+.ob-label { font-size: .8rem; color: var(--muted); }
+.seg-rate { opacity: .7; margin-left: 3px; font-size: .75em; }
+.outlook-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 10px; }
+.findings { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.findings li { padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.retro { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.retro textarea { width: 100%; min-height: 110px; }
+.check-inline { display: inline-flex; align-items: center; gap: 6px; font-size: .88rem; }
+details.more { margin-top: 10px; } details.more summary { cursor: pointer; color: var(--brand); font-size: .88rem; }
+@media (max-width: 640px) { .outlook-bar .seg { flex-basis: 100%; } .outlook-bar .seg a { padding: 7px 8px; } .seg-rate { display: none; } }
+
+/* ---------- Family report: large, easy-to-read print ---------- */
+@media print {
+  @page { size: A4; margin: 8mm; }
+  .rpt-1 .rpt-head { padding: 8px 14px; } .rpt-1 .rpt-head h1 { font-size: 20px; margin: 0; } .rpt-1 .rpt-head p { font-size: 12px; margin: 0; }
+  .rpt-1 .rpt-date { font-size: 12px; } .rpt-1 .rpt-date strong { font-size: 15px; }
+  .rpt-1 .rpt-kpis { gap: 6px; margin: 6px 0 2px; } .rpt-1 .kpi { padding: 5px 9px; } .rpt-1 .kpi span { font-size: 11px; } .rpt-1 .kpi strong { font-size: 16px; }
+  .rpt-1 .rpt-h { font-size: 12px; margin: 6px 14px 3px !important; }
+  .rpt-detail th { font-size: 11.5px; padding: 3px 6px; color: #000; }
+  .rpt-detail .rpt-parent td { font-size: 14px; padding: 4px 6px; color: #000; }
+  .rpt-detail .rpt-child td { font-size: 12.5px; padding: 2px 6px; color: #111; }
+  .rpt-detail .cnt { font-size: 11.5px; font-weight: 400; }
+  .rpt-detail .ch-name { padding-left: 14px; }
+  .rpt-detail .ch-note { font-size: 11.5px; line-height: 1.2; }
+}
+@media print {
+  .rpt-1 .rpt-head { padding: 6px 14px; } .rpt-1 .rpt-head h1 { font-size: 18px; } .rpt-1 .rpt-head p { font-size: 11.5px; }
+  .rpt-1 .rpt-kpis { margin: 4px 0 0; } .rpt-1 .kpi { padding: 3px 9px; } .rpt-1 .kpi strong { font-size: 15px; line-height: 1.15; }
+  .rpt-1 .rpt-h { margin: 3px 14px 2px !important; }
+  .rpt-detail th { padding: 2px 6px; }
+  .rpt-detail .rpt-parent td { font-size: 13px; padding: 2px 6px; line-height: 1.15; }
+  .rpt-detail .rpt-child td { font-size: 12px; padding: 0 6px; line-height: 1.3; }
+}
+@media print {
+  .rpt-detail .rpt-parent td { font-size: 13.5px; padding: 3px 6px; }
+  .rpt-detail .rpt-child td { font-size: 12.5px; padding: 1px 6px; }
+  .rpt-detail th { font-size: 12px; }
+}
+@media print {
+  .rpt-2 .rpt-head h1 { font-size: 20px; } .rpt-2 .rpt-date strong { font-size: 15px; }
+  .rpt-2 .rpt-h { font-size: 14px; margin: 8px 0 6px !important; }
+  .rpt-2 .legend li, .rpt-2 .hbars li { font-size: 14px; padding: 4px 0; }
+  .rpt-2 .hbars { gap: 8px; } .rpt-2 .hb-track { height: 12px; }
+  .rpt-2 .b-note, .rpt-2 .b-contacts { font-size: 14px; line-height: 1.45; } .rpt-2 .b-contacts li { margin-bottom: 4px; }
+  .rpt-2 .box p, .rpt-2 .box li { font-size: 14px; }
+  .rpt-foot { font-size: 12px; margin-top: 10px; }
+}
