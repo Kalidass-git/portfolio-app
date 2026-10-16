@@ -4,7 +4,7 @@ import { h, money, dateStr, monthLabel, section, table, btn, formDialog, dialog,
 import * as CAT from '../categories.js';
 import { hbars } from '../charts.js';
 import { closeForm, reopen } from './closing.js';
-import { confirmDialog, pct, posNeg, stat } from '../ui.js';
+import { confirmDialog, pct, posNeg, stat, datalistId } from '../ui.js';
 
 let fAcct = 'all', fMonth = 'all', fText = '', fKind = 'all', limit = 60;
 const TABS = [['accounts', 'Accounts'], ['ledger', 'Transactions']];
@@ -70,7 +70,7 @@ function accounts() {
       { label: 'Last entry', mob: 'under', mlabel: 'last ', get: (b) => dateStr(b.lastDate) },
       ...(canEdit() ? [{ label: '', cls: 'r', render: (b) => h('button', { class: 'small', title: 'Edit account', onclick: (e) => { e.stopPropagation(); accountForm(data.accounts.find((x) => x.id === b.id)); } }, 'Edit') }] : []),
     ], all.banks, { footer: { label: 'Total cash' }, onRow: (b) => openLedger({ acct: b.id }) }),
-    canEdit() ? [btn('Add account', () => accountForm(), 'primary')] : null));
+    canEdit() ? [btn('Add account', () => accountForm())] : null));
   wrap.append(h('p', { class: 'note' }, 'Tap an account to see its transactions. Balances come from the transactions, so to correct a balance add or edit a transaction.'));
   return wrap;
 }
@@ -142,7 +142,7 @@ export function txnForm(entry, preset) {
   let dl = document.getElementById(descListId);
   if (!dl) { dl = h('datalist', { id: descListId }); document.body.append(dl); }
   dl.replaceChildren(...[...new Set(data.categories.map((c) => c.desc))].map((d) => h('option', { value: d })));
-  formDialog({
+  formDialog({ focus: 'amount',
     title: !isNew ? 'Edit transaction' : preset && preset.title ? preset.title : 'Add transaction', value: base, saveLabel: isNew ? 'Add' : 'Save',
     fields: [
       { key: 'acct', label: 'Account', type: 'select', options: accts, required: true },
@@ -228,7 +228,9 @@ function savingForm(sv) {
       { key: 'name', label: 'Name', required: true },
       { key: 'type', label: 'Type', type: 'select', options: [...typeList(data).map((t) => ({ value: t, label: t })), { value: NEWTYPE, label: '+ New type…' }] },
       { key: 'newType', label: 'Name of the new type', type: 'text', required: true, showIf: (v) => v.type === NEWTYPE, hint: 'For example Post office, NSC, Sukanya, Gold savings. It appears in the type list from now on.' },
-      { key: 'holder', label: 'Account holder', required: true }, { key: 'rate', label: 'Assumed yearly rate (e.g. 0.0825 = 8.25%)', type: 'number', required: true, hint: 'Only used for the interest-per-day figure. The real return of a chit is the XIRR, worked out from your payments.' },
+      { key: 'holder', label: 'Account holder', required: true },
+      { key: 'organiser', label: 'Organiser / company (optional)', list: datalistId('org-list', data.savings.map((x) => x.organiser)), hint: 'Who runs the chit, or the insurer or bank. Only used to group things for your risk limits. Leave empty and the app works it out from the name.', showIf: (v) => v.type !== 'EPF' && v.type !== 'PPF' },
+      { key: 'rate', label: 'Assumed yearly rate (e.g. 0.0825 = 8.25%)', type: 'number', required: true, hint: 'Only used for the interest-per-day figure. The real return of a chit is the XIRR, worked out from your payments.' },
       { key: 'depositDate', label: 'Start date', type: 'date' }, { key: 'maturityDate', label: 'Maturity date', type: 'date' },
       { key: 'tenure', label: 'Tenure', type: 'number', half: true }, { key: 'tenureUnit', label: 'Tenure unit', type: 'select', options: ['Months', 'Years', 'Days'], half: true },
       { key: 'payout', label: 'Expected payout at the end (₹, optional)', type: 'number', showIf: (v) => v.type === 'Chit' || v.type === 'RD', hint: 'The amount you expect to receive. It gives an estimated XIRR while the chit runs. Close the chit with the real amount to get the actual XIRR.' },
@@ -239,7 +241,8 @@ function savingForm(sv) {
       if (rec.type === NEWTYPE) { rec.type = rec.newType; d.savingTypes = [...new Set([...(d.savingTypes || []), rec.type])]; }
       delete rec.newType;
       if (!rec.payout) delete rec.payout;
-      if (isNew) d.savings.push({ id: nextId('sv', d.savings), entries: [], compound: 'Monthly', ...rec }); else Object.assign(d.savings.find((x) => x.id === sv.id), rec);
+      rec.organiser = String(rec.organiser || '').trim(); if (!rec.organiser) delete rec.organiser;
+      if (isNew) d.savings.push({ id: nextId('sv', d.savings), entries: [], compound: 'Monthly', ...rec }); else { const t = d.savings.find((x) => x.id === sv.id); Object.assign(t, rec); if (!rec.organiser) delete t.organiser; }
     }),
     onDelete: isNew ? null : () => mutate((d) => { d.savings = d.savings.filter((x) => x.id !== sv.id); }),
     deleteMessage: 'Delete this account and all its entries? Use “Close it” instead to keep a history.',
@@ -285,7 +288,7 @@ export function savingsTab() {
         { label: 'Interest / day', cls: 'r', get: (s) => money(s.daily), total: (rs) => money(rs.reduce((a, s) => a + s.daily, 0)) },
         { label: 'Matures', mob: 'under', mlabel: 'matures ', get: (s) => dateStr(s.maturityDate) },
       ], list, { footer: { label: 'Total' }, onRow: openSaving, empty: 'No accounts of this kind.' }),
-      canEdit() && title === 'Chits' ? [btn('Add savings account', () => savingForm(), 'primary')] : null));
+      canEdit() && title === 'Chits' ? [btn('Add savings account', () => savingForm())] : null));
     if (title === 'Chits') wrap.append(h('p', { class: 'note' }, 'For a running chit the XIRR (marked ≈) is an estimate: it uses the “Expected payout” if you entered one, otherwise the assumed yearly rate. When the chit ends, press “Close it”, enter the date you received the money and the amount you actually got after commission, and the real XIRR appears here and under Closed.'));
   }
   return wrap;

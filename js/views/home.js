@@ -1,8 +1,9 @@
 // Home: a dashboard of cards. The detail tables live on each asset screen.
-import { S } from '../store.js';
+import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
 import { h, money, compact, pct, dateStr, monthLabel, section, monthPicker, rowList, kpi, dateChip, btn, canEdit, dec, toast } from '../ui.js';
-import { strip, legend, hbars, lineChart, donut, spark } from '../charts.js';
+import { strip, legend, hbars, lineChart, donut, spark, color } from '../charts.js';
+import * as R from '../risk.js';
 import { rateHistory, ageText } from './gold.js';
 import { homeCard as loansCard } from './loans.js';
 
@@ -82,7 +83,7 @@ function tiles(all, data, mc) {
     tile('Net monthly inflow', money(all.netMonthly), `${money(all.cfTotal.perMonth)} earned − ${money(all.loans.monthlyInterest)} loan interest`, { tone: tone(all.netMonthly), href: '#/fixed/loans' }),
     tile('Earning every day', money(all.cfTotal.perDay), `${money(all.cfTotal.perDay - all.loans.monthlyInterest / 30)} after loan interest`, { href: '#/fixed', pop: h('div', null, earningBody(all, false), h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income'))) }),
     tile('Markets today', anyDay ? sgn(dayAll) : '–', anyDay ? `${sgp(dayPctAll)} · shares, funds, ETFs, gold` : 'refresh prices to see', { tone: anyDay ? tone(dayAll) : '', href: '#/equity', pop: h('div', null, todayBody(all), h('p', null, h('a', { href: '#/equity' }, 'Open Shares & funds'))) }),
-    tile('Spent this month', money(spent), mc.totalExpected ? `${pct(spent / mc.totalExpected, 0)} of ${money(mc.totalExpected)} budget` : 'no budget income yet', { tone: mc.totalExpected && spent > mc.totalReceived ? 'neg' : '', href: '#/flow', pop: spentBody(mc, spent), right: true }));
+    tile('Spent this month', money(spent), (mc.totalExpected ? `${pct(spent / mc.totalExpected, 0)} of ${money(mc.totalExpected)} budget` : 'no budget income yet') + (mc.notCounted > 0 ? ` · ${compact(mc.notCounted)} not counted` : ''), { tone: mc.totalExpected && spent > mc.totalReceived ? 'neg' : '', href: '#/flow', pop: spentBody(mc, spent), right: true }));
 }
 
 /** Short expense summary for the drop-down. */
@@ -93,6 +94,7 @@ function spentBody(mc, spent) {
     h('p', { class: 'mini-title' }, 'Biggest spends so far'),
     top.length ? rowList(top.map((x) => ({ title: x.name, value: money(x.amount), valueSub: spent ? pct(x.amount / spent, 0) : null }))) : h('p', { class: 'empty' }, 'No expenses recorded this month.'),
     h('p', { class: 'summary-line' }, 'Spent ', h('b', null, money(spent)), exp ? ' of ' + money(exp) + ' budget · left ' : null, exp ? h('b', { class: tone(exp - spent) }, sgn(exp - spent)) : null),
+    mc.notCounted > 0 ? h('p', { class: 'note' }, `${money(mc.notCounted)} of other payments (${mc.others.filter((o) => !o.counted).map((o) => o.name).join(', ')}) is not counted here. Details are under “This month in detail” on Home.`) : null,
     h('p', null, h('a', { href: '#/flow' }, 'See where it went')));
 }
 
@@ -150,16 +152,29 @@ function attention(data, all) {
 
 function allocation(all) {
   const rows = all.rows.filter((r) => r.amount > 0).sort((a, b) => b.amount - a.amount).map((r) => ({ label: r.type, value: r.amount }));
-  const byRisk = RISK_ORDER.map((r) => ({ label: r, value: all.exposure.filter((e) => e.risk === r).reduce((a, e) => a + e.capital, 0) })).filter((x) => x.value > 0);
+  // risk groups and limits come from the settings on the Wealth projector > Risk limits tab
+  const cfg = R.riskCfg(S.data), ev = R.evaluate(cfg, R.stateNow(S.data, all));
+  const byRisk = ev.buckets.filter((b) => b.value > 0).map((b) => ({ label: b.name, value: b.value }));
+  const pc1 = (x) => (Math.round(x * 1000) / 10) + '%';
+  const ofw = (b) => (b.kind === 'item' ? ' ' + R.ofText(b.base) : b.of && b.of !== 'total' ? ' ' + R.ofText(b.of) : '');
+  const lim = (b) => [b.max != null ? pc1(b.max) : null, b.maxAmt != null ? money(b.maxAmt) : null].filter(Boolean).join(' or ');
+  const kindWord = (b) => (b.kind === 'item' ? 'single holding' : b.kind === 'bucket' ? 'risk group' : 'kind of holding');
+  const flags = ev.breaches.map((b) => ({ title: b.name, sub: `${kindWord(b)}, limit ${lim(b)}`, value: h('span', { class: 'neg' }, 'over by ' + money(b.excess)), valueSub: h('span', { class: 'neg' }, pc1(b.pct) + ofw(b)), tone: 'neg' }));
+  const nears = ev.near.map((b) => ({ title: b.name, sub: `${kindWord(b)}, limit ${lim(b)}`, value: h('span', { class: 'warn' }, Math.round(b.used * 100) + '% used'), valueSub: h('span', { class: 'warn' }, `${money(b.room || 0)} left`) }));
+  const toneCls = (b) => (b.over ? 'neg' : b.near ? 'warn' : '');
+  const limited = ev.classes.filter((c) => c.value > 1 || c.max != null).sort((a, b) => b.value - a.value);
   return section('Where your money is', h('div', { class: 'alloc' },
     h('div', { class: 'alloc-main' }, donut(rows, { fmt: money, center: compact(all.totalAssets), sub: 'total assets' }), legend(rows, { fmt: money })),
     h('div', { class: 'alloc-risk' },
       h('p', { class: 'mini-title' }, 'How risky is it'),
-      strip(byRisk, { fmt: money }), legend(byRisk, { fmt: money })),
-    h('details', { class: 'more' }, h('summary', null, 'Show exposure by type'),
-      rowList(all.exposure.slice().sort((a, b) => b.capital - a.capital).map((e) => ({
-        title: e.type, sub: e.risk + ' risk', value: money(e.capital), valueSub: pct(e.pct),
-      }))))));
+      strip(byRisk, { fmt: money }),
+      h('ul', { class: 'legend' }, ev.buckets.filter((b) => b.value > 0).map((b, i) => h('li', null, h('i', { style: { background: color(i) } }), h('span', { class: 'lg-name' }, b.name), h('span', { class: 'lg-val' }, money(b.value)), h('span', { class: 'lg-pct ' + toneCls(b) }, pc1(b.pct))))),
+      flags.length ? [h('p', { class: 'mini-title neg' }, `${flags.length} over your limit${flags.length > 1 ? 's' : ''}`), rowList(flags.slice(0, 4))] : null,
+      nears.length ? [h('p', { class: 'mini-title warn' }, `${nears.length} close to a limit`), rowList(nears.slice(0, 4))] : null,
+      !flags.length && !nears.length ? h('p', { class: 'note' }, 'Everything is within the limits you set.') : null,
+      h('p', null, h('a', { href: '#/risk/limits' }, 'Set limits'), ' · ', h('a', { href: '#/risk/whatif' }, 'Try a what-if'))),
+    h('details', { class: 'more' }, h('summary', null, 'Show by kind of holding'),
+      rowList(limited.map((c) => ({ title: c.name, sub: (cfg.buckets.find((b) => b.id === c.bucket) || {}).name + (c.max != null || c.maxAmt != null ? ` · limit ${lim(c)}` : ''), value: money(c.value), valueSub: h('span', { class: toneCls(c) }, pc1(c.pct) + (c.over ? ' over' : c.near ? ' close' : '')) }))))));
 }
 
 function earningBody(all, fold) {
@@ -227,8 +242,15 @@ function thisMonth(data, all, months) {
     h('p', { class: 'mini-title' }, `Spent ${money(spent)} of ${money(exp)} budget` + (exp ? ` (${pct(spent / exp, 0)})` : '')), bar(spent, exp, spent > exp ? 'bad' : spent > rec ? 'warn' : ''),
     h('p', { class: 'summary-line' }, 'Left to spend from budget ', h('b', { class: tone(left) }, sgn(left)), pend > 0 ? h('span', { class: 'muted' }, ` · ${money(pend)} still to receive`) : null),
     isCur && exp && spent > pace * 1.15 && day < dim - 3 ? h('p', { class: 'note warn' }, `Spending is ahead of the month: ${money(spent)} spent by day ${day}, an even pace would be about ${money(pace)}.`) : null);
+  const toggle = (o, on) => mutate((d) => { const set = new Set((d.settings.homeSpendExtra || []).map((x) => String(x).toLowerCase())); on ? set.add(o.key) : set.delete(o.key); d.settings.homeSpendExtra = [...set]; });
+  const others = mc.others.length ? h('details', { class: 'more', open: mc.notCounted > 0 }, h('summary', null, mc.notCounted > 0 ? `Not counted in Spent: ${money(mc.notCounted)}` : 'Other payments (all counted)'),
+    h('p', { class: 'note' }, 'Spent adds up groceries, outside food, medical, travel, rent, utilities and the clothes, entertainment, vacation and gifts line. These other payments from your bank entries are listed here so nothing is hidden. Investments, transfers and income are never counted as spending.'),
+    rowList(mc.others.map((o) => ({
+      title: o.name, sub: `${o.count} ${o.count === 1 ? 'entry' : 'entries'}`, value: money(o.amount),
+      valueSub: canEdit() ? h('label', { class: 'check-inline' }, h('input', { type: 'checkbox', checked: o.counted, onchange: (e) => toggle(o, e.target.checked) }), ' count in Spent') : (o.counted ? 'counted' : 'not counted'),
+    })))) : null;
   return section(isCur ? 'This month in detail' : monthLabel(selMonth) + ' in detail', h('div', null,
-    budget,
+    budget, others,
     h('div', { class: 'month' },
       h('div', null,
         h('p', { class: 'mini-title' }, 'Income'),

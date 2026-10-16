@@ -108,7 +108,7 @@ export function setOptions(sel, options, value) {
  * Form dialog. fields: [{key,label,type:'text'|'number'|'date'|'select'|'textarea'|'checkbox', options, required, step, hint, half, showIf(values)}]
  * onSave(values) may return false to keep the dialog open.
  */
-export function formDialog({ title, fields, value = {}, onSave, onDelete, extraActions = [], saveLabel = 'Save', deleteMessage = 'Delete this entry? This cannot be undone.' }) {
+export function formDialog({ focus, title, fields, value = {}, onSave, onDelete, extraActions = [], saveLabel = 'Save', deleteMessage = 'Delete this entry? This cannot be undone.' }) {
   const inputs = {}, labels = {};
   const form = h('form', { class: 'form', novalidate: true });
   for (const f of fields) {
@@ -176,8 +176,16 @@ export function formDialog({ title, fields, value = {}, onSave, onDelete, extraA
   actions.push({ label: saveLabel, class: 'primary', onclick: submit });
   const d = dialog(title, form, actions);
   form.addEventListener('submit', (e) => { e.preventDefault(); submit(d.close); });
-  setTimeout(() => form.querySelector('input,select,textarea')?.focus(), 30);
+  setTimeout(() => (focus && form.querySelector(`[name="${focus}"]`) || form.querySelector('input,select,textarea'))?.focus(), 30);
   return d;
+}
+
+/** A <datalist> of suggestions for a form field. Form fields take the id of one, not an array. Returns the id. */
+export function datalistId(id, names) {
+  let dl = document.getElementById(id);
+  if (!dl) { dl = h('datalist', { id }); document.body.append(dl); }
+  dl.replaceChildren(...[...new Set(names.filter(Boolean))].map((n) => h('option', { value: n })));
+  return id;
 }
 
 // ---------- page building blocks ----------
@@ -212,7 +220,7 @@ export const empty = (msg) => h('p', { class: 'empty' }, msg);
  * A table that stays readable on a phone.
  * Column options for small screens (under 700px):
  *   mob: 'under'  the value moves to a small grey line under the main (first or `host`) column
- *   mob: 'hide'   the column is left out (the "All columns" button brings it back)
+ *   mob: 'hide'   (phones now show every column on a card, so this no longer hides anything)
  *   mlabel        short text put before an 'under' value, such as 'rate '
  *   mu(row)       what to show in the small line when it should differ from the cell
  *   host: true    the column that carries the small line (default: the first)
@@ -232,13 +240,9 @@ export function table(cols, rows, { onRow, footer, rowClass, empty: emptyMsg = '
     h('thead', null, h('tr', null, cols.map((c, i) => h('th', { class: (c.cls || '') + small(c) + (i === hostI ? ' host' : '') }, c.label)))),
     h('tbody', null, rows.map((r) => h('tr', { class: (onRow ? 'click ' : '') + (rowClass ? rowClass(r) || '' : ''), tabindex: onRow ? 0 : null, onclick: onRow ? () => onRow(r) : null, onkeydown: onRow ? (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onRow(r)) : null },
       cols.map((c, i) => h('td', { class: (c.cls || '') + small(c) + (i === hostI ? ' host' : ''), 'data-label': c.label }, cell(c, r), i === hostI ? underLine(r) : null))))),
-    footer ? h('tfoot', null, h('tr', null, cols.map((c, i) => h('td', { class: (c.cls || '') + small(c) + (i === hostI ? ' host' : '') }, i === hostI ? footer.label || 'Total' : c.total ? c.total(rows) : '')))) : null);
+    footer ? h('tfoot', null, h('tr', null, cols.map((c, i) => h('td', { class: (c.cls || '') + small(c) + (i === hostI ? ' host' : '') + (i !== hostI && !c.total ? ' blank' : ''), 'data-label': c.label }, i === hostI ? footer.label || 'Total' : c.total ? c.total(rows) : '')))) : null);
   const wrap = h('div', { class: 'tbl-wrap' }, t);
-  if (!fit) return wrap;
-  const outer = h('div', { class: 'tbl-outer' });
-  const tog = h('button', { type: 'button', class: 'small m-toggle', 'aria-pressed': 'false', onclick: () => { const on = outer.classList.toggle('show-all'); tog.textContent = on ? 'Fewer columns' : 'All columns'; tog.setAttribute('aria-pressed', String(on)); } }, 'All columns');
-  outer.append(tog, wrap);
-  return outer;
+  return wrap; // on a phone each row becomes a card that shows every field (see app.css)
 }
 
 /**

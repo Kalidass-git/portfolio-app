@@ -5,6 +5,7 @@ import * as P from '../projector.js';
 import { monthActual } from '../yearplan.js';
 import { h, money, compact, pct, dateStr, monthLabel, section, stat, table, btn, formDialog, canEdit, toast, confirmDialog } from '../ui.js';
 import { lineChart, hbars } from '../charts.js';
+import * as actual from './proj-actual.js';
 import { rerender, outlooks, ensure, signed, pc, tone, outlookToggle, outlookSelects, planForm, oneOffForm, investForm, setAllOutlook, monthRange } from './proj-shared.js';
 
 let selYear = null;
@@ -103,7 +104,7 @@ export function render(root) {
     stat(`Target, Dec ${plan.year}`, money(plan.target), `from ${money(plan.baseline.net)} on ${dateStr(plan.baseline.date)}`),
     stat('Projected year end', h('span', { class: tone(m.gap) }, money(m.projected)), m.startFrom ? `from today’s ${money(m.live.net)}` : 'following the plan'),
     stat(m.gap >= 0 ? 'Cushion' : 'Short by', h('span', { class: tone(m.gap) }, money(Math.abs(m.gap))), h('span', { class: stTone }, stLabel)),
-    m.gap < 0 && m.extra > 0 ? stat('Extra to invest', money(m.extra) + ' / month', `for the ${m.monthsLeft} months left, in a fixed deposit`) : stat('Plan says', money(m.planEnd), 'year end, as planned at the start')));
+    m.gap < 0 && m.extra > 0 ? stat('Extra to save', money(m.extra) + ' / month', `earn more or spend less, for the ${m.monthsLeft} months left`) : stat('Plan says', money(m.planEnd), 'year end, as planned at the start')));
 
   // ---------- outlook toggle ----------
   const sel = h('div', null,
@@ -196,7 +197,7 @@ export function render(root) {
       stat('New investments', money(invTotal), 'each month, in total')),
     h('p', { class: 'note' }, `Interest from bonds and lending (about ${money(m.path[0] ? m.path[0].interest : 0)} a month after tax at the start) is added automatically from your holdings. Planned investments beyond what you save come out of cash, so cash can go negative: that means the plan asks for more than you earn.`),
     m.path.length && Math.min(...m.path.map((r) => r.cash)) < 0 ? h('p', { class: 'form-error' }, `Cash would run short: lowest point ${money(Math.min(...m.path.map((r) => r.cash)))} in ${monthLabel(m.path.reduce((b, r) => (r.cash < b.cash ? r : b)).month)}. Lower the monthly investments or raise income.`) : null),
-    canEdit() ? [btn('Edit target and assumptions', () => planForm(plan), 'primary', { keep: true })] : null));
+    canEdit() ? [btn('Edit target and assumptions', () => planForm(plan), '', { keep: true })] : null));
 
   root.append(section('New money going in each month', h('div', null,
     table([
@@ -206,14 +207,16 @@ export function render(root) {
       { label: 'Period', mob: 'hide', get: (l) => (l.from || l.to ? `${l.from ? monthLabel(l.from) : 'next month'} to ${l.to ? monthLabel(l.to) : 'Dec'}` : 'whole plan') },
     ], inv, { footer: { label: 'Total' }, onRow: canEdit() ? (l) => investForm(plan, inv.find((x) => x.id === l.id)) : null, empty: 'No new investments planned. Add where your savings will go.' }),
     h('p', { class: 'note' }, 'Fixed-income money earns the rate shown (bonds and lending pay it out monthly; deposits, EPF and chits compound). Market-linked money follows its outlook.')),
-    canEdit() ? [btn('Add investment', () => investForm(plan), 'primary', { keep: true })] : null));
+    canEdit() ? [btn('Add investment', () => investForm(plan), '', { keep: true })] : null));
+
+  actual.render(root, plan);
 
   root.append(section('One-time income and expenses', h('div', null,
     table([
       { label: 'What', host: true, get: (o) => o.name }, { label: 'When', mob: 'under', get: (o) => (o.month.length === 2 ? `every ${monthLabel(plan.year + '-' + o.month).split(' ')[0]}` : monthLabel(o.month)) },
       { label: 'Amount', cls: 'r', render: (o) => h('span', { class: o.kind === 'income' ? 'pos' : 'neg' }, (o.kind === 'income' ? '+' : '−') + money(o.amount)) },
     ], oneOffs, { onRow: canEdit() ? (o) => oneOffForm(plan, a.oneOffs.find((x) => x.id === o.id)) : null, empty: 'Nothing added. Add tax, school fees, insurance, a trip or a bonus so the plan sees them coming.' })),
-    canEdit() ? [btn('Add item', () => oneOffForm(plan), 'primary', { keep: true })] : null));
+    canEdit() ? [btn('Add item', () => oneOffForm(plan), '', { keep: true })] : null));
 
   // ---------- year-end review ----------
   const r = plan.retro || {};

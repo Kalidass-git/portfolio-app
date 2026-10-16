@@ -106,7 +106,7 @@ export function render() {
         { label: 'Description', get: (r) => r.desc }, { label: 'Category', get: (r) => r.category },
       ], rules.slice(0, ruleLimit), { onRow: editable ? (r) => ruleForm(r) : null, empty: 'No rules match.' }),
       rules.length > ruleLimit ? btn(`Show more (${rules.length - ruleLimit} left)`, () => { ruleLimit += 50; rerender(); }, 'wide') : null),
-    editable ? [btn('Add rule', () => ruleForm(), 'primary')] : null));
+    editable ? [btn('Add rule', () => ruleForm())] : null));
 
   const unknown = data.ledger.filter((e) => (e.category || '').toLowerCase() === 'unknown').length;
   if (unknown) root.append(h('div', { class: 'card' }, h('p', null, `${unknown} transactions are in “Unknown”. `), btn('Review them', () => openLedger({ text: 'Unknown' }), 'small')));

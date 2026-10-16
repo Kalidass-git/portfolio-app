@@ -61,6 +61,16 @@ const sipDone = (p) => {
 };
 const fromHistory = (p) => Object.keys(monthlyBuys(S.data)).length > 0 && !p.manual;
 
+/** "just now", "5 min ago", "3 hours ago", "2 days ago" */
+export function agoText(ms) {
+  const m = Math.floor(ms / 6e4);
+  if (m < 1) return 'just now';
+  if (m < 60) return m + ' min ago';
+  const hr = Math.floor(m / 60);
+  if (hr < 24) return hr + (hr === 1 ? ' hour ago' : ' hours ago');
+  const d = Math.floor(hr / 24);
+  return d + (d === 1 ? ' day ago' : ' days ago');
+}
 export async function refresh(btnEl) {
   if (busy) return;
   busy = true; btnEl.disabled = true;
@@ -267,7 +277,12 @@ export function render() {
   if (rsub === 'stocks' || rsub === 'etfs') location.replace('#/equity/holdings' + (rsub === 'etfs' ? '?f=etfs' : '?f=shares'));
   const tab = rsub === 'stocks' || rsub === 'etfs' ? 'holdings' : subTab(TABS.map((t) => t[0]));
   const st = all.stocks, mf = all.mf;
-  root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Shares and funds views'), h('button', { class: 'primary ib', type: 'button', title: 'Refresh prices', 'aria-label': 'Refresh prices', onclick: (e) => refresh(e.currentTarget) }, h('span', { class: 'ic' }, icon('refresh')), h('span', { class: 'lb' }, 'Refresh prices'))));
+  const upd = S.data.settings.pricesUpdatedAt, ageMs = upd ? Date.now() - new Date(upd).getTime() : null;
+  const stale = ageMs == null || ageMs > 864e5;
+  root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Shares and funds views')),
+    h('div', { class: 'price-bar' },
+      h('span', { class: 'stamp' + (stale ? ' warn' : ''), title: upd ? new Date(upd).toLocaleString('en-IN') : '' }, stale ? '⚠ ' : '', ageMs == null ? 'Prices not fetched yet' : 'Prices updated ' + agoText(ageMs)),
+      h('button', { class: 'refresh-btn', type: 'button', title: 'Fetch latest share prices and fund NAVs', onclick: (e) => refresh(e.currentTarget) }, h('span', { class: 'ic' }, icon('refresh')), h('span', { class: 'lb' }, 'Refresh prices'))));
 
   if (tab === 'insights') insights(root);
   else if (tab === 'sold') sold(root);

@@ -11,6 +11,7 @@ import * as savings from './views/savings.js';
 import * as flow from './views/flow.js';
 import * as plan from './views/plan.js';
 import * as projector from './views/projector.js';
+import * as riskPage from './views/risk.js';
 import * as report from './views/report.js';
 import * as settings from './views/settings.js';
 
@@ -22,12 +23,13 @@ const ROUTES = {
   savings: { label: 'Savings & chits', short: 'Savings', view: savings, tab: 'assets', group: 'Assets', icon: 'M12 21s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.6-7 10-7 10z' },
   gold: { label: 'Gold & others', short: 'Gold & more', view: gold, tab: 'assets', group: 'Assets', icon: 'M12 3l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V7z' },
   flow: { label: 'Income & expenses', view: flow, tab: 'flow', icon: 'M4 6h16M4 12h10M4 18h6' },
-  plan: { label: 'Plan', view: plan, tab: 'plan', icon: 'M5 19V9m7 10V5m7 14v-7' },
-  projector: { label: 'Wealth projector', short: 'Projector', view: projector, tab: 'plan', icon: 'M3 17l6-6 4 4 8-9M15 6h6v6' },
+  plan: { label: 'Plan', view: plan, tab: 'outlook', icon: 'M5 19V9m7 10V5m7 14v-7' },
+  projector: { label: 'Wealth projector', short: 'Projector', view: projector, tab: 'outlook', icon: 'M3 17l6-6 4 4 8-9M15 6h6v6' },
+  risk: { label: 'Risk & what-if', short: 'Risk', view: riskPage, tab: 'outlook', icon: 'M12 3l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V7zM9 12l2 2 4-4' },
   report: { label: 'Family report', view: report, tab: 'report', icon: 'M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h7' },
   settings: { label: 'Settings', view: settings, tab: 'settings', icon: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM3 12h3m12 0h3M12 3v3m0 12v3' },
 };
-const TABS = [['home', 'Home', 'home'], ['assets', 'Assets', 'cash'], ['flow', 'Expenses', 'flow'], ['plan', 'Plan', 'plan'], ['report', 'Report', 'report']];
+const TABS = [['home', 'Home', 'home'], ['assets', 'Assets', 'cash'], ['flow', 'Expenses', 'flow'], ['outlook', 'Outlook', 'projector'], ['report', 'Report', 'report']];
 const icon = (d) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'ico'); s.setAttribute('aria-hidden', 'true'); const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', d); s.append(p); return s; };
 
 const FS = [1, 1.15, 1.3, 1.5];

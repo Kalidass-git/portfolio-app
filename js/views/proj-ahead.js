@@ -77,7 +77,7 @@ export function render(root) {
   root.append(h('div', { class: 'stats' },
     stat(`Net worth in ${s.horizon} years`, money(end.nw), `${monthLabel(end.month)}, from ${money(b.net)} today`),
     stat('Interest income each month then', money(end.interest), cover != null ? `pays ${Math.round(cover * 100)}% of the ${money(expOut)} monthly spending` : ''),
-    s.target ? (hit ? stat('Target reached', monthLabel(hit.month), `${money(s.target)} · ${Math.round((rows.indexOf(hit) + 1) / 12 * 10) / 10} years`) : stat('Target not reached', h('span', { class: 'neg' }, `${money(s.target - end.nw)} short`), need > 0 ? `invest ${money(need)} more a month to get there` : 'in this time')) : stat('Target', 'Not set', 'add one in the assumptions'),
+    s.target ? (hit ? stat('Target reached', monthLabel(hit.month), `${money(s.target)} · ${Math.round((rows.indexOf(hit) + 1) / 12 * 10) / 10} years`) : stat('Target not reached', h('span', { class: 'neg' }, `${money(s.target - end.nw)} short`), need > 0 ? `save ${money(need)} more a month (earn more or spend less) to get there` : 'in this time')) : stat('Target', 'Not set', 'add one in the assumptions'),
     stat('Saved each year at the end', money(yearRows[yearRows.length - 1] ? (byYearFlows(rows, s.horizon - 1)) : 0), 'income minus spending, before new investments')));
 
   // ---------- chart ----------
@@ -98,6 +98,24 @@ export function render(root) {
   root.append(h('div', { class: 'grid2' },
     section('What you hold today', h('div', null, donut(nowGrp, { fmt: money, center: compact(b.net + b.liab), sub: 'assets', size: 190 }), legend(nowGrp, { fmt: money }))),
     section(`What you could hold in ${s.horizon} years`, h('div', null, donut(grp, { fmt: money, center: compact(end.assets), sub: 'assets', size: 190 }), legend(grp, { fmt: money })))));
+
+  // ---------- by class: today, this year end, horizon ----------
+  const yEnd = rows.find((r) => r.month === `${String(b.month).slice(0, 4)}-12`) || rows[0];
+  const plan0 = (s.a.invest || []).reduce((t, l) => t + (l.monthly || 0), 0);
+  const cr = P.CLASSES.map((c) => ({ key: c.key, label: c.label, now: b.values[c.key] || 0, yr: (yEnd && yEnd.values[c.key]) || 0, far: (end.values[c.key]) || 0 })).filter((x) => x.now > 1 || x.yr > 1 || x.far > 1);
+  const share = (v, tot) => (tot > 0 ? Math.round((v / tot) * 100) + '%' : '');
+  const tNow = cr.reduce((a, x) => a + x.now, 0), tYr = cr.reduce((a, x) => a + x.yr, 0), tFar = cr.reduce((a, x) => a + x.far, 0);
+  root.append(section('Where it sits: today, this year end, and later', h('div', null,
+    table([
+      { label: 'Asset', host: true, get: (x) => x.label },
+      { label: 'Today', mob: 'under', mlabel: 'today ', cls: 'r', get: (x) => money(x.now), total: () => money(tNow) },
+      { label: 'Share today', mob: 'hide', cls: 'r', get: (x) => share(x.now, tNow) },
+      { label: `End of ${String(yEnd.month).slice(0, 4)}`, cls: 'r', get: (x) => money(x.yr), total: () => money(tYr) },
+      { label: 'Share', mob: 'hide', cls: 'r', get: (x) => share(x.yr, tYr) },
+      { label: `In ${s.horizon} years`, cls: 'r', get: (x) => money(x.far), total: () => money(tFar) },
+      { label: 'Share ', mob: 'hide', cls: 'r', get: (x) => share(x.far, tFar) },
+    ], cr, { footer: { label: 'Total assets' }, empty: 'Nothing to show.' }),
+    h('p', { class: 'note' }, plan0 ? `Today’s holdings plus the ${money(plan0)} a month of new money from your plan, grown at the rates and outlook above. Cash is what is left after spending and investing.` : 'No new money is planned, so only growth of what you hold today is shown.'))));
 
   // ---------- table ----------
   const tbl = yearRows.map((r, i) => ({ r, i, flow: byYearFlows(rows, i) }));

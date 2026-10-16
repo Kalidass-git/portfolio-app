@@ -80,7 +80,7 @@ export function render() {
   if (canEdit()) {
     root.append(section('Loans (see Fixed income → Loans I owe)', table([
       { label: 'Loan', get: (l) => l.name }, { label: 'Outstanding', cls: 'r', get: (l) => money(l.amount) }, { label: 'Rate', cls: 'r', get: (l) => (l.rate * 100).toFixed(2) + '%' },
-    ], data.liabilities, { onRow: (l) => liabilityForm(data.liabilities.find((x) => x.id === l.id)), footer: { label: 'Total' } }), [btn('Add loan', () => liabilityForm(), 'primary')]));
+    ], data.liabilities, { onRow: (l) => liabilityForm(data.liabilities.find((x) => x.id === l.id)), footer: { label: 'Total' } }), [btn('Add loan', () => liabilityForm())]));
     root.append(section('Calculation settings', h('div', { class: 'kv' },
       h('p', null, 'Tax deducted on bond interest: ', h('b', null, (data.settings.tdsRate * 100).toFixed(0) + '%'), ' · days in month used for monthly interest: ', h('b', null, data.settings.daysInMonth)),
       btn('Change', () => formDialog({

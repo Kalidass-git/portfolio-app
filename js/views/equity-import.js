@@ -137,7 +137,7 @@ export function render(root) {
     h('p', { class: 'note', style: { marginTop: 0 } }, 'Download the order history from Groww (Stocks → Reports → Order history) and the mutual fund transactions statement, then pick the file here. The file is read on this device and never uploaded anywhere.'),
     h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Import mode' }, [['replace', 'Full history (replaces all)'], ['add', 'Only new purchases (adds)']].map(([k, l]) => h('a', { href: 'javascript:void 0', role: 'radio', 'aria-checked': String(mode === k), class: mode === k ? 'on' : '', onclick: (e) => { e.preventDefault(); mode = k; rerender(); } }, l))),
     h('p', { class: 'note' }, mode === 'replace' ? 'Use this for the complete history. Everything now in the list is replaced, after a warning that shows what will change. You can undo it.' : 'Use this after a few new buys. Entries already in the list are recognised and skipped. If you fixed something and upload again, tick “overwrite” in the next step.'),
-    h('div', { class: 'btn-row' }, btn('Choose Groww stocks file', importStocks, 'primary'), btn('Choose Groww mutual fund file', importFunds, 'primary')),
+    h('div', { class: 'btn-row' }, btn('Choose Groww stocks file', importStocks, 'primary'), btn('Choose Groww mutual fund file', importFunds)),
     bk ? h('p', { class: 'note' }, `Last import: ${new Date(bk.at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}. `, btn('Undo it', async () => { if (await confirmDialog('Restore everything as it was before the last import?', 'Undo import')) undoImport(); }, 'small')) : null)));
 
   root.append(h('div', { class: 'stats' },
@@ -152,7 +152,7 @@ export function render(root) {
       { label: 'Date', mob: 'under', get: (a) => dateStr(a.date) }, { label: 'Share', host: true, get: (a) => a.symbol }, { label: 'What', mob: 'under', get: (a) => ACTION_LABEL[a.type] },
       { label: 'Details', get: (a) => describeAction(a) },
     ], actions.slice().sort((a, b) => (a.date < b.date ? 1 : -1)), { onRow: canEdit() ? (a) => actionForm(actions.find((x) => x.id === a.id)) : null, empty: 'None yet. Add a dividend you received, or a split or bonus that changed your quantity.' })),
-    canEdit() ? [btn('Add', () => actionForm(), 'primary')] : null));
+    canEdit() ? [btn('Add', () => actionForm())] : null));
 
   const q = tradeFilter.toLowerCase();
   const list = trades.filter((t) => !q || (t.symbol + ' ' + t.name).toLowerCase().includes(q)).sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1));

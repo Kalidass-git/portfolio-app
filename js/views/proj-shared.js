@@ -122,3 +122,5 @@ export function investForm(plan, l) {
 
 /** Set the outlook of all market classes (and of lines that had their own). */
 export const setAllOutlook = (planId, id) => mutate((d) => { const p = ensure(d).years[planId]; for (const k of P.MARKET) p.a.outlook[k] = id; for (const l of p.a.invest || []) if (P.isMarket(l.cls)) l.outlook = ''; });
+
+export { datalistId } from '../ui.js';

@@ -110,7 +110,7 @@ const rateOf = (cls, a, outlooks) => {
  */
 export function simulate(start, a, outlooks, months) {
   const pots = Object.entries(start.values).map(([cls, value]) => ({ cls, value, rate: null }));
-  const line = (l) => ({ cls: l.cls, value: 0, rate: l.rate != null && l.rate !== '' ? Number(l.rate) : l.outlook && isMarket(l.cls) ? rateOf(l.cls, { outlook: { [l.cls]: l.outlook } }, outlooks) : null, line: l });
+  const line = (l) => ({ cls: l.cls, value: Number(l.lump) || 0, rate: l.rate != null && l.rate !== '' ? Number(l.rate) : l.outlook && isMarket(l.cls) ? rateOf(l.cls, { outlook: { [l.cls]: l.outlook } }, outlooks) : null, line: l });
   const linePots = (a.invest || []).map(line);
   const all = pots.concat(linePots);
   const g = a.growth || {};
@@ -182,12 +182,15 @@ export function breakEvenMarket(start, a, outlooks, months, target) {
   return (lo + hi) / 2;
 }
 
-/** Extra amount to invest every month (in a fixed deposit at `rate`) to just reach `target`. 0 when already on course. */
-export function extraMonthly(start, a, outlooks, months, target, rate = 0.07) {
-  const at = (x) => { const rows = simulate(start, { ...a, invest: (a.invest || []).concat([{ id: 'x', cls: 'fds', monthly: x }]), rates: { ...a.rates, fds: rate } }, outlooks, months); return rows.length ? rows[rows.length - 1].nw : start.net; };
+/**
+ * Extra money to set aside every month (earn more or spend less) to just reach `target`. 0 when already on course.
+ * Moving cash into a deposit only adds the small interest difference, so the shortfall has to come from saving more.
+ */
+export function extraMonthly(start, a, outlooks, months, target) {
+  const at = (x) => { const rows = simulate(start, { ...a, otherIncome: (a.otherIncome || 0) + x }, outlooks, months); return rows.length ? rows[rows.length - 1].nw : start.net; };
   if (at(0) >= target) return 0;
-  let lo = 0, hi = Math.max(1e5, (target - at(0)) / Math.max(1, months) * 3);
-  while (at(hi) < target && hi < 1e9) hi *= 2;
+  let lo = 0, hi = Math.max(1e4, (target - at(0)) / Math.max(1, months) * 2);
+  while (at(hi) < target && hi < 1e10) hi *= 2;
   for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; if (at(mid) < target) lo = mid; else hi = mid; }
   return hi;
 }

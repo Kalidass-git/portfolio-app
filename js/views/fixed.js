@@ -1,6 +1,6 @@
 import { S, mutate, nextId } from '../store.js';
 import * as C from '../calc.js';
-import { h, money, dateStr, pct, section, table, btn, formDialog, canEdit, toast, stat, segTabs, subTab, dialog, confirmDialog, posNeg } from '../ui.js';
+import { h, money, dateStr, pct, section, table, btn, formDialog, canEdit, toast, stat, segTabs, subTab, dialog, confirmDialog, posNeg, datalistId } from '../ui.js';
 import { closeForm, reopen } from './closing.js';
 
 const FREQ = ['Monthly', 'Quarterly', 'Yearly', 'Daily'];
@@ -39,6 +39,7 @@ function depositForm(kind, it) {
     title: (isNew ? 'Add ' : 'Edit ') + (kind === 'fd' ? 'fixed deposit' : 'private lending'), value: it || { tenureType: 'Years', compound: 'Yearly', interestType: 'Compound', account: kind === 'fd' ? 'HUF' : 'Private', depositDate: C.todayISO() },
     fields: [
       { key: 'name', label: 'Name', required: true },
+      kind === 'fd' ? { key: 'issuer', label: 'Bank / issuer (optional)', list: datalistId('issuer-list', S.data.fds.map((x) => x.issuer)), hint: 'Used only to group deposits for your risk limits. Leave empty and the app works it out from the name.' } : { key: 'borrower', label: 'Lent to (optional)', list: datalistId('borrower-list', S.data.lending.map((x) => x.borrower)), hint: 'The person or company. Several loans to the same one are added together for your risk limits. Leave empty and the app uses the name.' },
       { key: 'account', label: kind === 'fd' ? 'Account holder' : 'Type', type: kind === 'fd' ? 'text' : 'select', options: ['Private', 'Family'], required: true },
       { key: 'principal', label: 'Amount (₹)', type: 'number', required: true, hint: kind === 'lending' ? 'Use a negative amount for money you borrowed to lend onward.' : '' },
       { key: 'rate', label: 'Interest rate (0.086 = 8.6%)', type: 'number', required: true },
@@ -48,8 +49,10 @@ function depositForm(kind, it) {
       { key: 'depositDate', label: 'Started on', type: 'date', required: true }, { key: 'maturityDate', label: 'Matures on', type: 'date', required: true },
     ],
     onSave: (v) => mutate((d) => {
+      const opt = kind === 'fd' ? 'issuer' : 'borrower';
+      v[opt] = String(v[opt] || '').trim(); const keep = v[opt]; if (!keep) delete v[opt];
       if (isNew) d[key].push({ id: nextId(kind === 'fd' ? 'fd' : 'ln', d[key]), ...v });
-      else { const t = d[key].find((x) => x.id === it.id); Object.assign(t, v); delete t.accruedOverride; }
+      else { const t = d[key].find((x) => x.id === it.id); Object.assign(t, v); delete t.accruedOverride; if (!keep) delete t[opt]; }
     }),
     onDelete: isNew ? null : () => mutate((d) => { d[key] = d[key].filter((x) => x.id !== it.id); }),
     deleteMessage: 'Delete this completely? Use “Close it” instead to keep a history.',
@@ -111,10 +114,10 @@ export function render() {
     { label: 'Matures', mob: 'under', mlabel: 'matures ', get: (x) => dateStr(x.maturityDate) },
   ];
   root.append(section('Fixed deposits', table(depCols, all.fds, { footer: { label: 'Total' }, onRow: canEdit() ? (x) => depositForm('fd', data.fds.find((y) => y.id === x.id)) : null }),
-    canEdit() ? [btn('Add FD', () => depositForm('fd'), 'primary')] : null));
+    canEdit() ? [btn('Add FD', () => depositForm('fd'))] : null));
   root.append(section('Private lending',
     table(depCols, all.lending, { footer: { label: 'Total' }, onRow: canEdit() ? (x) => depositForm('lending', data.lending.find((y) => y.id === x.id)) : null }),
-    canEdit() ? [btn('Add loan', () => depositForm('lending'), 'primary')] : null));
+    canEdit() ? [btn('Add loan', () => depositForm('lending'))] : null));
 
   const rc = data.receivables.filter((r) => r.active !== false).map((r) => C.receivableStatus(r, all.asOf)).sort((a, b) => (b.overdue - a.overdue) || (a.received - b.received) || (a.due < b.due ? -1 : 1));
   const late = rc.filter((r) => r.overdue), waiting = rc.filter((r) => !r.received && !r.overdue && !r.notStarted && C.monthKey(r.due) <= C.monthKey(all.asOf));
@@ -133,7 +136,7 @@ export function render() {
       { label: 'This month', render: (r) => (r.active === false ? h('span', { class: 'tag' }, 'Closed') : h('span', { class: r.received ? 'tag good' : r.overdue ? 'tag bad' : 'tag' }, r.received ? 'Received' : r.overdue ? 'Overdue' : r.notStarted ? 'Starts ' + dateStr(r.startDate) : 'Due ' + dateStr(r.due))) },
       { label: '', render: (r) => (canEdit() && r.active !== false && !r.received ? h('button', { class: 'small', onclick: (e) => { e.stopPropagation(); mutate((d) => { d.receivables.find((x) => x.id === r.id).lastReceived = C.todayISO(); }); toast('Marked as received'); } }, 'Mark received') : '') },
     ], rc, { rowClass: (r) => (r.overdue ? 'row-bad' : !r.received && !r.notStarted && C.monthKey(r.due) <= C.monthKey(all.asOf) ? 'row-warn' : ''), onRow: canEdit() ? (r) => receivableForm(data.receivables.find((x) => x.id === r.id)) : null })),
-    canEdit() ? [btn('Add', () => receivableForm(), 'primary')] : null));
+    canEdit() ? [btn('Add', () => receivableForm())] : null));
   return root;
 }
 

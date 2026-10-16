@@ -463,8 +463,22 @@ export function monthCashflow(data, all, month) {
     groupOf('Travel', ['travel']), groupOf('Rent', ['rent']), groupOf('Utilities', ['utilities']),
   ];
   const lifestyle = groupOf('Clothes, entertainment, vacation, gifts', ['cloths', 'entertainment', 'vacation', 'gifts']);
+  // Everything else that was paid out and is not income, an investment or a transfer (EMI, tax, "others", custom categories).
+  // These are not in Home's groups. The owner can choose to count each one (optional setting, old files work without it).
+  const grouped = new Set(['family budget', 'food', 'medical', 'travel', 'rent', 'utilities', 'cloths', 'entertainment', 'vacation', 'gifts']);
+  const kinds = kindOf(data), counted = new Set((data.settings.homeSpendExtra || []).map((x) => String(x).toLowerCase()));
+  const oth = new Map();
+  for (const e of rows) {
+    const key = (e.category || '').trim().toLowerCase();
+    if (!key || grouped.has(key) || !(e.debit > 0) || kinds(e.category) !== 'expense') continue;
+    const r = oth.get(key) || { key, name: (e.category || '').trim(), amount: 0, count: 0, counted: counted.has(key) };
+    r.amount += e.debit; r.count++; oth.set(key, r);
+  }
+  const others = [...oth.values()].sort((a, b) => b.amount - a.amount);
+  for (const o of others) if (o.counted) spend.push({ name: o.name, amount: o.amount });
+  const notCounted = sum(others.filter((o) => !o.counted), (o) => o.amount);
   const totalSpent = sum(spend, (x) => x.amount); // sheet's G55 excludes the lifestyle line, we show it separately
-  return { month, income, totalExpected, totalReceived, yetToReceive: totalExpected - totalReceived, spend, lifestyle, totalSpent, remaining: totalExpected - totalSpent };
+  return { month, income, totalExpected, totalReceived, yetToReceive: totalExpected - totalReceived, spend, lifestyle, totalSpent, remaining: totalExpected - totalSpent, others, notCounted };
 }
 
 // ---------- receivables (Fixed Income!A50:L59) ----------

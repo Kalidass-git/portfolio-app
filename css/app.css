@@ -350,20 +350,20 @@ button.danger.primary-ish, dialog.sheet footer button.danger { border-color: var
 .m-under { display: none; } .m-toggle { display: none; }
 .tbl.fit td.host { font-weight: 500; } .tbl.fit .m-under .pos { color: var(--pos); } .tbl.fit .m-under .neg { color: var(--neg); }
 @media (max-width: 700px) {
-  .tbl-outer:not(.show-all) .tbl-wrap { overflow-x: visible; margin: 0; padding: 0; }
-  .tbl.fit { font-size: .84rem; }
-  .tbl.fit .m-under { display: block; overflow-wrap: anywhere; }
-  .tbl.fit td, .tbl.fit th { padding: 8px 5px; } .tbl.fit th { font-size: .7rem; white-space: normal; }
-  .tbl.fit td.r, .tbl.fit th.r { white-space: nowrap; min-width: 0; }
-  .tbl.fit td.host, .tbl.fit th.host { overflow-wrap: anywhere; min-width: 0; padding-left: 0; }
-  .tbl-outer:not(.show-all) .tbl.fit td:first-child, .tbl-outer:not(.show-all) .tbl.fit th:first-child { position: static; min-width: 0; }
-  .tbl.fit td:last-child, .tbl.fit th:last-child { padding-right: 0; }
-  .tbl-outer:not(.show-all) .tbl.fit td.host { width: 38%; }
-  .m-toggle { display: inline-block; margin: 0 0 4px; font-size: .74rem; padding: 3px 10px; }
-  .tbl-outer.show-all .hide-sm { display: table-cell !important; }
-  .tbl-outer.show-all .m-under { display: none !important; }
-  .tbl-outer.show-all .tbl-wrap { overflow-x: auto; }
-  .tbl-outer.show-all .tbl.fit td:first-child { position: sticky; }
+  /* every row becomes a card, every column shown with its label: nothing to switch on, nothing cut off */
+  .tbl-wrap:has(.tbl.fit) { overflow-x: visible; margin: 0; padding: 0; }
+  .tbl.fit, .tbl.fit tbody, .tbl.fit tfoot { display: block; font-size: .86rem; }
+  .tbl.fit thead { display: none; }
+  .tbl.fit tr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; padding: 11px 2px; border-bottom: 1px solid var(--line); }
+  .tbl.fit td { display: block; padding: 0; border: 0; text-align: left; min-width: 0; overflow-wrap: anywhere; white-space: normal; position: static; }
+  .tbl.fit td::before { content: attr(data-label); display: block; font-size: .68rem; color: var(--muted); font-weight: 400; }
+  .tbl.fit td.host { grid-column: 1 / -1; font-weight: 650; font-size: .96rem; }
+  .tbl.fit td.host::before { display: none; }
+  .tbl.fit td:empty, .tbl.fit td.blank { display: none; }
+  .tbl.fit .hide-sm { display: block !important; }
+  .tbl.fit .m-under { display: none !important; }
+  .tbl.fit tfoot tr { border-top: 2px solid var(--ink); border-bottom: 0; }
+  .tbl.fit tfoot td { border-top: 0; }
 }
 
 /* ---------- home: drop-down tiles, phone-only cards, budget inside the month card ---------- */
@@ -530,3 +530,21 @@ details.more { margin-top: 10px; } details.more summary { cursor: pointer; color
   .rpt-2 .box p, .rpt-2 .box li { font-size: 14px; }
   .rpt-foot { font-size: 12px; margin-top: 10px; }
 }
+.tag.warn { color: var(--warn); border-color: var(--warn); }
+.mini-title.neg { color: var(--neg); }
+.findings li.amber { border-color: var(--warn); }
+.findings li.over { border-color: var(--neg); }
+.warn { color: var(--warn); }
+.mini-title.warn { color: var(--warn); }
+
+/* Outlook: two pages (projector, risk & what-if) share one phone tab */
+.outlook-switch { display: none; gap: 6px; margin-bottom: 10px; }
+.outlook-switch a { flex: 1; text-align: center; padding: 8px 6px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); text-decoration: none; font-size: .88rem; }
+.outlook-switch a.on { background: var(--brand); color: #fff; border-color: var(--brand); font-weight: 650; }
+@media (max-width: 899px) { .outlook-switch { display: flex; } .tabbar a { font-size: .66rem; } }
+
+/* Prices bar on Shares & funds: age on the left, refresh on the right */
+.price-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0 12px; }
+.price-bar .stamp { font-size: .85rem; color: var(--muted); }
+.price-bar .stamp.warn { color: var(--warn, #b45309); font-weight: 600; }
+.price-bar .refresh-btn { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
