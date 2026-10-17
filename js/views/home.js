@@ -1,7 +1,7 @@
 // Home: a dashboard of cards. The detail tables live on each asset screen.
 import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
-import { h, money, compact, pct, dateStr, monthLabel, section, monthPicker, rowList, kpi, dateChip, btn, canEdit, dec, toast } from '../ui.js';
+import { h, money, compact, pct, dateStr, monthLabel, section, monthPicker, rowList, kpi, dateChip, btn, canEdit, dec, toast, dialog } from '../ui.js';
 import { strip, legend, hbars, lineChart, donut, spark, color } from '../charts.js';
 import * as R from '../risk.js';
 import { rateHistory, ageText } from './gold.js';
@@ -94,7 +94,7 @@ function spentBody(mc, spent) {
     h('p', { class: 'mini-title' }, 'Biggest spends so far'),
     top.length ? rowList(top.map((x) => ({ title: x.name, value: money(x.amount), valueSub: spent ? pct(x.amount / spent, 0) : null }))) : h('p', { class: 'empty' }, 'No expenses recorded this month.'),
     h('p', { class: 'summary-line' }, 'Spent ', h('b', null, money(spent)), exp ? ' of ' + money(exp) + ' budget · left ' : null, exp ? h('b', { class: tone(exp - spent) }, sgn(exp - spent)) : null),
-    mc.notCounted > 0 ? h('p', { class: 'note' }, `${money(mc.notCounted)} of other payments (${mc.others.filter((o) => !o.counted).map((o) => o.name).join(', ')}) is not counted here. Details are under “This month in detail” on Home.`) : null,
+    mc.notCounted > 0 ? h('p', { class: 'note' }, `${money(mc.notCounted)} of other payments (${mc.others.filter((o) => !o.counted).map((o) => o.name).join(', ')}) is not counted here. Open “Review” under This month in detail to count them.`) : null,
     h('p', null, h('a', { href: '#/flow' }, 'See where it went')));
 }
 
@@ -140,9 +140,10 @@ function breakupCard(all) {
 function attention(data, all) {
   const out = [];
   const soon = C.upcoming(data, all, 30), overdue = soon.filter((u) => u.days < 0);
-  if (overdue.length) out.push({ title: `${overdue.length} payment${overdue.length === 1 ? '' : 's'} overdue`, sub: overdue.slice(0, 2).map((u) => u.title).join(', '), value: money(overdue.reduce((a, u) => a + u.amount, 0)), tone: 'neg', href: '#/fixed' });
+  if (overdue.length) out.push({ title: `${overdue.length} payment${overdue.length === 1 ? '' : 's'} overdue`, sub: overdue.slice(0, 2).map((u) => u.title).join(', '), value: money(overdue.reduce((a, u) => a + u.amount, 0)), tone: 'neg', href: '#/fixed/lending' });
   const due = soon.filter((u) => u.days >= 0 && u.days <= 14);
-  if (due.length) out.push({ title: `${due.length} falling due in 14 days`, sub: due.slice(0, 2).map((u) => u.title).join(', '), value: money(due.reduce((a, u) => a + u.amount, 0)), tone: '', href: '#/home' });
+  const when = (u) => (u.days === 0 ? 'today' : u.days === 1 ? 'tomorrow' : dateStr(u.date).replace(/ \d{4}$/, ''));
+  if (due.length) out.push({ title: due.length === 1 ? `${due[0].title}: due ${when(due[0])}` : `${due.length} falling due in 14 days`, sub: due.slice(0, 3).map((u) => `${u.title} · ${when(u)}`).join(', ') + (due.length > 3 ? ` and ${due.length - 3} more` : ''), value: money(due.reduce((a, u) => a + u.amount, 0)), tone: '', href: due.every((u) => u.kind === 'Money to receive') ? '#/fixed/lending' : '#/home' });
   const at = data.settings.pricesUpdatedAt;
   const age = at ? Math.round((Date.now() - new Date(at).getTime()) / 864e5) : null;
   if (age == null || age >= 3) out.push({ title: 'Share and fund prices are ' + (age == null ? 'not fetched yet' : age + ' days old'), sub: 'Refresh on Shares & funds', value: '', tone: 'warn', href: '#/equity' });
@@ -243,12 +244,14 @@ function thisMonth(data, all, months) {
     h('p', { class: 'summary-line' }, 'Left to spend from budget ', h('b', { class: tone(left) }, sgn(left)), pend > 0 ? h('span', { class: 'muted' }, ` · ${money(pend)} still to receive`) : null),
     isCur && exp && spent > pace * 1.15 && day < dim - 3 ? h('p', { class: 'note warn' }, `Spending is ahead of the month: ${money(spent)} spent by day ${day}, an even pace would be about ${money(pace)}.`) : null);
   const toggle = (o, on) => mutate((d) => { const set = new Set((d.settings.homeSpendExtra || []).map((x) => String(x).toLowerCase())); on ? set.add(o.key) : set.delete(o.key); d.settings.homeSpendExtra = [...set]; });
-  const others = mc.others.length ? h('details', { class: 'more', open: mc.notCounted > 0 }, h('summary', null, mc.notCounted > 0 ? `Not counted in Spent: ${money(mc.notCounted)}` : 'Other payments (all counted)'),
-    h('p', { class: 'note' }, 'Spent adds up groceries, outside food, medical, travel, rent, utilities and the clothes, entertainment, vacation and gifts line. These other payments from your bank entries are listed here so nothing is hidden. Investments, transfers and income are never counted as spending.'),
-    rowList(mc.others.map((o) => ({
-      title: o.name, sub: `${o.count} ${o.count === 1 ? 'entry' : 'entries'}`, value: money(o.amount),
-      valueSub: canEdit() ? h('label', { class: 'check-inline' }, h('input', { type: 'checkbox', checked: o.counted, onchange: (e) => toggle(o, e.target.checked) }), ' count in Spent') : (o.counted ? 'counted' : 'not counted'),
-    })))) : null;
+  const review = () => {
+    const box = (o) => h('label', { class: 'check-inline', style: { display: 'flex', gap: '8px', alignItems: 'center' } }, h('input', { type: 'checkbox', checked: o.counted, disabled: !canEdit(), onchange: (e) => toggle(o, e.target.checked) }), ' count in Spent');
+    dialog('Other payments in ' + monthLabel(selMonth), h('div', null,
+      h('p', { class: 'note' }, 'Spent adds up groceries, outside food, medical, travel, rent, utilities and the clothes, entertainment, vacation and gifts line. These other payments from your bank entries are not in it unless you tick them. Investments, transfers and income are never counted as spending.'),
+      rowList(mc.others.map((o) => ({ title: o.name, sub: `${o.count} ${o.count === 1 ? 'entry' : 'entries'}`, value: money(o.amount), valueSub: canEdit() ? box(o) : (o.counted ? 'counted' : 'not counted') }))),
+      canEdit() ? null : h('p', { class: 'note' }, 'Only the owner can change this.')), [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
+  };
+  const others = mc.others.length ? h('p', { class: 'note' }, mc.notCounted > 0 ? `${money(mc.notCounted)} of other payments is not counted in Spent. ` : 'All other payments are counted in Spent. ', h('a', { href: 'javascript:void 0', onclick: (e) => { e.preventDefault(); review(); } }, 'Review')) : null;
   return section(isCur ? 'This month in detail' : monthLabel(selMonth) + ' in detail', h('div', null,
     budget, others,
     h('div', { class: 'month' },

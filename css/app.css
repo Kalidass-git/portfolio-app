@@ -350,20 +350,24 @@ button.danger.primary-ish, dialog.sheet footer button.danger { border-color: var
 .m-under { display: none; } .m-toggle { display: none; }
 .tbl.fit td.host { font-weight: 500; } .tbl.fit .m-under .pos { color: var(--pos); } .tbl.fit .m-under .neg { color: var(--neg); }
 @media (max-width: 700px) {
-  /* every row becomes a card, every column shown with its label: nothing to switch on, nothing cut off */
+  /* every row becomes a real card: title on top, then each column with its label, all fields shown */
   .tbl-wrap:has(.tbl.fit) { overflow-x: visible; margin: 0; padding: 0; }
-  .tbl.fit, .tbl.fit tbody, .tbl.fit tfoot { display: block; font-size: .86rem; }
+  .tbl.fit, .tbl.fit tbody, .tbl.fit tfoot { display: block; font-size: .88rem; }
   .tbl.fit thead { display: none; }
-  .tbl.fit tr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; padding: 11px 2px; border-bottom: 1px solid var(--line); }
-  .tbl.fit td { display: block; padding: 0; border: 0; text-align: left; min-width: 0; overflow-wrap: anywhere; white-space: normal; position: static; }
-  .tbl.fit td::before { content: attr(data-label); display: block; font-size: .68rem; color: var(--muted); font-weight: 400; }
-  .tbl.fit td.host { grid-column: 1 / -1; font-weight: 650; font-size: .96rem; }
+  .tbl.fit tr { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; padding: 14px 16px; margin: 0 0 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+  .tbl.fit tr.click { cursor: pointer; transition: background .12s, border-color .12s; }
+  .tbl.fit tr.click:active, .tbl.fit tr.click:focus-visible { background: var(--brand-soft); border-color: var(--brand); outline: none; }
+  .tbl.fit tr.row-bad { background: color-mix(in srgb, var(--neg) 9%, var(--surface)); border-color: color-mix(in srgb, var(--neg) 45%, var(--line)); border-left: 5px solid var(--neg); }
+  .tbl.fit tr.row-warn { background: color-mix(in srgb, var(--warn) 11%, var(--surface)); border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); border-left: 5px solid var(--warn); }
+  .tbl.fit td, .tbl.fit tr.row-bad td, .tbl.fit tr.row-warn td, .tbl.fit tr.click:hover td { display: block; padding: 0; border: 0; background: transparent; text-align: left; min-width: 0; overflow-wrap: anywhere; white-space: normal; position: static; font-weight: 550; line-height: 1.3; }
+  .tbl.fit td::before { content: attr(data-label); display: block; margin-bottom: 2px; font-size: .68rem; font-weight: 500; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); }
+  .tbl.fit td.host { grid-column: 1 / -1; font-size: 1.02rem; font-weight: 700; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
   .tbl.fit td.host::before { display: none; }
   .tbl.fit td:empty, .tbl.fit td.blank { display: none; }
   .tbl.fit .hide-sm { display: block !important; }
   .tbl.fit .m-under { display: none !important; }
-  .tbl.fit tfoot tr { border-top: 2px solid var(--ink); border-bottom: 0; }
-  .tbl.fit tfoot td { border-top: 0; }
+  .tbl.fit tfoot tr { background: var(--brand-soft); border-color: var(--brand); }
+  .tbl.fit tfoot td.host { border-bottom-color: color-mix(in srgb, var(--brand) 35%, transparent); }
 }
 
 /* ---------- home: drop-down tiles, phone-only cards, budget inside the month card ---------- */

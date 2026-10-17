@@ -20,7 +20,6 @@ export const BUCKETS = [
   { id: 'high', name: 'High risk', max: null }, { id: 'vhigh', name: 'Very high risk', max: null },
 ];
 export const BASES = [
-  { value: 'total', label: 'Everything I own' },
   { value: 'invest', label: 'Investments only (leave out bank balances)' },
   { value: 'market', label: 'Market-linked only (shares, ETFs, funds)' },
   { value: 'group', label: 'Its own group (all shares, all funds ...)' },
@@ -35,11 +34,11 @@ export const SCOPES = [
   { key: 'stocks', label: 'Each share', cls: 'shares', unit: 'share', of: 'group' },
   { key: 'etfs', label: 'Each ETF', cls: 'etfs', unit: 'ETF', of: 'group' },
   { key: 'funds', label: 'Each mutual fund', cls: 'funds', unit: 'fund', of: 'group' },
-  { key: 'bonds', label: 'Each bond issuer', cls: 'bonds', unit: 'issuer', of: 'total' },
-  { key: 'lending', label: 'Each person lent to', cls: 'lending', unit: 'borrower', of: 'total' },
-  { key: 'fds', label: 'Each FD bank / issuer', cls: 'fds', unit: 'issuer', of: 'total' },
-  { key: 'chits', label: 'Each chit organiser', cls: 'chits', unit: 'chit group', of: 'total' },
-  { key: 'lic', label: 'Each insurance / RD', cls: 'lic', unit: 'policy', of: 'total' },
+  { key: 'bonds', label: 'Each bond issuer', cls: 'bonds', unit: 'issuer', of: 'invest' },
+  { key: 'lending', label: 'Each person lent to', cls: 'lending', unit: 'borrower', of: 'invest' },
+  { key: 'fds', label: 'Each FD bank / issuer', cls: 'fds', unit: 'issuer', of: 'invest' },
+  { key: 'chits', label: 'Each chit organiser', cls: 'chits', unit: 'chit group', of: 'invest' },
+  { key: 'lic', label: 'Each insurance / RD', cls: 'lic', unit: 'policy', of: 'invest' },
 ];
 // which rules a what-if purchase into a kind of holding can fall under (first = where a new name goes)
 const SCOPES_OF = { shares: ['stocks'], etfs: ['etfs'], funds: ['funds'], bonds: ['bonds'], lending: ['lending'], fds: ['fds', 'lending'], chits: ['chits'], lic: ['lic'] };
@@ -48,13 +47,14 @@ const RULE_DEFAULT = { stocks: { max: 0.12 } };
 /** The settings with defaults filled in. */
 export function riskCfg(data) {
   const r = (data && data.risk) || {};
-  const basis = r.basis === 'invest' ? 'invest' : 'total';
+  const basis = 'invest'; // always investments only: bank balances are never part of a limit (an old 'total' choice is read as 'invest')
+  const inv = (o) => (o === 'total' ? 'invest' : o);
   const nearAt = r.nearAt > 0 && r.nearAt < 1 ? r.nearAt : 0.9;
   const buckets = (r.buckets && r.buckets.length ? r.buckets : BUCKETS).map((b) => ({ maxAmt: null, ...b }));
   const classes = {};
-  for (const c of P.CLASSES) { const d = CLASS_DEFAULT[c.key] || ['medium', null]; const o = (r.classes && r.classes[c.key]) || {}; classes[c.key] = { bucket: o.bucket || d[0], max: o.max !== undefined ? o.max : d[1], maxAmt: o.maxAmt ?? null, of: o.of || null }; }
+  for (const c of P.CLASSES) { const d = CLASS_DEFAULT[c.key] || ['medium', null]; const o = (r.classes && r.classes[c.key]) || {}; classes[c.key] = { bucket: o.bucket || d[0], max: o.max !== undefined ? o.max : d[1], maxAmt: o.maxAmt ?? null, of: inv(o.of) || null }; }
   const rules = {};
-  for (const s of SCOPES) { const o = (r.rules && r.rules[s.key]) || {}; const d = RULE_DEFAULT[s.key] || {}; rules[s.key] = { max: o.max !== undefined ? o.max : d.max ?? null, maxAmt: o.maxAmt !== undefined ? o.maxAmt : d.maxAmt ?? null, of: o.of || s.of }; }
+  for (const s of SCOPES) { const o = (r.rules && r.rules[s.key]) || {}; const d = RULE_DEFAULT[s.key] || {}; rules[s.key] = { max: o.max !== undefined ? o.max : d.max ?? null, maxAmt: o.maxAmt !== undefined ? o.maxAmt : d.maxAmt ?? null, of: inv(o.of) || s.of }; }
   const overrides = r.overrides ? r.overrides.map((x) => ({ ...x })) : [{ id: 'ov1', scope: 'bonds', name: 'Navi', max: null, maxAmt: 1000000 }];
   return { basis, nearAt, buckets, classes, rules, overrides };
 }

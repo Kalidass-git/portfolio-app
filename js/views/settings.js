@@ -78,7 +78,7 @@ export function render() {
         canEdit() ? btn('Restore from file', async () => { const d = await pickFile(); if (!d) return; if (!validData(d)) return toast('That file is not a portfolio data file.', 'bad'); if (await confirmDialog('Replace everything in the app with this file?', 'Restore')) { await doRestore(d); } }) : null))));
 
   if (canEdit()) {
-    root.append(section('Loans (see Fixed income → Loans I owe)', table([
+    root.append(section('Loans (see Fixed income → Loans)', table([
       { label: 'Loan', get: (l) => l.name }, { label: 'Outstanding', cls: 'r', get: (l) => money(l.amount) }, { label: 'Rate', cls: 'r', get: (l) => (l.rate * 100).toFixed(2) + '%' },
     ], data.liabilities, { onRow: (l) => liabilityForm(data.liabilities.find((x) => x.id === l.id)), footer: { label: 'Total' } }), [btn('Add loan', () => liabilityForm())]));
     root.append(section('Calculation settings', h('div', { class: 'kv' },

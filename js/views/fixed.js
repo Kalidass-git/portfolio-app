@@ -78,7 +78,7 @@ function receivableForm(r) {
 }
 
 import * as loans from './loans.js';
-const TABS = [['active', 'Fixed income'], ['loans', 'Loans I owe'], ['closed', 'Closed']];
+const TABS = [['bonds', 'Bonds'], ['fds', 'FDs'], ['lending', 'Lendings'], ['loans', 'Loans'], ['closed', 'Closed']];
 export function render() {
   const { all, data } = S;
   const root = h('div', { class: 'page' });
@@ -87,12 +87,14 @@ export function render() {
   if (tab === 'closed') { closedView(root); return root; }
   if (tab === 'loans') { loans.view(root); return root; }
   const f = all.fixed;
-  root.append(h('div', { class: 'stats' },
-    stat('Fixed income & lending', money(f.total), 'principal plus interest added so far'),
-    stat('Bonds', money(f.bondPrincipal), `${all.bonds.length} bonds · ${money(all.cashflow[3].perMonth)} a month before TDS`),
-    stat('Deposits & lending', money(f.fdPrincipal + f.lendPrincipal + f.accruedDeposits), `${all.fds.length} FDs · ${all.lending.filter((l) => l.principal > 0).length} loans given`)));
+  const stats = {
+    bonds: () => h('div', { class: 'stats' }, stat('Bonds', money(f.bondPrincipal), `${all.bonds.length} bonds`), stat('Interest a month', money(all.cashflow[3].perMonth), 'before TDS')),
+    fds: () => h('div', { class: 'stats' }, stat('Fixed deposits', money(f.fdPrincipal), `${all.fds.length} FDs`), stat('Interest added so far', money(all.fds.reduce((a, x) => a + (x.accrued || 0), 0)), 'on top of the amount')),
+    lending: () => h('div', { class: 'stats' }, stat('Lent out', money(f.lendPrincipal), `${all.lending.filter((l) => l.principal > 0).length} loans given`), stat('Interest added so far', money(all.lending.reduce((a, x) => a + (x.accrued || 0), 0)), 'on top of the amount')),
+  };
+  if (stats[tab]) root.append(stats[tab]());
 
-  root.append(section('Bonds',
+  if (tab === 'bonds') root.append(section('Bonds',
     table([
       { label: 'Bond', host: true, get: (b) => b.name },
       { label: 'Holder', mob: 'under', get: (b) => b.holder },
@@ -113,12 +115,13 @@ export function render() {
     { label: 'Per day', cls: 'r', get: (x) => money(x.daily) },
     { label: 'Matures', mob: 'under', mlabel: 'matures ', get: (x) => dateStr(x.maturityDate) },
   ];
-  root.append(section('Fixed deposits', table(depCols, all.fds, { footer: { label: 'Total' }, onRow: canEdit() ? (x) => depositForm('fd', data.fds.find((y) => y.id === x.id)) : null }),
+  if (tab === 'fds') root.append(section('Fixed deposits', table(depCols, all.fds, { footer: { label: 'Total' }, onRow: canEdit() ? (x) => depositForm('fd', data.fds.find((y) => y.id === x.id)) : null }),
     canEdit() ? [btn('Add FD', () => depositForm('fd'))] : null));
-  root.append(section('Private lending',
+  if (tab === 'lending') root.append(section('Private lending',
     table(depCols, all.lending, { footer: { label: 'Total' }, onRow: canEdit() ? (x) => depositForm('lending', data.lending.find((y) => y.id === x.id)) : null }),
     canEdit() ? [btn('Add loan', () => depositForm('lending'))] : null));
 
+  if (tab !== 'lending') return root;
   const rc = data.receivables.filter((r) => r.active !== false).map((r) => C.receivableStatus(r, all.asOf)).sort((a, b) => (b.overdue - a.overdue) || (a.received - b.received) || (a.due < b.due ? -1 : 1));
   const late = rc.filter((r) => r.overdue), waiting = rc.filter((r) => !r.received && !r.overdue && !r.notStarted && C.monthKey(r.due) <= C.monthKey(all.asOf));
   const lateSum = late.reduce((a, r) => a + (r.expected || 0), 0), waitSum = waiting.reduce((a, r) => a + (r.expected || 0), 0);
@@ -126,6 +129,9 @@ export function render() {
     h('div', null,
       late.length ? h('div', { class: 'alert' }, h('b', null, `${late.length} payment${late.length > 1 ? 's' : ''} overdue · ${money(lateSum)}`), h('p', null, late.map((r) => `${r.name} (${money(r.expected)}, was due ${dateStr(r.due)})`).join(' · '))) : null,
       waiting.length ? h('div', { class: 'alert warn', style: { marginTop: late.length ? 8 : 0 } }, h('b', null, `${waiting.length} still to come this month · ${money(waitSum)}`), h('p', null, waiting.map((r) => `${r.name} (${money(r.expected)}, due ${dateStr(r.due)})`).join(' · '))) : null,
+      h('div', { class: 'stats' },
+        stat('Received this month', money(rc.filter((r) => r.received).reduce((x, r) => x + (r.expected || 0), 0)), `${rc.filter((r) => r.received).length} of ${rc.length} payments in`),
+        stat('Received so far', money(rc.reduce((x, r) => x + (r.total || 0), 0)), `${rc.reduce((x, r) => x + (r.installmentsPaid || 0), 0)} payments since each started`)),
       !late.length && !waiting.length && rc.length ? h('p', { class: 'note', style: { marginTop: 0 } }, 'Everything due this month has been received.') : null,
       table([
       { label: 'From', host: true, get: (r) => r.name },

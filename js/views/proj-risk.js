@@ -32,7 +32,7 @@ function classForm(cfg, row) {
     fields: [
       { key: 'bucket', label: 'Risk group', type: 'select', options: cfg.buckets.map((b) => ({ value: b.id, label: b.name })) },
       { key: 'max', label: 'Most allowed (%)', type: 'number', half: true, hint: `Today it is ${pcs(row.pct)}. Leave empty for no limit.` },
-      { key: 'of', label: 'Percent of', type: 'select', half: true, options: [{ value: '', label: 'Follow the main setting' }, { value: 'total', label: 'Everything I own' }, { value: 'invest', label: 'Investments only' }] },
+      { key: 'of', label: 'Percent of', type: 'select', half: true, options: [{ value: '', label: 'Follow the main setting' }, { value: 'invest', label: 'Investments only' }] },
       { key: 'maxAmt', label: 'Or most rupees in total', type: 'number', hint: 'Percent, rupees or both: the stricter one applies.' },
     ],
     onSave: (v) => mutate((d) => { const r = risk(d); r.classes = r.classes || {}; r.classes[row.key] = { bucket: v.bucket, max: outPct(v.max), maxAmt: outAmt(v.maxAmt), of: v.of || null }; }),
@@ -74,14 +74,13 @@ export function render(root) {
   const worstItem = ev.items.slice().sort((a, b) => b.pct - a.pct)[0];
   const top = st.items.slice().sort((a, b) => b.value - a.value)[0];
 
-  root.append(section('What limits are measured against', h('div', null,
-    h('nav', { class: 'seg', 'aria-label': 'Measured against' }, [['total', 'Everything I own'], ['invest', 'Investments only']].map(([k, l]) => h('a', { href: 'javascript:void 0', class: cfg.basis === k ? 'on' : '', 'aria-selected': String(cfg.basis === k), onclick: (e) => { e.preventDefault(); if (canEdit()) { mutate((d) => { risk(d).basis = k; }); } else { toast('Only the owner can change this'); } } }, l))),
+  root.append(section('How limits work', h('div', null,
     h('div', { class: 'filters' }, h('label', null, 'Show amber when a limit is ', h('select', { 'aria-label': 'Amber at', onchange: (e) => { if (canEdit()) mutate((d) => { risk(d).nearAt = Number(e.target.value); }); else toast('Only the owner can change this'); } }, [0.8, 0.9, 0.95].map((v) => h('option', { value: v, selected: v === cfg.nearAt }, Math.round(v * 100) + '% used'))))),
-    h('p', { class: 'note' }, cfg.basis === 'invest' ? 'Risk-group and kind limits are shares of your investments only: bank balances are left out of both the amount and the total.' : 'Risk-group and kind limits are shares of everything you own, bank balances included.', ' Each kind, rule and named holding can use its own basis too: tap it to change.'))));
+    h('p', { class: 'note' }, 'Limits are shares of your investments only: bank balances are left out of both the amount and the total. A kind, rule or holding can instead be measured against market-linked holdings or its own group: tap it to change.'))));
   root.append(h('div', { class: 'stats' },
     stat('Limits', ev.breaches.length ? h('span', { class: 'neg' }, `${ev.breaches.length} over`) : ev.near.length ? h('span', { class: 'warn' }, `${ev.near.length} close`) : h('span', { class: 'pos' }, 'All within'), ev.breaches.length ? (ev.near.length ? `and ${ev.near.length} close to a limit` : 'see the list below') : ev.near.length ? 'nothing over, but close' : 'nothing is above a limit you set'),
     stat('Total assets', money(T), 'everything is measured against this'),
-    stat('High and very high risk', pcs(ev.buckets.filter((b) => b.key === 'high' || b.key === 'vhigh').reduce((a, b) => a + b.pct, 0)), 'of everything you own'),
+    stat('High and very high risk', pcs(ev.buckets.filter((b) => b.key === 'high' || b.key === 'vhigh').reduce((a, b) => a + b.pct, 0)), 'of your investments'),
     top ? stat('Largest single holding', pcs(top.value / T), `${top.name} · ${money(top.value)}`) : null));
 
   root.append(section('What needs attention', h('div', null, ev.breaches.length

@@ -269,15 +269,16 @@ function entryForm(sv, idx) {
     onDelete: isNew ? null : () => mutate((d) => { d.savings.find((x) => x.id === sv.id).entries.splice(idx, 1); }),
   });
 }
-export function savingsTab() {
+export function savingsTab(only) {
   const { all } = S;
   const wrap = h('div');
   const known = ['Chit', 'EPF', 'PPF', 'LIC', 'RD'];
-  const groups = [['Chits', 'Chit'], ['Provident fund', ['EPF', 'PPF']], ['Insurance & recurring deposits', ['LIC', 'RD']], ['Other savings', all.savings.filter((s) => !known.includes(s.type)).map((s) => s.type)]];
+  const groups = [['Chits', 'Chit'], ['Provident fund', ['EPF', 'PPF']], ['Insurance', 'LIC'], ['Recurring deposits', 'RD'], ['Other savings', all.savings.filter((s) => !known.includes(s.type)).map((s) => s.type)]];
   for (const [title, types] of groups) {
+    if (only && only !== title) continue;
     const list = all.savings.filter((s) => [].concat(types).includes(s.type));
     if (title === 'Other savings' && !list.length) continue;
-    const withX = title === 'Chits' || title === 'Insurance & recurring deposits' || title === 'Other savings';
+    const withX = title === 'Chits' || title === 'Insurance' || title === 'Recurring deposits' || title === 'Other savings';
     wrap.append(section(title,
       table([
         { label: 'Name', host: true, get: (s) => s.name },
@@ -288,7 +289,7 @@ export function savingsTab() {
         { label: 'Interest / day', cls: 'r', get: (s) => money(s.daily), total: (rs) => money(rs.reduce((a, s) => a + s.daily, 0)) },
         { label: 'Matures', mob: 'under', mlabel: 'matures ', get: (s) => dateStr(s.maturityDate) },
       ], list, { footer: { label: 'Total' }, onRow: openSaving, empty: 'No accounts of this kind.' }),
-      canEdit() && title === 'Chits' ? [btn('Add savings account', () => savingForm())] : null));
+      canEdit() ? [btn('Add savings account', () => savingForm())] : null));
     if (title === 'Chits') wrap.append(h('p', { class: 'note' }, 'For a running chit the XIRR (marked ≈) is an estimate: it uses the “Expected payout” if you entered one, otherwise the assumed yearly rate. When the chit ends, press “Close it”, enter the date you received the money and the amount you actually got after commission, and the real XIRR appears here and under Closed.'));
   }
   return wrap;
