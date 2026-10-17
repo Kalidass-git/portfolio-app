@@ -587,3 +587,26 @@ dialog.sheet.wide { width: min(1180px, 96vw); }
 .tbl.imp .imp-desc { max-width: 280px; overflow-wrap: anywhere; } .tbl.imp tr.imp-off td { opacity: .55; }
 .imp-cat { min-width: 190px; max-width: 240px; } .imp-cat.need { border-color: var(--warn); }
 .imp-foot { justify-content: flex-end; margin-top: 8px; } .imp-map label { display: flex; gap: 10px; align-items: center; margin-top: 6px; }
+.imp-paste { width: 100%; box-sizing: border-box; font: .85rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); resize: vertical; min-height: 160px; }
+.imp-actions { margin: 10px 0 4px; }
+
+/* Print-friendly family report (8.9.2): black text on white, outlined header and tiles, no heavy ink, readable on a black-and-white printer */
+@media print {
+  .rpt, .rpt * { color: #000 !important; }
+  .rpt { --ink: #000; --muted: #222; --line: #888; }
+  .rpt-head { background: #fff !important; border-top: 4px solid #1f5fb8; border-bottom: 2px solid #1f5fb8; }
+  .rpt-head p, .rpt-date { opacity: 1 !important; }
+  .rpt .kpi { background: #fff !important; border: 1.5px solid #000; border-left-width: 7px; opacity: 1; }
+  .rpt .kpi.k1 { border-left-color: #2a78d6; } .rpt .kpi.k2 { border-left-color: #d9622b; } .rpt .kpi.k3 { border-left-color: #17744a; } .rpt .kpi.k4 { border-left-color: #7b5ad6; }
+  .rpt .kpi span { opacity: 1 !important; font-weight: 600; }
+  .rpt-h { border-bottom: 1.5px solid #000; padding-bottom: 2px; font-weight: 700; }
+  .rpt-tbl th, .rpt-tbl .small { color: #000 !important; font-weight: 700; }
+  .rpt-tbl th { border-bottom-color: #000; } .rpt-tbl tfoot td { border-top-color: #000; }
+  .rpt .box { background: #fff !important; border: 1px solid #666; }
+  .rpt-detail .rpt-parent { background: #e9ecf0 !important; }
+  .rpt-detail .rpt-parent td { border-bottom-color: #666; }
+  .rpt-detail .rpt-child td, .rpt-detail .rpt-child .r, .rpt-detail .ch-name, .rpt-detail .ch-note, .rpt-detail .cnt { color: #000 !important; }
+  .rpt-detail .rpt-child td { border-bottom-color: #999; }
+  .rpt-foot { border-top-color: #000; }
+  .rpt .hb-track { background: #fff !important; border: 1px solid #666; }
+}

@@ -5,7 +5,7 @@ import * as CAT from '../categories.js';
 import { h, money, dateStr, dialog, formDialog, toast, setOptions } from '../ui.js';
 import { readTable } from '../xlsx.js';
 import { autoPoint } from './backups.js';
-import { buildImport, recheckDuplicates, SAMPLE_CSV } from '../bankimport.js';
+import { buildImport, recheckDuplicates, parseText, SAMPLE_CSV } from '../bankimport.js';
 
 const NEW = '__new__';
 const lc = (s) => String(s || '').trim().toLowerCase();
@@ -25,29 +25,40 @@ export function openBankImport(categoryOptions) {
   const box = h('div');
   const dlg = dialog('Import bank transactions', box, []);
   dlg.el.classList.add('wide');
-  let rows = [], pending = [], file = null;
+  let rows = [], pending = [], file = null, pasted = '';
 
   const known = () => new Set(CAT.categoryList(data).map((c) => lc(c.name)));
   const includedRows = () => rows.filter((r) => r.include);
 
   function start() {
+    const ta = h('textarea', { class: 'imp-paste', rows: 9, spellcheck: false, 'aria-label': 'Paste bank transactions', placeholder: 'account,date,description,credit,debit\nSCB,17/10/2026,Groceries,,2500\nSCB,18/10/2026,Salary,100000,' }, pasted);
     box.replaceChildren(
-      h('p', null, 'Choose a CSV file with the columns ', h('b', null, 'account, date, description, credit, debit'), '. You will see a preview before anything is saved.'),
+      h('p', null, 'Paste the rows here, or choose a file. The columns are ', h('b', null, 'account, date, description, credit, debit'), '. You will see a preview before anything is saved.'),
+      ta,
+      h('div', { class: 'btn-row imp-actions' }, h('button', { class: 'primary', onclick: () => fromText(ta.value) }, 'Preview pasted rows'), h('button', { onclick: choose }, 'Choose a CSV file instead'), h('button', { onclick: downloadSample }, 'Download a sample')),
       h('ul', { class: 'imp-help' },
+        h('li', null, 'You can paste straight from Excel or Google Sheets (tab separated) or CSV text. The first line must be the column names.'),
         h('li', null, 'Account can be the account name, “name · holder” or its id. Entries already in the app (same account, date, description and amount) are left out.'),
         h('li', null, 'Dates can be 2026-10-17, 17/10/2026 or 17-Oct-2026. Amounts can have commas.'),
-        h('li', null, 'A “category” column is optional and used when it matches one of your categories.')),
-      h('div', { class: 'btn-row' }, h('button', { class: 'primary', onclick: choose }, 'Choose CSV file'), h('button', { onclick: downloadSample }, 'Download a sample')));
+        h('li', null, 'A “category” column is optional and used when it matches one of your categories.')));
+    setTimeout(() => ta.focus(), 0);
+  }
+  function load(table, name) {
+    try {
+      const res = buildImport(table, data);
+      file = { name }; rows = res.rows;
+      for (const r of rows) { r.include = r.status === 'new' && !!r.acct; }
+      preview();
+    } catch (e) { toast(e.message || 'Could not read this.', 'bad'); }
+  }
+  function fromText(text) {
+    pasted = text;
+    if (!text.trim()) { toast('Paste the rows first.', 'bad'); return; }
+    load(parseText(text), 'Pasted rows');
   }
   async function choose() {
     const f = await pickFile(); if (!f) return;
-    try {
-      const table = await readTable(f);
-      const res = buildImport(table, data);
-      file = f; rows = res.rows;
-      for (const r of rows) { r.include = r.status === 'new' && !!r.acct; }
-      preview();
-    } catch (e) { toast(e.message || 'Could not read this file.', 'bad'); }
+    try { load(await readTable(f), f.name); } catch (e) { toast(e.message || 'Could not read this file.', 'bad'); }
   }
 
   const optionsFor = (r) => {
@@ -124,7 +135,7 @@ export function openBankImport(categoryOptions) {
         h('thead', null, h('tr', null, ['', 'Date', 'Account', 'Description', 'Paid out', 'Received', 'Category', ''].map((t, i) => h('th', { class: i === 4 || i === 5 ? 'r' : '' }, t)))),
         h('tbody', null, trs))),
       h('p', { class: 'note' }, `Selected: paid out ${money(out)}, received ${money(inn)}.`, needCat ? ` ${needCat} still have no category and will go in as “Unknown”.` : '', ' Changing a category also changes the rows with the same description. “+ New category…” creates one with its type.'),
-      h('div', { class: 'btn-row imp-foot' }, h('button', { onclick: start }, 'Choose another file'), h('button', { onclick: () => dlg.close() }, 'Cancel'), doImport));
+      h('div', { class: 'btn-row imp-foot' }, h('button', { onclick: start }, 'Back'), h('button', { onclick: () => dlg.close() }, 'Cancel'), doImport));
     const s2 = box.querySelector('.imp-scroll'); if (s2) s2.scrollTop = top;
   }
 

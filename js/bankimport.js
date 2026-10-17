@@ -13,6 +13,24 @@ const HEADS = {
   category: ['category'],
 };
 
+/** Pasted text (from Excel, a bank site or a CSV) -> rows. Tab, comma or semicolon separated; quotes are understood. */
+export function parseText(text) {
+  const t = String(text || '').replace(/^\uFEFF/, '');
+  const first = t.split(/\r?\n/).find((l) => l.trim()) || '';
+  const sep = first.includes('\t') ? '\t' : (first.match(/;/g) || []).length > (first.match(/,/g) || []).length ? ';' : ',';
+  const rows = []; let row = [], cur = '', q = false;
+  for (let i = 0; i < t.length; i++) {
+    const ch = t[i];
+    if (q) { if (ch === '"') { if (t[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+    else if (ch === '"') q = true;
+    else if (ch === sep) { row.push(cur); cur = ''; }
+    else if (ch === '\n' || ch === '\r') { if (ch === '\r' && t[i + 1] === '\n') i++; row.push(cur); rows.push(row); row = []; cur = ''; }
+    else cur += ch;
+  }
+  if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+  return rows.filter((r) => r.some((c) => String(c).trim() !== ''));
+}
+
 /** Find the header row and which column is which. Returns null when date and an amount column are not both found. */
 export function findColumns(rows) {
   for (let i = 0; i < Math.min(rows.length, 15); i++) {
