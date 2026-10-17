@@ -15,6 +15,7 @@ import * as riskPage from './views/risk.js';
 import * as report from './views/report.js';
 import * as incexp from './views/incexp.js';
 import * as networth from './views/networth.js';
+import * as insights from './views/insights.js';
 import * as settings from './views/settings.js';
 
 const ROUTES = {
@@ -31,6 +32,7 @@ const ROUTES = {
   report: { label: 'Family report', short: 'Family report', view: report, tab: 'report', group: 'Report', icon: 'M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h7' },
   networth: { label: 'Net worth over time', short: 'Net worth', view: networth, tab: 'report', group: 'Report', icon: 'M3 17l6-6 4 4 8-9M15 6h6v6' },
   incexp: { label: 'Income vs expense', short: 'Income vs expense', view: incexp, tab: 'report', group: 'Report', icon: 'M4 20V10m6 10V4m6 16v-7m4 7H2' },
+  insights: { label: 'Insights', short: 'Insights', view: insights, tab: 'report', group: 'Report', icon: 'M9 18h6M10 21h4M12 3a6 6 0 0 0-3 11.2V16h6v-1.8A6 6 0 0 0 12 3z' },
   settings: { label: 'Settings', view: settings, tab: 'settings', group: 'Manage', icon: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM3 12h3m12 0h3M12 3v3m0 12v3' },
 };
 const TABS = [['home', 'Home', 'home'], ['assets', 'Assets', 'cash'], ['flow', 'Expenses', 'flow'], ['outlook', 'Outlook', 'projector'], ['report', 'Report', 'report']];
@@ -124,7 +126,7 @@ function mergeNotice() {
 
 function assetsSubnav(cur) {
   // the Family report is shown on its own, without the tab strip
-  const grp = ROUTES[cur].tab === 'assets' ? 'Assets' : ROUTES[cur].tab === 'report' && cur !== 'report' ? 'Report' : null;
+  const grp = ROUTES[cur].tab === 'assets' ? 'Assets' : ROUTES[cur].tab === 'report' && cur !== 'report' && cur !== 'insights' ? 'Report' : null;
   if (!grp) return null;
   return h('nav', { class: 'section-tabs', 'aria-label': grp === 'Assets' ? 'Asset types' : 'Reports' }, Object.entries(ROUTES).filter(([, r]) => r.group === grp).map(([k, r]) => h('a', { class: k === cur ? 'on' : '', href: '#/' + k, 'aria-current': k === cur ? 'page' : null }, r.short || r.label)));
 }

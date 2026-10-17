@@ -18,7 +18,7 @@ export function render() {
   const sub = location.hash.split('?')[0].split('/')[2];
   if (sub === 'risk' || sub === 'whatif') { location.replace('#/risk/' + (sub === 'risk' ? 'limits' : 'whatif')); return root; }
   const tab = subTab(TABS.map((t) => t[0]));
-  root.append(outlookSwitch('projector'), h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Wealth projector views'), h('a', { class: 'crosslink', href: '#/plan', title: 'Plan page (from your Excel)' }, 'Plan page')));
+  root.append(outlookSwitch('projector'), h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Wealth projector views'), h('a', { class: 'crosslink', href: '#/plan', title: 'Plan page (from your Excel)' }, 'Plan page'), h('a', { class: 'crosslink', href: '#/insights/allocation', title: 'Target mix and time to reach it' }, 'Allocation goal')));
   if (tab === 'year') year.render(root);
   else if (tab === 'ahead') ahead.render(root);
   else market.render(root);
