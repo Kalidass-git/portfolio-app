@@ -213,6 +213,22 @@ const snapOf = (data, all, month, note = '') => {
 };
 export { snapOf as makeSnapshot };
 
+/**
+ * Month-end positions typed into the Plan sheet (Targets, "Month by month") that the projector has no snapshot for yet.
+ * Returns snapshot records (no per-class split, since the sheet only had totals). Nothing is changed here.
+ */
+export function planSheetSnapshots(data, asOf) {
+  const have = new Set(((data.projector && data.projector.snapshots) || []).map((x) => x.month));
+  const out = [];
+  for (const m of (data.targets && data.targets.months) || []) {
+    const month = (m.date || '').slice(0, 7);
+    if (!month || have.has(month) || !(m.actualAsset > 0) || m.date.slice(0, 7) > asOf.slice(0, 7)) continue;
+    const loans = Math.round(m.actualLiability || 0), assets = Math.round(m.actualAsset);
+    out.push({ id: 's' + month, month, date: m.date, net: assets - loans, assets, loans, note: 'From the Plan sheet' });
+  }
+  return out.sort((a, b) => (a.month < b.month ? -1 : 1));
+}
+
 /** A new plan for `year`, starting from today's position. Target defaults to what the Steady outlook reaches, rounded. */
 export function newYearPlan(data, all, year) {
   const b = baseline(data, all), a = defaults(data, all);

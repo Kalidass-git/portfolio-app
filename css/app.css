@@ -447,7 +447,7 @@ button.danger.primary-ish, dialog.sheet footer button.danger { border-color: var
 .rpt-scroll { overflow-x: auto; }
 .rpt-detail { table-layout: auto; }
 .rpt-detail .rpt-parent { background: color-mix(in srgb, var(--g, #1f5fb8) 13%, #fff); cursor: pointer; }
-.rpt-detail .rpt-parent td { border-bottom: 1px solid color-mix(in srgb, var(--g, #1f5fb8) 40%, #fff); padding-top: 5px; padding-bottom: 5px; }
+.rpt-detail .rpt-parent td { border-bottom: 1px solid color-mix(in srgb, var(--g, #1f5fb8) 26%, #fff); padding-top: 5px; padding-bottom: 5px; }
 .rpt-detail .cnt { font-weight: 400; font-size: .72rem; color: var(--muted); }
 .rpt-detail .rpt-child td { font-size: .74rem; color: #4a5a70; padding: 2px 6px; border-bottom: 1px dotted var(--line); }
 .rpt-detail .rpt-child .ch-name { padding-left: 14px; color: #2a3b52; } .rpt-detail .ch-note { color: #6a5a2f; max-width: 260px; }
@@ -590,25 +590,32 @@ dialog.sheet.wide { width: min(1180px, 96vw); }
 .imp-paste { width: 100%; box-sizing: border-box; font: .85rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); resize: vertical; min-height: 160px; }
 .imp-actions { margin: 10px 0 4px; }
 
-/* Print-friendly family report (8.9.2): black text on white, outlined header and tiles, no heavy ink, readable on a black-and-white printer */
+/* Family report print (8.9.4): greyscale, hairline borders, a lighter line for child rows than for parent rows */
+.rpt .kpi strong { font-weight: 500; } .rpt .kpi.key strong { font-weight: 800; font-size: 1.3rem; }
+.rpt .kpi.key span { font-weight: 600; }
 @media print {
+  .section-tabs { display: none !important; }
   .rpt, .rpt * { color: #000 !important; }
-  .rpt { --ink: #000; --muted: #222; --line: #888; }
-  .rpt-head { background: #fff !important; border-top: 4px solid #1f5fb8; border-bottom: 2px solid #1f5fb8; }
-  .rpt-head p, .rpt-date { opacity: 1 !important; }
-  .rpt .kpi { background: #fff !important; border: 1.5px solid #000; border-left-width: 7px; opacity: 1; }
-  .rpt .kpi.k1 { border-left-color: #2a78d6; } .rpt .kpi.k2 { border-left-color: #d9622b; } .rpt .kpi.k3 { border-left-color: #17744a; } .rpt .kpi.k4 { border-left-color: #7b5ad6; }
-  .rpt .kpi span { opacity: 1 !important; font-weight: 600; }
-  .rpt-h { border-bottom: 1.5px solid #000; padding-bottom: 2px; font-weight: 700; }
-  .rpt-tbl th, .rpt-tbl .small { color: #000 !important; font-weight: 700; }
-  .rpt-tbl th { border-bottom-color: #000; } .rpt-tbl tfoot td { border-top-color: #000; }
-  .rpt .box { background: #fff !important; border: 1px solid #666; }
-  .rpt-detail .rpt-parent { background: #e9ecf0 !important; }
-  .rpt-detail .rpt-parent td { border-bottom-color: #666; }
-  .rpt-detail .rpt-child td, .rpt-detail .rpt-child .r, .rpt-detail .ch-name, .rpt-detail .ch-note, .rpt-detail .cnt { color: #000 !important; }
-  .rpt-detail .rpt-child td { border-bottom-color: #999; }
-  .rpt-foot { border-top-color: #000; }
-  .rpt .hb-track { background: #fff !important; border: 1px solid #666; }
+  .rpt { --ink: #000; --muted: #444; --line: #e3e6ea; }
+  .rpt-head { background: #fff !important; border: 0 !important; border-bottom: 1px solid #b9bfc7 !important; }
+  .rpt-head p { opacity: 1 !important; color: #444 !important; }
+  .rpt-date, .rpt-date * { color: #7a828c !important; opacity: 1 !important; }
+  .rpt .kpi { background: #fff !important; border: 1px solid #d9dde2 !important; border-radius: 8px; opacity: 1; }
+  .rpt .kpi span { opacity: 1 !important; font-weight: 400; color: #555 !important; }
+  .rpt .kpi.key span { color: #000 !important; font-weight: 600; }
+  .rpt .kpi strong { font-weight: 400; }
+  .rpt .kpi.key strong { font-weight: 800; }
+  .rpt-h { border-bottom: 1px solid #d9dde2; padding-bottom: 2px; font-weight: 600; }
+  .rpt-tbl th { color: #444 !important; font-weight: 600; border-bottom: 1px solid #b9bfc7; }
+  .rpt-tbl tfoot td { border-top: 1px solid #b9bfc7; }
+  .rpt-tbl td { border-bottom-color: #e8eaee; }
+  .rpt-detail .rpt-parent { background: #f5f6f8 !important; }
+  .rpt-detail .rpt-parent td { border-top: 1px solid #d3d7dd; border-bottom: 1px solid #d3d7dd; }
+  .rpt-detail .rpt-child td { border-bottom: 1px solid #eceef1; }
+  .rpt-detail .rpt-child:last-child td { border-bottom: 0; }
+  .rpt .box { background: #fff !important; border: 1px solid #e3e6ea; }
+  .rpt-foot { border-top: 1px solid #d9dde2; }
+  .rpt .hb-track { background: #f1f2f4 !important; border: 0; }
 }
 
 /* Income vs expense report (8.9.3) */
@@ -637,3 +644,14 @@ dialog.sheet.wide { width: min(1180px, 96vw); }
 .stat.gain-card .stat-value small { font-size: .55em; font-weight: 600; }
 .stat.gain-card .gx { display: flex; flex-wrap: wrap; gap: 2px 6px; font-size: 1.05rem; align-items: baseline; color: var(--ink); }
 .stat.gain-card .gx b { font-size: 1.25rem; } .stat.gain-card .gx-inv { font-size: .8rem; color: var(--muted); }
+tr.cur-row td, tr.cur-row td.host { background: color-mix(in srgb, var(--brand, #17744a) 12%, var(--surface)); font-weight: 600; }
+tr.cur-row td:first-child { box-shadow: inset 3px 0 0 var(--brand, #17744a); }
+.tbl.fit tr.cur-row { background: color-mix(in srgb, var(--brand, #17744a) 10%, var(--surface)); border-color: var(--brand, #17744a); }
+.now-tag { font-weight: 600; color: var(--brand, #17744a); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+.ie-key i.nw-a { background: var(--s1); } .ie-key i.nw-p { background: var(--s4); border-radius: 50%; }
+tr.proj-row td { color: var(--muted); font-style: italic; }
+.tbl.imp td.miss { color: var(--neg); font-style: italic; font-weight: 600; }
+.imp-was { display: block; color: var(--muted); font-size: .74rem; text-decoration: line-through; }
+.imp-block { margin: 8px 0; } .imp-block p { margin: 4px 0 8px; }
+.tbl.imp tr.row-warn td { background: color-mix(in srgb, var(--warn) 18%, var(--surface)); } .tbl.imp tr.row-warn td:first-child { box-shadow: inset 4px 0 0 var(--warn); }
+.tbl.imp tr.row-bad td:first-child { box-shadow: inset 4px 0 0 var(--neg); }

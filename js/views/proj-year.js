@@ -9,6 +9,7 @@ import * as actual from './proj-actual.js';
 import { rerender, outlooks, ensure, signed, pc, tone, outlookToggle, outlookSelects, planForm, oneOffForm, investForm, setAllOutlook, monthRange } from './proj-shared.js';
 
 let selYear = null;
+const C_months = (year) => Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
 const thisYear = () => Number(String(S.all.asOf).slice(0, 4));
 
 /** Everything the page shows for one plan, worked out once. */
@@ -19,6 +20,8 @@ export function model(plan) {
   const live = P.baseline(S.data, S.all);
   const snaps = cfg.snapshots.filter((s) => s.month > plan.baseline.month && s.month <= `${plan.year}-12`);
   const snapBy = new Map(snaps.map((s) => [s.month, s]));
+  // every month-end snapshot of the plan's year, including months before the plan started
+  const yearSnapBy = new Map(cfg.snapshots.filter((s) => s.month.slice(0, 4) === String(plan.year)).map((s) => [s.month, s]));
   const startFrom = live.month > plan.baseline.month && live.month <= `${plan.year}-12`;
   const fc = startFrom ? P.simulate({ values: live.values, liab: live.liab, month: live.month }, plan.a, oc, P.monthsTo(live.month, plan.year)) : path;
   const projected = fc.length ? fc[fc.length - 1].nw : live.month > `${plan.year}-12` ? (snaps.length ? snaps[snaps.length - 1].net : live.net) : plan.baseline.net;
@@ -27,7 +30,7 @@ export function model(plan) {
   const status = gap >= 0 ? (gap > plan.target * 0.03 ? 'ahead' : 'on track') : gap >= -plan.target * 0.03 ? 'close' : 'behind';
   const monthsLeft = fc.length;
   const extra = gap < 0 && monthsLeft ? P.extraMonthly({ values: startFrom ? live.values : plan.baseline.classes, liab: startFrom ? live.liab : plan.baseline.loans, month: startFrom ? live.month : plan.baseline.month }, plan.a, oc, monthsLeft, plan.target) : 0;
-  return { oc, path, months, live, snaps, snapBy, fc, startFrom, projected, planEnd, gap, status, monthsLeft, extra };
+  return { oc, path, months, live, snaps, snapBy, yearSnapBy, fc, startFrom, projected, planEnd, gap, status, monthsLeft, extra };
 }
 const STATUS = { ahead: ['Ahead of target', 'pos'], 'on track': ['On track', 'pos'], close: ['Slightly behind', 'warn'], behind: ['Behind target', 'neg'] };
 
@@ -97,7 +100,7 @@ export function render(root) {
   }
   const m = model(plan);
   const [stLabel, stTone] = STATUS[m.status];
-  const lastSnap = m.snaps[m.snaps.length - 1];
+  const lastSnap = m.snaps.filter((x) => x.classes).pop() || m.snaps[m.snaps.length - 1];
 
   // ---------- headline ----------
   root.append(h('div', { class: 'stats' },
@@ -141,20 +144,31 @@ export function render(root) {
     canEdit() ? [btn(mine ? 'Update snapshot' : 'Save snapshot', () => saveSnapshot(nowM), 'primary', { keep: true })] : null));
 
   // ---------- month by month ----------
-  const sameMonth = (r) => r.month <= nowM;
-  const rows = m.path.map((r) => { const s = m.snapBy.get(r.month); const a = sameMonth(r) ? monthActual(data, r.month) : null; return { ...r, snap: s, act: a && a.has ? a : null }; });
-  const stat1 = (r) => { if (!r.snap) return r.month > nowM ? 'later' : '–'; const g = r.snap.net - r.nw, pcg = g / r.nw; return pcg > 0.01 ? 'ahead' : pcg >= -0.01 ? 'on track' : pcg >= -0.03 ? 'slightly behind' : 'behind'; };
+  // Every month of the year: months before the plan started show their snapshot only; the plan columns are blank for them.
+  const planBy = new Map(m.path.map((r) => [r.month, r]));
+  const rows = C_months(plan.year).map((mo) => {
+    const pr = planBy.get(mo);
+    const nw = pr ? pr.nw : mo === plan.baseline.month ? plan.baseline.net : null;
+    const snap = m.yearSnapBy.get(mo) || null;
+    const a = mo <= nowM ? monthActual(data, mo) : null;
+    return { month: mo, nw, income: pr ? pr.income : null, out: pr ? pr.out : null, snap, act: a && a.has ? a : null };
+  });
+  const stat1 = (r) => { if (!r.snap) return r.month > nowM ? 'later' : '–'; if (r.nw == null) return 'recorded'; const g = r.snap.net - r.nw, pcg = g / r.nw; return pcg > 0.01 ? 'ahead' : pcg >= -0.01 ? 'on track' : pcg >= -0.03 ? 'slightly behind' : 'behind'; };
+  const fromSheet = P.planSheetSnapshots(data, all.asOf).filter((x) => x.month.slice(0, 4) === String(plan.year));
   root.append(section('Month by month', h('div', null,
+    fromSheet.length && canEdit() ? h('div', { class: 'alert warn' }, h('b', null, `${fromSheet.length} month-end${fromSheet.length === 1 ? '' : 's'} from your Plan sheet ${fromSheet.length === 1 ? 'is' : 'are'} not in this table yet`),
+      h('p', null, `${fromSheet.map((x) => monthLabel(x.month).slice(0, 3)).join(', ')}: these were typed into Plan → Month by month. Bring them in as snapshots so they show here. Months that already have a snapshot are not changed.`),
+      btn('Bring them in', () => mutate((d) => { const add = P.planSheetSnapshots(d, S.all.asOf); const p = ensure(d); p.snapshots.push(...add); p.snapshots.sort((a, b) => (a.month < b.month ? -1 : 1)); toast(`${add.length} month-end${add.length === 1 ? '' : 's'} brought in`); }), 'small', { keep: true })) : null,
     table([
-      { label: 'Month end', host: true, get: (r) => monthLabel(r.month) },
-      { label: 'Plan: net worth', cls: 'r', get: (r) => money(r.nw) },
+      { label: 'Month end', host: true, render: (r) => h('span', null, monthLabel(r.month), r.month === nowM ? h('small', { class: 'now-tag' }, ' now') : null) },
+      { label: 'Plan: net worth', cls: 'r', get: (r) => (r.nw != null ? money(r.nw) : '–') },
       { label: 'Actual: net worth', mob: 'under', mlabel: 'actual ', cls: 'r', get: (r) => (r.snap ? money(r.snap.net) : '–') },
-      { label: 'Ahead / behind', cls: 'r', render: (r) => (r.snap ? h('span', { class: tone(r.snap.net - r.nw) }, signed(r.snap.net - r.nw)) : h('span', { class: 'muted' }, '–')) },
-      { label: 'Income plan | actual', mob: 'hide', cls: 'r', get: (r) => `${compact(r.income)} | ${r.act ? compact(r.act.income) : '–'}` },
-      { label: 'Spending plan | actual', mob: 'hide', cls: 'r', get: (r) => `${compact(r.out)} | ${r.act ? compact(r.act.expenses + r.act.emi + r.act.tax) : '–'}` },
+      { label: 'Ahead / behind', cls: 'r', render: (r) => (r.snap && r.nw != null ? h('span', { class: tone(r.snap.net - r.nw) }, signed(r.snap.net - r.nw)) : h('span', { class: 'muted' }, '–')) },
+      { label: 'Income plan | actual', mob: 'hide', cls: 'r', get: (r) => `${r.income != null ? compact(r.income) : '–'} | ${r.act ? compact(r.act.income) : '–'}` },
+      { label: 'Spending plan | actual', mob: 'hide', cls: 'r', get: (r) => `${r.out != null ? compact(r.out) : '–'} | ${r.act ? compact(r.act.expenses + r.act.emi + r.act.tax) : '–'}` },
       { label: 'Status', mob: 'under', render: (r) => { const s = stat1(r); return h('span', { class: s === 'ahead' || s === 'on track' ? 'pos' : s === 'behind' ? 'neg' : s === 'slightly behind' ? 'warn' : 'muted' }, s); } },
-    ], rows, { onRow: canEdit() ? (r) => snapshotForm(plan, r.month) : null }),
-    h('p', { class: 'note' }, 'Plan net worth is the planned position at each month end. Tap a month to type in its month-end position by hand. Spending includes loan EMI and one-time items; income includes interest that reached your bank.'))));
+    ], rows, { rowClass: (r) => (r.month === nowM ? 'cur-row' : ''), onRow: canEdit() ? (r) => snapshotForm(plan, r.month) : null }),
+    h('p', { class: 'note' }, 'The highlighted row is the current month. Plan net worth is the planned position at each month end; months before the plan started have no plan figure. Tap a month to type in its month-end position by hand. Spending includes loan EMI and one-time items; income includes interest that reached your bank.'))));
 
   // ---------- where it went ----------
   const latest = lastSnap || (m.startFrom ? { month: m.live.month, classes: m.live.values, net: m.live.net, assets: m.live.assets, loans: m.live.liab, live: true } : null);

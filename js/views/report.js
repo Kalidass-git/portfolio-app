@@ -1,6 +1,6 @@
 import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
-import { h, money, compact, dateStr, section, table, formDialog, canEdit, toast } from '../ui.js';
+import { h, money, compact, dateStr, section, table, formDialog, canEdit, toast, isMasked } from '../ui.js';
 import { donut, hbars, legend, color } from '../charts.js';
 
 function noteForm(item) {
@@ -33,6 +33,15 @@ function printReport() {
   setTimeout(() => window.print(), 150);
 }
 
+/** 2.17 Crores, 14 Lakhs: how people say it. Smaller amounts stay in full. */
+const trim = (x) => x.toFixed(2).replace(/\.?0+$/, '');
+function words(v) {
+  if (isMasked()) return money(v);
+  const a = Math.abs(v), sg = v < 0 ? '-' : '';
+  if (a >= 1e7) { const x = a / 1e7; return `${sg}₹${trim(x)} ${Number(trim(x)) === 1 ? 'Crore' : 'Crores'}`; }
+  if (a >= 1e5) { const x = a / 1e5; return `${sg}₹${trim(x)} ${Number(trim(x)) === 1 ? 'Lakh' : 'Lakhs'}`; }
+  return money(v);
+}
 const oneLine = (t) => String(t || '').split('\n').map((x) => x.trim()).filter(Boolean).join(' · ');
 const clip = (t, n) => (t.length > n ? t.slice(0, n - 1).trimEnd() + '…' : t);
 /** Same-named items (and the same note) become one line with a count. */
@@ -93,11 +102,10 @@ export function render() {
       h('div', null, h('h1', null, 'Family wealth summary'), h('p', null, 'Where our money is and whom to contact')),
       h('div', { class: 'rpt-date' }, h('span', null, 'As on'), h('strong', null, dateStr(all.asOf)), meta.preparedBy ? h('span', null, 'Prepared by ' + meta.preparedBy) : null)),
     h('div', { class: 'rpt-kpis' },
-      h('div', { class: 'kpi k1' }, h('span', null, 'Total held'), h('strong', null, money(rep.total))),
-      h('div', { class: 'kpi k2' }, h('span', null, 'Loans to repay'), h('strong', null, money(liab))),
-      h('div', { class: 'kpi k3' }, h('span', null, 'Net worth'), h('strong', null, money(net))),
-      h('div', { class: 'kpi k4' }, h('span', null, 'Monthly interest income'), h('strong', null, money(rep.monthly)))),
-    h('h3', { class: 'rpt-h' }, 'Where the money is, item by item'),
+      h('div', { class: 'kpi k1' }, h('span', null, 'Total Assets'), h('strong', { title: money(rep.total) }, words(rep.total))),
+      h('div', { class: 'kpi k2' }, h('span', null, 'Loans to repay'), h('strong', { title: money(liab) }, words(liab))),
+      h('div', { class: 'kpi k3 key' }, h('span', null, 'Net worth'), h('strong', { title: money(net) }, words(net))),
+      h('div', { class: 'kpi k4 key' }, h('span', null, 'Monthly interest income'), h('strong', null, money(rep.monthly)))),
     h('div', { class: 'rpt-scroll' }, holdingsTable(secs, rep, notes)),
     '');
 
@@ -121,6 +129,8 @@ export function render() {
     h('footer', { class: 'rpt-foot' }, 'Confidential, for family use only. Values are as recorded on the date shown and may have changed since. Do not keep passwords or PINs on this page.'));
 
   root.append(h('div', { class: 'rpts' }, p1, p2));
+
+  root.append(h('p', { class: 'note no-print other-reports' }, 'Other reports: ', h('a', { href: '#/incexp' }, 'Income vs expense'), ' · ', h('a', { href: '#/networth' }, 'Net worth over time')));
 
   // ---------- full list (screen only; tap to add notes) ----------
   root.append(h('div', { class: 'no-print' }, h('h2', { class: 'sec-title' }, 'All holdings and contact notes'), ...rep.sections.filter((s) => s.items.length).map((sec) =>

@@ -29,6 +29,15 @@ export function openBankImport(categoryOptions) {
 
   const known = () => new Set(CAT.categoryList(data).map((c) => lc(c.name)));
   const includedRows = () => rows.filter((r) => r.include);
+  /** What is missing on a row. Rows already in the app unchanged, and rows you left out, have no problems. */
+  const problems = (r) => {
+    if (r.status === 'duplicate' || r.left) return [];
+    if (r.status === 'invalid') return [r.reason];
+    const p = [];
+    if (!r.acct) p.push('account missing');
+    if (r.include && !r.category) p.push('category missing');
+    return p;
+  };
 
   function start() {
     const ta = h('textarea', { class: 'imp-paste', rows: 9, spellcheck: false, 'aria-label': 'Paste bank transactions', placeholder: 'account,date,description,credit,debit\nSCB,17/10/2026,Groceries,,2500\nSCB,18/10/2026,Salary,100000,' }, pasted);
@@ -47,7 +56,7 @@ export function openBankImport(categoryOptions) {
     try {
       const res = buildImport(table, data);
       file = { name }; rows = res.rows;
-      for (const r of rows) { r.include = r.status === 'new' && !!r.acct; }
+      for (const r of rows) { r.include = (r.status === 'new' || r.status === 'update') && !!r.acct; }
       preview();
     } catch (e) { toast(e.message || 'Could not read this.', 'bad'); }
   }
@@ -99,17 +108,17 @@ export function openBankImport(categoryOptions) {
   function preview() {
     const scroll = box.querySelector('.imp-scroll'); const top = scroll ? scroll.scrollTop : 0;
     const accts = new Map(data.accounts.map((a) => [a.id, `${a.name} · ${a.holder}`]));
-    const fresh = rows.filter((r) => r.status === 'new'), dup = rows.filter((r) => r.status === 'duplicate'), bad = rows.filter((r) => r.status === 'invalid');
+    const fresh = rows.filter((r) => r.status === 'new'), upd = rows.filter((r) => r.status === 'update'), dup = rows.filter((r) => r.status === 'duplicate'), bad = rows.filter((r) => r.status === 'invalid');
     const inc = includedRows();
     const out = inc.reduce((a, r) => a + r.debit, 0), inn = inc.reduce((a, r) => a + r.credit, 0);
     // accounts in the file that were not recognised
     const unknownAcct = [...new Set(rows.filter((r) => r.status !== 'invalid' && !r.acct).map((r) => r.acctText))];
-    const mapBox = unknownAcct.length ? h('div', { class: 'alert warn imp-map' }, h('b', null, 'Match the accounts'), h('p', null, 'These names in the file are not one of your accounts. Pick the account for each, or leave them out.'),
+    const mapBox = unknownAcct.length ? h('div', { class: 'alert warn imp-map' }, h('b', null, 'Match the accounts'), h('p', null, 'These names in the file are not one of your accounts. Pick the account for each, or choose “leave out”. You cannot import until each one is matched or left out.'),
       unknownAcct.map((t) => h('label', { class: 'inline-label' }, h('span', null, t ? `“${t}” is` : 'Rows without an account are'), (() => {
-        const s = h('select', { 'aria-label': 'Account for ' + t, onchange: (e) => {
-          for (const r of rows) if (r.status !== 'invalid' && r.acctText === t) r.acct = e.target.value;
+        const s = h('select', { 'aria-label': 'Account for ' + t, class: 'imp-acct', onchange: (e) => {
+          for (const r of rows) if (r.status !== 'invalid' && r.acctText === t) { r.acct = e.target.value; r.left = !e.target.value; }
           recheckDuplicates(rows, data);
-          for (const r of rows) if (r.status !== 'invalid' && r.acctText === t) r.include = r.status === 'new' && !!r.acct; else if (r.status === 'duplicate') r.include = false;
+          for (const r of rows) if (r.status !== 'invalid' && r.acctText === t) r.include = (r.status === 'new' || r.status === 'update') && !!r.acct; else if (r.status === 'duplicate') r.include = false;
           preview();
         } });
         setOptions(s, [{ value: '', label: '— leave out —' }, ...data.accounts.map((a) => ({ value: a.id, label: `${a.name} · ${a.holder}` }))], '');
@@ -117,30 +126,40 @@ export function openBankImport(categoryOptions) {
       })()))) : null;
 
     const trs = rows.map((r) => {
-      const sel = h('select', { class: 'imp-cat' + (r.status === 'new' && !r.category ? ' need' : ''), 'aria-label': 'Category', disabled: r.status === 'invalid', onchange: (e) => { if (e.target.value === NEW) newCategory(r, e.target); else setCategory(r, e.target.value); } });
+      const probs = problems(r);
+      const sel = h('select', { class: 'imp-cat' + (probs.includes('category missing') ? ' need' : ''), 'aria-label': 'Category', disabled: r.status === 'invalid', onchange: (e) => { if (e.target.value === NEW) newCategory(r, e.target); else setCategory(r, e.target.value); } });
       if (r.status !== 'invalid') setOptions(sel, optionsFor(r), r.category || '');
-      const tag = r.status === 'invalid' ? h('span', { class: 'tag bad' }, r.reason) : r.status === 'duplicate' ? h('span', { class: 'tag' }, 'already in the app') : !r.acct ? h('span', { class: 'tag warn' }, 'no account') : h('span', { class: 'tag good' }, 'new');
-      return h('tr', { class: r.status === 'invalid' ? 'row-bad' : r.include ? '' : 'imp-off' },
+      const tag = r.left ? h('span', { class: 'tag' }, 'left out')
+        : probs.length ? h('span', { class: r.status === 'invalid' ? 'tag bad' : 'tag warn' }, probs.join(', '))
+        : r.status === 'duplicate' ? h('span', { class: 'tag' }, 'already in the app')
+        : r.status === 'update' ? h('span', { class: 'tag warn', title: 'An entry with this account, date and description exists. Importing replaces it.' }, 'replaces existing · ' + r.reason)
+        : h('span', { class: 'tag good' }, 'new');
+      const was = (v, dir) => (r.status === 'update' && r.before && (r.before[dir] || 0) !== (v || 0) ? h('small', { class: 'imp-was' }, 'was ', r.before[dir] ? money(r.before[dir]) : '–') : null);
+      const catWas = r.status === 'update' && r.before && lc(r.before.category) !== lc(r.category) ? h('small', { class: 'imp-was' }, 'was ' + r.before.category) : null;
+      return h('tr', { class: r.status === 'invalid' && !r.left ? 'row-bad' : probs.length ? 'row-warn' : r.include ? '' : 'imp-off' },
         h('td', null, h('input', { type: 'checkbox', checked: r.include, disabled: r.status === 'invalid' || !r.acct, 'aria-label': 'Import this row', onchange: (e) => { r.include = e.target.checked; preview(); } })),
-        h('td', null, r.date ? dateStr(r.date) : '–'), h('td', null, r.acct ? accts.get(r.acct) : r.acctText || '–'), h('td', { class: 'imp-desc' }, r.desc || '–'),
-        h('td', { class: 'r neg' }, r.debit > 0 ? money(r.debit) : ''), h('td', { class: 'r pos' }, r.credit > 0 ? money(r.credit) : ''),
-        h('td', null, r.status === 'invalid' ? '' : sel), h('td', null, tag));
+        h('td', { class: !r.date ? 'miss' : '' }, r.date ? dateStr(r.date) : 'missing'), h('td', { class: !r.acct ? 'miss' : '' }, r.acct ? accts.get(r.acct) : r.acctText || 'missing'), h('td', { class: 'imp-desc' + (!r.desc ? ' miss' : '') }, r.desc || 'missing'),
+        h('td', { class: 'r neg' }, r.debit > 0 ? money(r.debit) : '', was(r.debit, 'debit')), h('td', { class: 'r pos' }, r.credit > 0 ? money(r.credit) : '', was(r.credit, 'credit')),
+        h('td', null, r.status === 'invalid' ? '' : h('div', null, sel, catWas)), h('td', null, tag));
     });
+    const blockers = rows.filter((r) => problems(r).length);
     const needCat = inc.filter((r) => !r.category).length;
-    const doImport = h('button', { class: 'primary', disabled: !inc.length, onclick: save }, inc.length ? `Import ${inc.length} transaction${inc.length === 1 ? '' : 's'}` : 'Nothing to import');
+    const nUpd = inc.filter((r) => r.status === 'update').length, nNew = inc.length - nUpd;
+    const doImport = h('button', { class: 'primary', disabled: !inc.length || blockers.length > 0, onclick: save }, !inc.length ? 'Nothing to import' : [nNew ? `Add ${nNew}` : null, nUpd ? `${nNew ? ' and ' : ''}replace ${nUpd}` : null].filter(Boolean).join('') + ` transaction${inc.length === 1 ? '' : 's'}`);
     box.replaceChildren(
-      h('p', { class: 'summary-line' }, h('b', null, file ? file.name : ''), ` · ${fresh.length} new`, dup.length ? ` · ${dup.length} already in the app` : '', bad.length ? [' · ', h('span', { class: 'neg' }, `${bad.length} with problems`)] : null),
+      h('p', { class: 'summary-line' }, h('b', null, file ? file.name : ''), ` · ${fresh.length} new`, upd.length ? ` · ${upd.length} to replace (changed amount or category)` : '', dup.length ? ` · ${dup.length} already in the app, unchanged` : '', bad.length ? [' · ', h('span', { class: 'neg' }, `${bad.length} with problems`)] : null),
+      blockers.length ? h('div', { class: 'alert warn imp-block' }, h('b', null, `${blockers.length} row${blockers.length === 1 ? ' needs' : 's need'} attention before you can import`), h('p', null, 'Highlighted rows are missing an account, date, description, amount or category. Fix the category here, fix the file and preview again, or leave the rows out.'), h('button', { class: 'small', onclick: () => { for (const r of blockers) { r.left = true; r.include = false; } preview(); } }, 'Leave out these rows')) : null,
       mapBox,
       h('div', { class: 'imp-scroll' }, h('table', { class: 'tbl imp' },
         h('thead', null, h('tr', null, ['', 'Date', 'Account', 'Description', 'Paid out', 'Received', 'Category', ''].map((t, i) => h('th', { class: i === 4 || i === 5 ? 'r' : '' }, t)))),
         h('tbody', null, trs))),
-      h('p', { class: 'note' }, `Selected: paid out ${money(out)}, received ${money(inn)}.`, needCat ? ` ${needCat} still have no category and will go in as “Unknown”.` : '', ' Changing a category also changes the rows with the same description. “+ New category…” creates one with its type.'),
+      h('p', { class: 'note' }, `Selected: paid out ${money(out)}, received ${money(inn)}.`, ' Changing a category also changes the rows with the same description. “+ New category…” creates one with its type. A row whose account, date and description already exist, but with another amount or category, replaces that entry instead of adding a second one.'),
       h('div', { class: 'btn-row imp-foot' }, h('button', { onclick: start }, 'Back'), h('button', { onclick: () => dlg.close() }, 'Cancel'), doImport));
     const s2 = box.querySelector('.imp-scroll'); if (s2) s2.scrollTop = top;
   }
 
   async function save() {
-    const inc = includedRows(); if (!inc.length) return;
+    const inc = includedRows(); if (!inc.length || rows.some((r) => problems(r).length)) return;
     await autoPoint('Before importing bank transactions');
     try {
       mutate((d) => {
@@ -148,13 +167,17 @@ export function openBankImport(categoryOptions) {
         for (const p of pending) if (used.has(lc(p.name))) CAT.add(d, { name: p.name, kind: p.kind });
         let id = Math.max(0, ...d.ledger.map((e) => e.id || 0));
         for (const r of inc) {
-          const category = r.category || 'Unknown';
-          d.ledger.push({ id: ++id, acct: r.acct, date: r.date, desc: r.desc, debit: r.debit, credit: r.credit, category });
+          const category = r.category;
+          if (r.status === 'update') {
+            const e = d.ledger.find((x) => x.id === r.existing);
+            if (e) { e.debit = r.debit; e.credit = r.credit; e.category = category; }
+            else d.ledger.push({ id: ++id, acct: r.acct, date: r.date, desc: r.desc, debit: r.debit, credit: r.credit, category });
+          } else d.ledger.push({ id: ++id, acct: r.acct, date: r.date, desc: r.desc, debit: r.debit, credit: r.credit, category });
           // remember the description so the next entry fills in by itself
           if (r.category && !d.categories.some((c) => lc(c.desc) === lc(r.desc))) d.categories.push({ desc: r.desc, category, type: r.credit > 0 ? 'Income' : 'Expense' });
         }
       });
-      toast(`Imported ${inc.length} transaction${inc.length === 1 ? '' : 's'}`);
+      { const u = inc.filter((r) => r.status === 'update').length; toast(`${inc.length - u ? 'Added ' + (inc.length - u) : ''}${inc.length - u && u ? ', ' : ''}${u ? 'replaced ' + u : ''}`.replace(/^r/, 'R')); }
       dlg.close();
     } catch (e) { toast(e.message || 'Could not import.', 'bad'); }
   }

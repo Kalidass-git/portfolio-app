@@ -155,31 +155,43 @@ function attention(data, all) {
   return out.length ? section('Needs a look', rowList(out.map((o) => ({ title: o.title, sub: o.sub, value: o.value, tone: o.tone, onClick: () => { location.hash = o.href; } })))) : null;
 }
 
-function allocation(all) {
-  const rows = all.rows.filter((r) => r.amount > 0).sort((a, b) => b.amount - a.amount).map((r) => ({ label: r.type, value: r.amount }));
+function riskState(all) {
   // risk groups and limits come from the settings on the Wealth projector > Risk limits tab
   const cfg = R.riskCfg(S.data), ev = R.evaluate(cfg, R.stateNow(S.data, all));
-  const byRisk = ev.buckets.filter((b) => b.value > 0).map((b) => ({ label: b.name, value: b.value }));
   const pc1 = (x) => (Math.round(x * 1000) / 10) + '%';
   const ofw = (b) => (b.kind === 'item' ? ' ' + R.ofText(b.base) : b.of && b.of !== 'total' ? ' ' + R.ofText(b.of) : '');
   const lim = (b) => [b.max != null ? pc1(b.max) : null, b.maxAmt != null ? money(b.maxAmt) : null].filter(Boolean).join(' or ');
   const kindWord = (b) => (b.kind === 'item' ? 'single holding' : b.kind === 'bucket' ? 'risk group' : 'kind of holding');
   const flags = ev.breaches.map((b) => ({ title: b.name, sub: `${kindWord(b)}, limit ${lim(b)}`, value: h('span', { class: 'neg' }, 'over by ' + money(b.excess)), valueSub: h('span', { class: 'neg' }, pc1(b.pct) + ofw(b)), tone: 'neg' }));
   const nears = ev.near.map((b) => ({ title: b.name, sub: `${kindWord(b)}, limit ${lim(b)}`, value: h('span', { class: 'warn' }, Math.round(b.used * 100) + '% used'), valueSub: h('span', { class: 'warn' }, `${money(b.room || 0)} left`) }));
+  return { cfg, ev, pc1, lim, flags, nears };
+}
+
+/** Where the money is, how risky it is and how it sits against the limits. The alerts are a card of their own. */
+function allocation(all) {
+  const rows = all.rows.filter((r) => r.amount > 0).sort((a, b) => b.amount - a.amount).map((r) => ({ label: r.type, value: r.amount }));
+  const { cfg, ev, pc1, lim } = riskState(all);
+  const byRisk = ev.buckets.filter((b) => b.value > 0).map((b) => ({ label: b.name, value: b.value }));
   const toneCls = (b) => (b.over ? 'neg' : b.near ? 'warn' : '');
   const limited = ev.classes.filter((c) => c.value > 1 || c.max != null).sort((a, b) => b.value - a.value);
-  return section('Where your money is', h('div', { class: 'alloc' },
+  return section('Allocation & risk', h('div', { class: 'alloc' },
     h('div', { class: 'alloc-main' }, donut(rows, { fmt: money, center: compact(all.totalAssets), sub: 'total assets' }), legend(rows, { fmt: money })),
     h('div', { class: 'alloc-risk' },
       h('p', { class: 'mini-title' }, 'How risky is it'),
       strip(byRisk, { fmt: money }),
-      h('ul', { class: 'legend' }, ev.buckets.filter((b) => b.value > 0).map((b, i) => h('li', null, h('i', { style: { background: color(i) } }), h('span', { class: 'lg-name' }, b.name), h('span', { class: 'lg-val' }, money(b.value)), h('span', { class: 'lg-pct ' + toneCls(b) }, pc1(b.pct))))),
-      flags.length ? [h('p', { class: 'mini-title neg' }, `${flags.length} over your limit${flags.length > 1 ? 's' : ''}`), rowList(flags.slice(0, 4))] : null,
-      nears.length ? [h('p', { class: 'mini-title warn' }, `${nears.length} close to a limit`), rowList(nears.slice(0, 4))] : null,
-      !flags.length && !nears.length ? h('p', { class: 'note' }, 'Everything is within the limits you set.') : null,
-      h('p', null, h('a', { href: '#/risk/limits' }, 'Set limits'), ' · ', h('a', { href: '#/risk/whatif' }, 'Try a what-if'))),
+      h('ul', { class: 'legend' }, ev.buckets.filter((b) => b.value > 0).map((b, i) => h('li', null, h('i', { style: { background: color(i) } }), h('span', { class: 'lg-name' }, b.name), h('span', { class: 'lg-val' }, money(b.value)), h('span', { class: 'lg-pct ' + toneCls(b) }, pc1(b.pct)))))),
     h('details', { class: 'more' }, h('summary', null, 'Show by kind of holding'),
       rowList(limited.map((c) => ({ title: c.name, sub: (cfg.buckets.find((b) => b.id === c.bucket) || {}).name + (c.max != null || c.maxAmt != null ? ` · limit ${lim(c)}` : ''), value: money(c.value), valueSub: h('span', { class: toneCls(c) }, pc1(c.pct) + (c.over ? ' over' : c.near ? ' close' : '')) }))))));
+}
+
+/** Over-limit and close-to-limit holdings, against the limits set under Risk. */
+function riskAlerts(all) {
+  const { flags, nears } = riskState(all);
+  return section('Risk alerts', h('div', null,
+    flags.length ? [h('p', { class: 'mini-title neg' }, `${flags.length} over your limit${flags.length > 1 ? 's' : ''}`), rowList(flags.slice(0, 5))] : null,
+    nears.length ? [h('p', { class: 'mini-title warn' }, `${nears.length} close to a limit`), rowList(nears.slice(0, 5))] : null,
+    !flags.length && !nears.length ? h('p', { class: 'note' }, '✓ Everything is within the limits you set.') : null,
+    h('p', null, h('a', { href: '#/risk' }, 'See all'), ' · ', h('a', { href: '#/risk/limits' }, 'Set limits'), ' · ', h('a', { href: '#/risk/whatif' }, 'Try a what-if'))));
 }
 
 function earningBody(all, fold) {
@@ -275,14 +287,6 @@ function thisMonth(data, all, months) {
     [monthPicker(months, selMonth, (m) => { selMonth = m; rerender(); })]);
 }
 
-function networthChart(series, data) {
-  if (series.length < 3) return null;
-  const first = series[0], last = series[series.length - 1];
-  return section('Net worth over time', h('div', null,
-    lineChart({ labels: series.map((p) => shortDate(p.date)), series: [{ name: 'Net worth', values: series.map((p) => p.value) }], fmt: money, height: 220, width: window.innerWidth < 640 ? 380 : 470, yMin: Math.min(...series.map((p) => p.value)) * 0.97, area: true }),
-    h('p', { class: 'note' }, `Up ${money(last.value - first.value)} since ${dateStr(first.date)}. Early points are your month-end figures from the Plan sheet. From now on the app saves a reading each day you open it.`)));
-}
-
 export function render() {
   const { all, data } = S;
   const months = C.ledgerMonths(data);
@@ -299,7 +303,7 @@ export function render() {
     place(thisMonth(data, all, months), 'span-12'),
     place(todayCard(all), 'm-only'), place(earning(all), 'm-only'),
     place(breakupCard(all), 'span-7'), place(loansCard(all), 'span-5'),
-    place(allocation(all), 'span-7'), place(networthChart(series, data), 'span-5'),
+    place(allocation(all), 'span-7'), place(riskAlerts(all), 'span-5'),
     place(returnsCard(data, all, rets, ox), 'span-12')];
   root.append(...parts.filter(Boolean));
   return root;

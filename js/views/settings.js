@@ -3,7 +3,6 @@ import * as C from '../calc.js';
 import { VERSION, RELEASED } from '../version.js';
 import { section_ as restorePoints, doRestore } from './backups.js';
 import { section_ as storageInfo } from './storage.js';
-import { loanForm as liabilityForm } from './loans.js';
 import { h, money, dateStr, section, btn, formDialog, dialog, confirmDialog, toast, canEdit, table } from '../ui.js';
 
 const rerender = () => window.dispatchEvent(new Event('rerender'));
@@ -78,9 +77,6 @@ export function render() {
         canEdit() ? btn('Restore from file', async () => { const d = await pickFile(); if (!d) return; if (!validData(d)) return toast('That file is not a portfolio data file.', 'bad'); if (await confirmDialog('Replace everything in the app with this file?', 'Restore')) { await doRestore(d); } }) : null))));
 
   if (canEdit()) {
-    root.append(section('Loans (see Fixed income → Loans)', table([
-      { label: 'Loan', get: (l) => l.name }, { label: 'Outstanding', cls: 'r', get: (l) => money(l.amount) }, { label: 'Rate', cls: 'r', get: (l) => (l.rate * 100).toFixed(2) + '%' },
-    ], data.liabilities, { onRow: (l) => liabilityForm(data.liabilities.find((x) => x.id === l.id)), footer: { label: 'Total' } }), [btn('Add loan', () => liabilityForm())]));
     root.append(section('Calculation settings', h('div', { class: 'kv' },
       h('p', null, 'Tax deducted on bond interest: ', h('b', null, (data.settings.tdsRate * 100).toFixed(0) + '%'), ' · days in month used for monthly interest: ', h('b', null, data.settings.daysInMonth)),
       btn('Change', () => formDialog({

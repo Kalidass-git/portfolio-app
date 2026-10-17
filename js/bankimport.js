@@ -119,33 +119,52 @@ export function buildImport(table, data) {
     else if (!desc) { row.status = 'invalid'; row.reason = 'no description'; }
     out.push(row);
   }
-  // rows that are already in the app are skipped (the same account, date, description and amount), one for one
   for (const row of out) {
     if (row.status !== 'new') continue;
     row.dir = row.credit > 0 ? 'credit' : 'debit';
     const names = new Set((data.categoryList || []).map((c) => lc(c.name)).concat((data.ledger || []).map((e) => lc(e.category))));
     row.category = suggestCategory(row.desc, rules, row.dir) || (row.csvCategory && names.has(lc(row.csvCategory)) ? row.csvCategory : '');
-    if (row.acct) {
-      const k = keyOf(row.acct, row.date, row.desc, row.debit, row.credit);
-      const c = existing.get(k) || 0;
-      if (c > 0) { existing.set(k, c - 1); row.status = 'duplicate'; row.reason = 'already in the app'; }
-    }
   }
+  matchExisting(out, data);
   return { rows: out, columns: col };
 }
 
-/** Re-check duplicates after the user maps an account (rows without an account could not be compared before). */
-export function recheckDuplicates(rows, data) {
-  const keyOf = (acct, date, desc, debit, credit) => [acct, date, lc(desc), Math.round(debit * 100), Math.round(credit * 100)].join('|');
-  const existing = new Map();
-  for (const e of data.ledger) { const k = keyOf(e.acct, e.date, e.desc, e.debit || 0, e.credit || 0); existing.set(k, (existing.get(k) || 0) + 1); }
-  for (const row of rows) {
-    if (row.status === 'invalid') continue;
-    row.status = 'new'; row.reason = '';
-    if (!row.acct) continue;
-    const k = keyOf(row.acct, row.date, row.desc, row.debit, row.credit), c = existing.get(k) || 0;
-    if (c > 0) { existing.set(k, c - 1); row.status = 'duplicate'; row.reason = 'already in the app'; }
+/**
+ * Compare file rows with what is already in the app. Rows are matched by account + date + description:
+ *   same amount (and category, if the file gives one) -> 'duplicate' (nothing to do)
+ *   same account, date and description but another amount or category -> 'update' (replaces that entry, keeps its id)
+ *   no match -> 'new'
+ * Exact matches are paired first, so two real entries on one day are not mistaken for an edit.
+ */
+export function matchExisting(rows, data) {
+  const keyOf = (acct, date, desc) => [acct, date, lc(desc)].join('|');
+  const pool = new Map();
+  for (const e of data.ledger || []) { const k = keyOf(e.acct, e.date, e.desc); if (!pool.has(k)) pool.set(k, []); pool.get(k).push(e); }
+  const cand = rows.filter((r) => r.status !== 'invalid' && r.acct);
+  for (const r of cand) { r.status = 'new'; r.reason = ''; r.existing = null; r.before = null; }
+  const cents = (v) => Math.round((v || 0) * 100);
+  // pass 1: identical amounts
+  for (const r of cand) {
+    const list = pool.get(keyOf(r.acct, r.date, r.desc)) || [];
+    const i = list.findIndex((e) => cents(e.debit) === cents(r.debit) && cents(e.credit) === cents(r.credit));
+    if (i < 0) continue;
+    const e = list.splice(i, 1)[0];
+    if (r.csvCategory && lc(r.csvCategory) !== lc(e.category)) { r.status = 'update'; r.existing = e.id; r.before = { debit: e.debit || 0, credit: e.credit || 0, category: e.category }; r.category = r.csvCategory; r.reason = 'category changed'; }
+    else { r.status = 'duplicate'; r.reason = 'already in the app'; r.existing = e.id; }
+  }
+  // pass 2: same account, date and description, different amount
+  for (const r of cand) {
+    if (r.status !== 'new') continue;
+    const list = pool.get(keyOf(r.acct, r.date, r.desc)) || [];
+    if (!list.length) continue;
+    const e = list.shift();
+    r.status = 'update'; r.existing = e.id; r.before = { debit: e.debit || 0, credit: e.credit || 0, category: e.category };
+    r.reason = cents(e.debit) !== cents(r.debit) || cents(e.credit) !== cents(r.credit) ? 'amount changed' : 'category changed';
+    if (!r.manual && !r.csvCategory) r.category = e.category;   // keep the category it already has
   }
 }
+
+/** Re-check against the app after the user maps an account (rows without an account could not be compared before). */
+export function recheckDuplicates(rows, data) { matchExisting(rows, data); }
 
 export const SAMPLE_CSV = 'account,date,description,credit,debit\nSCB,2026-10-01,Salary,100000,\nSCB,2026-10-02,Groceries,,2500\nTMB (Suganya),2026-10-03,Milk,,450\n';
