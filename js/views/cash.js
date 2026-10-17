@@ -4,7 +4,7 @@ import { h, money, dateStr, monthLabel, section, table, btn, formDialog, dialog,
 import * as CAT from '../categories.js';
 import { hbars } from '../charts.js';
 import { closeForm, reopen } from './closing.js';
-import { confirmDialog, pct, posNeg, stat, datalistId } from '../ui.js';
+import { confirmDialog, pct, posNeg, stat, datalistId, icon } from '../ui.js';
 
 let fAcct = 'all', fMonth = 'all', fText = '', fKind = 'all', limit = 60;
 const TABS = [['accounts', 'Accounts'], ['ledger', 'Transactions']];
@@ -65,10 +65,9 @@ function accounts() {
   const wrap = h('div');
   wrap.append(section('Bank accounts & cash',
     table([
-      { label: 'Account', host: true, get: (b) => `${b.name} · ${b.holder}` },
+      { label: 'Account', host: true, render: (b) => h('span', { class: 'name-edit' }, h('span', { class: 'ne-name' }, `${b.name} · ${b.holder}`), canEdit() ? h('button', { class: 'pencil', title: 'Edit account', 'aria-label': 'Edit ' + b.name, onclick: (e) => { e.stopPropagation(); accountForm(data.accounts.find((x) => x.id === b.id)); } }, icon('edit')) : null) },
       { label: 'Balance', cls: 'r', get: (b) => money(b.balance), total: () => money(all.cashTotal) },
       { label: 'Last entry', mob: 'under', mlabel: 'last ', get: (b) => dateStr(b.lastDate) },
-      ...(canEdit() ? [{ label: '', cls: 'r', render: (b) => h('button', { class: 'small', title: 'Edit account', onclick: (e) => { e.stopPropagation(); accountForm(data.accounts.find((x) => x.id === b.id)); } }, 'Edit') }] : []),
     ], all.banks, { footer: { label: 'Total cash' }, onRow: (b) => openLedger({ acct: b.id }) }),
     canEdit() ? [btn('Add account', () => accountForm())] : null));
   wrap.append(h('p', { class: 'note' }, 'Tap an account to see its transactions. Balances come from the transactions, so to correct a balance add or edit a transaction.'));

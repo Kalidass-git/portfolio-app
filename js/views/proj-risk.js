@@ -44,7 +44,7 @@ function ruleForm(cfg, scope) {
     title: scope.label, saveLabel: 'Save', value: { max: inPct(rl.max), maxAmt: rl.maxAmt, of: rl.of },
     fields: [
       { key: 'max', label: `Most any one ${scope.unit} may be (%)`, type: 'number', half: true },
-      { key: 'of', label: 'Percent of', type: 'select', half: true, options: R.BASES.map((b) => ({ value: b.value, label: b.value === 'group' ? `Its own group (all your ${({ stocks: 'shares', etfs: 'ETFs', funds: 'funds', bonds: 'bonds', lending: 'loans' })[scope.key]})` : b.label })) },
+      { key: 'of', label: 'Percent of', type: 'select', half: true, options: R.BASES.map((b) => ({ value: b.value, label: b.value === 'group' ? `Its own group (all your ${({ stocks: 'shares', etfs: 'ETFs', funds: 'funds', bonds: 'bonds', lending: 'loans', fds: 'fixed deposits', chits: 'chits', lic: 'insurance and RDs' })[scope.key] || 'holdings of this kind'})` : b.label })) },
       { key: 'maxAmt', label: `Or most rupees in any one ${scope.unit}`, type: 'number', hint: 'Both can be set. The stricter one applies.' },
     ],
     onSave: (v) => mutate((d) => { const r = risk(d); r.rules = r.rules || {}; r.rules[scope.key] = { max: outPct(v.max), maxAmt: outAmt(v.maxAmt), of: v.of }; }),

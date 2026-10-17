@@ -492,7 +492,7 @@ export function receivableStatus(r, asOf) {
     const a = r.startDate.split('-').map(Number), b = r.lastReceived.split('-').map(Number);
     paid = (b[0] - a[0]) * 12 + (b[1] - a[1]) - (b[2] < a[2] ? 1 : 0);
   }
-  return { ...r, due, received, notStarted, overdue: !received && !notStarted && due <= asOf, installmentsPaid: Math.max(0, paid), total: Math.max(0, paid) * (r.expected || 0) };
+  return { ...r, due, received, notStarted, overdue: !received && !notStarted && due < asOf, dueToday: !received && !notStarted && due === asOf, installmentsPaid: Math.max(0, paid), total: Math.max(0, paid) * (r.expected || 0) };
 }
 
 // ---------- projections (Proj + Targets sheets) ----------
@@ -737,7 +737,7 @@ export function upcoming(data, all, days = 60) {
   for (const s of all.savings) if (s.maturityDate && s.maturityDate >= from && s.maturityDate <= to) add(s.maturityDate, s.name + ' matures', s.principal, s.type);
   for (const r of data.receivables.filter((x) => x.active !== false && x.balanceDue > 0).map((x) => receivableStatus(x, from))) {
     if (r.received || r.notStarted) continue;
-    if (r.due <= to) add(r.due, r.name + (r.overdue ? ' (overdue)' : ' to pay you'), r.expected, 'Money to receive');
+    if (r.due <= to) add(r.due, r.name + (r.overdue ? ' (overdue)' : r.dueToday ? ' (due today)' : ' to pay you'), r.expected, 'Money to receive');
   }
   return out.sort((a, b) => (a.date < b.date ? -1 : 1));
 }

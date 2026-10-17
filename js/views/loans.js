@@ -38,11 +38,11 @@ export function view(root) {
   root.append(section('Your loans', h('div', null, table([
     { label: 'Loan', host: true, get: (l) => l.name }, { label: 'Type', mob: 'under', get: (l) => l.kind || '' },
     { label: 'Outstanding', cls: 'r', get: (l) => money(l.amount), total: () => money(ln.total) },
-    { label: 'Rate', mob: 'under', mlabel: 'rate ', cls: 'r', get: (l) => (l.rate * 100).toFixed(2) + '%' },
-    { label: 'Interest / month', cls: 'r neg', get: (l) => money(l.monthlyInterest), total: () => money(ln.monthlyInterest) },
+    { label: 'Rate', key: true, cls: 'r', get: (l) => (l.rate * 100).toFixed(2) + '%' },
+    { label: 'Interest / month', key: true, cls: 'r neg', get: (l) => money(l.monthlyInterest), total: () => money(ln.monthlyInterest) },
     { label: 'EMI', mob: 'under', mlabel: 'EMI ', cls: 'r', get: (l) => (l.emi ? money(l.emi) : '–'), total: () => money(ln.emi) },
     { label: 'Used for', mob: 'under', mlabel: 'for ', get: (l) => l.useFor || '' },
-  ], ln.items, { footer: { label: 'Total' }, onRow: canEdit() ? (l) => loanForm(S.data.liabilities.find((x) => x.id === l.id)) : null }),
+  ], ln.items, { footer: { label: 'Total', phone: false }, onRow: canEdit() ? (l) => loanForm(S.data.liabilities.find((x) => x.id === l.id)) : null }),
     h('p', { class: 'note' }, 'Monthly interest is outstanding × rate ÷ 12. When you pay principal, update the outstanding amount so interest stays right.')),
     canEdit() ? [btn('Add loan', () => loanForm(), 'primary')] : null));
   const lent = ln.items.filter((l) => /lent/i.test(l.useFor || ''));

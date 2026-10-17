@@ -109,10 +109,10 @@ function toReceiveCard(data, all) {
   const all2 = rows.concat(pend);
   return section('Money to receive this month', h('div', null,
     all2.length ? rowList(all2.map((r) => r.income ? { title: r.name, sub: r.sub, value: money(r.expected), valueSub: h('span', { class: 'warn' }, 'pending') } : ({
-      lead: dateChip(r.due), title: r.name, sub: r.overdue ? h('span', { class: 'neg' }, 'Overdue since ' + shortDate(r.due)) : 'Due ' + shortDate(r.due),
-      value: money(r.expected || 0), tone: r.overdue ? 'neg' : '',
+      lead: dateChip(r.due), title: r.name, sub: r.overdue ? h('span', { class: 'neg' }, 'Overdue since ' + shortDate(r.due)) : r.dueToday ? h('span', { class: 'warn' }, 'Due today') : 'Due ' + shortDate(r.due),
+      value: money(r.expected || 0), tone: r.overdue ? 'neg' : r.dueToday ? 'warn' : '',
     }))) : h('p', { class: 'empty' }, 'Everything due this month has been received.'),
-    all2.length ? h('p', { class: 'summary-line' }, `Waiting for ${money(total)}`, over.length ? h('span', { class: 'neg' }, ` · ${over.length} overdue`) : null) : null,
+    all2.length ? h('p', { class: 'summary-line' }, `Waiting for ${money(total)}`, over.length ? h('span', { class: 'neg' }, ` · ${over.length} overdue`) : null, rows.some((r) => r.dueToday) ? h('span', { class: 'warn' }, ` · ${rows.filter((r) => r.dueToday).length} due today`) : null) : null,
     h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income'))));
 }
 
@@ -143,7 +143,7 @@ function attention(data, all) {
   if (overdue.length) out.push({ title: `${overdue.length} payment${overdue.length === 1 ? '' : 's'} overdue`, sub: overdue.slice(0, 2).map((u) => u.title).join(', '), value: money(overdue.reduce((a, u) => a + u.amount, 0)), tone: 'neg', href: '#/fixed/lending' });
   const due = soon.filter((u) => u.days >= 0 && u.days <= 14);
   const when = (u) => (u.days === 0 ? 'today' : u.days === 1 ? 'tomorrow' : dateStr(u.date).replace(/ \d{4}$/, ''));
-  if (due.length) out.push({ title: due.length === 1 ? `${due[0].title}: due ${when(due[0])}` : `${due.length} falling due in 14 days`, sub: due.slice(0, 3).map((u) => `${u.title} · ${when(u)}`).join(', ') + (due.length > 3 ? ` and ${due.length - 3} more` : ''), value: money(due.reduce((a, u) => a + u.amount, 0)), tone: '', href: due.every((u) => u.kind === 'Money to receive') ? '#/fixed/lending' : '#/home' });
+  if (due.length) out.push({ title: due.length === 1 ? `${due[0].title}: due ${when(due[0])}` : `${due.length} falling due in 14 days`, sub: due.slice(0, 3).map((u) => `${u.title} · ${when(u)}`).join(', ') + (due.length > 3 ? ` and ${due.length - 3} more` : ''), value: money(due.reduce((a, u) => a + u.amount, 0)), tone: due.some((u) => u.days === 0) ? 'warn' : '', href: due.every((u) => u.kind === 'Money to receive') ? '#/fixed/lending' : '#/home' });
   const at = data.settings.pricesUpdatedAt;
   const age = at ? Math.round((Date.now() - new Date(at).getTime()) / 864e5) : null;
   if (age == null || age >= 3) out.push({ title: 'Share and fund prices are ' + (age == null ? 'not fetched yet' : age + ' days old'), sub: 'Refresh on Shares & funds', value: '', tone: 'warn', href: '#/equity' });
@@ -218,8 +218,8 @@ function comingUp(data, all) {
   const overdue = soon.filter((u) => u.days < 0).length;
   return section('Coming up', h('div', null,
     rowList(soon.slice(0, 8).map((u) => ({
-      lead: dateChip(u.date), title: u.title, sub: `${u.kind} · ${u.days < 0 ? 'overdue' : u.days === 0 ? 'today' : `in ${u.days} day${u.days === 1 ? '' : 's'}`}`,
-      value: money(u.amount), tone: u.days < 0 ? 'neg' : '',
+      lead: dateChip(u.date), title: u.title, sub: h('span', { class: u.days === 0 ? 'warn' : '' }, `${u.kind} · ${u.days < 0 ? 'overdue' : u.days === 0 ? 'due today' : `in ${u.days} day${u.days === 1 ? '' : 's'}`}`),
+      value: money(u.amount), tone: u.days < 0 ? 'neg' : u.days === 0 ? 'warn' : '',
     })), { empty: 'Nothing falls due in the next 60 days.' }),
     soon.length > 8 ? h('p', { class: 'note' }, `${soon.length - 8} more in the next 60 days.`) : null,
     overdue ? null : (data.receivables.length ? h('p', { class: 'note' }, 'No money to receive is overdue.') : null)));

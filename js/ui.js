@@ -227,7 +227,7 @@ export const empty = (msg) => h('p', { class: 'empty' }, msg);
  */
 export function table(cols, rows, { onRow, footer, rowClass, empty: emptyMsg = 'Nothing here yet.' } = {}) {
   if (!rows.length) return empty(emptyMsg);
-  const small = (c) => (c.mob === 'under' || c.mob === 'hide' ? ' hide-sm' : '');
+  const small = (c) => (c.mob === 'under' || c.mob === 'hide' ? ' hide-sm' : '') + (c.show === 'desk' ? ' desk-only' : '');
   let hostI = cols.findIndex((c) => c.host); if (hostI < 0) hostI = 0;
   const unders = cols.filter((c) => c.mob === 'under');
   const fit = cols.some((c) => c.mob);
@@ -239,8 +239,8 @@ export function table(cols, rows, { onRow, footer, rowClass, empty: emptyMsg = '
   const t = h('table', { class: 'tbl' + (fit ? ' fit' : '') },
     h('thead', null, h('tr', null, cols.map((c, i) => h('th', { class: (c.cls || '') + small(c) + (i === hostI ? ' host' : '') }, c.label)))),
     h('tbody', null, rows.map((r) => h('tr', { class: (onRow ? 'click ' : '') + (rowClass ? rowClass(r) || '' : ''), tabindex: onRow ? 0 : null, onclick: onRow ? () => onRow(r) : null, onkeydown: onRow ? (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onRow(r)) : null },
-      cols.map((c, i) => h('td', { class: (c.cls || '') + small(c) + (i === hostI ? ' host' : ''), 'data-label': c.label }, cell(c, r), i === hostI ? underLine(r) : null))))),
-    footer ? h('tfoot', null, h('tr', null, cols.map((c, i) => h('td', { class: (c.cls || '') + small(c) + (i === hostI ? ' host' : '') + (i !== hostI && !c.total ? ' blank' : ''), 'data-label': c.label }, i === hostI ? footer.label || 'Total' : c.total ? c.total(rows) : '')))) : null);
+      cols.map((c, i) => h('td', { class: (c.cls || '') + (c.key ? ' key' : '') + small(c) + (i === hostI ? ' host' : ''), 'data-label': c.label }, cell(c, r), i === hostI ? underLine(r) : null))))),
+    footer ? h('tfoot', { class: footer.phone === false ? 'no-m' : '' }, h('tr', null, cols.map((c, i) => h('td', { class: (c.cls || '') + (c.key ? ' key' : '') + small(c) + (i === hostI ? ' host' : '') + (i !== hostI && !c.total ? ' blank' : ''), 'data-label': c.label }, i === hostI ? footer.label || 'Total' : c.total ? c.total(rows) : '')))) : null);
   const wrap = h('div', { class: 'tbl-wrap' }, t);
   return wrap; // on a phone each row becomes a card that shows every field (see app.css)
 }

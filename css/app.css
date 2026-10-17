@@ -126,7 +126,7 @@ main { padding: 14px 16px 24px; max-width: 1100px; margin: 0 auto; outline: none
 .tbl tr.click { cursor: pointer; } .tbl tr.click:hover td { background: var(--surface-2); }
 .tbl tfoot td { font-weight: 650; border-top: 2px solid var(--ink); border-bottom: none; }
 .tag { display: inline-block; font-size: .72rem; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); margin-left: 6px; }
-.tag.good { color: var(--pos); border-color: var(--pos); } .tag.bad { color: var(--neg); border-color: var(--neg); }
+.tag.warn { color: var(--warn); border-color: var(--warn); } .tag.good { color: var(--pos); border-color: var(--pos); } .tag.bad { color: var(--neg); border-color: var(--neg); }
 .note-cell { color: var(--muted); font-size: .84rem; white-space: pre-wrap; }
 .with-meter { display: inline-flex; align-items: center; gap: 8px; }
 .meter { display: inline-block; width: 56px; height: 6px; border-radius: 3px; background: var(--line-2); overflow: hidden; } .meter span { display: block; height: 100%; border-radius: 3px; }
@@ -366,6 +366,23 @@ button.danger.primary-ish, dialog.sheet footer button.danger { border-color: var
   .tbl.fit td:empty, .tbl.fit td.blank { display: none; }
   .tbl.fit .hide-sm { display: block !important; }
   .tbl.fit .m-under { display: none !important; }
+  .tbl.fit tfoot.no-m { display: none; }
+  .tbl.fit td.desk-only { display: none !important; }
+  /* holdings on a phone: name uses the full width; value and price sit side by side, gain and return under the value */
+  .tbl.fit.compact tr { gap: 4px 14px; padding: 10px 14px; margin-bottom: 8px; }
+  .tbl.fit.compact td.host, .tbl.fit.compact td:first-child { width: auto; }
+  .tbl.fit.compact td.host { padding-bottom: 6px; font-size: .98rem; overflow-wrap: normal; }
+  .tbl.fit.compact td.host .nm { white-space: normal; }
+  .tbl.fit.compact td::before { display: none; }
+  .tbl.fit.compact td.pc-price { grid-column: 1 / -1; order: 3; padding-top: 6px; border-top: 1px solid var(--line); }
+  .tbl.fit.compact td.pc-price > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+  .tbl.fit.compact td.pc-price .sub2 { margin-top: 0; font-size: .8rem; }
+  .tbl.fit.compact td.r { min-width: 0; padding: 0; }
+  .tbl.fit.compact .sub2 { margin-top: 1px; }
+  .tbl.fit td.key { color: var(--brand); font-weight: 750; }
+  .tbl.fit td.key.neg { color: var(--neg); }
+  .tbl.fit td .plain { color: var(--ink); font-weight: 500; }
+  .tbl.fit td .legend { display: block; margin-top: 2px; font-size: .72rem; font-weight: 500; color: var(--muted); }
   .tbl.fit tfoot tr { background: var(--brand-soft); border-color: var(--brand); }
   .tbl.fit tfoot td.host { border-bottom-color: color-mix(in srgb, var(--brand) 35%, transparent); }
 }
@@ -552,3 +569,11 @@ details.more { margin-top: 10px; } details.more summary { cursor: pointer; color
 .price-bar .stamp { font-size: .85rem; color: var(--muted); }
 .price-bar .stamp.warn { color: var(--warn, #b45309); font-weight: 600; }
 .price-bar .refresh-btn { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+
+/* pencil icon beside a name (Cash accounts) */
+.name-edit { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .name-edit .ne-name { min-width: 0; overflow-wrap: anywhere; }
+.pencil { flex: none; width: 34px; height: 34px; padding: 0; display: inline-grid; place-items: center; border-radius: 10px; background: transparent; border: 1px solid var(--line); color: var(--muted); cursor: pointer; }
+.pencil:hover, .pencil:focus-visible { color: var(--brand); border-color: var(--brand); outline: none; }
+.pencil .ico { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.phone-only { display: none; } .phone-only-i { display: none; } @media (max-width: 700px) { .phone-only { display: block; } .phone-only-i { display: inline; } .with-meter.phone-only-i { display: inline-flex; margin-left: 8px; vertical-align: middle; } .desk-i { display: none; } }

@@ -88,7 +88,7 @@ export function render() {
   if (tab === 'loans') { loans.view(root); return root; }
   const f = all.fixed;
   const stats = {
-    bonds: () => h('div', { class: 'stats' }, stat('Bonds', money(f.bondPrincipal), `${all.bonds.length} bonds`), stat('Interest a month', money(all.cashflow[3].perMonth), 'before TDS')),
+    bonds: () => h('div', { class: 'stats' }, stat('Bonds', money(f.bondPrincipal), `${all.bonds.length} bonds`), stat('Interest to receive', money(all.bonds.reduce((a, b) => a + b.monthNet, 0)), 'after ' + money(all.bonds.reduce((a, b) => a + b.monthGross - b.monthNet, 0)) + ' TDS')),
     fds: () => h('div', { class: 'stats' }, stat('Fixed deposits', money(f.fdPrincipal), `${all.fds.length} FDs`), stat('Interest added so far', money(all.fds.reduce((a, x) => a + (x.accrued || 0), 0)), 'on top of the amount')),
     lending: () => h('div', { class: 'stats' }, stat('Lent out', money(f.lendPrincipal), `${all.lending.filter((l) => l.principal > 0).length} loans given`), stat('Interest added so far', money(all.lending.reduce((a, x) => a + (x.accrued || 0), 0)), 'on top of the amount')),
   };
@@ -100,25 +100,24 @@ export function render() {
       { label: 'Holder', mob: 'under', get: (b) => b.holder },
       { label: 'Via', mob: 'under', get: (b) => b.platform },
       { label: 'Invested', cls: 'r', get: (b) => money(b.principal), total: (rs) => money(rs.reduce((a, b) => a + b.principal, 0)) },
-      { label: 'Rate', mob: 'under', mlabel: 'rate ', cls: 'r', get: (b) => pct(b.rate, 2) },
-      { label: 'Paid', mob: 'under', mlabel: 'paid ', get: (b) => b.credit },
-      { label: 'Per month (after TDS)', cls: 'r', get: (b) => money(b.monthNet), total: (rs) => money(rs.reduce((a, b) => a + b.monthNet, 0)) },
+      { label: 'Rate (paid)', key: true, cls: 'r', render: (b) => h('span', null, pct(b.rate, 2), h('span', { class: 'plain' }, ' (' + String(b.credit || 'Monthly').toLowerCase() + ')')) },
+      { label: 'Net per month', key: true, cls: 'r', get: (b) => money(b.monthNet), total: (rs) => money(rs.reduce((a, b) => a + b.monthNet, 0)) },
       { label: 'Matures', mob: 'under', mlabel: 'matures ', get: (b) => dateStr(b.maturityDate) },
-    ], all.bonds, { footer: { label: 'Total' }, onRow: canEdit() ? (b) => bondForm(data.bonds.find((x) => x.id === b.id)) : null }),
+    ], all.bonds, { footer: { label: 'Total', phone: false }, onRow: canEdit() ? (b) => bondForm(data.bonds.find((x) => x.id === b.id)) : null }),
     canEdit() ? [btn('Add bond', () => bondForm(), 'primary')] : null));
 
   const depCols = [
     { label: 'Name', host: true, get: (x) => x.name }, { label: 'Holder / type', mob: 'under', get: (x) => x.account },
     { label: 'Amount', cls: 'r', get: (x) => money(x.principal), total: (rs) => money(rs.reduce((a, x) => a + x.principal, 0)) },
-    { label: 'Rate', mob: 'under', mlabel: 'rate ', cls: 'r', get: (x) => pct(x.rate, 2) },
-    { label: 'Interest so far', mob: 'under', mlabel: 'earned ', cls: 'r', get: (x) => (x.interestType === 'Payout' ? 'paid out' : money(x.accrued)), total: (rs) => money(rs.reduce((a, x) => a + x.accrued, 0)) },
+    { label: 'Rate', key: true, cls: 'r', get: (x) => pct(x.rate, 2) },
+    { label: 'Interest so far', key: true, cls: 'r', get: (x) => (x.interestType === 'Payout' ? 'paid out' : money(x.accrued)), total: (rs) => money(rs.reduce((a, x) => a + x.accrued, 0)) },
     { label: 'Per day', cls: 'r', get: (x) => money(x.daily) },
     { label: 'Matures', mob: 'under', mlabel: 'matures ', get: (x) => dateStr(x.maturityDate) },
   ];
-  if (tab === 'fds') root.append(section('Fixed deposits', table(depCols, all.fds, { footer: { label: 'Total' }, onRow: canEdit() ? (x) => depositForm('fd', data.fds.find((y) => y.id === x.id)) : null }),
+  if (tab === 'fds') root.append(section('Fixed deposits', table(depCols, all.fds, { footer: { label: 'Total', phone: false }, onRow: canEdit() ? (x) => depositForm('fd', data.fds.find((y) => y.id === x.id)) : null }),
     canEdit() ? [btn('Add FD', () => depositForm('fd'))] : null));
   if (tab === 'lending') root.append(section('Private lending',
-    table(depCols, all.lending, { footer: { label: 'Total' }, onRow: canEdit() ? (x) => depositForm('lending', data.lending.find((y) => y.id === x.id)) : null }),
+    table(depCols, all.lending, { footer: { label: 'Total', phone: false }, onRow: canEdit() ? (x) => depositForm('lending', data.lending.find((y) => y.id === x.id)) : null }),
     canEdit() ? [btn('Add loan', () => depositForm('lending'))] : null));
 
   if (tab !== 'lending') return root;
@@ -139,7 +138,7 @@ export function render() {
       { label: 'Expected', cls: 'r', get: (r) => money(r.expected) },
       { label: 'How often', mob: 'under', get: (r) => r.term },
       { label: 'Last received', mob: 'under', mlabel: 'last ', get: (r) => dateStr(r.lastReceived) },
-      { label: 'This month', render: (r) => (r.active === false ? h('span', { class: 'tag' }, 'Closed') : h('span', { class: r.received ? 'tag good' : r.overdue ? 'tag bad' : 'tag' }, r.received ? 'Received' : r.overdue ? 'Overdue' : r.notStarted ? 'Starts ' + dateStr(r.startDate) : 'Due ' + dateStr(r.due))) },
+      { label: 'This month', render: (r) => (r.active === false ? h('span', { class: 'tag' }, 'Closed') : h('span', { class: r.received ? 'tag good' : r.overdue ? 'tag bad' : r.dueToday ? 'tag warn' : 'tag' }, r.received ? 'Received' : r.overdue ? 'Overdue' : r.dueToday ? 'Due today' : r.notStarted ? 'Starts ' + dateStr(r.startDate) : 'Due ' + dateStr(r.due))) },
       { label: '', render: (r) => (canEdit() && r.active !== false && !r.received ? h('button', { class: 'small', onclick: (e) => { e.stopPropagation(); mutate((d) => { d.receivables.find((x) => x.id === r.id).lastReceived = C.todayISO(); }); toast('Marked as received'); } }, 'Mark received') : '') },
     ], rc, { rowClass: (r) => (r.overdue ? 'row-bad' : !r.received && !r.notStarted && C.monthKey(r.due) <= C.monthKey(all.asOf) ? 'row-warn' : ''), onRow: canEdit() ? (r) => receivableForm(data.receivables.find((x) => x.id === r.id)) : null })),
     canEdit() ? [btn('Add', () => receivableForm())] : null));
@@ -162,7 +161,7 @@ function closedView(root) {
       { label: 'Came back', cls: 'r', get: (x) => money(x.closed.amount), total: (rs) => money(rs.reduce((a, x) => a + x.closed.amount, 0)) },
       { label: 'XIRR', mob: 'under', mlabel: 'XIRR ', cls: 'r', render: (x) => (x.xirr == null ? '–' : h('span', { class: posNeg(x.xirr) }, pct(x.xirr, 1))) },
       { label: 'Money went to', mob: 'hide', get: (x) => (x.closed.acct ? acct.get(x.closed.acct) || '' : 'not added') },
-    ], list, { footer: { label: 'Total' }, onRow: (x) => openClosedItem(key, x), empty: 'Nothing closed yet. Open one and press “Close it”.' })));
+    ], list, { footer: { label: 'Total', phone: false }, onRow: (x) => openClosedItem(key, x), empty: 'Nothing closed yet. Open one and press “Close it”.' })));
   }
   const rcs = all.closed.receivables;
   root.append(section(`Money to receive, closed (${rcs.length})`, table([
