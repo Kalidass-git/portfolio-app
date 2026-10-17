@@ -13,6 +13,7 @@ import * as plan from './views/plan.js';
 import * as projector from './views/projector.js';
 import * as riskPage from './views/risk.js';
 import * as report from './views/report.js';
+import * as incexp from './views/incexp.js';
 import * as settings from './views/settings.js';
 
 const ROUTES = {
@@ -26,8 +27,9 @@ const ROUTES = {
   plan: { label: 'Plan', view: plan, tab: 'outlook', group: 'Spend & plan', icon: 'M5 19V9m7 10V5m7 14v-7' },
   projector: { label: 'Wealth projector', short: 'Projector', view: projector, tab: 'outlook', group: 'Spend & plan', icon: 'M3 17l6-6 4 4 8-9M15 6h6v6' },
   risk: { label: 'Risk & what-if', short: 'Risk', view: riskPage, tab: 'outlook', group: 'Spend & plan', icon: 'M12 3l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V7zM9 12l2 2 4-4' },
-  report: { label: 'Family report', view: report, tab: 'report', group: 'Share & manage', icon: 'M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h7' },
-  settings: { label: 'Settings', view: settings, tab: 'settings', group: 'Share & manage', icon: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM3 12h3m12 0h3M12 3v3m0 12v3' },
+  report: { label: 'Family report', short: 'Family report', view: report, tab: 'report', group: 'Report', icon: 'M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h7' },
+  incexp: { label: 'Income vs expense', short: 'Income vs expense', view: incexp, tab: 'report', group: 'Report', icon: 'M4 20V10m6 10V4m6 16v-7m4 7H2' },
+  settings: { label: 'Settings', view: settings, tab: 'settings', group: 'Manage', icon: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM3 12h3m12 0h3M12 3v3m0 12v3' },
 };
 const TABS = [['home', 'Home', 'home'], ['assets', 'Assets', 'cash'], ['flow', 'Expenses', 'flow'], ['outlook', 'Outlook', 'projector'], ['report', 'Report', 'report']];
 const icon = (d) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'ico'); s.setAttribute('aria-hidden', 'true'); const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', d); s.append(p); return s; };
@@ -119,8 +121,9 @@ function mergeNotice() {
 }
 
 function assetsSubnav(cur) {
-  if (ROUTES[cur].tab !== 'assets') return null;
-  return h('nav', { class: 'section-tabs', 'aria-label': 'Asset types' }, Object.entries(ROUTES).filter(([, r]) => r.group === 'Assets').map(([k, r]) => h('a', { class: k === cur ? 'on' : '', href: '#/' + k, 'aria-current': k === cur ? 'page' : null }, r.short || r.label)));
+  const grp = ROUTES[cur].tab === 'assets' ? 'Assets' : ROUTES[cur].tab === 'report' ? 'Report' : null;
+  if (!grp) return null;
+  return h('nav', { class: 'section-tabs', 'aria-label': grp === 'Assets' ? 'Asset types' : 'Reports' }, Object.entries(ROUTES).filter(([, r]) => r.group === grp).map(([k, r]) => h('a', { class: k === cur ? 'on' : '', href: '#/' + k, 'aria-current': k === cur ? 'page' : null }, r.short || r.label)));
 }
 
 const NEG = /^\s*[-−–]\s?₹|^\s*[-−]\d|^\s*[-−]\s?[\d.,]+\s?(L|Cr|K|%)/;

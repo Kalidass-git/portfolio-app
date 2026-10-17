@@ -418,6 +418,22 @@ export function rangeSummary(data, from, to, filter) {
     left: totalIncome - everything, count: all.length,
   };
 }
+/** Income vs expense report: income, expenses and investments for a period, each by category with its descriptions underneath. */
+export function flowReport(data, from, to) {
+  const s = rangeSummary(data, from, to);
+  const tree = (cats, rows, field) => cats.map((c) => {
+    const mine = rows.filter((e) => (e.category || 'Unknown') === c.category);
+    return { category: c.category, amount: c.amount, count: mine.length, items: byDescription(mine, field) };
+  });
+  const out = s.totalExpense + s.totalInvest;
+  return {
+    ...s,
+    incomeTree: tree(s.income, s.incomeRows, 'credit'),
+    expenseTree: tree(s.expense, s.expenseRows, 'debit'),
+    investTree: tree(s.invest, s.investRows, 'debit'),
+    saved: s.totalIncome - out,
+  };
+}
 /** Group rows by description: count, total, average, last date. field is 'debit' or 'credit'. */
 export function byDescription(rows, field) {
   const m = new Map();

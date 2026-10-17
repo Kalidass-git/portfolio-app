@@ -109,6 +109,11 @@ function groupXirr(items) {
   return v == null || !isFinite(v) ? null : v;
 }
 const xiText = (v) => (v == null ? null : h('span', null, ' · XIRR ', h('span', { class: posNeg(v) }, pct(v, 1))));
+/** Invested card: the gain and the XIRR are the big figures; the amount invested is the small line. */
+function investedStat(invested, pl, ret, xi) {
+  return stat('Gain / loss', h('span', { class: posNeg(pl) }, gainText(pl), ' ', h('small', null, '(', pct(ret), ')')),
+    h('span', { class: 'gx' }, xi == null ? 'XIRR –' : h('span', null, 'XIRR ', h('b', { class: posNeg(xi) }, pct(xi, 1))), h('span', { class: 'gx-inv' }, ' · invested ', money(invested))), 'gain-card');
+}
 const GROUP_LABEL = { shares: 'Shares', etfs: 'ETFs', funds: 'Mutual funds' };
 
 function today(root) {
@@ -191,7 +196,7 @@ function holdingsTab(root) {
   const seg = h('nav', { class: 'seg', 'aria-label': 'Show' }, [['all', 'Both'], ['shares', 'Shares only'], ['etfs', 'ETFs only']].map(([k, l]) => h('a', { href: '#/equity/holdings' + (k === 'all' ? '' : '?f=' + k), class: k === f ? 'on' : '', 'aria-selected': String(k === f) }, l + ' (' + (k === 'all' ? merged.items.length : gr[k].items.length) + ')')));
   root.append(h('div', { class: 'stats' },
     stat(label, money(g.current), `${g.items.length} holdings`),
-    stat('Invested', money(g.invested), h('span', null, gainText(g.pl), ' (', pct(g.ret), ')', xiText(groupXirr(g.items)))),
+    investedStat(g.invested, g.pl, g.ret, groupXirr(g.items)),
     stat('Today', g.dayCount ? h('span', { class: posNeg(g.day) }, signedMoney(g.day)) : '–', g.dayCount ? signedPct(g.dayPct) : 'refresh prices')));
   const items = sortItems(g.items);
   root.append(section(label, h('div', null,
@@ -206,7 +211,7 @@ function fundsTab(root) {
   const { data, all } = S, mf = all.mf;
   root.append(h('div', { class: 'stats' },
     stat('Mutual funds', money(mf.current), `${mf.items.length} funds`),
-    stat('Invested', money(mf.invested), h('span', null, gainText(mf.pl), ' (', pct(mf.ret), ')', xiText(mf.xirr))),
+    investedStat(mf.invested, mf.pl, mf.ret, mf.xirr),
     stat('Today', mf.dayCount ? h('span', { class: posNeg(mf.day) }, signedMoney(mf.day)) : '–', mf.dayCount ? signedPct(mf.dayPct) : 'refresh prices')));
   root.append(section('Mutual funds', h('div', null,
     tableTools(),

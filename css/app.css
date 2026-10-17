@@ -610,3 +610,30 @@ dialog.sheet.wide { width: min(1180px, 96vw); }
   .rpt-foot { border-top-color: #000; }
   .rpt .hb-track { background: #fff !important; border: 1px solid #666; }
 }
+
+/* Income vs expense report (8.9.3) */
+.ie-flow { display: flex; height: 18px; border-radius: 9px; overflow: hidden; background: var(--line); }
+.ie-flow span { display: block; height: 100%; }
+.f-exp { background: var(--neg); } .f-inv { background: var(--s1, #2a78d6); } .f-left { background: var(--pos); }
+.ie-flow .f-left { background: var(--pos); }
+.ie-key { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 8px; font-size: .85rem; }
+.ie-key i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: baseline; }
+.ie-list { display: grid; gap: 6px; }
+.ie-node { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.ie-node > summary { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "n a p" "b b b"; gap: 2px 12px; padding: 9px 12px; cursor: pointer; list-style: none; align-items: baseline; }
+.ie-node > summary::-webkit-details-marker { display: none; }
+.ie-name { grid-area: n; font-weight: 600; overflow-wrap: anywhere; } .ie-name::before { content: '▸'; display: inline-block; width: 1.1em; color: var(--muted); transition: transform .12s; }
+.ie-node[open] .ie-name::before { transform: rotate(90deg); }
+.ie-name small, .ie-pct small, .ie-d small { color: var(--muted); font-weight: 400; }
+.ie-amt { grid-area: a; font-weight: 650; text-align: right; } .ie-pct { grid-area: p; text-align: right; min-width: 4.5em; font-size: .85rem; }
+.ie-bar { grid-area: b; height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; margin-top: 4px; } .ie-bar i { display: block; height: 100%; background: var(--neg); }
+.ie-node.is-inc .ie-bar i, .ie-node.is-inc .ie-amt { background: var(--pos); } .ie-node.is-inc .ie-amt { background: none; color: var(--pos); }
+.ie-node.is-inv .ie-bar i { background: var(--s1, #2a78d6); } .ie-node.is-inv .ie-amt { color: var(--s1, #2a78d6); } .ie-node.is-exp .ie-amt { color: var(--neg); }
+.ie-items { list-style: none; margin: 0; padding: 4px 12px 8px 30px; border-top: 1px dashed var(--line); background: color-mix(in srgb, var(--line) 22%, var(--surface)); }
+.ie-items li { display: grid; grid-template-columns: minmax(0, 1fr) auto 3.5em; gap: 10px; padding: 3px 0; font-size: .86rem; border-bottom: 1px dotted var(--line); }
+.ie-items li:last-child { border-bottom: 0; } .ie-d { overflow-wrap: anywhere; } .ie-a, .ie-p { text-align: right; } .ie-p { color: var(--muted); } .ie-more { color: var(--muted); font-style: italic; }
+@media print { .ie-node { break-inside: avoid; } .ie-items { display: block; } }
+.stat.gain-card .stat-value { font-size: clamp(1.4rem, 6.5vw, 1.9rem); }
+.stat.gain-card .stat-value small { font-size: .55em; font-weight: 600; }
+.stat.gain-card .gx { display: flex; flex-wrap: wrap; gap: 2px 6px; font-size: 1.05rem; align-items: baseline; color: var(--ink); }
+.stat.gain-card .gx b { font-size: 1.25rem; } .stat.gain-card .gx-inv { font-size: .8rem; color: var(--muted); }
