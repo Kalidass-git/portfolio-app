@@ -609,7 +609,7 @@ dialog.sheet.wide { width: min(1180px, 96vw); }
   .rpt-tbl th { color: #444 !important; font-weight: 600; border-bottom: 1px solid #cfd3d9; }
   .rpt-tbl tfoot td { border-top: 1px solid #cfd3d9; }
   .rpt-tbl td { border-bottom-color: #e8eaee; }
-  .rpt-detail .rpt-parent { background: #f7f8f9 !important; }
+  .rpt-detail .rpt-parent { background: #e9ebee !important; }
   .rpt-detail .rpt-parent td { border-top: 1px solid #e1e4e8; border-bottom: 1px solid #e1e4e8; }
   .rpt-detail .rpt-child td { border-bottom: 1px solid #f3f4f6; }
   .rpt-detail .rpt-child:last-child td { border-bottom: 0; }
