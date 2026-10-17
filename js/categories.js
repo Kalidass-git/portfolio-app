@@ -60,7 +60,7 @@ export function kindOf(data) {
 
 /** Make the list part of the data so it can be edited. */
 export function ensure(d) {
-  d.categoryList = categoryList(d).map((c) => ({ name: c.name, kind: c.kind, budget: c.budget || 0 }));
+  d.categoryList = categoryList(d).map((c) => ({ name: c.name, kind: c.kind, budget: c.budget || 0, ...(c.yearlyBudget > 0 ? { yearlyBudget: c.yearlyBudget } : {}) }));
   d.categories = d.categories || [];
   return d.categoryList;
 }
@@ -82,17 +82,17 @@ export function usage(data, sinceMonth = null) {
 export const exists = (data, name) => categoryList(data).some((c) => lc(c.name) === lc(name));
 
 /** Add a category (does nothing when the name exists). Returns the stored name. */
-export function add(d, { name, kind = 'expense', budget = 0 }) {
+export function add(d, { name, kind = 'expense', budget = 0, yearlyBudget = 0 }) {
   const list = ensure(d);
   const hit = list.find((c) => lc(c.name) === lc(name));
   if (hit) return hit.name;
-  list.push({ name: name.trim(), kind, budget: budget || 0 });
+  list.push({ name: name.trim(), kind, budget: budget || 0, ...(yearlyBudget > 0 ? { yearlyBudget } : {}) });
   list.sort((a, b) => a.name.localeCompare(b.name));
   return name.trim();
 }
 
 /** Change name, type or budget. A new name that matches another category merges into it. */
-export function update(d, oldName, { name, kind, budget }) {
+export function update(d, oldName, { name, kind, budget, yearlyBudget }) {
   const list = ensure(d);
   const cur = list.find((c) => lc(c.name) === lc(oldName));
   if (!cur) return;
@@ -107,6 +107,7 @@ export function update(d, oldName, { name, kind, budget }) {
   }
   if (kind) cur.kind = kind;
   if (budget != null) cur.budget = budget || 0;
+  if (yearlyBudget !== undefined) { if (yearlyBudget > 0) cur.yearlyBudget = yearlyBudget; else delete cur.yearlyBudget; }
   list.sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -121,6 +122,7 @@ export function merge(d, from, to) {
   for (const r of d.categories) if (lc(r.category) === lc(from)) r.category = target.name;
   const src = list.find((c) => lc(c.name) === lc(from));
   if (src && !target.budget && src.budget && src.kind === target.kind) target.budget = src.budget;
+  if (src && !target.yearlyBudget && src.yearlyBudget && src.kind === target.kind) target.yearlyBudget = src.yearlyBudget;
   d.categoryList = list.filter((c) => lc(c.name) !== lc(from));
 }
 
@@ -149,4 +151,20 @@ export function budgetLines(data, spentByCategory) {
     .map((c) => ({ name: c.name, budget: c.budget, spent: spent.get(lc(c.name)) || 0 }))
     .map((x) => ({ ...x, left: x.budget - x.spent, used: x.budget ? x.spent / x.budget : 0 }))
     .sort((a, b) => b.used - a.used);
+}
+
+/** Spending categories that have a yearly budget: spent so far this year against it. */
+export function yearlyLines(data, spentByCategory) {
+  const spent = new Map(spentByCategory.map((x) => [lc(x.category), x.amount]));
+  return categoryList(data).filter((c) => c.kind === 'expense' && c.yearlyBudget > 0)
+    .map((c) => ({ name: c.name, budget: c.yearlyBudget, spent: spent.get(lc(c.name)) || 0 }))
+    .map((x) => ({ ...x, left: x.budget - x.spent, used: x.spent / x.budget }))
+    .sort((a, b) => b.used - a.used);
+}
+/** Categories close to (nearAt, default 80%) or over a budget: this month against the monthly budget, this year against the yearly one. */
+export function budgetAlerts(data, monthSpent, yearSpent, nearAt = 0.8) {
+  const out = [];
+  for (const l of budgetLines(data, monthSpent)) if (l.used >= nearAt) out.push({ ...l, scope: 'month', over: l.used > 1 });
+  for (const l of yearlyLines(data, yearSpent)) if (l.used >= nearAt) out.push({ ...l, scope: 'year', over: l.used > 1 });
+  return out.sort((a, b) => (b.over - a.over) || (b.used - a.used));
 }

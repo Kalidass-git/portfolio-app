@@ -78,7 +78,7 @@ export function dialog(title, body, actions = []) {
   dlg.append(
     h('header', null, h('h2', null, title), h('button', { class: 'icon', 'aria-label': 'Close', onclick: close }, '✕')),
     h('div', { class: 'dlg-body' }, body),
-    actions.length ? h('footer', null, actions.map((a) => h('button', { class: a.class || '', onclick: () => a.onclick(close) }, a.label))) : null,
+    ...(actions.length ? [h('footer', null, actions.map((a) => h('button', { class: a.class || '', onclick: () => a.onclick(close) }, a.label)))] : []),
   );
   dlg.addEventListener('cancel', () => dlg.remove());
   document.body.append(dlg);

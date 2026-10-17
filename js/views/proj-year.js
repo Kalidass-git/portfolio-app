@@ -192,8 +192,8 @@ export function render(root) {
   const invTotal = inv.reduce((s, l) => s + (l.monthly || 0), 0);
   root.append(section('What the plan assumes', h('div', null,
     h('div', { class: 'stats' },
-      stat('Salary', money(a.salary), 'each month'), stat('Everyday expenses', money(a.expenses), 'each month'),
-      stat('EMI and EPF', `${money(a.emi)} out · ${money(a.pfAdd)} in`, 'each month'),
+      stat('Salary with EPF', money((a.salary || 0) + (a.pfAdd || 0)), `${money(a.salary)} to bank + ${money(a.pfAdd)} to EPF`), stat('Everyday expenses', money(a.expenses), 'each month'),
+      stat('Loan EMI', money(a.emi), 'each month'),
       stat('New investments', money(invTotal), 'each month, in total')),
     h('p', { class: 'note' }, `Interest from bonds and lending (about ${money(m.path[0] ? m.path[0].interest : 0)} a month after tax at the start) is added automatically from your holdings. Planned investments beyond what you save come out of cash, so cash can go negative: that means the plan asks for more than you earn.`),
     m.path.length && Math.min(...m.path.map((r) => r.cash)) < 0 ? h('p', { class: 'form-error' }, `Cash would run short: lowest point ${money(Math.min(...m.path.map((r) => r.cash)))} in ${monthLabel(m.path.reduce((b, r) => (r.cash < b.cash ? r : b)).month)}. Lower the monthly investments or raise income.`) : null),
@@ -205,10 +205,23 @@ export function render(root) {
   const oneNet = m.path.length ? m.path.reduce((x, r) => x + r.oneOut - r.oneIn, 0) / m.path.length : 0;
   const availAfter = avail - oneNet, left = avail - invTotal;
   const shareOf = (v) => (avail > 0 ? pct(v / avail, 0) : '–');
+  // interest income expected for the rest of the plan year
+  if (m.path.length) {
+    const paidYr = m.path.reduce((a, r) => a + r.interest, 0), addedYr = m.path.reduce((a, r) => a + (r.accrual || 0), 0), p0 = m.path[0], pL = m.path[m.path.length - 1];
+    root.append(section('Interest income expected', h('div', null,
+      h('div', { class: 'stats' },
+        stat('Paid out each month', h('span', { class: 'pos' }, money(p0.interest)), `bonds and lending after tax · ${money(pL.interest)} by ${monthLabel(pL.month)}`),
+        stat(`Paid out by December`, h('span', { class: 'pos' }, money(paidYr)), `${m.path.length} months left`),
+        stat('Added to deposits, EPF, chits', h('span', { class: 'pos' }, money(addedYr)), 'compounds inside the balance'),
+        stat('Credit every day', h('span', { class: 'pos' }, money((p0.interest + (p0.accrual || 0)) * 12 / 365)), 'paid out and compounding together')),
+      h('p', { class: 'note' }, 'It grows as the plan adds to bonds, lending and deposits. See Years ahead for how it grows over many years.'))));
+  }
+
   root.append(section('New money going in each month', h('div', null,
     h('div', { class: 'stats' },
       stat('Available to invest', h('span', { class: tone(avail) }, money(avail)), `each month · ${money(inc)} in, ${money(spend)} out`),
       stat(left >= 0 ? 'Still to plan' : 'Planned over', h('span', { class: left >= 0 ? '' : 'neg' }, money(Math.abs(left))), `${money(invTotal)} planned of ${money(Math.max(0, avail))}`)),
+    (a.pfAdd || 0) > 0 ? h('p', { class: 'note' }, `Your EPF (${money(a.pfAdd)} a month, yours and the employer’s) goes in before salary reaches the bank, so it is already saved and is not part of the available amount.`) : null,
     oneNet > 1 ? h('p', { class: 'note' }, `One-time items (tax, fees and so on) average ${money(oneNet)} a month over the rest of the year, which leaves ${money(availAfter)} a month to invest after them.`) : null,
     avail <= 0 ? h('p', { class: 'form-error' }, 'Nothing is left each month after expenses and EMI, so new investments would come out of cash.') : null,
     table([

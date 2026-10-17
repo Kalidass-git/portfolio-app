@@ -553,8 +553,9 @@ details.more { margin-top: 10px; } details.more summary { cursor: pointer; color
 }
 .tag.warn { color: var(--warn); border-color: var(--warn); }
 .mini-title.neg { color: var(--neg); }
-.findings li.amber { border-color: var(--warn); }
-.findings li.over { border-color: var(--neg); }
+.findings li.amber { border-color: var(--warn); border-left-width: 4px; }
+.findings li.over { border: 2px solid var(--neg); border-left-width: 8px; background: color-mix(in srgb, var(--neg) 12%, var(--surface)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--neg) 14%, transparent); }
+.findings li.over .over-tag { font-weight: 800; letter-spacing: .04em; background: var(--neg); color: #fff; border-color: var(--neg); }
 .warn { color: var(--warn); }
 .mini-title.warn { color: var(--warn); }
 
@@ -577,3 +578,12 @@ details.more { margin-top: 10px; } details.more summary { cursor: pointer; color
 .pencil .ico { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 .phone-only { display: none; } .phone-only-i { display: none; } @media (max-width: 700px) { .phone-only { display: block; } .phone-only-i { display: inline; } .with-meter.phone-only-i { display: inline-flex; margin-left: 8px; vertical-align: middle; } .desk-i { display: none; } }
+
+/* bank CSV import (desktop only) */
+dialog.sheet.wide { width: min(1180px, 96vw); }
+.imp-help { margin: 6px 0 14px 18px; padding: 0; color: var(--muted); font-size: .9rem; display: grid; gap: 4px; }
+.imp-scroll { max-height: 52vh; overflow: auto; border: 1px solid var(--line); border-radius: 10px; margin: 8px 0; }
+.tbl.imp { font-size: .86rem; } .tbl.imp th { position: sticky; top: 0; background: var(--surface-2); z-index: 1; } .tbl.imp td { vertical-align: middle; }
+.tbl.imp .imp-desc { max-width: 280px; overflow-wrap: anywhere; } .tbl.imp tr.imp-off td { opacity: .55; }
+.imp-cat { min-width: 190px; max-width: 240px; } .imp-cat.need { border-color: var(--warn); }
+.imp-foot { justify-content: flex-end; margin-top: 8px; } .imp-map label { display: flex; gap: 10px; align-items: center; margin-top: 6px; }

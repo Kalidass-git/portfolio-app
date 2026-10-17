@@ -739,6 +739,7 @@ export function upcoming(data, all, days = 60) {
     if (r.received || r.notStarted) continue;
     if (r.due <= to) add(r.due, r.name + (r.overdue ? ' (overdue)' : r.dueToday ? ' (due today)' : ' to pay you'), r.expected, 'Money to receive');
   }
+  for (const d of loanDues(data, from)) if (!d.paid && d.date <= to) add(d.date, d.name + (d.status === 'overdue' ? ' EMI (overdue)' : d.status === 'today' ? ' EMI (due today)' : ' EMI due'), d.emi, 'Loan EMI');
   return out.sort((a, b) => (a.date < b.date ? -1 : 1));
 }
 
@@ -774,4 +775,29 @@ export function loanSummary(data) {
   });
   const sumBy = (k) => items.reduce((a, x) => a + (x[k] || 0), 0);
   return { items, total: sumBy('amount'), monthlyInterest: sumBy('monthlyInterest'), yearlyInterest: sumBy('yearlyInterest'), emi: sumBy('emi'), avgRate: sumBy('amount') ? sumBy('monthlyInterest') * 12 / sumBy('amount') : 0 };
+}
+
+/**
+ * EMI due dates for loans that have an EMI and an optional `emiDay` (day of month).
+ * An EMI counts as paid this month when a bank entry in the "Loan" category is close to the EMI amount in the month,
+ * or the loan has `emiPaidOn` in this month (set with "EMI paid this month").
+ * status: paid | overdue | today | soon (within 7 days) | later
+ */
+export function loanDues(data, asOf) {
+  const ms = monthStart(asOf), me = iso(toMs(addMonths(ms, 1)) - DAY), dim = Number(me.slice(8, 10));
+  const entries = (data.ledger || []).filter((e) => e.debit > 0 && e.date >= ms && e.date <= asOf && /^loan$/i.test(e.category || '')).map((e) => ({ amt: e.debit, used: false }));
+  const loans = (data.liabilities || []).filter((l) => l.emi > 0 && l.emiDay > 0).sort((a, b) => b.emi - a.emi);
+  const out = loans.map((l) => {
+    const day = Math.min(dim, Math.max(1, Math.round(l.emiDay)));
+    const due = ms.slice(0, 8) + String(day).padStart(2, '0');
+    const hit = entries.find((x) => !x.used && x.amt >= l.emi * 0.95 && x.amt <= l.emi * 1.05);
+    if (hit) hit.used = true;
+    const paid = !!hit || (!!l.emiPaidOn && l.emiPaidOn >= ms && l.emiPaidOn <= me);
+    const nextDue = paid ? addMonths(ms, 1).slice(0, 8) + String(Math.min(Number(l.emiDay) || 1, 28)).padStart(2, '0') : due;
+    const date = paid ? nextDue : due;
+    const days = Math.round((toMs(date) - toMs(asOf)) / DAY);
+    const status = paid ? 'paid' : days < 0 ? 'overdue' : days === 0 ? 'today' : days <= 7 ? 'soon' : 'later';
+    return { id: l.id, name: l.name, emi: l.emi, date, days, status, paid };
+  });
+  return out.sort((a, b) => (a.date < b.date ? -1 : 1));
 }

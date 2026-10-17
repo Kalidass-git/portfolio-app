@@ -18,13 +18,14 @@ function categoryForm(cat, presetKind) {
   const others = CAT.categoryList(data).filter((c) => !cat || c.name.toLowerCase() !== cat.name.toLowerCase()).map((c) => c.name).sort((a, b) => a.localeCompare(b));
   const dlg = formDialog({
     title: isNew ? 'Add category' : 'Edit ' + cat.name,
-    value: cat ? { name: cat.name, kind: cat.kind, budget: cat.budget || '', mergeInto: '' } : { kind: presetKind || 'expense', budget: '' },
+    value: cat ? { name: cat.name, kind: cat.kind, budget: cat.budget || '', yearlyBudget: cat.yearlyBudget || '', mergeInto: '' } : { kind: presetKind || 'expense', budget: '', yearlyBudget: '' },
     saveLabel: isNew ? 'Add' : 'Save',
     deleteMessage: use && use.count ? `“${cat && cat.name}” has ${use.count} entries. Next you will choose another category to move them to.` : 'Delete this category?',
     fields: [
       { key: 'name', label: 'Name', type: 'text', required: true, readonly: locked, hint: locked ? 'The Home screen groups its summary by this name, so the name cannot change. You can still change the budget.' : '' },
       { key: 'kind', label: 'Counts as', type: 'select', options: CAT.KINDS.map((k) => ({ value: k.key, label: k.one })), hint: 'Expenses are what you spent. Investments are money you put away, not spent. “Not counted” is for moves between your own accounts and cash withdrawals.' },
-      { key: 'budget', label: 'Monthly budget (₹, optional)', type: 'number', showIf: (v) => v.kind === 'expense', hint: 'The Expenses screen shows how much of this is used each month.' },
+      { key: 'budget', label: 'Monthly budget (₹, optional)', type: 'number', showIf: (v) => v.kind === 'expense', hint: 'The Expenses screen shows how much of this is used each month.', half: true },
+      { key: 'yearlyBudget', label: 'Yearly budget (₹, optional)', type: 'number', showIf: (v) => v.kind === 'expense', half: true, hint: 'You can set either or both. You are warned on Expenses when 80% of a budget is used.' },
       ...(!isNew && !locked && others.length ? [{ key: 'mergeInto', label: 'Merge into another category (optional)', type: 'select', options: [{ value: '', label: 'Keep as it is' }, ...others], hint: 'Moves all its entries and auto-fill rules into the chosen category and removes this one.' }] : []),
     ],
     onSave: (v) => {
@@ -32,9 +33,9 @@ function categoryForm(cat, presetKind) {
         mutate((d) => {
           if (isNew) {
             if (CAT.exists(d, v.name)) throw new Error('A category with this name already exists.');
-            CAT.add(d, { name: v.name, kind: v.kind, budget: v.kind === 'expense' ? v.budget : 0 });
+            CAT.add(d, { name: v.name, kind: v.kind, budget: v.kind === 'expense' ? v.budget : 0, yearlyBudget: v.kind === 'expense' ? v.yearlyBudget : 0 });
           } else if (v.mergeInto) CAT.merge(d, cat.name, v.mergeInto);
-          else CAT.update(d, cat.name, { name: locked ? cat.name : v.name, kind: v.kind, budget: v.kind === 'expense' ? v.budget : 0 });
+          else CAT.update(d, cat.name, { name: locked ? cat.name : v.name, kind: v.kind, budget: v.kind === 'expense' ? v.budget : 0, yearlyBudget: v.kind === 'expense' ? (v.yearlyBudget || 0) : 0 });
         });
         toast(isNew ? 'Category added' : v.mergeInto ? 'Categories merged' : 'Category saved');
       } catch (e) { return fail(e); }
@@ -78,19 +79,19 @@ export function render() {
   const usage = CAT.usage(data, C.addMonths(C.monthStart(S.all.asOf), -11).slice(0, 7));
   const editable = canEdit();
 
-  root.append(h('p', { class: 'note', style: { marginTop: 0 } }, 'Categories decide where each transaction is counted. Tap a row to rename it, change what it counts as, set a monthly budget, or merge it into another category.'));
+  root.append(h('p', { class: 'note', style: { marginTop: 0 } }, 'Categories decide where each transaction is counted. Tap a row to rename it, change what it counts as, set a monthly and/or yearly budget, or merge it into another category.'));
 
   for (const k of CAT.KINDS) {
     const rows = list.filter((c) => c.kind === k.key).map((c) => ({ ...c, u: usage.get(c.name.toLowerCase()) || { count: 0, recent: 0, last: '' } })).sort((a, b) => b.u.recent - a.u.recent || a.name.localeCompare(b.name));
     const showBudget = k.key === 'expense';
-    const budgetTotal = rows.reduce((a, c) => a + (c.budget || 0), 0);
+    const budgetTotal = rows.reduce((a, c) => a + (c.budget || 0), 0), yearTotal = rows.reduce((a, c) => a + (c.yearlyBudget || 0), 0);
     root.append(section(`${k.label} (${rows.length})`,
       table([
         { label: 'Category', host: true, render: (c) => h('span', { title: CAT.isProtected(c.name) ? 'Name is fixed because the Home screen summary uses it' : null }, c.name + (CAT.isProtected(c.name) ? ' 🔒' : '')) },
         { label: 'Entries', mob: 'under', mlabel: 'entries ', cls: 'r', get: (c) => num(c.u.count) },
         { label: 'Last 12 months', cls: 'r', get: (c) => (c.u.recent ? money(c.u.recent) : '–') },
-        ...(showBudget ? [{ label: 'Budget / month', cls: 'r', get: (c) => (c.budget ? money(c.budget) : '–'), total: () => (budgetTotal ? money(budgetTotal) : '') }] : []),
-      ], rows, { footer: showBudget && budgetTotal ? { label: 'Total budget' } : null, onRow: editable ? (c) => categoryForm(list.find((x) => x.name === c.name)) : null, empty: 'No categories of this kind yet.' }),
+        ...(showBudget ? [{ label: 'Budget / month', cls: 'r', get: (c) => (c.budget ? money(c.budget) : '–'), total: () => (budgetTotal ? money(budgetTotal) : '') }, { label: 'Budget / year', cls: 'r', get: (c) => (c.yearlyBudget ? money(c.yearlyBudget) : '–'), total: () => (yearTotal ? money(yearTotal) : '') }] : []),
+      ], rows, { footer: showBudget && (budgetTotal || yearTotal) ? { label: 'Total budget' } : null, onRow: editable ? (c) => categoryForm(list.find((x) => x.name === c.name)) : null, empty: 'No categories of this kind yet.' }),
       editable ? [btn('Add category', () => categoryForm(null, k.key), 'primary')] : null));
   }
 

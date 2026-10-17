@@ -5,6 +5,10 @@ import { closeForm, reopen } from './closing.js';
 
 const FREQ = ['Monthly', 'Quarterly', 'Yearly', 'Daily'];
 const rerender = () => window.dispatchEvent(new Event('rerender'));
+const green = (v) => h('span', { class: 'pos' }, v);
+/** Interest only (never the amount lent or deposited): added to the balance, or paid out so far at the stated rate. */
+const interestSoFar = (x, asOf) => (x.principal > 0 ? (x.interestType === 'Payout' ? Math.max(0, (new Date(asOf) - new Date(x.depositDate)) / 864e5) * x.principal * x.rate / 365 : x.accrued || 0) : 0);
+const sumInterest = (list, asOf) => list.reduce((a, x) => a + interestSoFar(x, asOf), 0);
 
 /** Close a bond, FD or loan: record what came back, optionally credit a bank account, keep it in the Closed list. */
 function closeItem(key, kind, it, suggested, label) {
@@ -88,9 +92,9 @@ export function render() {
   if (tab === 'loans') { loans.view(root); return root; }
   const f = all.fixed;
   const stats = {
-    bonds: () => h('div', { class: 'stats' }, stat('Bonds', money(f.bondPrincipal), `${all.bonds.length} bonds`), stat('Interest to receive', money(all.bonds.reduce((a, b) => a + b.monthNet, 0)), 'after ' + money(all.bonds.reduce((a, b) => a + b.monthGross - b.monthNet, 0)) + ' TDS')),
-    fds: () => h('div', { class: 'stats' }, stat('Fixed deposits', money(f.fdPrincipal), `${all.fds.length} FDs`), stat('Interest added so far', money(all.fds.reduce((a, x) => a + (x.accrued || 0), 0)), 'on top of the amount')),
-    lending: () => h('div', { class: 'stats' }, stat('Lent out', money(f.lendPrincipal), `${all.lending.filter((l) => l.principal > 0).length} loans given`), stat('Interest added so far', money(all.lending.reduce((a, x) => a + (x.accrued || 0), 0)), 'on top of the amount')),
+    bonds: () => h('div', { class: 'stats' }, stat('Bonds', money(f.bondPrincipal), `${all.bonds.length} bonds`), stat('Interest to receive', green(money(all.bonds.reduce((a, b) => a + b.monthNet, 0))), 'after ' + money(all.bonds.reduce((a, b) => a + b.monthGross - b.monthNet, 0)) + ' TDS')),
+    fds: () => h('div', { class: 'stats' }, stat('Fixed deposits', money(f.fdPrincipal), `${all.fds.length} FDs`), stat('Interest so far', green(money(sumInterest(all.fds, all.asOf))), 'interest only, paid-out included')),
+    lending: () => h('div', { class: 'stats' }, stat('Lent out', money(f.lendPrincipal), `${all.lending.filter((l) => l.principal > 0).length} loans given`), stat('Interest so far', green(money(sumInterest(all.lending, all.asOf))), 'interest only, paid-out included')),
   };
   if (stats[tab]) root.append(stats[tab]());
 
@@ -110,7 +114,7 @@ export function render() {
     { label: 'Name', host: true, get: (x) => x.name }, { label: 'Holder / type', mob: 'under', get: (x) => x.account },
     { label: 'Amount', cls: 'r', get: (x) => money(x.principal), total: (rs) => money(rs.reduce((a, x) => a + x.principal, 0)) },
     { label: 'Rate', key: true, cls: 'r', get: (x) => pct(x.rate, 2) },
-    { label: 'Interest so far', key: true, cls: 'r', get: (x) => (x.interestType === 'Payout' ? 'paid out' : money(x.accrued)), total: (rs) => money(rs.reduce((a, x) => a + x.accrued, 0)) },
+    { label: 'Interest so far', key: true, cls: 'r', render: (x) => (x.principal > 0 ? green(money(interestSoFar(x, all.asOf)) + (x.interestType === 'Payout' ? ' paid out' : '')) : '–'), total: (rs) => money(sumInterest(rs, all.asOf)) },
     { label: 'Per day', cls: 'r', get: (x) => money(x.daily) },
     { label: 'Matures', mob: 'under', mlabel: 'matures ', get: (x) => dateStr(x.maturityDate) },
   ];
@@ -130,13 +134,14 @@ export function render() {
       waiting.length ? h('div', { class: 'alert warn', style: { marginTop: late.length ? 8 : 0 } }, h('b', null, `${waiting.length} still to come this month · ${money(waitSum)}`), h('p', null, waiting.map((r) => `${r.name} (${money(r.expected)}, due ${dateStr(r.due)})`).join(' · '))) : null,
       h('div', { class: 'stats' },
         stat('Received this month', money(rc.filter((r) => r.received).reduce((x, r) => x + (r.expected || 0), 0)), `${rc.filter((r) => r.received).length} of ${rc.length} payments in`),
-        stat('Received so far', money(rc.reduce((x, r) => x + (r.total || 0), 0)), `${rc.reduce((x, r) => x + (r.installmentsPaid || 0), 0)} payments since each started`)),
+        stat('Received so far', green(money(rc.reduce((x, r) => x + (r.total || 0), 0))), `${rc.reduce((x, r) => x + (r.installmentsPaid || 0), 0)} payments since each started`)),
       !late.length && !waiting.length && rc.length ? h('p', { class: 'note', style: { marginTop: 0 } }, 'Everything due this month has been received.') : null,
       table([
       { label: 'From', host: true, get: (r) => r.name },
       { label: 'Balance with them', mob: 'under', mlabel: 'with them ', cls: 'r', get: (r) => money(r.balanceDue) },
       { label: 'Expected', cls: 'r', get: (r) => money(r.expected) },
       { label: 'How often', mob: 'under', get: (r) => r.term },
+      { label: 'Total received', key: true, cls: 'r', render: (r) => green(money(r.total || 0)) },
       { label: 'Last received', mob: 'under', mlabel: 'last ', get: (r) => dateStr(r.lastReceived) },
       { label: 'This month', render: (r) => (r.active === false ? h('span', { class: 'tag' }, 'Closed') : h('span', { class: r.received ? 'tag good' : r.overdue ? 'tag bad' : r.dueToday ? 'tag warn' : 'tag' }, r.received ? 'Received' : r.overdue ? 'Overdue' : r.dueToday ? 'Due today' : r.notStarted ? 'Starts ' + dateStr(r.startDate) : 'Due ' + dateStr(r.due))) },
       { label: '', render: (r) => (canEdit() && r.active !== false && !r.received ? h('button', { class: 'small', onclick: (e) => { e.stopPropagation(); mutate((d) => { d.receivables.find((x) => x.id === r.id).lastReceived = C.todayISO(); }); toast('Marked as received'); } }, 'Mark received') : '') },

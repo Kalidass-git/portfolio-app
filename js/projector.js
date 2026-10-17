@@ -129,11 +129,11 @@ export function simulate(start, a, outlooks, months) {
       if (o.kind === 'income') oneIn += amt; else oneOut += amt;
     }
     // interest paid out by bonds and lending (after TDS), growth for everything else
-    let interest = 0;
+    let interest = 0, accrual = 0;
     for (const p of all) {
       const k = classOf(p.cls), r = p.rate ?? rateOf(p.cls, a, outlooks);
       if (k.kind === 'payout') interest += p.value * (r / 12) * (1 - (a.tds ?? 0.1));
-      else p.value *= 1 + f(r);
+      else { const was = p.value; p.value *= 1 + f(r); if (k.kind === 'accrual') accrual += p.value - was; }
     }
     // planned new money moves from cash into its class
     let invested = 0;
@@ -154,7 +154,7 @@ export function simulate(start, a, outlooks, months) {
     const values = {};
     for (const p of all) values[p.cls] = (values[p.cls] || 0) + p.value;
     const assets = sum(Object.values(values));
-    rows.push({ month, salary, other, interest, oneIn, expenses, emi, oneOut, invested, pfAdd, surplus, income, out, cash: values.cash, values, market: sum(MARKET, (k) => values[k] || 0), assets, liab, nw: assets - liab });
+    rows.push({ month, salary, other, interest, accrual, oneIn, expenses, emi, oneOut, invested, pfAdd, surplus, income, out, cash: values.cash, values, market: sum(MARKET, (k) => values[k] || 0), assets, liab, nw: assets - liab });
     cashBefore = values.cash;
   }
   return rows;
@@ -198,7 +198,7 @@ export function extraMonthly(start, a, outlooks, months, target) {
 /** Month rows grouped by calendar year (year-end values, yearly flows). */
 export function byYear(rows) {
   const m = new Map();
-  for (const r of rows) { const y = r.month.slice(0, 4); const x = m.get(y) || { year: y, income: 0, out: 0, invested: 0, interest: 0, months: 0 }; x.income += r.income; x.out += r.out; x.invested += r.invested; x.interest += r.interest; x.months++; x.end = r; m.set(y, x); }
+  for (const r of rows) { const y = r.month.slice(0, 4); const x = m.get(y) || { year: y, income: 0, out: 0, invested: 0, interest: 0, accrual: 0, months: 0 }; x.income += r.income; x.out += r.out; x.invested += r.invested; x.interest += r.interest; x.accrual += r.accrual || 0; x.months++; x.end = r; m.set(y, x); }
   return [...m.values()];
 }
 

@@ -4,19 +4,20 @@ import { h, money, dateStr, monthLabel, section, table, btn, formDialog, dialog,
 import * as CAT from '../categories.js';
 import { hbars } from '../charts.js';
 import { closeForm, reopen } from './closing.js';
+import { openBankImport } from './cash-import.js';
 import { confirmDialog, pct, posNeg, stat, datalistId, icon } from '../ui.js';
 
-let fAcct = 'all', fMonth = 'all', fText = '', fKind = 'all', limit = 60;
+let fAcct = 'all', fMonth = null, fText = '', fKind = 'all', limit = 60;
 const TABS = [['accounts', 'Accounts'], ['ledger', 'Transactions']];
 /** Open the transactions list, optionally pre-filtered. Used by links from other screens. */
-export function openLedger({ text = '', month = 'all', acct = 'all', kind = 'all' } = {}) { fText = text; fMonth = month; fAcct = acct; fKind = kind; limit = 60; location.hash = '#/cash/ledger'; }
+export function openLedger({ text = '', month = null, acct = 'all', kind = 'all' } = {}) { fText = text; fMonth = month; fAcct = acct; fKind = kind; limit = 60; location.hash = '#/cash/ledger'; }
 
 export function render() {
   const root = h('div', { class: 'page' });
   const old = route().sub;
   if (old === 'savings' || old === 'closed') location.replace('#/savings' + (old === 'closed' ? '/closed' : ''));
   const tab = subTab(TABS.map((t) => t[0]));
-  root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Cash views'), canEdit() ? h('span', { class: 'btn-row' }, btn('Transfer', () => transferForm()), btn('Add transaction', () => txnForm(), 'primary')) : null));
+  root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Cash views'), canEdit() ? h('span', { class: 'btn-row' }, (() => { const b = btn('Import', () => openBankImport(categoryOptions)); b.classList.add('only-lg'); b.title = 'Import bank transactions from a CSV file'; return b; })(), btn('Transfer', () => transferForm()), btn('Add transaction', () => txnForm(), 'primary')) : null));
   root.append(tab === 'ledger' ? ledger() : accounts());
   return root;
 }
@@ -174,6 +175,7 @@ export function txnForm(entry, preset) {
 
 function ledger() {
   const { data } = S;
+  if (fMonth === null) fMonth = C.monthKey(S.all.asOf); // first visit: this month
   const kindOfCat = CAT.kindOf(data);
   const wrap = h('div');
   const months = [...new Set(data.ledger.map((e) => C.monthKey(e.date)))].sort().reverse();

@@ -139,7 +139,11 @@ function breakupCard(all) {
 /** Things that need a look: overdue money, old prices, loans, behind plan. */
 function attention(data, all) {
   const out = [];
-  const soon = C.upcoming(data, all, 30), overdue = soon.filter((u) => u.days < 0);
+  const soon = C.upcoming(data, all, 30).filter((u) => u.kind !== 'Loan EMI'), overdue = soon.filter((u) => u.days < 0);
+  const emis = C.loanDues(data, all.asOf).filter((d) => !d.paid && d.days <= 7);
+  const emiLate = emis.filter((d) => d.status === 'overdue'), emiSoon = emis.filter((d) => d.status !== 'overdue');
+  if (emiLate.length) out.push({ title: `${emiLate.length} loan EMI${emiLate.length === 1 ? '' : 's'} overdue`, sub: emiLate.map((d) => `${d.name} (was due ${dateStr(d.date)})`).join(', '), value: money(emiLate.reduce((a, d) => a + d.emi, 0)), tone: 'neg', href: '#/fixed/loans' });
+  if (emiSoon.length) out.push({ title: emiSoon.length === 1 ? `${emiSoon[0].name} EMI: ${emiSoon[0].days === 0 ? 'due today' : emiSoon[0].days === 1 ? 'due tomorrow' : 'due in ' + emiSoon[0].days + ' days'}` : `${emiSoon.length} loan EMIs due within a week`, sub: emiSoon.map((d) => `${d.name} · ${d.days === 0 ? 'today' : dateStr(d.date).replace(/ \d{4}$/, '')}`).join(', '), value: money(emiSoon.reduce((a, d) => a + d.emi, 0)), tone: 'warn', href: '#/fixed/loans' });
   if (overdue.length) out.push({ title: `${overdue.length} payment${overdue.length === 1 ? '' : 's'} overdue`, sub: overdue.slice(0, 2).map((u) => u.title).join(', '), value: money(overdue.reduce((a, u) => a + u.amount, 0)), tone: 'neg', href: '#/fixed/lending' });
   const due = soon.filter((u) => u.days >= 0 && u.days <= 14);
   const when = (u) => (u.days === 0 ? 'today' : u.days === 1 ? 'tomorrow' : dateStr(u.date).replace(/ \d{4}$/, ''));
@@ -222,7 +226,7 @@ function comingUp(data, all) {
       value: money(u.amount), tone: u.days < 0 ? 'neg' : u.days === 0 ? 'warn' : '',
     })), { empty: 'Nothing falls due in the next 60 days.' }),
     soon.length > 8 ? h('p', { class: 'note' }, `${soon.length - 8} more in the next 60 days.`) : null,
-    overdue ? null : (data.receivables.length ? h('p', { class: 'note' }, 'No money to receive is overdue.') : null)));
+    soon.filter((u) => u.kind === 'Money to receive' && u.days < 0).length ? null : (data.receivables.length ? h('p', { class: 'note' }, 'No money to receive is overdue.') : null)));
 }
 
 function thisMonth(data, all, months) {

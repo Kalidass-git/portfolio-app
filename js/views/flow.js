@@ -109,6 +109,27 @@ function overview() {
     stat('Invested', money(s.totalInvest), 'not an expense', 'inv'),
     filtered ? stat('Filter total', money(s.totalExpense), 'expenses + loan & tax in the filter', 'exp') : null));
 
+  // alert: a budget that is nearly used up (this month against monthly budgets, this year against yearly ones)
+  {
+    const mo = C.periodRange('this', all.asOf), yr = C.periodRange('ytd', all.asOf);
+    const none = { mode: 'all', cats: [] };
+    const al = CAT.budgetAlerts(data, C.rangeSummary(data, mo.from, mo.to, none).expense, C.rangeSummary(data, yr.from, yr.to, none).expense);
+    if (al.length) root.append(h('div', { class: 'alert' + (al.some((x) => x.over) ? '' : ' warn') },
+      h('b', null, al.some((x) => x.over) ? `${al.filter((x) => x.over).length} over budget` + (al.some((x) => !x.over) ? `, ${al.filter((x) => !x.over).length} close to it` : '') : `${al.length} budget${al.length > 1 ? 's' : ''} nearly used up`),
+      h('ul', { class: 'findings' }, al.map((x) => h('li', null, h('b', { class: x.over ? 'neg' : 'warn' }, x.name), ` ${x.scope === 'month' ? 'this month' : 'this year'}: ${pct(x.used, 0)} of the ${x.scope === 'month' ? 'monthly' : 'yearly'} budget used (${money(x.spent)} of ${money(x.budget)})${x.over ? ', over by ' + money(-x.left) : ''}`)))));
+    const yl = CAT.yearlyLines(data, C.rangeSummary(data, yr.from, yr.to, none).expense).filter((l) => passes(l.name));
+    if (yl.length) root.append(section('Yearly budget · ' + yr.from.slice(0, 4), h('div', null,
+      table([
+        { label: 'Category', host: true, get: (l) => l.name },
+        { label: 'Spent so far', cls: 'r', get: (l) => money(l.spent) },
+        { label: 'Yearly budget', mob: 'under', mlabel: 'budget ', cls: 'r', get: (l) => money(l.budget) },
+        { label: 'Used', mob: 'under', mlabel: 'used ', cls: 'r', render: (l) => h('span', { class: 'with-meter' }, meter(Math.min(1, l.used), l.used > 1 ? 7 : l.used >= 0.8 ? 3 : 2), h('span', { class: l.used > 1 ? 'neg' : l.used >= 0.8 ? 'warn' : '' }, pct(l.used, 0))) },
+        { label: 'Left', cls: 'r', render: (l) => h('span', { class: l.left < 0 ? 'neg' : 'pos' }, money(l.left)) },
+      ], yl),
+      h('p', { class: 'note' }, 'Spending from 1 January to today, whatever period is chosen above.')),
+      [h('a', { class: 'btn small', href: '#/flow/categories' }, 'Edit budgets')]));
+  }
+
   // budgets: monthly budget × months in the period
   if (range.months) {
     const lines = CAT.budgetLines(data, s.expense).map((l) => ({ ...l, budget: l.budget * range.months, left: l.budget * range.months - l.spent, used: l.spent / (l.budget * range.months) })).filter((l) => passes(l.name));

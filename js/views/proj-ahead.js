@@ -117,6 +117,26 @@ export function render(root) {
     ], cr, { footer: { label: 'Total assets' }, empty: 'Nothing to show.' }),
     h('p', { class: 'note' }, plan0 ? `Today’s holdings plus the ${money(plan0)} a month of new money from your plan, grown at the rates and outlook above. Cash is what is left after spending and investing.` : 'No new money is planned, so only growth of what you hold today is shown.'))));
 
+  // ---------- interest income: how it grows ----------
+  const debtSum = (r) => P.CLASSES.filter((c) => c.kind === 'payout' || c.kind === 'accrual').reduce((a, c) => a + ((r.values && r.values[c.key]) || 0), 0);
+  const perDay = (r) => ((r.interest || 0) + (r.accrual || 0)) * 12 / 365;
+  const iy = yearRows.map((r, i) => { const yr = rows.slice(i * 12, i * 12 + 12); return { r, paid: yr.reduce((a, x) => a + x.interest, 0), added: yr.reduce((a, x) => a + (x.accrual || 0), 0) }; });
+  const first = rows[0];
+  root.append(section('Interest income: how it grows', h('div', null,
+    h('div', { class: 'stats' },
+      stat('Interest each month now', h('span', { class: 'pos' }, money(first ? first.interest : 0)), `paid out by bonds and lending, after tax · ${money(first ? perDay(first) : 0)} a day with compounding`),
+      stat(`Interest each month in ${s.horizon} years`, h('span', { class: 'pos' }, money(end.interest)), `${money(perDay(end))} a day credited · debt investments ${compact(debtSum(end))}`)),
+    lineChart({ labels: yearRows.map(year0), fmt: money, yMin: 0, series: [{ name: 'Interest paid out each month', values: yearRows.map((r) => r.interest), color: 2 }, { name: 'Interest added to deposits, EPF and chits each month', values: yearRows.map((r) => r.accrual || 0), color: 4 }] }),
+    table([
+      { label: 'Year ending', host: true, get: (x) => year0(x.r) },
+      { label: 'Debt investments', cls: 'r', get: (x) => money(debtSum(x.r)) },
+      { label: 'Interest / month', key: true, cls: 'r', render: (x) => h('span', { class: 'pos' }, money(x.r.interest)) },
+      { label: 'Credit / day', key: true, cls: 'r', render: (x) => h('span', { class: 'pos' }, money(perDay(x.r))) },
+      { label: 'Paid out that year', mob: 'under', mlabel: 'paid out ', cls: 'r', get: (x) => money(x.paid) },
+      { label: 'Added to balances that year', mob: 'under', mlabel: 'added ', cls: 'r', get: (x) => money(x.added) },
+    ], iy, { empty: 'Nothing to show.' }),
+    h('p', { class: 'note' }, 'Debt investments are bonds, private lending, FDs, EPF and PPF, chits, insurance and recurring deposits at that year end, growing with new money and their own rates. Paid out is cash from bonds and lending after tax; added to balances is interest that compounds inside deposits, EPF and chits. Credit a day counts both.'))));
+
   // ---------- table ----------
   const tbl = yearRows.map((r, i) => ({ r, i, flow: byYearFlows(rows, i) }));
   root.append(section('Year by year', h('div', null,
