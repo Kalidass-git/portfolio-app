@@ -606,12 +606,12 @@ dialog.sheet.wide { width: min(1180px, 96vw); }
   .rpt .kpi strong { font-weight: 400; }
   .rpt .kpi.key strong { font-weight: 800; }
   .rpt-h { border-bottom: 1px solid #d9dde2; padding-bottom: 2px; font-weight: 600; }
-  .rpt-tbl th { color: #444 !important; font-weight: 600; border-bottom: 1px solid #b9bfc7; }
-  .rpt-tbl tfoot td { border-top: 1px solid #b9bfc7; }
+  .rpt-tbl th { color: #444 !important; font-weight: 600; border-bottom: 1px solid #cfd3d9; }
+  .rpt-tbl tfoot td { border-top: 1px solid #cfd3d9; }
   .rpt-tbl td { border-bottom-color: #e8eaee; }
-  .rpt-detail .rpt-parent { background: #f5f6f8 !important; }
-  .rpt-detail .rpt-parent td { border-top: 1px solid #d3d7dd; border-bottom: 1px solid #d3d7dd; }
-  .rpt-detail .rpt-child td { border-bottom: 1px solid #eceef1; }
+  .rpt-detail .rpt-parent { background: #f7f8f9 !important; }
+  .rpt-detail .rpt-parent td { border-top: 1px solid #e1e4e8; border-bottom: 1px solid #e1e4e8; }
+  .rpt-detail .rpt-child td { border-bottom: 1px solid #f3f4f6; }
   .rpt-detail .rpt-child:last-child td { border-bottom: 0; }
   .rpt .box { background: #fff !important; border: 1px solid #e3e6ea; }
   .rpt-foot { border-top: 1px solid #d9dde2; }
