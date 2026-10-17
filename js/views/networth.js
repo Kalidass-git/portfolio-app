@@ -3,9 +3,31 @@
 import { S } from '../store.js';
 import * as C from '../calc.js';
 import * as P from '../projector.js';
-import { h, money, pct, dateStr, monthLabel, section, stat, table } from '../ui.js';
+import { h, money, pct, dateStr, monthLabel, section, stat, table, setOptions } from '../ui.js';
 import { lineChart } from '../charts.js';
 import { model } from './proj-year.js';
+
+let range = 'year';
+const RANGES = [['3m', 'Past 3 months'], ['6m', 'Past 6 months'], ['12m', 'Past 12 months'], ['year', 'This year'], ['last', 'Last year'], ['2y', 'Past 2 years'], ['all', 'Everything']];
+const rerender = () => window.dispatchEvent(new Event('rerender'));
+const monthsBetween = (a, b) => { const out = []; for (let m = a; m <= b; m = C.addMonths(m + '-01', 1).slice(0, 7)) out.push(m); return out; };
+
+/**
+ * The plan as it was set at the start, month by month: the Plan sheet's own path (start position plus the planned saving
+ * each month, never re-based on what really happened), then any Wealth projector year plan for months the sheet does not cover.
+ */
+export function plannedByMonth(data, all) {
+  const out = new Map();
+  try {
+    for (const t of C.targets(data, C.projection(data, all))) if (t.estAsset != null) out.set(t.date.slice(0, 7), Math.round(t.estAsset - t.plannedLiab));
+  } catch (e) { /* no Plan sheet in this file */ }
+  const cfg = P.cfg(data);
+  for (const plan of Object.values(cfg.years)) {
+    if (!out.has(plan.baseline.month)) out.set(plan.baseline.month, Math.round(plan.baseline.net));
+    for (const r of P.planPath(plan, P.cfg(data).outlooks)) if (!out.has(r.month)) out.set(r.month, Math.round(r.nw));
+  }
+  return out;
+}
 
 const signed = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + money(Math.abs(n));
 const tone = (n) => (n > 0 ? 'pos' : n < 0 ? 'neg' : '');
@@ -33,34 +55,57 @@ export function render() {
   const { data, all } = S;
   const cur = C.monthKey(all.asOf), year = cur.slice(0, 4);
   const { actual, projected, plan, hasPlan } = netWorthRows(data, all);
+  const planned = plannedByMonth(data, all);
   const root = h('div', { class: 'page' });
   if (actual.length < 2) {
     root.append(h('div', { class: 'card' }, h('p', null, 'The graph needs at least two month-end snapshots.'), h('p', { class: 'note' }, 'Save one on the last day of each month under Wealth projector → This year → Month-end check-in. Month-ends you typed into the Plan sheet can be brought in from the Month by month table there.')));
     return root;
   }
-  const first = actual[0], last = actual[actual.length - 1], end = projected.length ? projected[projected.length - 1] : null;
-  const months = [...actual.map((r) => r.month), ...projected.map((r) => r.month)];
-  const labels = months.map((mo) => monthLabel(mo).slice(0, 3) + (mo.slice(5) === '01' || mo === months[0] ? " '" + mo.slice(2, 4) : ''));
-  const act = months.map((mo) => { const r = actual.find((x) => x.month === mo); return r ? r.value : null; });
-  const prj = months.map((mo) => { if (mo === last.month) return last.value; const r = projected.find((x) => x.month === mo); return r ? r.value : null; });
-  const lo = Math.min(...act.concat(prj).filter((v) => v != null));
+  // the window
+  const first = actual[0].month, back = (n) => C.addMonths(cur + '-01', -n).slice(0, 7);
+  let from = { '3m': back(3), '6m': back(6), '12m': back(12), year: year + '-01', last: (Number(year) - 1) + '-01', '2y': back(24), all: first }[range] || year + '-01';
+  const to = range === 'last' ? (Number(year) - 1) + '-12' : year + '-12';
+  if (from < first && range !== 'all') from = range === 'last' || range === 'year' ? from : first;
+  const inWin = (r) => r.month >= from && r.month <= to;
+  const act = actual.filter(inWin), prj = range === 'last' ? [] : projected.filter(inWin);
+  const sel = h('select', { class: 'month-select', 'aria-label': 'Period', onchange: (e) => { range = e.target.value; rerender(); } });
+  setOptions(sel, RANGES.map(([v, l]) => ({ value: v, label: l })), range);
+  root.append(h('div', { class: 'filters' }, sel));
+  if (!act.length) { root.append(h('div', { class: 'card' }, h('p', { class: 'empty' }, 'No month-end snapshots in this period.'), h('p', { class: 'note' }, 'Pick a longer period, or “Everything”.'))); return root; }
+
+  const firstA = act[0], last = act[act.length - 1], end = prj.length ? prj[prj.length - 1] : null;
+  const months = monthsBetween(from < first ? first : from, to);
+  const lbl = (mo, i) => monthLabel(mo).slice(0, 3) + (mo.slice(5) === '01' || i === 0 ? " '" + mo.slice(2, 4) : '');
+  const labels = months.map(lbl);
+  const aVals = months.map((mo) => { const r = act.find((x) => x.month === mo); return r ? r.value : null; });
+  const pVals = months.map((mo) => { if (!prj.length) return null; if (mo === last.month) return last.value; const r = prj.find((x) => x.month === mo); return r ? r.value : null; });
+  const planVals = months.map((mo) => (planned.has(mo) ? planned.get(mo) : null));
+  const havePlan = planVals.some((v) => v != null);
+  const all3 = aVals.concat(pVals, planVals).filter((v) => v != null);
+  const lo = Math.min(...all3);
+  const vsPlan = planned.has(last.month) ? last.value - planned.get(last.month) : null;
   root.append(h('div', { class: 'stats' },
     stat('Net worth now', money(all.netAsset), `as on ${dateStr(all.asOf)}`),
-    stat('Change since ' + monthLabel(first.month, true), h('span', { class: tone(last.value - first.value) }, signed(last.value - first.value)), first.value ? pct((last.value - first.value) / first.value, 1) : ''),
-    end ? stat(`Projected, ${monthLabel(end.month, true)}`, money(end.value), h('span', { class: tone(end.value - last.value) }, `${signed(end.value - last.value)} from today`)) : stat('Projected', '–', `nothing left in ${year}`),
-    hasPlan ? stat(`Target, Dec ${year}`, money(plan.target), end ? (end.value >= plan.target ? 'projection reaches it' : `${money(plan.target - end.value)} short`) : '') : null));
+    stat('Change since ' + monthLabel(firstA.month, true), h('span', { class: tone(last.value - firstA.value) }, signed(last.value - firstA.value)), firstA.value ? pct((last.value - firstA.value) / firstA.value, 1) : ''),
+    vsPlan != null ? stat('Against the plan', h('span', { class: tone(vsPlan) }, signed(vsPlan)), `${vsPlan >= 0 ? 'ahead of' : 'behind'} the plan for ${monthLabel(last.month, true)}`) : null,
+    end ? stat(`Projected, ${monthLabel(end.month, true)}`, money(end.value), planned.has(end.month) ? h('span', { class: tone(end.value - planned.get(end.month)) }, `${signed(end.value - planned.get(end.month))} against the plan`) : h('span', { class: tone(end.value - last.value) }, `${signed(end.value - last.value)} from today`)) : null));
 
+  const series = [{ name: 'Actual (month-end snapshots)', values: aVals, color: 0 }];
+  if (havePlan) series.push({ name: 'Planned at the start', values: planVals, color: 2, dash: '2 4' });
+  if (prj.length) series.push({ name: 'Projected from today', values: pVals, dashed: true, color: 3 });
   root.append(section('Net worth, month by month', h('div', null,
-    lineChart({ labels, fmt: money, yMin: Math.floor((lo * 0.97) / 1e5) * 1e5, height: 260, series: [{ name: 'Actual (month-end snapshots)', values: act, color: 0 }, { name: 'Projected to December', values: prj, dashed: true, color: 3 }] }),
-    h('p', { class: 'note' }, `The solid line is each month-end snapshot, ending at today. The dashed line carries today’s position to December using ${hasPlan ? 'your ' + year + ' plan' : 'the standard assumptions (no ' + year + ' plan saved yet)'} and the market outlook set under Wealth projector.`))));
+    lineChart({ labels, fmt: money, yMin: Math.floor((lo * 0.97) / 1e5) * 1e5, height: 260, series }),
+    h('p', { class: 'note' }, `The solid line is each month-end snapshot, ending at today. ${havePlan ? 'The dotted line is the plan as it was made at the start (the Plan sheet, or the year plan in the Wealth projector), so the gap between the two is how far you have moved from it. ' : ''}${prj.length ? `The dashed line carries today’s position to December using ${hasPlan ? 'your ' + year + ' plan' : 'the standard assumptions (no ' + year + ' plan saved yet)'} and the market outlook set under Wealth projector.` : ''}`))));
 
-  const rows = actual.concat(projected).map((r, i, a) => ({ ...r, change: i ? r.value - a[i - 1].value : null, current: r.month === cur }));
+  const rows = act.concat(prj).map((r, i, a) => ({ ...r, change: i ? r.value - a[i - 1].value : null, plan: planned.has(r.month) ? planned.get(r.month) : null, current: r.month === cur }));
   root.append(section('The numbers', h('div', null, table([
     { label: 'Month', host: true, render: (r) => h('span', null, monthLabel(r.month, true), r.current ? h('small', { class: 'now-tag' }, ' now') : null) },
     { label: 'Net worth', cls: 'r', get: (r) => money(r.value) },
+    havePlan ? { label: 'Planned', mob: 'under', mlabel: 'plan ', cls: 'r', get: (r) => (r.plan != null ? money(r.plan) : '–') } : null,
+    havePlan ? { label: 'Against plan', mob: 'under', mlabel: 'vs plan ', cls: 'r', render: (r) => (r.plan == null ? h('span', { class: 'muted' }, '–') : h('span', { class: tone(r.value - r.plan) }, signed(r.value - r.plan))) } : null,
     { label: 'Change', mob: 'under', mlabel: 'change ', cls: 'r', render: (r) => (r.change == null ? h('span', { class: 'muted' }, '–') : h('span', { class: tone(r.change) }, signed(r.change))) },
     { label: 'Source', mob: 'under', render: (r) => h('span', { class: r.src === 'Projected' ? 'muted' : '' }, r.src) },
-  ], rows, { rowClass: (r) => (r.current ? 'cur-row' : r.src === 'Projected' ? 'proj-row' : '') }),
-  h('p', { class: 'note' }, '“Plan sheet” months were typed in the Plan sheet before snapshots began; “Snapshot” months are saved on the Wealth projector. Change is against the month before.'))));
+  ].filter(Boolean), rows, { rowClass: (r) => (r.current ? 'cur-row' : r.src === 'Projected' ? 'proj-row' : '') }),
+  h('p', { class: 'note' }, '“Plan sheet” months were typed in the Plan sheet before snapshots began; “Snapshot” months are saved on the Wealth projector. Change is against the month before. “Against plan” is net worth minus the planned net worth for that month.'))));
   return root;
 }

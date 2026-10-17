@@ -96,7 +96,7 @@ export function lineChart({ labels, series, fmt = (v) => v, height = 220, yMin, 
     let d = '', started = false;
     s.values.forEach((v, i) => { if (v == null) { started = false; return; } d += `${started ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`; started = true; });
     if (area && si === 0) root.append(svg('path', { d: d + `L${x(labels.length - 1)},${y(lo)}L${x(0)},${y(lo)}Z`, fill: color(si), opacity: '.12' }));
-    root.append(svg('path', { d, fill: 'none', stroke: color(s.color ?? si), 'stroke-width': 2, 'stroke-dasharray': s.dashed ? '5 4' : null, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+    root.append(svg('path', { d, fill: 'none', stroke: color(s.color ?? si), 'stroke-width': 2, 'stroke-dasharray': s.dash || (s.dashed ? '5 4' : null), 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
   });
   const cross = svg('line', { y1: pad.t, y2: H - pad.b, class: 'cross', style: 'display:none' });
   const dots = series.map((s, si) => svg('circle', { r: 4, fill: color(s.color ?? si), class: 'dot', style: 'display:none' }));
