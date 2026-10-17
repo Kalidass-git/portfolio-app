@@ -199,10 +199,22 @@ export function render(root) {
     m.path.length && Math.min(...m.path.map((r) => r.cash)) < 0 ? h('p', { class: 'form-error' }, `Cash would run short: lowest point ${money(Math.min(...m.path.map((r) => r.cash)))} in ${monthLabel(m.path.reduce((b, r) => (r.cash < b.cash ? r : b)).month)}. Lower the monthly investments or raise income.`) : null),
     canEdit() ? [btn('Edit target and assumptions', () => planForm(plan), '', { keep: true })] : null));
 
+  // money available to invest each month, after the expenses and EMI set in the plan
+  const r0m = m.path[0];
+  const inc = r0m ? r0m.salary + r0m.other + r0m.interest : 0, spend = r0m ? r0m.expenses + r0m.emi : 0, avail = inc - spend;
+  const oneNet = m.path.length ? m.path.reduce((x, r) => x + r.oneOut - r.oneIn, 0) / m.path.length : 0;
+  const availAfter = avail - oneNet, left = avail - invTotal;
+  const shareOf = (v) => (avail > 0 ? pct(v / avail, 0) : '–');
   root.append(section('New money going in each month', h('div', null,
+    h('div', { class: 'stats' },
+      stat('Available to invest', h('span', { class: tone(avail) }, money(avail)), `each month · ${money(inc)} in, ${money(spend)} out`),
+      stat(left >= 0 ? 'Still to plan' : 'Planned over', h('span', { class: left >= 0 ? '' : 'neg' }, money(Math.abs(left))), `${money(invTotal)} planned of ${money(Math.max(0, avail))}`)),
+    oneNet > 1 ? h('p', { class: 'note' }, `One-time items (tax, fees and so on) average ${money(oneNet)} a month over the rest of the year, which leaves ${money(availAfter)} a month to invest after them.`) : null,
+    avail <= 0 ? h('p', { class: 'form-error' }, 'Nothing is left each month after expenses and EMI, so new investments would come out of cash.') : null,
     table([
       { label: 'Investment', host: true, get: (l) => l.name }, { label: 'Goes into', mob: 'under', get: (l) => P.classOf(l.cls).label },
       { label: 'Each month', cls: 'r', get: (l) => money(l.monthly), total: () => money(invTotal) },
+      { label: 'Of available', mob: 'under', mlabel: 'of available ', cls: 'r', get: (l) => shareOf(l.monthly), total: () => shareOf(invTotal) },
       { label: 'Return', mob: 'under', mlabel: 'return ', cls: 'r', get: (l) => (P.isMarket(l.cls) ? (l.outlook ? (outlooks().find((o) => o.id === l.outlook) || {}).name : 'class outlook') : pc(l.rate != null ? l.rate : (a.rates || {})[l.cls] || 0)) },
       { label: 'Period', mob: 'hide', get: (l) => (l.from || l.to ? `${l.from ? monthLabel(l.from) : 'next month'} to ${l.to ? monthLabel(l.to) : 'Dec'}` : 'whole plan') },
     ], inv, { footer: { label: 'Total' }, onRow: canEdit() ? (l) => investForm(plan, inv.find((x) => x.id === l.id)) : null, empty: 'No new investments planned. Add where your savings will go.' }),
