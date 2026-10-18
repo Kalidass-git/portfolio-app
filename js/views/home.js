@@ -1,4 +1,5 @@
 // Home: a dashboard of cards. The detail tables live on each asset screen.
+import { evalAlerts } from '../watch.js';
 import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
 import { h, money, compact, pct, dateStr, monthLabel, section, monthPicker, rowList, kpi, dateChip, btn, canEdit, dec, toast, dialog } from '../ui.js';
@@ -145,6 +146,8 @@ function attention(data, all) {
   const due = soon.filter((u) => u.days >= 0 && u.days <= 14);
   const when = (u) => (u.days === 0 ? 'today' : u.days === 1 ? 'tomorrow' : dateStr(u.date).replace(/ \d{4}$/, ''));
   if (due.length) out.push({ title: due.length === 1 ? `${due[0].title}: due ${when(due[0])}` : `${due.length} falling due in 14 days`, sub: due.slice(0, 3).map((u) => `${u.title} · ${when(u)}`).join(', ') + (due.length > 3 ? ` and ${due.length - 3} more` : ''), value: money(due.reduce((a, u) => a + u.amount, 0)), tone: due.some((u) => u.days === 0) ? 'warn' : '', href: due.every((u) => u.kind === 'Money to receive') ? '#/fixed/lending' : '#/home' });
+  const al = evalAlerts(data).hit;
+  if (al.length) out.push({ title: al.length === 1 ? `Price alert: ${al[0].alert.name}` : `${al.length} price alerts triggered`, sub: al.slice(0, 2).map((x) => x.text).join(' · '), value: '', tone: 'warn', href: '#/equity/today' });
   const at = data.settings.pricesUpdatedAt;
   const age = at ? Math.round((Date.now() - new Date(at).getTime()) / 864e5) : null;
   if (age == null || age >= 3) out.push({ title: 'Share and fund prices are ' + (age == null ? 'not fetched yet' : age + ' days old'), sub: 'Refresh on Shares & funds', value: '', tone: 'warn', href: '#/equity' });

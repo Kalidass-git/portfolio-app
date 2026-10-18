@@ -7,6 +7,7 @@ import { insights, sold } from './equity-insights.js';
 import * as dividends from './dividends.js';
 import * as importView from './equity-import.js';
 import * as holdingView from './equity-holding.js';
+import * as watchView from './watch.js';
 import * as fundView from './equity-fund.js';
 import { fundForm, linkFund } from './equity-fund.js';
 import { xirrFor, symKey } from '../trades.js';
@@ -17,7 +18,7 @@ import { monthlyBuys, lastMonths, byName, planDone } from '../buys.js';
 import { barChart } from '../charts.js';
 
 let sortKey = 'current', busy = false;
-const TABS = [['today', 'Today'], ['holdings', 'Shares & ETFs'], ['funds', 'Funds'], ['insights', 'Insights'], ['sold', 'Sold'], ['dividends', 'Dividends'], ['sip', 'Investment Planner'], ['import', 'Import']];
+const TABS = [['today', 'Today'], ['alerts', 'Alerts & watchlist'], ['holdings', 'Shares & ETFs'], ['funds', 'Funds'], ['insights', 'Insights'], ['sold', 'Sold'], ['dividends', 'Dividends'], ['sip', 'Investment Planner'], ['import', 'Import']];
 const rerender = () => window.dispatchEvent(new Event('rerender'));
 
 function stockForm(s, kind) {
@@ -294,11 +295,14 @@ export function render() {
   else if (tab === 'sold') sold(root);
   else if (tab === 'dividends') dividends.render(root);
   else if (tab === 'import') importView.render(root);
+  else if (tab === 'alerts') watchView.alertsTab(root);
   else if (tab === 'today') {
+    root.append(watchView.refreshBar(), watchView.triggeredCard());
     today(root);
     const g = groups();
     root.append(section('What you hold', h('div', { class: 'stats' },
       ...['shares', 'etfs', 'funds'].map((k) => stat(GROUP_LABEL[k], money(g[k].current), h('span', null, 'invested ', money(g[k].invested), ' · ', gainText(g[k].pl), ' (', pct(g[k].ret), ')', xiText(k === 'funds' ? all.mf.xirr : groupXirr(g[k].items))))))));
+    root.append(watchView.screensSection());
   } else if (tab === 'holdings') {
     holdingsTab(root);
   } else if (tab === 'funds') {
