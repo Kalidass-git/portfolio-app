@@ -235,15 +235,16 @@ function savingForm(sv) {
       { key: 'depositDate', label: 'Start date', type: 'date' }, { key: 'maturityDate', label: 'Maturity date', type: 'date' },
       { key: 'tenure', label: 'Tenure', type: 'number', half: true }, { key: 'tenureUnit', label: 'Tenure unit', type: 'select', options: ['Months', 'Years', 'Days'], half: true },
       { key: 'payout', label: 'Expected payout at the end (₹, optional)', type: 'number', showIf: (v) => v.type === 'Chit' || v.type === 'RD', hint: 'The amount you expect to receive. Leave it empty to project it from the assumed yearly rate. It gives an estimated XIRR while the chit runs. Close the chit with the real amount to get the actual XIRR.' },
+      { key: 'nextPayment', label: 'Monthly payment for the remaining months (₹, optional)', type: 'number', showIf: (v) => v.type === 'Chit' || v.type === 'RD', hint: 'What you expect to pay each month from now to the end. Used for the estimated XIRR and the projected payout. Leave empty to assume the average paid so far.' },
       { key: 'desc', label: 'Notes / who to contact', type: 'textarea' },
     ],
     onSave: (v) => mutate((d) => {
       const rec = { ...v }; rec.tenureType = rec.tenureUnit; delete rec.tenureUnit;
       if (rec.type === NEWTYPE) { rec.type = rec.newType; d.savingTypes = [...new Set([...(d.savingTypes || []), rec.type])]; }
       delete rec.newType;
-      if (!rec.payout) delete rec.payout;
+      const blank = (k) => !(Number(rec[k]) > 0); const clear = ['payout', 'nextPayment'].filter(blank); clear.forEach((k) => delete rec[k]);
       rec.organiser = String(rec.organiser || '').trim(); if (!rec.organiser) delete rec.organiser;
-      if (isNew) d.savings.push({ id: nextId('sv', d.savings), entries: [], compound: 'Monthly', ...rec }); else { const t = d.savings.find((x) => x.id === sv.id); Object.assign(t, rec); if (!rec.organiser) delete t.organiser; }
+      if (isNew) d.savings.push({ id: nextId('sv', d.savings), entries: [], compound: 'Monthly', ...rec }); else { const t = d.savings.find((x) => x.id === sv.id); Object.assign(t, rec); clear.forEach((k) => delete t[k]); if (!rec.organiser) delete t.organiser; }
     }),
     onDelete: isNew ? null : () => mutate((d) => { d.savings = d.savings.filter((x) => x.id !== sv.id); }),
     deleteMessage: 'Delete this account and all its entries? Use “Close it” instead to keep a history.',

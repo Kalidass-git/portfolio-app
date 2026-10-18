@@ -686,3 +686,15 @@ tr.proj-row td { color: var(--muted); font-style: italic; }
 .rets .ret-grp { box-sizing: border-box; min-width: 0; } .rets .rg-gain { white-space: nowrap; }
 @media (max-width: 640px) { .rets .ret-grp > summary { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "n g" "f f" "x x"; } .rets .rg-name { grid-area: n; } .rets .rg-gain { grid-area: g; } .rets .rg-flow { grid-area: f; } .rets .rg-x { grid-area: x; } }
 .drill-tbl { width: 100%; border-collapse: collapse; font-size: .92rem; } .drill-tbl td { padding: 6px 4px; border-bottom: 1px solid var(--line); } .drill-tbl td.r { text-align: right; } .drill-tbl i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; }
+.alloc-grid { display: grid; gap: 14px; align-items: start; } .alloc-chart { display: grid; justify-items: center; gap: 6px; text-align: center; }
+@media (min-width: 900px) { .alloc-grid { grid-template-columns: 230px minmax(0, 1fr); gap: 22px; } }
+.gdot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; vertical-align: baseline; flex: none; }
+.share { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 3px; min-width: 64px; }
+.mbar { display: block; width: 64px; height: 5px; background: var(--line-2, #e6eaee); border-radius: 3px; overflow: hidden; } .mbar i { display: block; height: 100%; background: var(--g, var(--brand)); }
+.gt .gt-child .mbar i { background: color-mix(in srgb, var(--g, #1f5fb8) 60%, #fff); }
+.owner-rows { display: grid; gap: 8px; margin-top: 8px; } .owner-row { display: grid; gap: 4px 12px; align-items: center; } .owner-row input { width: 100%; max-width: 260px; }
+@media (min-width: 640px) { .owner-row { grid-template-columns: 1fr 260px; } }
+.gt td:first-child { min-width: 9.5em; } .gt .gt-parent td:first-child b { display: inline; }
+@media (min-width: 900px) { .alloc-grid { grid-template-columns: 200px minmax(0, 1fr); } }
+/* allocation: chart on top, list below at full width */
+.alloc-grid, .alloc-grid { grid-template-columns: minmax(0, 1fr) !important; }

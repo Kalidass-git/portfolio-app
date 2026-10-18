@@ -10,7 +10,7 @@ import { groupedTable, groupOfAlloc } from './groupmix.js';
 
 const TABS = [['tax', 'Tax summary'], ['calendar', 'Cash calendar'], ['review', 'Annual review'], ['anomalies', 'Spending anomalies'], ['allocation', 'Allocation goal']];
 const rerender = () => window.dispatchEvent(new Event('rerender'));
-const st = { fy: null, months: 12, year: null, month: null };
+const st = { fy: null, months: 12, year: null, month: null, who: 'all' };
 const signed = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + money(Math.abs(n));
 const tone = (n) => (n > 0 ? 'pos' : n < 0 ? 'neg' : '');
 const note = (t) => h('p', { class: 'note' }, t);
@@ -33,9 +33,22 @@ function tax(root) {
   const { data, all } = S;
   const fys = I.fyList(data, all.asOf);
   if (!st.fy || !fys.some((f) => f.y === st.fy)) st.fy = fys[0].y;
-  const t = I.taxSummary(data, all, st.fy);
+  const people = I.taxPeople(data);
+  if (st.who !== 'all' && st.who !== I.NO_OWNER && !people.some((p) => p.toLowerCase() === st.who.toLowerCase())) st.who = 'all';
+  const t = I.taxSummary(data, all, st.fy, st.who);
   root.append(h('div', { class: 'filters' }, select(fys.map((f) => ({ value: String(f.y), label: f.label })), st.fy, 'Financial year', (v) => { st.fy = Number(v); rerender(); }),
+    select([{ value: 'all', label: 'All people' }, ...people.map((p) => ({ value: p, label: p })), { value: I.NO_OWNER, label: 'Owner not set' }], st.who, 'Whose', (v) => { st.who = v; rerender(); }),
     btn('Download CSV', () => download(`tax-summary-${t.fy.replace(/\s/g, '-')}.csv`, I.taxCsv(t)), 'small')));
+  if (st.who === 'all' && people.length > 1) {
+    const bp = I.taxByPerson(data, all, st.fy);
+    if (bp.length) root.append(section('By person', h('div', null, table([
+      { label: 'Person', host: true, get: (r) => r.person },
+      { label: 'Interest', cls: 'r', get: (r) => money(r.interest) }, { label: 'Salary', cls: 'r', mob: 'under', mlabel: 'salary ', get: (r) => money(r.salary) },
+      { label: 'Dividends', cls: 'r', mob: 'under', mlabel: 'dividends ', get: (r) => money(r.dividends) },
+      { label: 'Short-term', cls: 'r', mob: 'hide', get: (r) => money(r.stcg) }, { label: 'Long-term', cls: 'r', mob: 'hide', get: (r) => money(r.ltcg) },
+    ], bp, {}), note('Pick a person above to see their full summary. Each person’s income is kept apart, so it can go into their own return.'))));
+  }
+  root.append(ownersCard(data, people));
   if (t.bankOther.length) root.append(section('Other income credited to the bank', table([{ label: 'Category', host: true, get: (r) => r.category }, { label: 'Amount', cls: 'r', get: (r) => money(r.amount) }], t.bankOther, {})));
   root.append(h('div', { class: 'stats' },
     stat('Interest earned', money(t.interestGross), 'bonds, FDs and lending'),
@@ -65,6 +78,22 @@ function tax(root) {
     { label: 'Term', mob: 'under', get: (g) => (g.term === 'LT' ? 'Long term' : 'Short term') },
   ], t.gains, {}) : h('p', { class: 'empty' }, 'No shares or funds sold in this year.')));
   root.append(note('A guide for filing, not tax advice. Gains use oldest units first. Debt funds, gold ETFs, bonus and split adjustments and the grandfathering rules are taxed differently, so check these with your accountant. Rental income, interest on savings accounts and other bank interest appear under Other income credited only if you categorised them.'));
+}
+
+/** Who each account belongs to. Bonds, FDs, lending and savings already carry a holder; the Groww equity and fund accounts and the bank accounts are set here. */
+function ownersCard(data, people) {
+  const rows = [
+    { key: 'stocks', label: 'Stocks & ETFs account', note: 'dividends and share gains', now: I.ownerOfSource(data, 'stocks') },
+    { key: 'funds', label: 'Mutual fund account', note: 'fund gains', now: I.ownerOfSource(data, 'funds') },
+    ...(data.accounts || []).map((a) => ({ key: 'acct:' + a.id, label: a.name + ' (bank)', note: 'salary and interest credited', now: I.acctOwner(data, a.id) })),
+  ];
+  const listId = 'tax-people';
+  const save = (key, val) => { if (!canEdit()) return toast('This device has read-only access.'); try { mutate((d) => { d.taxOwners = { ...(d.taxOwners || {}) }; const v = String(val).trim(); if (v && v !== I.NO_OWNER) d.taxOwners[key] = v; else delete d.taxOwners[key]; }); } catch (e) { toast(e.message, 'error'); } };
+  return h('details', { class: 'more' }, h('summary', null, 'Who owns which account'),
+    h('p', { class: 'note' }, 'Bonds, FDs, lending and savings use the holder already on each one. Set the owner of the other accounts here, then pick a person above. Type a new name to add someone (a wife, a HUF, a parent).'),
+    h('datalist', { id: listId }, people.map((p) => h('option', { value: p }))),
+    h('div', { class: 'owner-rows' }, rows.map((r) => h('label', { class: 'owner-row' }, h('span', null, h('b', null, r.label), h('small', { class: 'muted' }, ' · ' + r.note)),
+      h('input', { type: 'text', list: listId, value: r.now === I.NO_OWNER ? '' : r.now, placeholder: 'Owner', disabled: !canEdit(), 'aria-label': 'Owner of ' + r.label, onchange: (e) => save(r.key, e.target.value) })))));
 }
 
 // ---------- 2. Cash calendar ----------

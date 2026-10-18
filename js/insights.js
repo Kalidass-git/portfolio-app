@@ -44,8 +44,22 @@ export function fundGains(data) {
 }
 
 // ---------- 1. Tax summary ----------
-export function taxSummary(data, all, y) {
+export const NO_OWNER = 'Not set';
+/** Who owns what for the tax summary: data.taxOwners maps 'stocks', 'funds' and 'acct:<id>' to a person. Bonds, FDs, lending and savings use their own holder. */
+export const ownerOfSource = (data, key, fallback) => String((data.taxOwners && data.taxOwners[key]) || fallback || '').trim() || NO_OWNER;
+export const acctOwner = (data, acctId) => ownerOfSource(data, 'acct:' + acctId, ((data.accounts || []).find((a) => a.id === acctId) || {}).holder);
+/** Everyone named anywhere, each spelled once, with the app's own owner first. */
+export function taxPeople(data) {
+  const seen = new Map();
+  const add = (n) => { const t = String(n || '').trim(); if (t && !seen.has(lc(t))) seen.set(lc(t), t); };
+  (data.accounts || []).forEach((a) => add(a.holder));
+  ['bonds', 'fds', 'lending', 'savings'].forEach((k) => (data[k] || []).forEach((x) => add(x.holder)));
+  Object.values(data.taxOwners || {}).forEach(add);
+  return [...seen.values()].sort((a, b) => a.localeCompare(b));
+}
+export function taxSummary(data, all, y, who = 'all') {
   const { from, to, label } = fyRange(y);
+  const mine = (name) => who === 'all' || lc(name || NO_OWNER) === lc(who);
   const end = to < all.asOf ? to : all.asOf;
   const tdsRate = data.settings.tdsRate ?? 0.1;
   const span = (it) => {
@@ -57,49 +71,56 @@ export function taxSummary(data, all, y) {
   };
   const compound = (it, date) => { const cap = it.maturityDate && it.maturityDate < date ? it.maturityDate : date; return C.calcDeposit({ ...it, accruedOverride: undefined }, cap).accrued; };
   const interest = [];
-  for (const b of data.bonds || []) { const s = span(b); if (!s) continue; const gross = (b.principal * b.rate * s.days) / 365; interest.push({ kind: 'Bonds', name: b.name, holder: b.holder, gross, tds: gross * tdsRate }); }
+  for (const b of data.bonds || []) { const s = span(b); if (!s || !mine(b.holder)) continue; const gross = (b.principal * b.rate * s.days) / 365; interest.push({ kind: 'Bonds', name: b.name, holder: b.holder || NO_OWNER, gross, tds: gross * tdsRate }); }
   for (const [list, kind] of [[data.fds || [], 'Fixed deposits'], [data.lending || [], 'Private lending']]) {
     for (const it of list) {
-      const s = span(it); if (!s) continue;
+      const s = span(it); if (!s || !mine(it.holder)) continue;
       let gross;
       if (it.interestType === 'Compound') {
         const before = it.depositDate < from ? compound(it, new Date(C.toMs(from) - DAY).toISOString().slice(0, 10)) : 0;
         gross = compound(it, s.b) - before;
       } else gross = (it.principal * it.rate * s.days) / 365;
-      interest.push({ kind, name: it.name, holder: it.holder || it.borrower || it.issuer, gross, tds: 0 });
+      interest.push({ kind, name: it.name, holder: it.holder || NO_OWNER, party: it.borrower || it.issuer, gross, tds: 0 });
     }
   }
   const interestBy = ['Bonds', 'Fixed deposits', 'Private lending'].map((kind) => { const rows = interest.filter((r) => r.kind === kind); return { kind, rows, gross: sum(rows, (r) => r.gross), tds: sum(rows, (r) => r.tds) }; }).filter((g) => g.rows.length);
 
   // what really reached the bank
-  const rs = C.rangeSummary(data, from, end);
+  const rs = C.rangeSummary(who === 'all' ? data : { ...data, ledger: data.ledger.filter((e) => mine(acctOwner(data, e.acct))) }, from, end);
   const salary = sum(rs.income.filter((x) => lc(x.category) === 'salary'), (x) => x.amount);
   const bankOther = rs.income.filter((x) => lc(x.category) !== 'salary');
 
   // dividends
   const divs = new Map();
-  for (const d of (all.stocks.eq && all.stocks.eq.dividends) || []) if (d.date >= from && d.date <= end) { const r = divs.get(d.symbol) || { name: d.name || d.symbol, amount: 0, count: 0 }; r.amount += d.amount; r.count++; divs.set(d.symbol, r); }
+  const stockOwner = ownerOfSource(data, 'stocks'), fundOwner = ownerOfSource(data, 'funds');
+  for (const d of (mine(stockOwner) && all.stocks.eq && all.stocks.eq.dividends) || []) if (d.date >= from && d.date <= end) { const r = divs.get(d.symbol) || { name: d.name || d.symbol, amount: 0, count: 0 }; r.amount += d.amount; r.count++; divs.set(d.symbol, r); }
   const dividends = [...divs.values()].sort((a, b) => b.amount - a.amount);
 
   // capital gains
-  const sales = ((all.stocks.eq && all.stocks.eq.sold) || []).filter((s) => s.date >= from && s.date <= end)
+  const sales = ((mine(stockOwner) && all.stocks.eq && all.stocks.eq.sold) || []).filter((s) => s.date >= from && s.date <= end)
     .map((s) => ({ kind: 'Shares', name: s.name, date: s.date, buyDate: s.buyDate, proceeds: s.proceeds, cost: s.cost, gain: s.realized, term: spanDays(s.buyDate, s.date) > 365 ? 'LT' : 'ST' }));
-  const funds = fundGains(data).filter((g) => g.date >= from && g.date <= end).map((g) => ({ kind: 'Mutual funds', name: g.scheme, date: g.date, buyDate: g.buyDate, proceeds: g.proceeds, cost: g.cost, gain: g.gain, term: g.term }));
+  const funds = (mine(fundOwner) ? fundGains(data) : []).filter((g) => g.date >= from && g.date <= end).map((g) => ({ kind: 'Mutual funds', name: g.scheme, date: g.date, buyDate: g.buyDate, proceeds: g.proceeds, cost: g.cost, gain: g.gain, term: g.term }));
   const gains = sales.concat(funds).sort((a, b) => (a.date < b.date ? -1 : 1));
   const stcg = sum(gains.filter((g) => g.term === 'ST'), (g) => g.gain), ltcg = sum(gains.filter((g) => g.term === 'LT'), (g) => g.gain);
 
   return {
-    fy: label, from, to, end, tdsRate, interestBy, interestGross: sum(interestBy, (g) => g.gross), tdsBonds: sum(interestBy, (g) => g.tds),
+    fy: label, from, to, end, tdsRate, who, interestBy, interestGross: sum(interestBy, (g) => g.gross), tdsBonds: sum(interestBy, (g) => g.tds),
     salary, bankOther, bankOtherTotal: sum(bankOther, (x) => x.amount),
     dividends, dividendTotal: sum(dividends, (d) => d.amount), gains, stcg, ltcg, proceeds: sum(gains, (g) => g.proceeds),
   };
 }
 
+/** One line per person for the year, so each person's figures can be taken to their own return. */
+export function taxByPerson(data, all, y) {
+  const people = [...taxPeople(data), NO_OWNER];
+  return people.map((p) => { const t = taxSummary(data, all, y, p); return { person: p, interest: t.interestGross, tds: t.tdsBonds, salary: t.salary, other: t.bankOtherTotal, dividends: t.dividendTotal, stcg: t.stcg, ltcg: t.ltcg }; })
+    .filter((r) => [r.interest, r.salary, r.other, r.dividends, r.stcg, r.ltcg].some((v) => Math.abs(v) > 0.5));
+}
 export function taxCsv(t) {
   const q = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
   const r = (a) => a.map(q).join(',');
   const n = (v) => Math.round(v);
-  const L = [r([`Tax summary ${t.fy}`, `${t.from} to ${t.end}`])];
+  const L = [r([`Tax summary ${t.fy}`, `${t.from} to ${t.end}`, t.who === 'all' ? 'All people' : t.who])];
   L.push('', r(['Interest (accrual basis)']), r(['Type', 'Name', 'Holder', 'Gross interest', 'TDS (estimate)']));
   for (const g of t.interestBy) for (const x of g.rows) L.push(r([g.kind, x.name, x.holder || '', n(x.gross), n(x.tds)]));
   L.push('', r(['Income credited to bank']), r(['Category', 'Amount']), r(['Salary', n(t.salary)]));

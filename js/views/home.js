@@ -184,30 +184,25 @@ function allocation(all) {
   const toneCls = (b) => (b.over ? 'neg' : b.near ? 'warn' : '');
   const share = (v, t) => (t > 0 ? (Math.round((v / t) * 1000) / 10) + '%' : '–');
   const toggle = h('nav', { class: 'seg slim', 'aria-label': 'Group by' }, [['cat', 'By investment type'], ['risk', 'By risk']].map(([k, l]) => h('a', { href: '#', class: allocMode === k ? 'on' : '', onclick: (e) => { e.preventDefault(); setAlloc(k, null); } }, l)));
-  let chart;
-  if (!drill) {
-    chart = h('div', { class: 'alloc-main' }, donut(parents, { fmt: money, center: compact(tot), sub: 'total assets', onSelect: (p) => setAlloc(allocMode, p.id) }),
-      h('div', null, legend(parents, { fmt: money, onSelect: (p) => setAlloc(allocMode, p.id) }), h('p', { class: 'note' }, 'Tap a group to see what is inside it.')));
-  } else {
-    const kids = kinds.filter((c) => gOf(c) === drill.id).map((c) => ({ label: c.name, value: c.value }));
-    chart = h('div', null, h('button', { type: 'button', class: 'back-link', onclick: () => setAlloc(allocMode, null) }, '← All groups'),
-      h('div', { class: 'alloc-main' }, donut(kids, { fmt: money, center: compact(drill.value), sub: `${share(drill.value, tot)} of everything`, size: 190 }),
-        h('table', { class: 'drill-tbl' }, h('thead', null, h('tr', null, h('th'), h('th', { class: 'r' }, 'Amount'), h('th', { class: 'r' }, 'In ' + drill.label.split(/[ ,]/)[0]), h('th', { class: 'r' }, 'Of all'))),
-          h('tbody', null, kids.map((k, i) => h('tr', null, h('td', null, h('i', { style: { background: color(i) } }), k.label), h('td', { class: 'r' }, money(k.value)), h('td', { class: 'r' }, share(k.value, drill.value)), h('td', { class: 'r' }, share(k.value, tot))))))));
-  }
-  const worst = (it) => (it.some((c) => c.over) ? 'neg' : it.some((c) => c.near) ? 'warn' : '');
+  const gi = new Map(parents.map((p, i) => [p.id, i]));
+  const chart = !drill
+    ? h('div', { class: 'alloc-chart' }, donut(parents, { fmt: money, center: compact(tot), sub: 'total assets', onSelect: (p) => setAlloc(allocMode, p.id), size: 210 }), h('p', { class: 'note' }, 'Tap a slice to zoom into it. The colours match the list below.'))
+    : h('div', { class: 'alloc-chart' }, h('button', { type: 'button', class: 'back-link', onclick: () => setAlloc(allocMode, null) }, '← All groups'),
+      donut(kinds.filter((c) => gOf(c) === drill.id).map((c) => ({ label: c.name, value: c.value })), { fmt: money, center: compact(drill.value), sub: `${share(drill.value, tot)} of all`, size: 210 }));
+  const bar = (v, t, g) => h('span', { class: 'mbar', title: share(v, t) }, h('i', { style: { width: Math.max(2, (t > 0 ? v / t : 0) * 100) + '%' } }));
+  const sumOf = (it) => it.reduce((a, c) => a + c.value, 0);
   const table = groupedTable({
-    rows: kinds, groups, groupOf: gOf, footerLabel: 'Total assets',
+    rows: kinds, groups, groupOf: gOf, footerLabel: 'Total assets', parentDot: true, openIds: drill ? [drill.id] : [],
+    childDot: (g, ri) => (drill && drill.id === g.id ? color(ri) : null),
     cols: [
       { label: allocMode === 'cat' ? 'Type' : 'Risk group' },
-      { label: 'Amount', cls: 'r', parent: (it) => money(it.reduce((a, c) => a + c.value, 0)), child: (c) => money(c.value), total: () => money(tot) },
-      { label: 'Of all', cls: 'r', parent: (it) => share(it.reduce((a, c) => a + c.value, 0), tot), child: (c) => share(c.value, tot), total: () => '100%' },
-      { label: 'Within group', cls: 'r', hide: true, parent: () => '100%', child: (c) => share(c.value, kinds.filter((k) => gOf(k) === gOf(c)).reduce((a, k) => a + k.value, 0)) },
+      { label: 'Amount', cls: 'r', parent: (it) => money(sumOf(it)), child: (c) => money(c.value), total: () => money(tot) },
+      { label: 'Of all', cls: 'r', parent: (it) => h('span', { class: 'share' }, share(sumOf(it), tot), bar(sumOf(it), tot)), child: (c) => h('span', { class: 'share' }, share(c.value, tot), bar(c.value, tot)), total: () => '100%' },
+      { label: 'Within group', cls: 'r', hide: true, parent: () => '', child: (c) => share(c.value, sumOf(kinds.filter((k) => gOf(k) === gOf(c)))) },
       { label: 'Limit', cls: 'r', hide: true, parent: () => '', child: (c) => h('span', { class: toneCls(c) }, c.max != null || c.maxAmt != null ? `${lim(c)}${c.over ? ' · over' : c.near ? ' · close' : ''}` : '–') },
     ],
   });
-  return section('Allocation & risk', h('div', { class: 'alloc' }, h('div', { class: 'alloc-top' }, toggle), chart,
-    h('details', { class: 'more', open: true }, h('summary', null, allocMode === 'cat' ? 'Show by investment type' : 'Show by risk group'), table)));
+  return section('Allocation & risk', h('div', { class: 'alloc' }, h('div', { class: 'alloc-top' }, toggle), h('div', { class: 'alloc-grid' }, chart, h('div', null, table, h('p', { class: 'note' }, 'Tap a group to open or close it. Each kind shows its share of everything and of its group.')))));
 }
 
 /** Over-limit and close-to-limit holdings, against the limits set under Risk. */

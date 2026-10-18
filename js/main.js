@@ -125,8 +125,7 @@ function mergeNotice() {
 }
 
 function assetsSubnav(cur) {
-  // the Family report is shown on its own, without the tab strip
-  const grp = ROUTES[cur].tab === 'assets' ? 'Assets' : ROUTES[cur].tab === 'report' && cur !== 'report' && cur !== 'insights' ? 'Report' : null;
+  const grp = ROUTES[cur].tab === 'assets' ? 'Assets' : ROUTES[cur].tab === 'report' ? 'Report' : null;
   if (!grp) return null;
   return h('nav', { class: 'section-tabs', 'aria-label': grp === 'Assets' ? 'Asset types' : 'Reports' }, Object.entries(ROUTES).filter(([, r]) => r.group === grp).map(([k, r]) => h('a', { class: k === cur ? 'on' : '', href: '#/' + k, 'aria-current': k === cur ? 'page' : null }, r.short || r.label)));
 }
