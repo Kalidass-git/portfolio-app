@@ -26,7 +26,7 @@ export function render(root) {
   const sym = symKey(route().query.get('sym') || '');
   const s = all.stocks.items.find((x) => symKey(x.symbol) === sym);
   const isEtf = s && s.assetClass !== 'equity';
-  root.append(h('div', { class: 'pagebar' }, h('a', { class: 'back', href: isEtf ? '#/equity/holdings?f=etfs' : '#/equity/holdings?f=shares' }, isEtf ? '← ETFs' : '← Shares')));
+  root.append(h('div', { class: 'pagebar' }, h('a', { class: 'back', href: isEtf ? '#/equity/holdings?v=etfs' : '#/equity/holdings?v=shares' }, isEtf ? '← ETFs' : '← Shares')));
   if (!s) { root.append(h('div', { class: 'card' }, h('p', { class: 'empty' }, 'This share is not in your holdings any more. If you sold all of it, see the Sold tab.'))); return; }
   const eq = all.stocks.eq;
   const flows = eq ? eq.flows.get(sym) || [] : [];
@@ -62,5 +62,5 @@ export function render(root) {
     if (ac.length) root.append(section('Splits, bonus, dividends', table([
       { label: 'Date', get: (a) => dateStr(a.date) }, { label: 'What', get: (a) => ACTION_LABEL[a.type] }, { label: 'Details', get: (a) => (symKey(a.symbol) === sym ? '' : a.symbol + ': ') + describeAction(a) },
     ], ac, { onRow: canEdit() ? (a) => actionForm(data.corporateActions.find((x) => x.id === a.id)) : null })));
-  } else root.append(h('div', { class: 'card' }, h('p', null, 'This holding was entered by hand, so there is no trade history. Import your Groww history to see lots, XIRR and sales.'), h('a', { class: 'btn small', href: '#/equity/import' }, 'Go to Import')));
+  } else root.append(h('div', { class: 'card' }, h('p', null, 'This holding was entered by hand, so there is no trade history. Import your Groww history to see lots, XIRR and sales.'), h('a', { class: 'btn small', href: '#/equity/manage?v=import' }, 'Go to Import')));
 }

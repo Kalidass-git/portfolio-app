@@ -8,6 +8,7 @@ import * as dividends from './dividends.js';
 import * as importView from './equity-import.js';
 import * as holdingView from './equity-holding.js';
 import * as watchView from './watch.js';
+import * as W from '../watch.js';
 import * as fundView from './equity-fund.js';
 import { fundForm, linkFund } from './equity-fund.js';
 import { xirrFor, symKey } from '../trades.js';
@@ -18,7 +19,7 @@ import { monthlyBuys, lastMonths, byName, planDone } from '../buys.js';
 import { barChart } from '../charts.js';
 
 let sortKey = 'current', busy = false;
-const TABS = [['today', 'Today'], ['alerts', 'Alerts & watchlist'], ['holdings', 'Shares & ETFs'], ['funds', 'Funds'], ['insights', 'Insights'], ['sold', 'Sold'], ['dividends', 'Dividends'], ['sip', 'Investment Planner'], ['import', 'Import']];
+const TABS = [['overview', 'Overview'], ['holdings', 'Holdings'], ['watch', 'Watch'], ['manage', 'Manage']];
 const rerender = () => window.dispatchEvent(new Event('rerender'));
 
 function stockForm(s, kind) {
@@ -79,7 +80,10 @@ export async function refresh(btnEl) {
   btnEl.classList.add('busy');
   try {
     const res = await prices.refreshAll((m) => (lb.textContent = m));
-    toast(`Updated ${res.stocks} shares and ${res.funds} funds` + (res.errors.length ? `. ${res.errors.length} issue${res.errors.length > 1 ? 's' : ''}: ${res.errors[0]}` : ''), res.errors.length ? 'bad' : '');
+    let ind = { errors: [] };
+    try { ind = await W.refreshMetrics(W.targetsOf(S.data, S.all), (m) => (lb.textContent = m)); } catch (e) { ind.errors.push(e.message); }
+    const errs = res.errors.concat(ind.errors);
+    toast(`Updated ${res.stocks} shares and ${res.funds} funds` + (errs.length ? `. ${errs.length} issue${errs.length > 1 ? 's' : ''}: ${errs[0]}` : ''), errs.length ? 'bad' : '');
   } finally { busy = false; lb.textContent = label0; btnEl.classList.remove('busy'); btnEl.disabled = false; rerender(); }
 }
 
@@ -187,14 +191,13 @@ const tableTools = () => h('div', { class: 'tbl-tools' }, sortBox(), searchBox()
 const totalRow = (g, label) => h('div', { class: 'totalbar' }, h('b', null, label + ' total'), h('span', null, money(g.current), h('small', null, ' (' + money(g.invested) + ')')), h('span', { class: posNeg(g.pl) }, arrow(g.pl) + money(Math.abs(g.pl)), h('small', null, ' ' + pct(Math.abs(g.ret), 1))), g.dayCount ? h('span', { class: posNeg(g.day) }, 'today ' + signed(g.day)) : null);
 
 /** Shares and ETFs together; switch to see only one. */
-function holdingsTab(root) {
+function holdingsTab(root, f = 'shares') {
   const { data } = S;
-  const f = ['all', 'shares', 'etfs'].includes(route().query.get('f')) ? route().query.get('f') : 'all';
   const gr = groups();
   const merged = totalsOf(gr.shares.items.concat(gr.etfs.items));
   const g = f === 'shares' ? gr.shares : f === 'etfs' ? gr.etfs : merged;
   const label = f === 'shares' ? 'Shares' : f === 'etfs' ? 'ETFs' : 'Shares & ETFs';
-  const seg = h('nav', { class: 'seg', 'aria-label': 'Show' }, [['all', 'Both'], ['shares', 'Shares only'], ['etfs', 'ETFs only']].map(([k, l]) => h('a', { href: '#/equity/holdings' + (k === 'all' ? '' : '?f=' + k), class: k === f ? 'on' : '', 'aria-selected': String(k === f) }, l + ' (' + (k === 'all' ? merged.items.length : gr[k].items.length) + ')')));
+  const seg = null;
   root.append(h('div', { class: 'stats' },
     stat(label, money(g.current), `${g.items.length} holdings`),
     investedStat(g.invested, g.pl, g.ret, groupXirr(g.items)),
@@ -229,9 +232,9 @@ function findAll(q) {
   const { all, data } = S, out = [];
   const hit = (...f) => f.some((x) => (x || '').toLowerCase().includes(t));
   for (const x of all.stocks.items) if (hit(x.name, x.symbol)) out.push({ kind: isEtf(x) ? 'ETF' : 'Share', title: x.name, sub: x.symbol, value: money(x.current), tone: posNeg(x.pl), go: () => { if (tradeMode()) location.hash = '#/equity/holding?sym=' + encodeURIComponent(x.symbol); else location.hash = '#/equity/holdings' + (isEtf(x) ? '?f=etfs' : '?f=shares'); } });
-  for (const x of all.mf.items) if (hit(x.name, x.folio)) out.push({ kind: 'Fund', title: x.name, sub: x.folio ? 'Folio ' + x.folio : '', value: money(x.current), tone: posNeg(x.pl), go: () => { location.hash = '#/equity/funds'; } });
+  for (const x of all.mf.items) if (hit(x.name, x.folio)) out.push({ kind: 'Fund', title: x.name, sub: x.folio ? 'Folio ' + x.folio : '', value: money(x.current), tone: posNeg(x.pl), go: () => { location.hash = '#/equity/holdings?v=funds'; } });
   const eq = all.stocks.eq;
-  if (eq) for (const x of eq.sold) if (hit(x.name, x.symbol, x.nowSymbol)) out.push({ kind: 'Sold', title: x.name, sub: x.symbol, value: '', tone: '', go: () => { location.hash = '#/equity/sold'; } });
+  if (eq) for (const x of eq.sold) if (hit(x.name, x.symbol, x.nowSymbol)) out.push({ kind: 'Sold', title: x.name, sub: x.symbol, value: '', tone: '', go: () => { location.hash = '#/equity/holdings?v=sold'; } });
   return out.slice(0, 12);
 }
 function searchBox() {
@@ -281,22 +284,21 @@ export function render() {
   if (route().sub === 'holding') { holdingView.render(root); return root; }
   if (route().sub === 'fund') { fundView.render(root); return root; }
   const rsub = route().sub;
-  if (rsub === 'stocks' || rsub === 'etfs') location.replace('#/equity/holdings' + (rsub === 'etfs' ? '?f=etfs' : '?f=shares'));
-  const tab = rsub === 'stocks' || rsub === 'etfs' ? 'holdings' : subTab(TABS.map((t) => t[0]));
+  const LEGACY = { today: '#/equity/overview', alerts: '#/equity/watch?v=alerts', funds: '#/equity/holdings?v=funds', insights: '#/equity/watch?v=insights', sold: '#/equity/holdings?v=sold', dividends: '#/equity/holdings?v=dividends', sip: '#/equity/manage?v=planner', import: '#/equity/manage?v=import', stocks: '#/equity/holdings?v=shares', etfs: '#/equity/holdings?v=etfs' };
+  if (LEGACY[rsub]) { location.replace(LEGACY[rsub]); return root; }
+  const visible = TABS.filter((t) => t[0] !== 'manage' || canEdit());
+  const tab = visible.some((t) => t[0] === rsub) ? rsub : 'overview';
+  const q = route().query, view = q.get('v') || (tab === 'holdings' && q.get('f')) || '';
   const st = all.stocks, mf = all.mf;
   const upd = S.data.settings.pricesUpdatedAt, ageMs = upd ? Date.now() - new Date(upd).getTime() : null;
   const stale = ageMs == null || ageMs > 864e5;
-  root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Shares and funds views')),
+  root.append(h('div', { class: 'pagebar' }, segTabs(visible, tab, 'Shares and funds views')),
     h('div', { class: 'price-bar' },
       h('span', { class: 'stamp' + (stale ? ' warn' : ''), title: upd ? new Date(upd).toLocaleString('en-IN') : '' }, stale ? '⚠ ' : '', ageMs == null ? 'Prices not fetched yet' : 'Prices updated ' + agoText(ageMs)),
-      h('button', { class: 'refresh-btn', type: 'button', title: 'Fetch latest share prices and fund NAVs', onclick: (e) => refresh(e.currentTarget) }, h('span', { class: 'ic' }, icon('refresh')), h('span', { class: 'lb' }, 'Refresh prices'))));
+      h('button', { class: 'refresh-btn', type: 'button', title: 'Fetch latest prices, NAVs, P/E and 52-week data', onclick: (e) => refresh(e.currentTarget) }, h('span', { class: 'ic' }, icon('refresh')), h('span', { class: 'lb' }, 'Refresh'))));
 
-  if (tab === 'insights') insights(root);
-  else if (tab === 'sold') sold(root);
-  else if (tab === 'dividends') dividends.render(root);
-  else if (tab === 'import') importView.render(root);
-  else if (tab === 'alerts') watchView.alertsTab(root);
-  else if (tab === 'today') {
+  const sub = (items, cur, extra) => root.append(viewBar(tab, items, cur, extra));
+  if (tab === 'overview') {
     root.append(watchView.refreshBar(), watchView.triggeredCard());
     today(root);
     const g = groups();
@@ -304,25 +306,45 @@ export function render() {
       ...['shares', 'etfs', 'funds'].map((k) => stat(GROUP_LABEL[k], money(g[k].current), h('span', null, 'invested ', money(g[k].invested), ' · ', gainText(g[k].pl), ' (', pct(g[k].ret), ')', xiText(k === 'funds' ? all.mf.xirr : groupXirr(g[k].items))))))));
     root.append(watchView.screensSection());
   } else if (tab === 'holdings') {
-    holdingsTab(root);
-  } else if (tab === 'funds') {
-    fundsTab(root);
+    const v = ['shares', 'etfs', 'funds', 'sold', 'dividends'].includes(view) ? view : 'shares';
+    sub([['shares', 'Shares'], ['etfs', 'ETFs'], ['funds', 'Funds'], ['sold', 'History']], v === 'dividends' ? 'sold' : v);
+    if (v === 'sold' || v === 'dividends') root.append(viewBar('holdings', [['sold', 'Sold shares'], ['dividends', 'Dividends']], v, 'small'));
+    if (v === 'funds') fundsTab(root);
+    else if (v === 'sold') sold(root);
+    else if (v === 'dividends') dividends.render(root);
+    else holdingsTab(root, v);
+  } else if (tab === 'watch') {
+    const v = view === 'insights' ? 'insights' : 'alerts';
+    sub([['alerts', 'Alerts & watchlist'], ['insights', 'Insights']], v);
+    if (v === 'insights') insights(root); else watchView.alertsTab(root);
   } else {
-    const plans = data.sipPlans;
-    const tot = plans.reduce((a, p) => a + p.monthly, 0), done = plans.reduce((a, p) => a + sipDone(p), 0);
-    root.append(section('Plan for the month',
-      h('div', null, table([
-        { label: 'Where', host: true, get: (p) => p.name },
-        { label: 'Each month', cls: 'r', get: (p) => money(p.monthly), total: () => money(tot) },
-        { label: 'Each year', mob: 'hide', cls: 'r', get: (p) => money(p.monthly * 12), total: () => money(tot * 12) },
-        { label: 'Done this month', cls: 'r', render: (p) => h('span', null, money(sipDone(p)), fromHistory(p) ? h('small', { class: 'sub' }, ' from history') : null), total: () => money(done) },
-        { label: 'Left this month', mob: 'under', mlabel: 'left ', cls: 'r', get: (p) => money(Math.max(0, p.monthly - sipDone(p))), total: () => money(Math.max(0, tot - done)) },
-        { label: '', render: (p) => (canEdit() && sipDone(p) < p.monthly ? h('button', { class: 'small', onclick: (e) => { e.stopPropagation(); mutate((d) => { const t = d.sipPlans.find((x) => x.id === p.id); t.doneThisMonth = t.monthly; t.manual = true; t.doneMonth = C.monthKey(S.all.asOf); }); toast('Marked as invested'); } }, 'Mark done') : h('span', { class: 'tag good' }, 'Done')) },
-      ], plans, { footer: { label: 'Total' }, onRow: canEdit() ? (p) => sipForm(plans.find((x) => x.id === p.id)) : null }),
-        h('p', { class: 'note' }, Object.keys(monthlyBuys(data)).length ? 'Done this month is read from your buy history (shares, ETFs and funds), so it follows every purchase you import or record. It resets by itself each month. Lines you set to manual keep the amount you typed.' : 'Done this month is the amount you type or mark. Once your buy history exists (Groww import), it is filled in from that automatically.'),
-        (() => { const bd = planDone(plans, monthlyBuys(data), C.monthKey(S.all.asOf)); return bd.other > 0 ? h('p', { class: 'note' }, `Bought this month but not matching any line above: ${money(bd.other)}. Add a line for it, or set “Find its buys by” on the right line.`) : null; })()),
-      canEdit() ? [btn('Refresh from history', () => { if (!Object.keys(monthlyBuys(data)).length) return toast('No buy history yet. Import your Groww files first.', 'bad'); mutate((d) => { const bd = planDone(d.sipPlans, monthlyBuys(d), C.monthKey(S.all.asOf)); for (const t of d.sipPlans) { t.manual = false; t.doneThisMonth = bd.byPlan.get(t.id) || 0; t.doneMonth = C.monthKey(S.all.asOf); } }); histDone = null; toast('Updated from your buy history'); }), btn('Add', () => sipForm(), 'primary')] : null));
-    root.append(plannerBuys(data));
+    const v = view === 'import' ? 'import' : 'planner';
+    sub([['planner', 'Investment planner'], ['import', 'Import']], v);
+    if (v === 'import') importView.render(root); else planner(root);
   }
   return root;
 }
+
+/** Second row of choices inside a tab. Real links, so the back button and a refresh keep your place. */
+function viewBar(tab, items, cur, cls = '') {
+  return h('nav', { class: 'seg sub ' + cls, role: 'tablist', 'aria-label': 'Choose a view' }, items.map(([k, l]) => h('a', { href: `#/equity/${tab}?v=${k}`, role: 'tab', 'aria-selected': k === cur ? 'true' : 'false', class: k === cur ? 'on' : '' }, l)));
+}
+function planner(root) {
+  const { data } = S;
+  const plans = data.sipPlans;
+  const tot = plans.reduce((a, p) => a + p.monthly, 0), done = plans.reduce((a, p) => a + sipDone(p), 0);
+  root.append(section('Plan for the month',
+    h('div', null, table([
+      { label: 'Where', host: true, get: (p) => p.name },
+      { label: 'Each month', cls: 'r', get: (p) => money(p.monthly), total: () => money(tot) },
+      { label: 'Each year', mob: 'hide', cls: 'r', get: (p) => money(p.monthly * 12), total: () => money(tot * 12) },
+      { label: 'Done this month', cls: 'r', render: (p) => h('span', null, money(sipDone(p)), fromHistory(p) ? h('small', { class: 'sub' }, ' from history') : null), total: () => money(done) },
+      { label: 'Left this month', mob: 'under', mlabel: 'left ', cls: 'r', get: (p) => money(Math.max(0, p.monthly - sipDone(p))), total: () => money(Math.max(0, tot - done)) },
+      { label: '', render: (p) => (canEdit() && sipDone(p) < p.monthly ? h('button', { class: 'small', onclick: (e) => { e.stopPropagation(); mutate((d) => { const t = d.sipPlans.find((x) => x.id === p.id); t.doneThisMonth = t.monthly; t.manual = true; t.doneMonth = C.monthKey(S.all.asOf); }); toast('Marked as invested'); } }, 'Mark done') : h('span', { class: 'tag good' }, 'Done')) },
+    ], plans, { footer: { label: 'Total' }, onRow: canEdit() ? (p) => sipForm(plans.find((x) => x.id === p.id)) : null }),
+      h('p', { class: 'note' }, Object.keys(monthlyBuys(data)).length ? 'Done this month is read from your buy history (shares, ETFs and funds), so it follows every purchase you import or record. It resets by itself each month. Lines you set to manual keep the amount you typed.' : 'Done this month is the amount you type or mark. Once your buy history exists (Groww import), it is filled in from that automatically.'),
+      (() => { const bd = planDone(plans, monthlyBuys(data), C.monthKey(S.all.asOf)); return bd.other > 0 ? h('p', { class: 'note' }, `Bought this month but not matching any line above: ${money(bd.other)}. Add a line for it, or set “Find its buys by” on the right line.`) : null; })()),
+    canEdit() ? [btn('Refresh from history', () => { if (!Object.keys(monthlyBuys(data)).length) return toast('No buy history yet. Import your Groww files first.', 'bad'); mutate((d) => { const bd = planDone(d.sipPlans, monthlyBuys(d), C.monthKey(S.all.asOf)); for (const t of d.sipPlans) { t.manual = false; t.doneThisMonth = bd.byPlan.get(t.id) || 0; t.doneMonth = C.monthKey(S.all.asOf); } }); histDone = null; toast('Updated from your buy history'); }), btn('Add', () => sipForm(), 'primary')] : null));
+  root.append(plannerBuys(data));
+}
+

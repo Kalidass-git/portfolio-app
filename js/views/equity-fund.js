@@ -90,7 +90,7 @@ export function render(root) {
   const { data, all } = S;
   const id = route().query.get('id');
   const m = all.mf.items.find((x) => x.id === id);
-  root.append(h('div', { class: 'pagebar' }, h('a', { class: 'back', href: '#/equity/funds' }, '← Funds')));
+  root.append(h('div', { class: 'pagebar' }, h('a', { class: 'back', href: '#/equity/holdings?v=funds' }, '← Funds')));
   if (!m) { root.append(h('div', { class: 'card' }, h('p', { class: 'empty' }, 'This fund is not in your list any more.'))); return; }
   const raw = data.mutualFunds.find((x) => x.id === id) || m;
   const k = fundKey(m.name);
