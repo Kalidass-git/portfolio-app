@@ -197,6 +197,11 @@ No backend change. The Wealth projector now has five tabs: This year, Years ahea
 - **Measured against** is now a setting. On the Risk limits tab, switch risk-group and kind limits between **Everything I own** and **Investments only** (bank balances left out). Each kind, each single-holding rule and each named holding can also choose **Market-linked only** (shares, ETFs, funds) or **Its own group**.
 - Name suggestions in the Risk and What-if forms now show up as you type.
 
+## Release 8.9.19 – Tidier top bar and combined Shares & ETFs
+
+- The "Prices updated … ago" note and the Refresh button now sit on the right of the tabs (below them on a phone), smaller and on one line. The extra "P/E, 52-week range and alerts updated" line is gone; hover the note to see when each was last fetched.
+- Holdings: Shares and ETFs are one view with a Both / Shares / ETFs switch; the second row is now Shares & ETFs, Funds, History.
+
 ## Release 8.9.18 – Simpler Shares & funds menu
 
 - Nine tabs became four: **Overview** (today, alerts, where to look), **Holdings** (Shares, ETFs, Funds, and History with Sold and Dividends), **Watch** (Alerts & watchlist, Insights) and **Manage** (Investment planner, Import; the owner only, hidden on view-only devices).

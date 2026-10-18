@@ -191,13 +191,13 @@ const tableTools = () => h('div', { class: 'tbl-tools' }, sortBox(), searchBox()
 const totalRow = (g, label) => h('div', { class: 'totalbar' }, h('b', null, label + ' total'), h('span', null, money(g.current), h('small', null, ' (' + money(g.invested) + ')')), h('span', { class: posNeg(g.pl) }, arrow(g.pl) + money(Math.abs(g.pl)), h('small', null, ' ' + pct(Math.abs(g.ret), 1))), g.dayCount ? h('span', { class: posNeg(g.day) }, 'today ' + signed(g.day)) : null);
 
 /** Shares and ETFs together; switch to see only one. */
-function holdingsTab(root, f = 'shares') {
+function holdingsTab(root, f = 'all') {
   const { data } = S;
   const gr = groups();
   const merged = totalsOf(gr.shares.items.concat(gr.etfs.items));
   const g = f === 'shares' ? gr.shares : f === 'etfs' ? gr.etfs : merged;
   const label = f === 'shares' ? 'Shares' : f === 'etfs' ? 'ETFs' : 'Shares & ETFs';
-  const seg = null;
+  const seg = h('nav', { class: 'seg', 'aria-label': 'Show' }, [['all', 'Both'], ['shares', 'Shares'], ['etfs', 'ETFs']].map(([k, l]) => h('a', { href: '#/equity/holdings?v=stocks&f=' + k, class: k === f ? 'on' : '', 'aria-selected': String(k === f) }, l + ' (' + (k === 'all' ? merged.items.length : gr[k].items.length) + ')')));
   root.append(h('div', { class: 'stats' },
     stat(label, money(g.current), `${g.items.length} holdings`),
     investedStat(g.invested, g.pl, g.ret, groupXirr(g.items)),
@@ -284,7 +284,7 @@ export function render() {
   if (route().sub === 'holding') { holdingView.render(root); return root; }
   if (route().sub === 'fund') { fundView.render(root); return root; }
   const rsub = route().sub;
-  const LEGACY = { today: '#/equity/overview', alerts: '#/equity/watch?v=alerts', funds: '#/equity/holdings?v=funds', insights: '#/equity/watch?v=insights', sold: '#/equity/holdings?v=sold', dividends: '#/equity/holdings?v=dividends', sip: '#/equity/manage?v=planner', import: '#/equity/manage?v=import', stocks: '#/equity/holdings?v=shares', etfs: '#/equity/holdings?v=etfs' };
+  const LEGACY = { today: '#/equity/overview', alerts: '#/equity/watch?v=alerts', funds: '#/equity/holdings?v=funds', insights: '#/equity/watch?v=insights', sold: '#/equity/holdings?v=sold', dividends: '#/equity/holdings?v=dividends', sip: '#/equity/manage?v=planner', import: '#/equity/manage?v=import', stocks: '#/equity/holdings?v=stocks&f=shares', etfs: '#/equity/holdings?v=stocks&f=etfs' };
   if (LEGACY[rsub]) { location.replace(LEGACY[rsub]); return root; }
   const visible = TABS.filter((t) => t[0] !== 'manage' || canEdit());
   const tab = visible.some((t) => t[0] === rsub) ? rsub : 'overview';
@@ -292,27 +292,30 @@ export function render() {
   const st = all.stocks, mf = all.mf;
   const upd = S.data.settings.pricesUpdatedAt, ageMs = upd ? Date.now() - new Date(upd).getTime() : null;
   const stale = ageMs == null || ageMs > 864e5;
-  root.append(h('div', { class: 'pagebar' }, segTabs(visible, tab, 'Shares and funds views')),
-    h('div', { class: 'price-bar' },
-      h('span', { class: 'stamp' + (stale ? ' warn' : ''), title: upd ? new Date(upd).toLocaleString('en-IN') : '' }, stale ? '⚠ ' : '', ageMs == null ? 'Prices not fetched yet' : 'Prices updated ' + agoText(ageMs)),
-      h('button', { class: 'refresh-btn', type: 'button', title: 'Fetch latest prices, NAVs, P/E and 52-week data', onclick: (e) => refresh(e.currentTarget) }, h('span', { class: 'ic' }, icon('refresh')), h('span', { class: 'lb' }, 'Refresh'))));
+  root.append(h('div', { class: 'pagebar' }, segTabs(visible, tab, 'Shares and funds views'),
+    h('div', { class: 'price-bar inline' },
+      h('span', { class: 'stamp' + (stale ? ' warn' : ''), title: (upd ? 'Prices ' + new Date(upd).toLocaleString('en-IN') : '') + (W.metricsAt() ? ' · P/E, 52-week data ' + new Date(W.metricsAt()).toLocaleString('en-IN') : '') }, stale ? '⚠ ' : '', ageMs == null ? 'Prices not fetched yet' : 'Prices updated ' + agoText(ageMs)),
+      h('button', { class: 'refresh-btn small', type: 'button', title: 'Fetch latest prices, NAVs, P/E and 52-week data', onclick: (e) => refresh(e.currentTarget) }, h('span', { class: 'ic' }, icon('refresh')), h('span', { class: 'lb' }, 'Refresh')))));
 
   const sub = (items, cur, extra) => root.append(viewBar(tab, items, cur, extra));
   if (tab === 'overview') {
-    root.append(watchView.refreshBar(), watchView.triggeredCard());
+    watchView.autoRefresh();
+    root.append(watchView.triggeredCard());
     today(root);
     const g = groups();
     root.append(section('What you hold', h('div', { class: 'stats' },
       ...['shares', 'etfs', 'funds'].map((k) => stat(GROUP_LABEL[k], money(g[k].current), h('span', null, 'invested ', money(g[k].invested), ' · ', gainText(g[k].pl), ' (', pct(g[k].ret), ')', xiText(k === 'funds' ? all.mf.xirr : groupXirr(g[k].items))))))));
     root.append(watchView.screensSection());
   } else if (tab === 'holdings') {
-    const v = ['shares', 'etfs', 'funds', 'sold', 'dividends'].includes(view) ? view : 'shares';
-    sub([['shares', 'Shares'], ['etfs', 'ETFs'], ['funds', 'Funds'], ['sold', 'History']], v === 'dividends' ? 'sold' : v);
+    const v0 = ['shares', 'etfs', 'stocks', 'funds', 'sold', 'dividends'].includes(view) ? view : 'stocks';
+    const v = v0 === 'shares' || v0 === 'etfs' ? 'stocks' : v0;
+    const f = v0 === 'shares' || v0 === 'etfs' ? v0 : ['shares', 'etfs'].includes(q.get('f')) ? q.get('f') : 'all';
+    sub([['stocks', 'Shares & ETFs'], ['funds', 'Funds'], ['sold', 'History']], v === 'dividends' ? 'sold' : v);
     if (v === 'sold' || v === 'dividends') root.append(viewBar('holdings', [['sold', 'Sold shares'], ['dividends', 'Dividends']], v, 'small'));
     if (v === 'funds') fundsTab(root);
     else if (v === 'sold') sold(root);
     else if (v === 'dividends') dividends.render(root);
-    else holdingsTab(root, v);
+    else holdingsTab(root, f);
   } else if (tab === 'watch') {
     const v = view === 'insights' ? 'insights' : 'alerts';
     sub([['alerts', 'Alerts & watchlist'], ['insights', 'Insights']], v);
