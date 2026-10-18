@@ -1,4 +1,4 @@
-// Wealth projector engine. Pure functions, no DOM.
+// Wealth outlook engine. Pure functions, no DOM.
 //
 // A plan starts from where you stand (asset classes and loans on a date) and walks month by month:
 //   salary and other income come in, interest from bonds and lending is paid out, expenses go out,

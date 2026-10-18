@@ -1,4 +1,4 @@
-// Wealth projector → This year: the year-end target, a month-by-month path, month-end check-ins and the year review.
+// Wealth outlook → This year: the year-end target, a month-by-month path, month-end check-ins and the year review.
 import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
 import * as P from '../projector.js';

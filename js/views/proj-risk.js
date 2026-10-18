@@ -1,4 +1,4 @@
-// Wealth projector → Risk limits: set how much of your money each risk group, kind of holding and single holding may take.
+// Wealth outlook → Risk limits: set how much of your money each risk group, kind of holding and single holding may take.
 import { S, mutate } from '../store.js';
 import * as P from '../projector.js';
 import * as R from '../risk.js';

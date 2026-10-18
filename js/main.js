@@ -27,7 +27,7 @@ const ROUTES = {
   gold: { label: 'Gold & others', short: 'Gold & more', view: gold, tab: 'assets', group: 'Assets', icon: 'M12 3l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V7z' },
   flow: { label: 'Income & expenses', view: flow, tab: 'flow', group: 'Spend & plan', icon: 'M4 6h16M4 12h10M4 18h6' },
   plan: { label: 'Plan', view: plan, tab: 'outlook', group: 'Spend & plan', icon: 'M5 19V9m7 10V5m7 14v-7' },
-  projector: { label: 'Wealth projector', short: 'Projector', view: projector, tab: 'outlook', group: 'Spend & plan', icon: 'M3 17l6-6 4 4 8-9M15 6h6v6' },
+  projector: { label: 'Wealth outlook', short: 'Wealth outlook', view: projector, tab: 'outlook', group: 'Spend & plan', icon: 'M3 17l6-6 4 4 8-9M15 6h6v6' },
   risk: { label: 'Risk & what-if', short: 'Risk', view: riskPage, tab: 'outlook', group: 'Spend & plan', icon: 'M12 3l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V7zM9 12l2 2 4-4' },
   report: { label: 'Family report', short: 'Family report', view: report, tab: 'report', group: 'Report', icon: 'M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h7' },
   networth: { label: 'Net worth over time', short: 'Net worth', view: networth, tab: 'report', group: 'Report', icon: 'M3 17l6-6 4 4 8-9M15 6h6v6' },

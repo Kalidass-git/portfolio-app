@@ -65,6 +65,27 @@ export function calcDeposit(it, asOf) {
   return { ...it, elapsed: L, accrued, totalInterest: total, daily: (P * r) / 365, value: P + accrued };
 }
 
+/** Months between payouts of an interest-paying deposit or loan: from its Compounding / payout setting. */
+export const payoutStep = (x) => ({ Monthly: 1, Quarterly: 3, Yearly: 12 }[x.compound] || 1);
+/** What reaches you each month on average: the amount you entered per payout, else the rate on the amount. */
+export const payoutMonthly = (x) => (x.payoutAmount > 0 ? x.payoutAmount / payoutStep(x) : (x.principal * x.rate) / 12);
+/**
+ * Interest received so far on a paying-out deposit or loan. With the payout amount entered: that amount for every payout date reached (one a month, quarter or year after the start, up to today or the end).
+ * Without it: the rate on the amount, by days, up to today or the end.
+ */
+export function interestReceived(x, asOf) {
+  if (!(x.principal > 0) || !x.depositDate) return 0;
+  const stop = x.closed ? x.closed.date : x.maturityDate;
+  const end = stop && stop < asOf ? stop : asOf;
+  if (end <= x.depositDate) return 0;
+  if (x.payoutAmount > 0) {
+    const step = payoutStep(x); let n = 0, d = addMonths(x.depositDate, step);
+    while (d <= end && n < 1200) { n++; d = addMonths(x.depositDate, step * (n + 1)); }
+    return n * x.payoutAmount;
+  }
+  return ((toMs(end) - toMs(x.depositDate)) / DAY) * x.principal * x.rate / 365;
+}
+
 // ---------- small savings (Cash!A12:Q23 + Chits & Savings) ----------
 export function savingPrincipal(sv) {
   if (sv.type === 'EPF') return sum(sv.entries, (e) => (e.employee || 0) + (e.employer || 0));
@@ -656,6 +677,31 @@ export function xirr(flows, guess = 0.1) {
   return (lo + hi) / 2;
 }
 
+/**
+ * XIRR for a group of rows. Dated flows with buys, sells and re-buys can have more than one rate that makes them balance, and a plain search may land on a far one.
+ * This scans the whole range, and returns the rate nearest to `guess` (the value-weighted XIRR of the rows), so a group never lands far from its rows.
+ */
+export function xirrNear(flows, guess = 0.1) {
+  const f = flows.filter((x) => x.amount && !isNaN(x.t)).sort((a, b) => a.t - b.t);
+  if (f.length < 2 || !f.some((x) => x.amount < 0) || !f.some((x) => x.amount > 0)) return null;
+  const t0 = f[0].t;
+  const npv = (r) => f.reduce((a, x) => a + x.amount / Math.pow(1 + r, (x.t - t0) / DAY / 365), 0);
+  const grid = []; for (let r = -0.9; r <= 12; r += r < 1 ? 0.01 : 0.25) grid.push(+r.toFixed(4));
+  const roots = [];
+  for (let i = 1; i < grid.length; i++) {
+    let lo = grid[i - 1], hi = grid[i], flo = npv(lo), fhi = npv(hi);
+    if (flo === 0) { roots.push(lo); continue; }
+    if (flo * fhi > 0) continue;
+    for (let k = 0; k < 80; k++) { const mid = (lo + hi) / 2, fm = npv(mid); if (flo * fm <= 0) { hi = mid; fhi = fm; } else { lo = mid; flo = fm; } }
+    roots.push((lo + hi) / 2);
+  }
+  if (!roots.length) return null;
+  return roots.reduce((best, r) => (Math.abs(r - guess) < Math.abs(best - guess) ? r : best));
+}
+const weightedGuess = (rows) => { const w = rows.filter((r) => r.xirr != null && r.value > 0); const t = w.reduce((a, r) => a + r.value, 0); return t ? w.reduce((a, r) => a + r.xirr * r.value, 0) / t : 0.1; };
+/** The XIRR of several return rows together. */
+export const groupXirr = (rows) => { const good = rows.filter((r) => r.xirr != null && r.flows && !r.estimated); return good.length ? { xirr: xirrNear(good.flatMap((r) => r.flows), weightedGuess(good)), count: good.length } : { xirr: null, count: 0 }; };
+
 /** Return metrics per asset class. XIRR needs dated cash flows, so only classes that carry dates are included. */
 export function returns(data, all) {
   const asOf = toMs(all.asOf);
@@ -685,7 +731,13 @@ export function returns(data, all) {
   add('FDs & compounding loans', comp.map((x) => ({ t: toMs(x.depositDate), amount: -x.principal })),
     sum(comp, (x) => x.value), sum(comp, (x) => x.principal));
   const pay = all.lending.filter((l) => l.interestType === 'Payout' && l.principal > 0);
-  add('Private lending (monthly payout)', pay.flatMap((l) => coupons({ ...l, credit: 'Monthly' })), sum(pay, (x) => x.principal), sum(pay, (x) => x.principal), 'Coupons assumed paid on schedule');
+  const lendFlows = (l) => {
+    if (!(l.payoutAmount > 0)) return coupons({ ...l, credit: 'Monthly' });
+    const step = payoutStep(l), fl = [{ t: toMs(l.depositDate), amount: -l.principal }];
+    for (let n = 1; addMonths(l.depositDate, step * n) <= all.asOf; n++) fl.push({ t: toMs(addMonths(l.depositDate, step * n)), amount: l.payoutAmount });
+    return fl;
+  };
+  add('Private lending (monthly payout)', pay.flatMap(lendFlows), sum(pay, (x) => x.principal), sum(pay, (x) => x.principal), 'Coupons assumed paid on schedule');
   // EPF / PPF: your entries say how much went in and when; the yearly rate is the declared one (see epf.js).
   const ep = all.savings.filter((s) => s.type === 'EPF' || s.type === 'PPF');
   const ems = ep.map((s) => modelFlows(s, all.asOf, toMs));
@@ -736,7 +788,8 @@ export function overallXirr(data, all, rets) {
   const closed = closedFlows(all);
   const merged = covered.flatMap((r) => r.flows).concat(closed);
   const noPf = covered.filter((r) => !/^EPF/.test(r.name)).flatMap((r) => r.flows).concat(closed);
-  return { xirr: covered.length ? xirr(merged) : null, xirrNoPf: covered.length ? xirr(noPf) : null, closedCount: all.closed.bonds.length + all.closed.fds.length + all.closed.lending.length + (all.closed.savings || []).length,
+  const guess = weightedGuess(covered);
+  return { xirr: covered.length ? xirrNear(merged, guess) : null, xirrNoPf: covered.length ? xirrNear(noPf, weightedGuess(covered.filter((r) => !/^EPF/.test(r.name)))) : null, closedCount: all.closed.bonds.length + all.closed.fds.length + all.closed.lending.length + (all.closed.savings || []).length,
     covered: covered.map((r) => r.name), coverage: all.totalAssets ? sum(covered, (r) => r.value) / all.totalAssets : 0 };
 }
 
@@ -756,7 +809,7 @@ export function familyReport(data, all) {
   for (const items of by(all.lending.filter((l) => l.principal !== 0), (l) => l.name.replace(/^(To |Money ?[Ll]ending_?)/, '').trim())) {
     const first = items[0];
     g('Private lending', first.name.replace(/^To /, ''), first.account, sum(items, (x) => x.principal + x.accrued),
-      sum(items.filter((x) => x.interestType === 'Payout'), (x) => (x.principal * x.rate) / 12));
+      sum(items.filter((x) => x.interestType === 'Payout'), (x) => payoutMonthly(x)));
   }
   for (const f of all.fds) g('Fixed deposits', f.name, f.account, f.value, 0);
   for (const sv of all.savings.filter((x) => x.type !== 'Chit')) g('EPF, PPF & LIC', sv.name, sv.holder, sv.principal, 0);
@@ -785,7 +838,7 @@ export function upcoming(data, all, days = 60) {
   for (const b of all.bonds) if (b.maturityDate >= from && b.maturityDate <= to) add(b.maturityDate, b.name + ' matures', b.principal, 'Bond');
   for (const f of all.fds) if (f.maturityDate >= from && f.maturityDate <= to) add(f.maturityDate, f.name + ' matures', f.value || f.principal, 'Fixed deposit');
   for (const l of all.lending) if (l.principal > 0 && l.maturityDate >= from && l.maturityDate <= to) add(l.maturityDate, l.name + ' due back', l.principal + (l.accrued || 0), 'Lending');
-  for (const s of all.savings) if (s.maturityDate && s.maturityDate >= from && s.maturityDate <= to) add(s.maturityDate, s.name + ' matures', s.principal, s.type);
+  for (const s of all.savings) { if (s.type === 'EPF' || s.type === 'PPF') continue; const end = savingEnd(s); if (end && end >= from && end <= to) { const m = savingMaturity(s); add(end, s.name + ' matures', m.amount, s.type); } }
   for (const r of data.receivables.filter((x) => x.active !== false && x.balanceDue > 0).map((x) => receivableStatus(x, from))) {
     if (r.received || r.notStarted) continue;
     if (r.due <= to) add(r.due, r.name + (r.overdue ? ' (overdue)' : r.dueToday ? ' (due today)' : ' to pay you'), r.expected, 'Money to receive');

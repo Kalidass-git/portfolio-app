@@ -203,7 +203,7 @@ function allocation(root) {
   const now = I.allocNow(data, all, rate);
   const total = now.reduce((s, x) => s + x.value, 0);
   const monthly = g && g.monthly != null ? g.monthly : I.defaultMonthly(data, all);
-  const link = h('a', { class: 'crosslink', href: '#/projector/ahead' }, 'Wealth projector');
+  const link = h('a', { class: 'crosslink', href: '#/projector/ahead' }, 'Wealth outlook');
   const edit = () => goalForm(g, monthly, outlookId);
   if (!g || !g.targets) {
     root.append(h('div', { class: 'card' }, h('h3', null, 'Set the mix you want to reach'),

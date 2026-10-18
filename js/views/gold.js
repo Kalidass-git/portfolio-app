@@ -101,29 +101,62 @@ function chitEntryForm(c, idx) {
   const e = isNew ? { date: C.todayISO(), amount: c.monthly || '' } : c.entries[idx];
   formDialog({
     title: (isNew ? 'Add payment to ' : 'Edit payment in ') + c.name, value: e,
-    fields: [{ key: 'date', label: 'Date', type: 'date', required: true }, { key: 'amount', label: 'Amount paid (₹)', type: 'number', required: true }],
-    onSave: (v) => mutate((d) => { const t = d.gold.chits.find((x) => x.id === c.id); const rec = { date: v.date, amount: v.amount }; if (isNew) t.entries.push(rec); else t.entries[idx] = rec; t.entries.sort((a, b) => (a.date < b.date ? -1 : 1)); }),
+    fields: [{ key: 'date', label: 'Date', type: 'date', required: true }, { key: 'amount', label: 'Amount paid (₹)', type: 'number', required: true },
+      { key: 'rate', label: 'Gold rate that day (₹ per gram, optional)', type: 'number', hint: 'Lets the app work out the grams this payment bought, to compare “by value” with “by gold” when the chit ends.' }],
+    onSave: (v) => mutate((d) => { const t = d.gold.chits.find((x) => x.id === c.id); const rec = { date: v.date, amount: v.amount }; if (v.rate > 0) rec.rate = v.rate; if (isNew) t.entries.push(rec); else t.entries[idx] = rec; t.entries.sort((a, b) => (a.date < b.date ? -1 : 1)); }),
     onDelete: isNew ? null : () => mutate((d) => { d.gold.chits.find((x) => x.id === c.id).entries.splice(idx, 1); }),
   });
 }
-function closeChit(c) {
+/** Closing a gold chit: take the money's worth, or the grams saved up, whichever is better at today's rate. */
+function chitOptions(c, rate) {
   const paid = c.entries.reduce((a, e) => a + e.amount, 0);
+  const withRate = c.entries.filter((e) => e.rate > 0);
+  const grams = withRate.reduce((a, e) => a + e.amount / e.rate, 0);
+  const rated = withRate.reduce((a, e) => a + e.amount, 0);
+  const complete = c.entries.length > 0 && withRate.length === c.entries.length;
+  const byValueGrams = rate > 0 ? paid / rate : 0;
+  const goldValue = grams * rate;
+  const known = grams > 0;
+  const best = !known ? 'value' : goldValue > paid ? 'gold' : 'value';
+  return { paid, grams, rated, complete, byValueGrams, goldValue, known, best, edge: known ? Math.abs(goldValue - paid) : 0 };
+}
+function chitBestCard(c, rate) {
+  const o = chitOptions(c, rate);
+  const mk = (title, big, sub, win) => h('div', { class: 'stat', style: win ? { borderColor: 'var(--accent, #1b7f3b)', borderWidth: '2px', borderStyle: 'solid' } : null },
+    h('span', { class: 'stat-label' }, title + (win ? ' · better today' : '')), h('strong', { class: 'stat-value' }, big), h('span', { class: 'sub' }, sub));
+  return h('div', { class: 'card' },
+    h('h3', null, 'Best option today · ' + c.name),
+    h('div', { class: 'stats' },
+      mk('Take it by value', dec(o.byValueGrams, 2) + ' g', `${money(o.paid)} paid in, buys this much at ${money(rate)} / g`, o.best === 'value'),
+      o.known ? mk('Take it by gold saved', dec(o.grams, 2) + ' g', `worth ${money(o.goldValue)} today${o.complete ? '' : ' (only payments with a rate are counted)'}`, o.best === 'gold')
+        : mk('Take it by gold saved', '–', 'add the gold rate on the payments to compare')),
+    h('p', { class: 'note' }, o.known
+      ? (o.best === 'gold'
+        ? `Gold basis is better: ${dec(o.grams - o.byValueGrams, 2)} g more, worth ${money(o.edge)} extra at today's rate.`
+        : `Value basis is better: ${dec(o.byValueGrams - o.grams, 2)} g more, worth ${money(o.edge)} extra at today's rate.`)
+      : 'Value basis gives you the money paid in as gold at today\'s rate.'));
+}
+function closeChit(c) {
+  const rate = S.all.gold.rate;
+  const o = chitOptions(c, rate), paid = o.paid;
+  const bestGrams = o.best === 'gold' ? o.grams : o.byValueGrams;
   formDialog({
-    title: 'Close ' + c.name, saveLabel: 'Close and add the gold', value: { date: C.todayISO(), grams: '', amount: paid, note: '' },
+    title: 'Close ' + c.name, saveLabel: 'Close and add the gold', value: { date: C.todayISO(), grams: bestGrams ? Math.round(bestGrams * 1000) / 1000 : '', extra: '', note: '' },
     fields: [
       { key: 'date', label: 'Closed on', type: 'date', required: true },
-      { key: 'grams', label: 'Gold received (grams)', type: 'number', required: true, hint: 'Coins, jewellery or bars you took when the chit ended.' },
-      { key: 'amount', label: 'Value recorded for the gold (₹)', type: 'number', required: true, hint: `You paid ${money(paid)} in. Change it if the jeweller added a bonus or you paid extra.` },
+      { key: 'grams', label: 'Gold bought (grams)', type: 'number', required: true, hint: `Today at ${money(rate)} / g: by value ${dec(o.byValueGrams, 2)} g${o.known ? `, by gold saved ${dec(o.grams, 2)} g, so “${o.best === 'gold' ? 'gold' : 'value'}” is better` : ''}. Change it to what you actually received.` },
+      { key: 'extra', label: 'Extra amount paid while closing (₹, optional)', type: 'number', hint: `Making charges, tax or top-up. It is added to the ${money(paid)} you paid into the chit.` },
       { key: 'note', label: 'Note (optional)', type: 'text' },
     ],
     onSave: (v) => {
-      if (!(v.grams > 0)) { toast('Enter the grams of gold you received.', 'bad'); return false; }
+      if (!(v.grams > 0)) { toast('Enter the grams of gold you bought.', 'bad'); return false; }
+      const amt = paid + (v.extra > 0 ? v.extra : 0);
       mutate((d) => {
         const t = d.gold.chits.find((x) => x.id === c.id);
         const pid = nextId('g', d.gold.purchases);
-        d.gold.purchases.push({ id: pid, date: v.date, desc: `Gold from chit: ${c.name}`, grams: v.grams, amount: v.amount });
+        d.gold.purchases.push({ id: pid, date: v.date, desc: `Gold from chit: ${c.name}`, grams: v.grams, amount: amt });
         d.gold.purchases.sort((a, b) => (a.date < b.date ? -1 : 1));
-        t.closed = { date: v.date, grams: v.grams, amount: v.amount, purchaseId: pid, note: v.note || '' };
+        t.closed = { date: v.date, grams: v.grams, amount: amt, extra: v.extra > 0 ? v.extra : 0, purchaseId: pid, note: v.note || '' };
       });
       toast('Closed. The gold is now in your gold purchases.');
     },
@@ -140,7 +173,7 @@ function openChit(row) {
     else acts.push({ label: 'Edit chit', onclick: (cl) => { cl(); chitForm(c); } }, { label: 'Close it', onclick: (cl) => { cl(); closeChit(c); } }, { label: 'Add payment', class: 'primary', onclick: (cl) => { cl(); chitEntryForm(c); } });
   }
   acts.push({ label: 'Close window', onclick: (cl) => cl() });
-  dialog(c.name, h('div', null, h('p', { class: 'note' }, `${c.shop || 'Gold chit'}${c.monthly ? ' · ' + money(c.monthly) + ' a month' : ''}${c.closed ? ` · closed ${dateStr(c.closed.date)}, ${dec(c.closed.grams, 2)} g received` : ''}`), c.desc ? h('p', null, c.desc) : null, list), acts);
+  dialog(c.name, h('div', null, c.closed ? null : chitBestCard(c, S.all.gold.rate), h('p', { class: 'note' }, `${c.shop || 'Gold chit'}${c.monthly ? ' · ' + money(c.monthly) + ' a month' : ''}${c.closed ? ` · closed ${dateStr(c.closed.date)}, ${dec(c.closed.grams, 2)} g received` : ''}`), c.desc ? h('p', null, c.desc) : null, list), acts);
 }
 function chitsTab(root) {
   const { all, data } = S;
@@ -154,6 +187,7 @@ function chitsTab(root) {
   root.append(h('div', { class: 'stats' },
     stat('Invested in gold chits', money(runPaid), `${running.length} running chit${running.length === 1 ? '' : 's'}`),
     stat('Closed chits', String(g.closed.length + oldSch.length), g.closed.length + oldSch.length ? `${dec(g.closed.reduce((a, c) => a + c.closed.grams, 0), 1)} g received through chits closed here` : 'none yet')));
+  for (const r of running) if (r.chit && r.paid > 0) root.append(chitBestCard(r.chit, all.gold.rate));
   root.append(section('Running chits', h('div', null, table([
     { label: 'Chit', host: true, get: (c) => c.name }, { label: 'Jeweller', mob: 'under', get: (c) => c.shop || '' },
     { label: 'Started', mob: 'under', mlabel: 'started ', get: (c) => dateStr(c.startDate) },
@@ -215,11 +249,13 @@ export function render() {
   if (tab === 'chits') chitsTab(root);
   if (tab === 'gold') {
   root.append(h('div', { class: 'stats' },
-    stat('Gold value', money(g.value), `${dec(g.grams, 2)} g · ${dec(g.grams / 8, 1)} sovereigns (8 g)`),
+    (() => { const row = C.returns(data, all).find((r) => r.name === 'Gold'); const gain = g.value - g.invested;
+      return stat('Gold value', money(g.value), h('span', null, h('span', { class: gain >= 0 ? 'pos' : 'neg' }, (gain >= 0 ? '+' : '−') + money(Math.abs(gain))), ` gain · XIRR ${row && row.xirr != null ? pct(row.xirr, 1) : '–'} · paid ${money(g.invested)}`)); })(),
+    (() => { const jg = g.jewellery.grams, tg = g.grams + jg, tv = g.value + g.jewellery.value;
+      return stat('Total gold incl. jewellery', money(tv), `${dec(tg, 2)} g · ${dec(tg / 8, 1)} sovereigns (8 g) · jewellery ${dec(jg, 2)} g`); })(),
     (() => { const d = g.day, sg = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + money(Math.abs(n)), sp = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + pct(Math.abs(n), 2);
       return d ? stat('Gold today', h('span', { class: posNeg(d.total) }, sg(d.total)), h('span', { class: posNeg(d.total) }, `${sp(d.pct)} · ${sg(d.perGram)} a gram`))
         : stat('Gold today', '–', 'turns on with the automatic rate or after a price refresh'); })(),
-    stat('Gain on gold', h('span', { class: g.value - g.invested >= 0 ? 'pos' : 'neg' }, money(g.value - g.invested)), `paid ${money(g.invested)}`),
     h('a', { class: 'stat', href: '#/gold/chits', style: { textDecoration: 'none', color: 'inherit' } }, h('span', { class: 'stat-label' }, 'Invested in gold chits'), h('strong', { class: 'stat-value' }, money(g.chits.invested + (g.scheme.invested || 0))), h('span', { class: 'stat-sub' }, `${g.chits.active.length + (g.scheme.name ? 1 : 0)} running · tap to see`))));
   root.append(rateCard());
 

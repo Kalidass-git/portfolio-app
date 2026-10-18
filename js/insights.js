@@ -45,6 +45,8 @@ export function fundGains(data) {
 
 // ---------- 1. Tax summary ----------
 export const NO_OWNER = 'Not set';
+/** Whose a bond, FD, lending or savings item is: its holder, else (FDs and lending) the account it sits in, unless that only says Private or Family. */
+export const itemOwner = (it) => { const h = String(it.holder || '').trim(); if (h) return h; const a = String(it.account || '').trim(); return /^(private|family)$/i.test(a) ? '' : a; };
 /** Who owns what for the tax summary: data.taxOwners maps 'stocks', 'funds' and 'acct:<id>' to a person. Bonds, FDs, lending and savings use their own holder. */
 export const ownerOfSource = (data, key, fallback) => String((data.taxOwners && data.taxOwners[key]) || fallback || '').trim() || NO_OWNER;
 export const acctOwner = (data, acctId) => ownerOfSource(data, 'acct:' + acctId, ((data.accounts || []).find((a) => a.id === acctId) || {}).holder);
@@ -53,7 +55,7 @@ export function taxPeople(data) {
   const seen = new Map();
   const add = (n) => { const t = String(n || '').trim(); if (t && !seen.has(lc(t))) seen.set(lc(t), t); };
   (data.accounts || []).forEach((a) => add(a.holder));
-  ['bonds', 'fds', 'lending', 'savings'].forEach((k) => (data[k] || []).forEach((x) => add(x.holder)));
+  ['bonds', 'fds', 'lending', 'savings'].forEach((k) => (data[k] || []).forEach((x) => add(itemOwner(x))));
   Object.values(data.taxOwners || {}).forEach(add);
   return [...seen.values()].sort((a, b) => a.localeCompare(b));
 }
@@ -71,16 +73,16 @@ export function taxSummary(data, all, y, who = 'all') {
   };
   const compound = (it, date) => { const cap = it.maturityDate && it.maturityDate < date ? it.maturityDate : date; return C.calcDeposit({ ...it, accruedOverride: undefined }, cap).accrued; };
   const interest = [];
-  for (const b of data.bonds || []) { const s = span(b); if (!s || !mine(b.holder)) continue; const gross = (b.principal * b.rate * s.days) / 365; interest.push({ kind: 'Bonds', name: b.name, holder: b.holder || NO_OWNER, gross, tds: gross * tdsRate }); }
+  for (const b of data.bonds || []) { const s = span(b); if (!s || !mine(itemOwner(b))) continue; const gross = (b.principal * b.rate * s.days) / 365; interest.push({ kind: 'Bonds', name: b.name, holder: itemOwner(b) || NO_OWNER, gross, tds: gross * tdsRate }); }
   for (const [list, kind] of [[data.fds || [], 'Fixed deposits'], [data.lending || [], 'Private lending']]) {
     for (const it of list) {
-      const s = span(it); if (!s || !mine(it.holder)) continue;
+      const s = span(it); if (!s || !mine(itemOwner(it))) continue;
       let gross;
       if (it.interestType === 'Compound') {
         const before = it.depositDate < from ? compound(it, new Date(C.toMs(from) - DAY).toISOString().slice(0, 10)) : 0;
         gross = compound(it, s.b) - before;
       } else gross = (it.principal * it.rate * s.days) / 365;
-      interest.push({ kind, name: it.name, holder: it.holder || NO_OWNER, party: it.borrower || it.issuer, gross, tds: 0 });
+      interest.push({ kind, name: it.name, holder: itemOwner(it) || NO_OWNER, party: it.borrower || it.issuer, gross, tds: 0 });
     }
   }
   const interestBy = ['Bonds', 'Fixed deposits', 'Private lending'].map((kind) => { const rows = interest.filter((r) => r.kind === kind); return { kind, rows, gross: sum(rows, (r) => r.gross), tds: sum(rows, (r) => r.tds) }; }).filter((g) => g.rows.length);
@@ -147,7 +149,7 @@ export function cashCalendar(data, all, nMonths) {
   for (const m of months) {
     const first = m + '-01';
     const bondsNet = sum(all.bonds.filter((b) => !b.maturityDate || b.maturityDate >= first), (b) => b.monthNet);
-    const payout = sum(all.lending.concat(all.fds).filter((x) => x.interestType === 'Payout' && x.principal > 0 && (!x.maturityDate || x.maturityDate >= first)), (x) => (x.principal * x.rate) / 12);
+    const payout = sum(all.lending.concat(all.fds).filter((x) => x.interestType === 'Payout' && x.principal > 0 && (!x.maturityDate || x.maturityDate >= first)), (x) => C.payoutMonthly(x));
     if (bondsNet > 0) by.get(m).push({ date: first, title: 'Bond interest after TDS', amount: bondsNet, kind: 'Interest', dir: 'in' });
     if (payout > 0) by.get(m).push({ date: first, title: 'Lending and deposit interest', amount: payout, kind: 'Interest', dir: 'in' });
   }

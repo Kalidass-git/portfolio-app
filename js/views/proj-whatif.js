@@ -1,4 +1,4 @@
-// Wealth projector → What-if: try a purchase, a sale or a spend against your risk limits and see where you would stand.
+// Wealth outlook → What-if: try a purchase, a sale or a spend against your risk limits and see where you would stand.
 // Nothing here is saved to your records; it is a scratch pad.
 import { S } from '../store.js';
 import * as P from '../projector.js';
@@ -8,7 +8,8 @@ import { lineChart, donut, legend, riskColor } from '../charts.js';
 import { rerender, outlooks, signed, pc, tone, outlookToggle, datalistId } from './proj-shared.js';
 import { currentPlan } from './proj-year.js';
 import { statusTag, limitText, shareText } from './proj-risk.js';
-import { groupedTable, groupOfClass } from './groupmix.js';
+import { groupedTable } from './groupmix.js';
+import { allocationBody, groupSetup, groupToggle, allocMode } from './allocview.js';
 
 const KEY = 'pt.whatif';
 const load = () => { try { return JSON.parse(sessionStorage.getItem(KEY)) || null; } catch { return null; } };
@@ -164,27 +165,29 @@ function firstBreach(cfg, rows, evAfter, b) {
 }
 
 function summary(cfg, ev, ev2, b) {
-  const e = ev2 || ev;
-  const rc = (list) => list.map((x, i) => ({ label: x.name, value: x.value, color: riskColor(x.id || x.key, i, list.length) })).filter((x) => x.value > 0);
-  const bs = rc(ev.buckets), bs2 = rc(e.buckets);
+  // today only: the same chart and list as on Home
+  if (!ev2) return allocationBody(cfg, ev);
+  // today and after: two charts side by side, grouped the same way (by investment type or by risk), and one list
+  const e = ev2, { groups, gOf } = groupSetup(cfg);
+  const parents = (x) => groups.map((g) => ({ label: g.label, color: g.color, value: x.classes.filter((c) => gOf(c) === g.id).reduce((a, c) => a + c.value, 0) })).filter((p) => p.value > 0);
+  const bs = parents(ev), bs2 = parents(e);
   const was = (c) => ev.classes.find((x) => x.key === c.key);
   const S_ = (it, f) => it.reduce((a, c) => a + f(c), 0);
   const inS = (it, f) => S_(it.filter((c) => c.inScope), f);
   const table2 = groupedTable({
-    rows: e.classes.filter((c) => c.value > 1 || was(c).value > 1), groupOf: (c) => groupOfClass(c.key),
+    rows: e.classes.filter((c) => c.value > 1 || was(c).value > 1), groupOf: gOf, groups, parentDot: true,
     cols: [
-      { label: 'Kind' },
-      ev2 ? { label: 'Amount today', hide: true, cls: 'r', parent: (it) => money(S_(it, (c) => was(c).value)), child: (c) => money(was(c).value) } : null,
-      ev2 ? { label: 'Amount after', hide: true, cls: 'r', parent: (it) => money(S_(it, (c) => c.value)), child: (c) => money(c.value) } : null,
+      { label: allocMode === 'cat' ? 'Kind' : 'Risk group' },
+      { label: 'Amount today', hide: true, cls: 'r', parent: (it) => money(S_(it, (c) => was(c).value)), child: (c) => money(was(c).value) },
+      { label: 'Amount after', hide: true, cls: 'r', parent: (it) => money(S_(it, (c) => c.value)), child: (c) => money(c.value) },
       { label: 'Today', cls: 'r', parent: (it) => pcs(inS(it, (c) => was(c).pct)), child: (c) => pcs(was(c).pct) },
-      ev2 ? { label: 'After', cls: 'r', parent: (it) => h('span', { class: it.some((c) => c.over) ? 'neg' : it.some((c) => c.near) ? 'warn' : '' }, pcs(inS(it, (c) => c.pct))), child: (c) => h('span', { class: c.over ? 'neg' : c.near ? 'warn' : '' }, pcs(c.pct)) } : null,
+      { label: 'After', cls: 'r', parent: (it) => h('span', { class: it.some((c) => c.over) ? 'neg' : it.some((c) => c.near) ? 'warn' : '' }, pcs(inS(it, (c) => c.pct))), child: (c) => h('span', { class: c.over ? 'neg' : c.near ? 'warn' : '' }, pcs(c.pct)) },
       { label: 'Limit', cls: 'r', parent: () => '', child: (c) => (c.max != null ? pcs(c.max) : '–') },
       { label: 'Room left', hide: true, cls: 'r', parent: () => '', child: (c) => (c.room == null ? '–' : money(c.room)) },
       { label: '', parent: (it) => (it.some((c) => c.over) ? h('span', { class: 'tag bad' }, 'over') : it.some((c) => c.near) ? h('span', { class: 'tag warn' }, 'close') : ''), child: statusTag },
-    ].filter(Boolean),
+    ],
   });
-  return h('div', null,
-    ev2 ? h('div', { class: 'grid2' }, h('div', null, h('p', { class: 'mini-title' }, 'Today'), donut(bs, { fmt: money, center: compact(ev.total), sub: 'assets', size: 170 })), h('div', null, h('p', { class: 'mini-title' }, 'After'), donut(bs2, { fmt: money, center: compact(e.total), sub: 'assets', size: 170 }))) : h('div', null, donut(bs, { fmt: money, center: compact(ev.total), sub: 'assets', size: 190 }), legend(bs, { fmt: money })),
-    ev2 ? legend(bs2, { fmt: money }) : null,
-    table2);
+  return h('div', null, h('div', { class: 'alloc-top' }, groupToggle()),
+    h('div', { class: 'grid2' }, h('div', null, h('p', { class: 'mini-title' }, 'Today'), donut(bs, { fmt: money, center: compact(ev.total), sub: 'assets', size: 170 })), h('div', null, h('p', { class: 'mini-title' }, 'After'), donut(bs2, { fmt: money, center: compact(e.total), sub: 'assets', size: 170 }))),
+    legend(bs2, { fmt: money }), table2);
 }

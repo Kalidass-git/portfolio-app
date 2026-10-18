@@ -1,4 +1,4 @@
-// Wealth projector → planned versus actual new money, monthly and yearly.
+// Wealth outlook → planned versus actual new money, monthly and yearly.
 import { S } from '../store.js';
 import * as P from '../projector.js';
 import * as A from '../actuals.js';

@@ -7,7 +7,7 @@ const FREQ = ['Monthly', 'Quarterly', 'Yearly', 'Daily'];
 const rerender = () => window.dispatchEvent(new Event('rerender'));
 const green = (v) => h('span', { class: 'pos' }, v);
 /** Interest only (never the amount lent or deposited): added to the balance, or paid out so far at the stated rate. */
-const interestSoFar = (x, asOf) => (x.principal > 0 ? (x.interestType === 'Payout' ? Math.max(0, (new Date(asOf) - new Date(x.depositDate)) / 864e5) * x.principal * x.rate / 365 : x.accrued || 0) : 0);
+const interestSoFar = (x, asOf) => (x.principal > 0 ? (x.interestType === 'Payout' ? C.interestReceived(x, asOf) : x.accrued || 0) : 0);
 const sumInterest = (list, asOf) => list.reduce((a, x) => a + interestSoFar(x, asOf), 0);
 
 /** Close a bond, FD or loan: record what came back, optionally credit a bank account, keep it in the Closed list. */
@@ -49,14 +49,16 @@ function depositForm(kind, it) {
       { key: 'rate', label: 'Interest rate (0.086 = 8.6%)', type: 'number', required: true },
       { key: 'interestType', label: 'Interest', type: 'select', options: [{ value: 'Compound', label: 'Added to the balance (compound)' }, { value: 'Payout', label: 'Paid out regularly' }] },
       { key: 'compound', label: 'Compounding / payout', type: 'select', options: FREQ },
+      { key: 'payoutAmount', label: 'Amount you receive each payout (₹, optional)', type: 'number', showIf: (v) => v.interestType === 'Payout', hint: 'What actually reaches you each month, quarter or year (as set in Compounding / payout). Interest received so far and the monthly income use it. Leave empty to use the rate.' },
       { key: 'tenure', label: 'Tenure', type: 'number', half: true, required: true }, { key: 'tenureType', label: 'Tenure unit', type: 'select', options: ['Years', 'Months', 'Days'], half: true },
       { key: 'depositDate', label: 'Started on', type: 'date', required: true }, { key: 'maturityDate', label: 'Matures on', type: 'date', required: true },
     ],
     onSave: (v) => mutate((d) => {
       const opt = kind === 'fd' ? 'issuer' : 'borrower';
       v[opt] = String(v[opt] || '').trim(); const keep = v[opt]; if (!keep) delete v[opt];
+      if (!(Number(v.payoutAmount) > 0)) delete v.payoutAmount;
       if (isNew) d[key].push({ id: nextId(kind === 'fd' ? 'fd' : 'ln', d[key]), ...v });
-      else { const t = d[key].find((x) => x.id === it.id); Object.assign(t, v); delete t.accruedOverride; if (!keep) delete t[opt]; }
+      else { const t = d[key].find((x) => x.id === it.id); Object.assign(t, v); delete t.accruedOverride; if (!keep) delete t[opt]; if (!(Number(v.payoutAmount) > 0)) delete t.payoutAmount; }
     }),
     onDelete: isNew ? null : () => mutate((d) => { d[key] = d[key].filter((x) => x.id !== it.id); }),
     deleteMessage: 'Delete this completely? Use “Close it” instead to keep a history.',

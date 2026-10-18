@@ -1,5 +1,5 @@
 // Net worth report: the month-end snapshots as one line, today's position, and a different-coloured line projected to December.
-// Snapshots come from the Wealth projector (month-end check-ins). Months that only exist in the Plan sheet are included too.
+// Snapshots come from the Wealth outlook (month-end check-ins). Months that only exist in the Plan sheet are included too.
 import { S } from '../store.js';
 import * as C from '../calc.js';
 import * as P from '../projector.js';
@@ -14,7 +14,7 @@ const monthsBetween = (a, b) => { const out = []; for (let m = a; m <= b; m = C.
 
 /**
  * The plan as it was set at the start, month by month: the Plan sheet's own path (start position plus the planned saving
- * each month, never re-based on what really happened), then any Wealth projector year plan for months the sheet does not cover.
+ * each month, never re-based on what really happened), then any Wealth outlook year plan for months the sheet does not cover.
  */
 export function plannedByMonth(data, all) {
   const out = new Map();
@@ -58,7 +58,7 @@ export function render() {
   const planned = plannedByMonth(data, all);
   const root = h('div', { class: 'page' });
   if (actual.length < 2) {
-    root.append(h('div', { class: 'card' }, h('p', null, 'The graph needs at least two month-end snapshots.'), h('p', { class: 'note' }, 'Save one on the last day of each month under Wealth projector → This year → Month-end check-in. Month-ends you typed into the Plan sheet can be brought in from the Month by month table there.')));
+    root.append(h('div', { class: 'card' }, h('p', null, 'The graph needs at least two month-end snapshots.'), h('p', { class: 'note' }, 'Save one on the last day of each month under Wealth outlook → This year → Month-end check-in. Month-ends you typed into the Plan sheet can be brought in from the Month by month table there.')));
     return root;
   }
   // the window
@@ -95,7 +95,7 @@ export function render() {
   if (prj.length) series.push({ name: 'Projected from today', values: pVals, dashed: true, color: 3 });
   root.append(section('Net worth, month by month', h('div', null,
     lineChart({ labels, fmt: money, yMin: Math.floor((lo * 0.97) / 1e5) * 1e5, height: 260, series }),
-    h('p', { class: 'note' }, `The solid line is each month-end snapshot, ending at today. ${havePlan ? 'The dotted line is the plan as it was made at the start (the Plan sheet, or the year plan in the Wealth projector), so the gap between the two is how far you have moved from it. ' : ''}${prj.length ? `The dashed line carries today’s position to December using ${hasPlan ? 'your ' + year + ' plan' : 'the standard assumptions (no ' + year + ' plan saved yet)'} and the market outlook set under Wealth projector.` : ''}`))));
+    h('p', { class: 'note' }, `The solid line is each month-end snapshot, ending at today. ${havePlan ? 'The dotted line is the plan as it was made at the start (the Plan sheet, or the year plan in the Wealth outlook), so the gap between the two is how far you have moved from it. ' : ''}${prj.length ? `The dashed line carries today’s position to December using ${hasPlan ? 'your ' + year + ' plan' : 'the standard assumptions (no ' + year + ' plan saved yet)'} and the market outlook set under Wealth outlook.` : ''}`))));
 
   const rows = act.concat(prj).map((r, i, a) => ({ ...r, change: i ? r.value - a[i - 1].value : null, plan: planned.has(r.month) ? planned.get(r.month) : null, current: r.month === cur }));
   root.append(section('The numbers', h('div', null, table([
@@ -106,6 +106,6 @@ export function render() {
     { label: 'Change', mob: 'under', mlabel: 'change ', cls: 'r', render: (r) => (r.change == null ? h('span', { class: 'muted' }, '–') : h('span', { class: tone(r.change) }, signed(r.change))) },
     { label: 'Source', mob: 'under', render: (r) => h('span', { class: r.src === 'Projected' ? 'muted' : '' }, r.src) },
   ].filter(Boolean), rows, { rowClass: (r) => (r.current ? 'cur-row' : r.src === 'Projected' ? 'proj-row' : '') }),
-  h('p', { class: 'note' }, '“Plan sheet” months were typed in the Plan sheet before snapshots began; “Snapshot” months are saved on the Wealth projector. Change is against the month before. “Against plan” is net worth minus the planned net worth for that month.'))));
+  h('p', { class: 'note' }, '“Plan sheet” months were typed in the Plan sheet before snapshots began; “Snapshot” months are saved on the Wealth outlook. Change is against the month before. “Against plan” is net worth minus the planned net worth for that month.'))));
   return root;
 }

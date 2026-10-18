@@ -1,4 +1,4 @@
-// Wealth projector → Market outlook: what shares, funds and gold could do to the year end under each outlook.
+// Wealth outlook → Market outlook: what shares, funds and gold could do to the year end under each outlook.
 import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
 import * as P from '../projector.js';

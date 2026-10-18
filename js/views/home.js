@@ -6,7 +6,8 @@ import { strip, legend, hbars, lineChart, donut, spark, color, riskColor } from 
 import * as R from '../risk.js';
 import { rateHistory, ageText } from './gold.js';
 import { homeCard as loansCard } from './loans.js';
-import { groupedTable, GROUPS, groupOfClass } from './groupmix.js';
+import { GROUPS } from './groupmix.js';
+import { allocationBody } from './allocview.js';
 
 let selMonth = null;
 const rerender = () => window.dispatchEvent(new Event('rerender'));
@@ -137,7 +138,10 @@ function breakupCard(all) {
     h('p', { class: 'note' }, 'Gain is today’s value minus what you put in. Details are on each tab under Shares & funds.')));
 }
 
-/** Things that need a look: overdue money, old prices, loans, behind plan. */
+const DISMISS = 'fw.dismissed';
+const dismissed = () => { try { const o = JSON.parse(localStorage.getItem(DISMISS) || '{}'), t = C.todayISO(); return Object.fromEntries(Object.entries(o).filter(([, d]) => d === t)); } catch (e) { return {}; } };
+const setDismissed = (o) => { try { localStorage.setItem(DISMISS, JSON.stringify(o)); } catch (e) { /* private window */ } rerender(); };
+/** Things that need a look: overdue money, old prices, loans, behind plan. Each can be hidden for the rest of today (this device only). */
 function attention(data, all) {
   const out = [];
   const soon = C.upcoming(data, all, 30).filter((u) => u.kind !== 'Loan EMI'), overdue = soon.filter((u) => u.days < 0);
@@ -153,11 +157,18 @@ function attention(data, all) {
   const age = at ? Math.round((Date.now() - new Date(at).getTime()) / 864e5) : null;
   if (age == null || age >= 3) out.push({ title: 'Share and fund prices are ' + (age == null ? 'not fetched yet' : age + ' days old'), sub: 'Refresh on Shares & funds', value: '', tone: 'warn', href: '#/equity' });
   if (all.loans.monthlyInterest > all.cfTotal.perMonth) out.push({ title: 'Loan interest is more than the interest you earn', sub: `${money(all.loans.monthlyInterest)} out, ${money(all.cfTotal.perMonth)} in each month`, value: '', tone: 'neg', href: '#/fixed/loans' });
-  return out.length ? section('Needs a look', rowList(out.map((o) => ({ title: o.title, sub: o.sub, value: o.value, tone: o.tone, onClick: () => { location.hash = o.href; } })))) : null;
+  const hid = dismissed();
+  const keyOf = (o) => o.title;
+  const shown = out.filter((o) => !hid[keyOf(o)]), nHid = out.length - shown.length;
+  if (!shown.length) return null;
+  const today = C.todayISO();
+  return section('Needs a look', h('div', null, rowList(shown.map((o) => ({ title: o.title, sub: o.sub, value: o.value, tone: o.tone, onClick: () => { location.hash = o.href; },
+    extra: h('button', { type: 'button', class: 'small dismiss', title: 'Hide this until tomorrow', 'aria-label': 'Hide until tomorrow: ' + o.title, onclick: (e) => { e.stopPropagation(); setDismissed({ ...hid, [keyOf(o)]: today }); } }, 'Hide for today') }))),
+    nHid ? h('p', { class: 'note' }, `${nHid} hidden until tomorrow. `, h('a', { href: '#', onclick: (e) => { e.preventDefault(); setDismissed({}); } }, 'Show again')) : null));
 }
 
 function riskState(all) {
-  // risk groups and limits come from the settings on the Wealth projector > Risk limits tab
+  // risk groups and limits come from the settings on the Wealth outlook > Risk limits tab
   const cfg = R.riskCfg(S.data), ev = R.evaluate(cfg, R.stateNow(S.data, all));
   const pc1 = (x) => (Math.round(x * 1000) / 10) + '%';
   const ofw = (b) => (b.kind === 'item' ? ' ' + R.ofText(b.base) : b.of && b.of !== 'total' ? ' ' + R.ofText(b.of) : '');
@@ -168,41 +179,10 @@ function riskState(all) {
   return { cfg, ev, pc1, lim, flags, nears };
 }
 
-let allocMode = (() => { try { return localStorage.getItem('fw.allocMode') === 'risk' ? 'risk' : 'cat'; } catch (e) { return 'cat'; } })();
-let allocDrill = null;
-const setAlloc = (m, d) => { allocMode = m; allocDrill = d; try { localStorage.setItem('fw.allocMode', m); } catch (e) { /* private window */ } rerender(); };
-
 /** Where the money is, grouped by kind of investment (Debts, Gold, Equity, Others) or by risk. Tap a group in the chart or list to see what is inside it. */
 function allocation(all) {
-  const { cfg, ev, pc1, lim } = riskState(all);
-  const kinds = ev.classes.filter((c) => c.value > 1).sort((a, b) => b.value - a.value);
-  const tot = kinds.reduce((a, c) => a + c.value, 0);
-  const groups = allocMode === 'cat' ? GROUPS : cfg.buckets.map((b, i) => ({ id: b.id, label: b.name, color: riskColor(b.id, i, cfg.buckets.length) }));
-  const gOf = allocMode === 'cat' ? (c) => groupOfClass(c.key) : (c) => c.bucket;
-  const parents = groups.map((g) => ({ id: g.id, label: g.label, color: g.color, value: kinds.filter((c) => gOf(c) === g.id).reduce((a, c) => a + c.value, 0) })).filter((p) => p.value > 0);
-  const drill = parents.find((p) => p.id === allocDrill) || null;
-  const toneCls = (b) => (b.over ? 'neg' : b.near ? 'warn' : '');
-  const share = (v, t) => (t > 0 ? (Math.round((v / t) * 1000) / 10) + '%' : '–');
-  const toggle = h('nav', { class: 'seg slim', 'aria-label': 'Group by' }, [['cat', 'By investment type'], ['risk', 'By risk']].map(([k, l]) => h('a', { href: '#', class: allocMode === k ? 'on' : '', onclick: (e) => { e.preventDefault(); setAlloc(k, null); } }, l)));
-  const gi = new Map(parents.map((p, i) => [p.id, i]));
-  const chart = !drill
-    ? h('div', { class: 'alloc-chart' }, donut(parents, { fmt: money, center: compact(tot), sub: 'total assets', onSelect: (p) => setAlloc(allocMode, p.id), size: 210 }), h('p', { class: 'note' }, 'Tap a slice to zoom into it. The colours match the list below.'))
-    : h('div', { class: 'alloc-chart' }, h('button', { type: 'button', class: 'back-link', onclick: () => setAlloc(allocMode, null) }, '← All groups'),
-      donut(kinds.filter((c) => gOf(c) === drill.id).map((c) => ({ label: c.name, value: c.value })), { fmt: money, center: compact(drill.value), sub: `${share(drill.value, tot)} of all`, size: 210 }));
-  const bar = (v, t, g) => h('span', { class: 'mbar', title: share(v, t) }, h('i', { style: { width: Math.max(2, (t > 0 ? v / t : 0) * 100) + '%' } }));
-  const sumOf = (it) => it.reduce((a, c) => a + c.value, 0);
-  const table = groupedTable({
-    rows: kinds, groups, groupOf: gOf, footerLabel: 'Total assets', parentDot: true, openIds: drill ? [drill.id] : [],
-    childDot: (g, ri) => (drill && drill.id === g.id ? color(ri) : null),
-    cols: [
-      { label: allocMode === 'cat' ? 'Type' : 'Risk group' },
-      { label: 'Amount', cls: 'r', parent: (it) => money(sumOf(it)), child: (c) => money(c.value), total: () => money(tot) },
-      { label: 'Of all', cls: 'r', parent: (it) => h('span', { class: 'share' }, share(sumOf(it), tot), bar(sumOf(it), tot)), child: (c) => h('span', { class: 'share' }, share(c.value, tot), bar(c.value, tot)), total: () => '100%' },
-      { label: 'Within group', cls: 'r', hide: true, parent: () => '', child: (c) => share(c.value, sumOf(kinds.filter((k) => gOf(k) === gOf(c)))) },
-      { label: 'Limit', cls: 'r', hide: true, parent: () => '', child: (c) => h('span', { class: toneCls(c) }, c.max != null || c.maxAmt != null ? `${lim(c)}${c.over ? ' · over' : c.near ? ' · close' : ''}` : '–') },
-    ],
-  });
-  return section('Allocation & risk', h('div', { class: 'alloc' }, h('div', { class: 'alloc-top' }, toggle), h('div', { class: 'alloc-grid' }, chart, h('div', null, table, h('p', { class: 'note' }, 'Tap a group to open or close it. Each kind shows its share of everything and of its group.')))));
+  const { cfg, ev } = riskState(all);
+  return section('Allocation & risk', allocationBody(cfg, ev));
 }
 
 /** Over-limit and close-to-limit holdings, against the limits set under Risk. */
@@ -245,9 +225,8 @@ function returnsCard(data, all, rets, cov) {
     const it = rets.filter((r) => groupOf(r) === g.id);
     const invested = it.reduce((a, r) => a + r.invested, 0), value = it.reduce((a, r) => a + r.value, 0), gain = value - invested;
     // the group's XIRR comes from all its rows' dated cash flows together; estimates from an assumed rate stay out
-    const good = it.filter((r) => r.xirr != null && r.flows && !r.estimated);
-    const x = good.length ? C.xirr(good.flatMap((r) => r.flows)) : null;
-    return { it, invested, value, gain, x, partial: good.length < it.length, ret: invested ? gain / invested : null };
+    const gx = C.groupXirr(it), x = gx.xirr;
+    return { it, invested, value, gain, x, partial: gx.count < it.length, ret: invested ? gain / invested : null };
   };
   const rows = GROUPS.map((g) => ({ g, p: parent(g) })).filter((x) => x.p.it.length);
   const tbl = h('div', { class: 'rets' }, rows.map(({ g, p }, i) => h('details', { class: 'ret-grp', open: false },

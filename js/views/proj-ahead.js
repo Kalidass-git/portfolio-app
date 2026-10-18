@@ -1,4 +1,4 @@
-// Wealth projector → Years ahead: where you could stand in 5 to 25 years, from salary growth, expenses, new investments and returns.
+// Wealth outlook → Years ahead: where you could stand in 5 to 25 years, from salary growth, expenses, new investments and returns.
 import { S, mutate } from '../store.js';
 import * as P from '../projector.js';
 import { h, money, compact, pct, monthLabel, section, stat, table, btn, formDialog, canEdit, toast, setOptions } from '../ui.js';
@@ -7,6 +7,7 @@ import { rerender, outlooks, ensure, signed, pc, tone, outlookToggle, outlookSel
 import { currentPlan } from './proj-year.js';
 import { groupedTable, groupOfClass, GROUPS } from './groupmix.js';
 
+const yrs = (n) => (n === 1 ? '1 year' : n + ' years');
 let compare = false, viewHorizon = null, netView = 'net', catPick = 'all';
 const frac = (x) => (x == null || x === '' ? 0 : Number(x) / 100);
 const pctIn = (x) => (x == null || x === '' ? '' : Math.round(x * 10000) / 100);
@@ -63,7 +64,7 @@ export function render(root) {
   const year0 = (r) => monthLabel(r.month);
 
   // ---------- controls ----------
-  const hz = h('select', { 'aria-label': 'Years to look ahead', onchange: (e) => { viewHorizon = +e.target.value; if (canEdit()) setOwn({ horizon: viewHorizon }); else rerender(); } }, [2, 3, 4, 5, 7, 10, 15, 20, 25].map((n) => h('option', { value: n, selected: n === s.horizon }, `${n} years`)));
+  const hz = h('select', { 'aria-label': 'Years to look ahead', onchange: (e) => { viewHorizon = +e.target.value; if (canEdit()) setOwn({ horizon: viewHorizon }); else rerender(); } }, [1, 2, 3, 4, 5, 7, 10, 15, 20, 25].map((n) => h('option', { value: n, selected: n === s.horizon }, yrs(n))));
   root.append(h('div', { class: 'filters' }, h('label', null, 'Look ahead ', hz), h('label', { class: 'check-inline' }, h('input', { type: 'checkbox', checked: compare, onchange: (e) => { compare = e.target.checked; rerender(); } }), ' Compare all outlooks')));
   root.append(section('Market outlook for the years ahead', h('div', null,
     outlookToggle(s.a.outlook, (id) => canEdit() && setOwn({ outlook: Object.fromEntries(P.MARKET.map((k) => [k, id])) }), { disabled: !canEdit() }),
@@ -76,23 +77,24 @@ export function render(root) {
   const hit = s.target ? rows.find((r) => r.nw >= s.target) : null;
   const need = s.target && !hit ? P.extraMonthly(start, s.a, oc, months, s.target) : 0;
   root.append(h('div', { class: 'stats' },
-    stat(`Net worth in ${s.horizon} years`, money(end.nw), `${monthLabel(end.month)}, from ${money(b.net)} today`),
+    stat(`Net worth in ${yrs(s.horizon)}`, money(end.nw), `${monthLabel(end.month)}, from ${money(b.net)} today`),
     stat('Interest income each month then', money(end.interest), cover != null ? `pays ${Math.round(cover * 100)}% of the ${money(expOut)} monthly spending` : ''),
     s.target ? (hit ? stat('Target reached', monthLabel(hit.month), `${money(s.target)} · ${Math.round((rows.indexOf(hit) + 1) / 12 * 10) / 10} years`) : stat('Target not reached', h('span', { class: 'neg' }, `${money(s.target - end.nw)} short`), need > 0 ? `save ${money(need)} more a month (earn more or spend less) to get there` : 'in this time')) : stat('Target', 'Not set', 'add one in the assumptions'),
     stat('Saved each year at the end', money(yearRows[yearRows.length - 1] ? (byYearFlows(rows, s.horizon - 1)) : 0), 'income minus spending, before new investments')));
 
   // ---------- chart ----------
-  const labels = [monthLabel(b.month), ...yearRows.map(year0)];
+  const monthly = s.horizon <= 2, pts = monthly ? rows : yearRows, stepK = monthly ? 1 : 12;   // a short look-ahead is drawn month by month
+  const labels = [monthLabel(b.month), ...pts.map(year0)];
   const line = (rr) => [b.net, ...rr.map((r, i) => (r ? r.nw : null))];
   const series = [];
   if (compare) {
     const sc = P.scenarios(start, s.a, oc, months);
-    sc.forEach((x, i) => series.push({ name: `${x.outlook.name} (${pc(x.outlook.rate, 0)})`, values: [b.net, ...Array.from({ length: s.horizon }, (_, k) => x.rows[k * 12 + 11].nw)], color: i }));
-  } else series.push({ name: 'Net worth', values: line(yearRows), color: 0 });
+    sc.forEach((x, i) => series.push({ name: `${x.outlook.name} (${pc(x.outlook.rate, 0)})`, values: [b.net, ...Array.from({ length: pts.length }, (_, k) => x.rows[k * stepK + stepK - 1].nw)], color: i }));
+  } else series.push({ name: 'Net worth', values: line(pts), color: 0 });
   if (s.target) series.push({ name: 'Target', values: labels.map(() => s.target), dashed: true, color: 7 });
   // by category: debts, gold, equity and others, each in its own colour
   const sumGroup = (vals, gid) => P.CLASSES.filter((c) => groupOfClass(c.key) === gid).reduce((a, c) => a + ((vals && vals[c.key]) || 0), 0);
-  const catSeries = GROUPS.map((g, gi) => ({ id: g.id, name: g.label, color: gi, values: [sumGroup(b.values, g.id), ...yearRows.map((r) => (r ? sumGroup(r.values, g.id) : null))] })).filter((x) => x.values.some((v) => v > 1));
+  const catSeries = GROUPS.map((g, gi) => ({ id: g.id, name: g.label, color: gi, values: [sumGroup(b.values, g.id), ...pts.map((r) => (r ? sumGroup(r.values, g.id) : null))] })).filter((x) => x.values.some((v) => v > 1));
   const growth = catSeries.map((x) => { const a = x.values[0], z = x.values[x.values.length - 1]; return { ...x, now: a, far: z, change: z - a, mult: a > 1 ? z / a : null, cagr: a > 1 && s.horizon ? Math.pow(z / a, 1 / s.horizon) - 1 : null }; });
   if (catPick !== 'all' && !catSeries.some((x) => x.id === catPick)) catPick = 'all';
   const tabs = h('nav', { class: 'seg slim', 'aria-label': 'Chart view' }, [['net', 'Net worth'], ['cats', 'By category']].map(([k, l]) => h('a', { href: '#', class: netView === k ? 'on' : '', onclick: (e) => { e.preventDefault(); netView = k; rerender(); } }, l)));
@@ -106,7 +108,7 @@ export function render(root) {
       table([
         { label: 'Category', host: true, render: (x) => h('span', null, h('i', { class: 'gdot', style: { background: color(x.color) } }), x.name, fastest[0] && fastest[0].id === x.id && fastest.length > 1 ? h('small', { class: 'now-tag' }, ' fastest') : null) },
         { label: 'Today', cls: 'r', get: (x) => money(x.now) },
-        { label: `In ${s.horizon} years`, cls: 'r', get: (x) => money(x.far) },
+        { label: `In ${yrs(s.horizon)}`, cls: 'r', get: (x) => money(x.far) },
         { label: 'Grows by', cls: 'r', mob: 'under', mlabel: '', render: (x) => h('span', { class: x.change >= 0 ? 'pos' : 'neg' }, (x.change >= 0 ? '+' : '−') + money(Math.abs(x.change))) },
         { label: 'Times', cls: 'r', mob: 'hide', get: (x) => (x.mult == null ? '–' : x.mult.toFixed(2) + '×') },
         { label: 'Yearly growth', cls: 'r', mob: 'under', mlabel: 'per year ', get: (x) => (x.cagr == null ? '–' : pct(x.cagr, 1)) },
@@ -121,7 +123,7 @@ export function render(root) {
   const nowGrp = [['Cash', b.values.cash || 0], ['Fixed income (bonds, lending, FDs, chits, insurance)', (b.values.bonds || 0) + (b.values.lending || 0) + (b.values.fds || 0) + (b.values.chits || 0) + (b.values.lic || 0) + (b.values.other || 0)], ['EPF & PPF', b.values.pf || 0], ['Shares, ETFs and funds', (b.values.shares || 0) + (b.values.etfs || 0) + (b.values.funds || 0)], ['Gold', b.values.gold || 0]].filter((x) => x[1] > 1).map(([label, value]) => ({ label, value }));
   root.append(h('div', { class: 'grid2' },
     section('What you hold today', h('div', null, donut(nowGrp, { fmt: money, center: compact(b.net + b.liab), sub: 'assets', size: 190 }), legend(nowGrp, { fmt: money }))),
-    section(`What you could hold in ${s.horizon} years`, h('div', null, donut(grp, { fmt: money, center: compact(end.assets), sub: 'assets', size: 190 }), legend(grp, { fmt: money })))));
+    section(`What you could hold in ${yrs(s.horizon)}`, h('div', null, donut(grp, { fmt: money, center: compact(end.assets), sub: 'assets', size: 190 }), legend(grp, { fmt: money })))));
 
   // ---------- by class: today, this year end, horizon ----------
   const yEnd = rows.find((r) => r.month === `${String(b.month).slice(0, 4)}-12`) || rows[0];
@@ -139,7 +141,7 @@ export function render(root) {
         { label: 'Share today', cls: 'r', hide: true, parent: (it) => share(sumOf(it, 'now'), tNow), child: (x) => share(x.now, tNow) },
         { label: `End of ${String(yEnd.month).slice(0, 4)}`, cls: 'r', parent: (it) => money(sumOf(it, 'yr')), child: (x) => money(x.yr), total: () => money(tYr) },
         { label: 'Share', cls: 'r', hide: true, parent: (it) => share(sumOf(it, 'yr'), tYr), child: (x) => share(x.yr, tYr) },
-        { label: `In ${s.horizon} years`, cls: 'r', parent: (it) => money(sumOf(it, 'far')), child: (x) => money(x.far), total: () => money(tFar) },
+        { label: `In ${yrs(s.horizon)}`, cls: 'r', parent: (it) => money(sumOf(it, 'far')), child: (x) => money(x.far), total: () => money(tFar) },
         { label: 'Share ', cls: 'r', hide: true, parent: (it) => share(sumOf(it, 'far'), tFar), child: (x) => share(x.far, tFar) },
       ],
     }) : h('p', { class: 'empty' }, 'Nothing to show.'),
@@ -153,7 +155,7 @@ export function render(root) {
   root.append(section('Interest income: how it grows', h('div', null,
     h('div', { class: 'stats' },
       stat('Interest each month now', h('span', { class: 'pos' }, money(first ? first.interest : 0)), `paid out by bonds and lending, after tax · ${money(first ? perDay(first) : 0)} a day with compounding`),
-      stat(`Interest each month in ${s.horizon} years`, h('span', { class: 'pos' }, money(end.interest)), `${money(perDay(end))} a day credited · debt investments ${compact(debtSum(end))}`)),
+      stat(`Interest each month in ${yrs(s.horizon)}`, h('span', { class: 'pos' }, money(end.interest)), `${money(perDay(end))} a day credited · debt investments ${compact(debtSum(end))}`)),
     lineChart({ labels: yearRows.map(year0), fmt: money, yMin: 0, series: [{ name: 'Interest paid out each month', values: yearRows.map((r) => r.interest), color: 2 }, { name: 'Interest added to deposits, EPF and chits each month', values: yearRows.map((r) => r.accrual || 0), color: 4 }] }),
     table([
       { label: 'Year ending', host: true, get: (x) => year0(x.r) },

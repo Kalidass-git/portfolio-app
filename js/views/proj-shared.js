@@ -1,4 +1,4 @@
-// Wealth projector: pieces shared by its three tabs (outlook toggle, forms for plans, one-offs and new investments).
+// Wealth outlook: pieces shared by its three tabs (outlook toggle, forms for plans, one-offs and new investments).
 import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
 import * as P from '../projector.js';
