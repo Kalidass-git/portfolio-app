@@ -6,6 +6,7 @@ import { strip, legend, hbars, lineChart, donut, spark, color } from '../charts.
 import * as R from '../risk.js';
 import { rateHistory, ageText } from './gold.js';
 import { homeCard as loansCard } from './loans.js';
+import { groupedTable, GROUPS, groupOfClass } from './groupmix.js';
 
 let selMonth = null;
 const rerender = () => window.dispatchEvent(new Event('rerender'));
@@ -167,21 +168,46 @@ function riskState(all) {
   return { cfg, ev, pc1, lim, flags, nears };
 }
 
-/** Where the money is, how risky it is and how it sits against the limits. The alerts are a card of their own. */
+let allocMode = (() => { try { return localStorage.getItem('fw.allocMode') === 'risk' ? 'risk' : 'cat'; } catch (e) { return 'cat'; } })();
+let allocDrill = null;
+const setAlloc = (m, d) => { allocMode = m; allocDrill = d; try { localStorage.setItem('fw.allocMode', m); } catch (e) { /* private window */ } rerender(); };
+
+/** Where the money is, grouped by kind of investment (Debts, Gold, Equity, Others) or by risk. Tap a group in the chart or list to see what is inside it. */
 function allocation(all) {
-  const rows = all.rows.filter((r) => r.amount > 0).sort((a, b) => b.amount - a.amount).map((r) => ({ label: r.type, value: r.amount }));
   const { cfg, ev, pc1, lim } = riskState(all);
-  const byRisk = ev.buckets.filter((b) => b.value > 0).map((b) => ({ label: b.name, value: b.value }));
+  const kinds = ev.classes.filter((c) => c.value > 1).sort((a, b) => b.value - a.value);
+  const tot = kinds.reduce((a, c) => a + c.value, 0);
+  const groups = allocMode === 'cat' ? GROUPS : cfg.buckets.map((b) => ({ id: b.id, label: b.name }));
+  const gOf = allocMode === 'cat' ? (c) => groupOfClass(c.key) : (c) => c.bucket;
+  const parents = groups.map((g) => ({ id: g.id, label: g.label, value: kinds.filter((c) => gOf(c) === g.id).reduce((a, c) => a + c.value, 0) })).filter((p) => p.value > 0);
+  const drill = parents.find((p) => p.id === allocDrill) || null;
   const toneCls = (b) => (b.over ? 'neg' : b.near ? 'warn' : '');
-  const limited = ev.classes.filter((c) => c.value > 1 || c.max != null).sort((a, b) => b.value - a.value);
-  return section('Allocation & risk', h('div', { class: 'alloc' },
-    h('div', { class: 'alloc-main' }, donut(rows, { fmt: money, center: compact(all.totalAssets), sub: 'total assets' }), legend(rows, { fmt: money })),
-    h('div', { class: 'alloc-risk' },
-      h('p', { class: 'mini-title' }, 'How risky is it'),
-      strip(byRisk, { fmt: money }),
-      h('ul', { class: 'legend' }, ev.buckets.filter((b) => b.value > 0).map((b, i) => h('li', null, h('i', { style: { background: color(i) } }), h('span', { class: 'lg-name' }, b.name), h('span', { class: 'lg-val' }, money(b.value)), h('span', { class: 'lg-pct ' + toneCls(b) }, pc1(b.pct)))))),
-    h('details', { class: 'more' }, h('summary', null, 'Show by kind of holding'),
-      rowList(limited.map((c) => ({ title: c.name, sub: (cfg.buckets.find((b) => b.id === c.bucket) || {}).name + (c.max != null || c.maxAmt != null ? ` · limit ${lim(c)}` : ''), value: money(c.value), valueSub: h('span', { class: toneCls(c) }, pc1(c.pct) + (c.over ? ' over' : c.near ? ' close' : '')) }))))));
+  const share = (v, t) => (t > 0 ? (Math.round((v / t) * 1000) / 10) + '%' : '–');
+  const toggle = h('nav', { class: 'seg slim', 'aria-label': 'Group by' }, [['cat', 'By investment type'], ['risk', 'By risk']].map(([k, l]) => h('a', { href: '#', class: allocMode === k ? 'on' : '', onclick: (e) => { e.preventDefault(); setAlloc(k, null); } }, l)));
+  let chart;
+  if (!drill) {
+    chart = h('div', { class: 'alloc-main' }, donut(parents, { fmt: money, center: compact(tot), sub: 'total assets', onSelect: (p) => setAlloc(allocMode, p.id) }),
+      h('div', null, legend(parents, { fmt: money, onSelect: (p) => setAlloc(allocMode, p.id) }), h('p', { class: 'note' }, 'Tap a group to see what is inside it.')));
+  } else {
+    const kids = kinds.filter((c) => gOf(c) === drill.id).map((c) => ({ label: c.name, value: c.value }));
+    chart = h('div', null, h('button', { type: 'button', class: 'back-link', onclick: () => setAlloc(allocMode, null) }, '← All groups'),
+      h('div', { class: 'alloc-main' }, donut(kids, { fmt: money, center: compact(drill.value), sub: `${share(drill.value, tot)} of everything`, size: 190 }),
+        h('table', { class: 'drill-tbl' }, h('thead', null, h('tr', null, h('th'), h('th', { class: 'r' }, 'Amount'), h('th', { class: 'r' }, 'In ' + drill.label.split(/[ ,]/)[0]), h('th', { class: 'r' }, 'Of all'))),
+          h('tbody', null, kids.map((k, i) => h('tr', null, h('td', null, h('i', { style: { background: color(i) } }), k.label), h('td', { class: 'r' }, money(k.value)), h('td', { class: 'r' }, share(k.value, drill.value)), h('td', { class: 'r' }, share(k.value, tot))))))));
+  }
+  const worst = (it) => (it.some((c) => c.over) ? 'neg' : it.some((c) => c.near) ? 'warn' : '');
+  const table = groupedTable({
+    rows: kinds, groups, groupOf: gOf, footerLabel: 'Total assets',
+    cols: [
+      { label: allocMode === 'cat' ? 'Type' : 'Risk group' },
+      { label: 'Amount', cls: 'r', parent: (it) => money(it.reduce((a, c) => a + c.value, 0)), child: (c) => money(c.value), total: () => money(tot) },
+      { label: 'Of all', cls: 'r', parent: (it) => share(it.reduce((a, c) => a + c.value, 0), tot), child: (c) => share(c.value, tot), total: () => '100%' },
+      { label: 'Within group', cls: 'r', hide: true, parent: () => '100%', child: (c) => share(c.value, kinds.filter((k) => gOf(k) === gOf(c)).reduce((a, k) => a + k.value, 0)) },
+      { label: 'Limit', cls: 'r', hide: true, parent: () => '', child: (c) => h('span', { class: toneCls(c) }, c.max != null || c.maxAmt != null ? `${lim(c)}${c.over ? ' · over' : c.near ? ' · close' : ''}` : '–') },
+    ],
+  });
+  return section('Allocation & risk', h('div', { class: 'alloc' }, h('div', { class: 'alloc-top' }, toggle), chart,
+    h('details', { class: 'more', open: true }, h('summary', null, allocMode === 'cat' ? 'Show by investment type' : 'Show by risk group'), table)));
 }
 
 /** Over-limit and close-to-limit holdings, against the limits set under Risk. */
@@ -217,16 +243,29 @@ function earningBody(all, fold) {
 const earning = (all) => section('Earning every day', earningBody(all, true));
 
 function returnsCard(data, all, rets, cov) {
-  const items = rets.map((r) => {
-    const showRet = !(r.ret == null || r.name.includes('lending') || r.name === 'Bonds');
-    return {
+  const groupOf = (r) => (r.name === 'Gold' ? 'gold' : /^(Stocks|Mutual)/.test(r.name) ? 'equity' : /^(Bonds|FDs|Private lending|EPF|Chits|Insurance)/.test(r.name) ? 'debt' : 'other');
+  const showRet = (r) => !(r.ret == null || r.name.includes('lending') || r.name === 'Bonds');
+  const xirrTxt = (r) => (r.xirr == null ? null : `XIRR ${r.estimated ? '≈ ' : ''}${pct(r.xirr)}`);
+  const parent = (g) => {
+    const it = rets.filter((r) => groupOf(r) === g.id);
+    const invested = it.reduce((a, r) => a + r.invested, 0), value = it.reduce((a, r) => a + r.value, 0), gain = value - invested;
+    // the group's XIRR comes from all its rows' dated cash flows together; estimates from an assumed rate stay out
+    const good = it.filter((r) => r.xirr != null && r.flows && !r.estimated);
+    const x = good.length ? C.xirr(good.flatMap((r) => r.flows)) : null;
+    return { it, invested, value, gain, x, partial: good.length < it.length, ret: invested ? gain / invested : null };
+  };
+  const rows = GROUPS.map((g) => ({ g, p: parent(g) })).filter((x) => x.p.it.length);
+  const tbl = h('div', { class: 'rets' }, rows.map(({ g, p }, i) => h('details', { class: 'ret-grp', open: false },
+    h('summary', null, h('span', { class: 'rg-name' }, h('i', { class: 'dot', style: { background: color(i) } }), h('b', null, g.label)), h('span', { class: 'rg-flow' }, `${compact(p.invested)} in → ${compact(p.value)} now`),
+      h('span', { class: 'rg-gain ' + tone(p.gain) }, `${p.gain >= 0 ? '▲' : '▼'} ${compact(Math.abs(p.gain))}`),
+      h('span', { class: 'rg-x' }, [p.ret != null && g.id !== 'debt' ? pct(p.ret) : null, p.x == null ? null : `XIRR ${pct(p.x)}${p.partial ? '*' : ''}`].filter(Boolean).join(' · ') || '–')),
+    rowList(p.it.map((r) => ({
       title: r.name, sub: `${compact(r.invested)} in → ${compact(r.value)} now`,
       value: h('span', { class: tone(r.gain) }, `${r.gain >= 0 ? '▲' : '▼'} ${compact(Math.abs(r.gain))}`),
-      valueSub: [showRet ? pct(r.ret) : null, r.xirr == null ? null : `XIRR ${r.estimated ? '≈ ' : ''}${pct(r.xirr)}`].filter(Boolean).join(' · ') || null,
-    };
-  });
-  return section('How your investments did', h('div', null, rowList(items),
-    h('p', { class: 'note' }, 'XIRR is the yearly return that accounts for when each rupee went in. It needs dated cash flows, so shares and funds show plain return until buy dates are added. XIRR rows cover ' + pct(cov.coverage, 0) + ' of your assets.' + (cov.xirr != null ? ' Overall XIRR across everything with dates is ' + pct(cov.xirr, 1) + (cov.xirrNoPf != null ? ' (' + pct(cov.xirrNoPf, 1) + ' without EPF and PPF)' : '') + '. It is money-weighted: long-held money, such as EPF at a steady rate, counts for more than newer money.' : '') + ' Bond and lending XIRR assume coupons arrive on schedule. “≈” marks an estimate from an assumed rate (chits and savings); it is left out of the overall figure until the chit is closed with the real amount.')));
+      valueSub: [showRet(r) ? pct(r.ret) : null, xirrTxt(r)].filter(Boolean).join(' · ') || null,
+    }))))));
+  return section('How your investments did', h('div', null, tbl,
+    h('p', { class: 'note' }, 'XIRR is the yearly return that accounts for when each rupee went in. It needs dated cash flows, so shares and funds show plain return until buy dates are added. XIRR rows cover ' + pct(cov.coverage, 0) + ' of your assets.' + (cov.xirr != null ? ' Overall XIRR across everything with dates is ' + pct(cov.xirr, 1) + (cov.xirrNoPf != null ? ' (' + pct(cov.xirrNoPf, 1) + ' without EPF and PPF)' : '') + '. It is money-weighted: long-held money, such as EPF at a steady rate, counts for more than newer money.' : '') + ' Bond and lending XIRR assume coupons arrive on schedule. “≈” marks an estimate from an assumed rate (chits and savings); it is left out of the overall figure until the chit is closed with the real amount. A group’s XIRR is worked out from all its rows’ dated cash flows together; * means some rows are left out because they have no dates or are only estimates. Tap a group to see its rows.')));
 }
 
 function comingUp(data, all) {

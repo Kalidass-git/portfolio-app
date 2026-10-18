@@ -42,9 +42,9 @@ export function strip(items, { fmt, total } = {}) {
   });
   return bar;
 }
-export function legend(items, { fmt } = {}) {
+export function legend(items, { fmt, onSelect = null } = {}) {
   const sum = items.reduce((a, x) => a + Math.max(0, x.value), 0);
-  return h('ul', { class: 'legend' }, items.map((it, i) => h('li', null,
+  return h('ul', { class: 'legend' }, items.map((it, i) => h('li', onSelect ? { class: 'click', tabindex: 0, onclick: () => onSelect(it, i), onkeydown: (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onSelect(it, i)) } : null,
     h('i', { style: { background: color(i) } }),
     h('span', { class: 'lg-name' }, it.label),
     h('span', { class: 'lg-val' }, fmt ? fmt(it.value) : it.value),
@@ -148,7 +148,7 @@ export function barChart({ groups, names, fmt = (v) => v, height = 220, width, c
 export const meter = (v, ci = 0) => h('span', { class: 'meter' }, h('span', { style: { width: Math.min(100, Math.max(0, v * 100)) + '%', background: color(ci) } }));
 
 /** Donut with the grand total in the middle. items: [{label, value}] (colors follow the list order, same as legend()). */
-export function donut(items, { fmt = (v) => v, center = '', sub = '', size = 200 } = {}) {
+export function donut(items, { fmt = (v) => v, center = '', sub = '', size = 200, onSelect = null } = {}) {
   const sum = items.reduce((a, x) => a + Math.max(0, x.value), 0) || 1;
   const cx = 100, cy = 100, R = 92, r = 62;
   const root = svg('svg', { viewBox: '0 0 200 200', class: 'donut-svg', role: 'img', 'aria-label': items.map((i) => `${i.label} ${((i.value / sum) * 100).toFixed(1)}%`).join(', '), style: `max-width:${size}px` });
@@ -166,7 +166,8 @@ export function donut(items, { fmt = (v) => v, center = '', sub = '', size = 200
       const [x1, y1] = pt(R, s), [x2, y2] = pt(R, e), [x3, y3] = pt(r, e), [x4, y4] = pt(r, s), big = e - s > Math.PI ? 1 : 0;
       d = `M${x1.toFixed(2)},${y1.toFixed(2)}A${R},${R} 0 ${big} 1 ${x2.toFixed(2)},${y2.toFixed(2)}L${x3.toFixed(2)},${y3.toFixed(2)}A${r},${r} 0 ${big} 0 ${x4.toFixed(2)},${y4.toFixed(2)}Z`;
     }
-    const seg = svg('path', { d, fill: color(i), class: 'dseg', 'fill-rule': 'evenodd' });
+    const seg = svg('path', { d, fill: color(i), class: 'dseg' + (onSelect ? ' click' : ''), 'fill-rule': 'evenodd' });
+    if (onSelect) { seg.addEventListener('click', () => onSelect(it, i)); seg.setAttribute('tabindex', '0'); seg.setAttribute('role', 'button'); seg.setAttribute('aria-label', 'Show what is inside ' + it.label); seg.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(it, i); } }); }
     hover(seg, () => [h('b', null, it.label), h('div', null, fmt(it.value) + '  ·  ' + ((it.value / sum) * 100).toFixed(1) + '%')]);
     root.append(seg);
   });

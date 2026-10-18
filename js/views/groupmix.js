@@ -18,10 +18,10 @@ export const groupOfAlloc = (key) => ({ bonds: 'debt', lending: 'debt', safe: 'd
  * cols: [{ label, cls, hide (hide on phones), host, parent(items) -> node, child(row) -> node, total(rows) -> node }]
  * The first column is the name column: parent shows the group, child shows the row's own name.
  */
-export function groupedTable({ cols, rows, groupOf, onRow, rowClass, footerLabel = 'Total', open = false }) {
+export function groupedTable({ cols, rows, groupOf, onRow, rowClass, footerLabel = 'Total', open = false, groups = GROUPS }) {
   const t = h('table', { class: 'tbl gt' }, h('thead', null, h('tr', null, cols.map((c, i) => h('th', { class: [c.cls || '', c.hide ? 'hide-sm' : ''].join(' ').trim() }, i === 0 && c.label ? c.label : c.label)))));
   let n = 0;
-  for (const g of GROUPS) {
+  for (const g of groups) {
     const items = rows.filter((r) => groupOf(r) === g.id);
     if (!items.length) continue;
     const tb = h('tbody', { class: 'grp' + (open ? '' : ' collapsed') });

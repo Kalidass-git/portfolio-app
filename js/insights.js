@@ -121,7 +121,7 @@ export function cashCalendar(data, all, nMonths) {
   for (const b of all.bonds) if (b.maturityDate) add(b.maturityDate, b.name + ' matures', b.principal, 'Bond maturity', 'in');
   for (const f of all.fds) if (f.maturityDate) add(f.maturityDate, f.name + ' matures', f.interestType === 'Compound' ? f.principal + f.totalInterest : f.principal, 'FD maturity', 'in');
   for (const l of all.lending) if (l.maturityDate && l.principal > 0) add(l.maturityDate, l.name + ' due back', l.interestType === 'Compound' ? l.principal + l.totalInterest : l.principal, 'Lending back', 'in');
-  for (const s of all.savings) if (s.maturityDate) add(s.maturityDate, s.name + ' matures', s.payout > 0 ? s.payout : s.principal, s.type === 'Chit' ? 'Chit payout' : 'Savings maturity', 'in');
+  for (const s of all.savings) { const end = C.savingEnd(s); if (end && s.type !== 'EPF' && s.type !== 'PPF') { const m = C.savingMaturity(s); add(end, s.name + (m.kind === 'projected' ? ' matures (projected)' : ' matures'), m.amount, s.type === 'Chit' ? 'Chit payout' : 'Savings maturity', 'in'); } }
   // interest paid out every month while it runs
   for (const m of months) {
     const first = m + '-01';
@@ -167,11 +167,11 @@ export function cashCalendar(data, all, nMonths) {
 export function maturityAlerts(data, all, days = 31) {
   const lim = new Date(C.toMs(all.asOf) + days * DAY).toISOString().slice(0, 10);
   const out = [];
-  const push = (it, kind, amount) => { if (it.maturityDate && it.maturityDate <= lim) out.push({ name: it.name, kind, date: it.maturityDate, amount, daysLeft: spanDays(all.asOf, it.maturityDate), overdue: it.maturityDate < all.asOf }); };
+  const push = (it, kind, amount, basis) => { if (it.maturityDate && it.maturityDate <= lim) out.push({ name: it.name, kind, date: it.maturityDate, amount, basis, daysLeft: spanDays(all.asOf, it.maturityDate), overdue: it.maturityDate < all.asOf }); };
   for (const b of all.bonds) push(b, 'Bond', b.principal);
   for (const f of all.fds) push(f, 'Fixed deposit', f.interestType === 'Compound' ? f.principal + f.totalInterest : f.principal);
   for (const l of all.lending) if (l.principal > 0) push(l, 'Private lending', l.interestType === 'Compound' ? l.principal + l.totalInterest : l.principal);
-  for (const s of all.savings) push(s, s.type === 'Chit' ? 'Chit' : s.type || 'Savings', s.payout > 0 ? s.payout : s.principal);
+  for (const s of all.savings) { if (s.type === 'EPF' || s.type === 'PPF') continue; const end = C.savingEnd(s), m = C.savingMaturity(s); if (end) push({ ...s, maturityDate: end }, s.type === 'Chit' ? 'Chit' : s.type || 'Savings', m.amount, m.kind); }
   return out.sort((a, b) => (a.date < b.date ? -1 : 1));
 }
 

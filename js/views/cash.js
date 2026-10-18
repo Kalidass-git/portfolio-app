@@ -234,7 +234,7 @@ function savingForm(sv) {
       { key: 'rate', label: 'Assumed yearly rate (e.g. 0.0825 = 8.25%)', type: 'number', required: true, hint: 'Only used for the interest-per-day figure. The real return of a chit is the XIRR, worked out from your payments.' },
       { key: 'depositDate', label: 'Start date', type: 'date' }, { key: 'maturityDate', label: 'Maturity date', type: 'date' },
       { key: 'tenure', label: 'Tenure', type: 'number', half: true }, { key: 'tenureUnit', label: 'Tenure unit', type: 'select', options: ['Months', 'Years', 'Days'], half: true },
-      { key: 'payout', label: 'Expected payout at the end (₹, optional)', type: 'number', showIf: (v) => v.type === 'Chit' || v.type === 'RD', hint: 'The amount you expect to receive. It gives an estimated XIRR while the chit runs. Close the chit with the real amount to get the actual XIRR.' },
+      { key: 'payout', label: 'Expected payout at the end (₹, optional)', type: 'number', showIf: (v) => v.type === 'Chit' || v.type === 'RD', hint: 'The amount you expect to receive. Leave it empty to project it from the assumed yearly rate. It gives an estimated XIRR while the chit runs. Close the chit with the real amount to get the actual XIRR.' },
       { key: 'desc', label: 'Notes / who to contact', type: 'textarea' },
     ],
     onSave: (v) => mutate((d) => {
@@ -299,9 +299,9 @@ const xirrCell = (s) => (s.xirr == null ? h('span', { class: 'muted' }, '–') :
 function closeSaving(sv) {
   const paid = C.savingPrincipal(sv);
   closeForm({
-    title: 'Close ' + sv.name, amount: sv.payout || paid, desc: `${sv.type} closed: ${sv.name}`,
+    title: 'Close ' + sv.name, amount: Math.round(C.savingMaturity(sv).amount), desc: `${sv.type} closed: ${sv.name}`,
     dateLabel: 'Money received on', amountLabel: 'Amount you received, after commission (₹)',
-    hint: 'Suggested: the expected payout if you entered one, otherwise what you paid in. Change it to what actually reached you; the real XIRR is worked out from this date and amount.',
+    hint: 'Suggested: the expected payout if you entered one, otherwise a projection at the assumed rate. Change it to what actually reached you; the real XIRR is worked out from this date and amount.',
     apply: (d, v, lid) => { const t = d.savings.find((x) => x.id === sv.id); t.closed = { date: v.date, amount: v.amount, acct: v.acct || '', ledgerId: lid, note: v.note || '' }; },
   });
 }

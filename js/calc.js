@@ -80,18 +80,45 @@ const tenureMonths = (sv) => (sv.tenure ? Math.round(sv.tenure * ({ Years: 12, M
  *   closed: the payments plus the amount received when it was closed.
  *   open:   only an estimate, and only when you entered the expected payout. Remaining instalments are assumed equal to the average paid so far.
  */
+/** The date a chit or recurring deposit ends: the one entered, else the first payment plus its tenure. */
+export function savingEnd(sv) {
+  if (sv.maturityDate) return sv.maturityDate;
+  const ents = (sv.entries || []).filter((e) => e.amount > 0 && e.date).map((e) => e.date).sort();
+  const m = tenureMonths(sv);
+  return ents.length && m ? addMonths(ents[0], m - 1) : null;
+}
+/**
+ * What a chit or recurring deposit is expected to pay at its end.
+ * kind 'entered': the expected payout you typed. 'projected': payments so far and the remaining instalments (the average paid so far) grown at the yearly rate to the end date. 'paid': only what has been paid in, when there is no rate or end date to project with.
+ */
+export function savingMaturity(sv) {
+  const paid = savingPrincipal(sv);
+  if (sv.payout > 0) return { amount: sv.payout, kind: 'entered' };
+  const ents = (sv.entries || []).filter((e) => e.amount > 0 && e.date).sort((a, b) => (a.date < b.date ? -1 : 1));
+  const endD = savingEnd(sv);
+  if (endD && ents.length && sv.rate > 0 && sv.type !== 'EPF' && sv.type !== 'PPF') {
+    const end = toMs(endD), fv = (amt, date) => amt * Math.pow(1 + sv.rate, Math.max(0, end - toMs(date)) / DAY / 365);
+    let total = sum(ents, (e) => fv(e.amount, e.date));
+    const avg = sum(ents, (e) => e.amount) / ents.length, left = Math.max(0, tenureMonths(sv) - ents.length);
+    let d = ents[ents.length - 1].date;
+    for (let i = 0; i < left; i++) { d = addMonths(d, 1); if (toMs(d) > end) break; total += fv(avg, d); }
+    return { amount: total, kind: 'projected' };
+  }
+  return { amount: paid, kind: 'paid' };
+}
 export function savingXirr(sv, asOf) {
   if (sv.type === 'EPF' || sv.type === 'PPF') return {};
   const ents = sv.entries.filter((e) => e.amount > 0 && e.date);
   if (!ents.length) return {};
   const flows = ents.map((e) => ({ t: toMs(e.date), amount: -e.amount }));
   if (sv.closed) { const x = xirr(flows.concat([{ t: toMs(sv.closed.date), amount: sv.closed.amount }])); return { xirr: x, xirrKind: 'actual' }; }
-  if (sv.payout > 0 && sv.maturityDate) {
+  const endD = savingEnd(sv);
+  if (sv.payout > 0 && endD) {
     const f = flows.slice(), avg = sum(ents, (e) => e.amount) / ents.length;
     const left = Math.max(0, tenureMonths(sv) - ents.length);
-    let d = ents[ents.length - 1].date;
-    for (let i = 0; i < left; i++) { d = addMonths(d, 1); f.push({ t: toMs(d), amount: -avg }); }
-    f.push({ t: toMs(sv.maturityDate), amount: sv.payout });
+    let d = ents.map((e) => e.date).sort().pop();
+    for (let i = 0; i < left; i++) { d = addMonths(d, 1); if (toMs(d) > toMs(endD)) break; f.push({ t: toMs(d), amount: -avg }); }
+    f.push({ t: toMs(endD), amount: sv.payout });
     return { xirr: xirr(f), xirrKind: 'estimate', xirrBasis: 'payout' };
   }
   // no expected payout: the assumed yearly rate stands in for the return
