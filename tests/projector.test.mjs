@@ -1,0 +1,26 @@
+import fs from 'node:fs';
+import * as C from '../js/calc.js';
+import * as P from '../js/projector.js';
+const data = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const all = C.computeAll(data, { asOf: '2026-10-11', useLive: false });
+let fail = 0;
+const ok = (label, cond, info = '') => { if (!cond) fail++; console.log(cond ? 'ok  ' : 'FAIL', label, info); };
+const b = P.baseline(data, all);
+ok('baseline reconciles to total assets', Math.abs(Object.values(b.values).reduce((a, x) => a + x, 0) - all.totalAssets) < 1);
+const plan = P.newYearPlan(data, all, 2027);
+const oc = P.cfg(data).outlooks;
+const start = { values: plan.baseline.classes, liab: plan.baseline.loans, month: plan.baseline.month };
+const n = P.monthsTo(start.month, 2027);
+const sc = P.scenarios(start, plan.a, oc, n);
+const ends = sc.map((s) => s.end.nw);
+ok('better outlook never ends lower', ends.every((v, i) => i === 0 || v >= ends[i - 1] - 1e-6), ends.map(Math.round).join(' '));
+const flat = P.simulate(start, { ...plan.a, marketRate: 0 }, oc, n);
+ok('simulation has one row per month', flat.length === n);
+const t = plan.target + 2e6;
+const be = P.breakEvenMarket(start, plan.a, oc, n, t);
+if (be == null) ok('break-even reachable', false);
+else { const e = P.simulate(start, { ...plan.a, marketRate: be, invest: plan.a.invest.map((l) => ({ ...l, outlook: null })) }, oc, n).at(-1).nw; ok('break-even market return hits target', Math.abs(e - t) < 1000, `${(be * 100).toFixed(2)}%`); }
+const ex = P.extraMonthly(start, plan.a, oc, n, t);
+const e2 = P.simulate(start, { ...plan.a, otherIncome: (plan.a.otherIncome || 0) + ex }, oc, n).at(-1).nw;
+ok('extra monthly hits target', e2 >= t - 1000 && e2 <= t + 20000, Math.round(ex));
+process.exit(fail ? 1 : 0);

@@ -5,7 +5,6 @@ import { h, money, compact, pct, dateStr, monthLabel, section, monthPicker, rowL
 import { strip, legend, hbars, lineChart, donut, spark, color, riskColor } from '../charts.js';
 import * as R from '../risk.js';
 import { rateHistory, ageText } from './gold.js';
-import { homeCard as loansCard } from './loans.js';
 import { GROUPS } from './groupmix.js';
 import { allocationBody } from './allocview.js';
 
@@ -82,8 +81,8 @@ function tiles(all, data, mc) {
   const dayPctAll = baseAll ? dayAll / baseAll : 0;
   const spent = mc.totalSpent + mc.lifestyle.amount;
   return h('div', { class: 'kpis span-12' },
-    tile('Net monthly inflow', money(all.netMonthly), `${money(all.cfTotal.perMonth)} earned − ${money(all.loans.monthlyInterest)} loan interest`, { tone: tone(all.netMonthly), href: '#/fixed/loans' }),
-    tile('Earning every day', money(all.cfTotal.perDay), `${money(all.cfTotal.perDay - all.loans.monthlyInterest / 30)} after loan interest`, { href: '#/fixed', pop: h('div', null, earningBody(all, false), h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income'))) }),
+    tile('Net monthly inflow', money(all.netMonthly), h('span', null, `${money(all.cfTotal.perMonth)} earned `, all.loans.monthlyInterest > 0 ? h('span', { class: 'neg' }, `− ${money(all.loans.monthlyInterest)} loan interest`) : '− ₹ 0 loan interest'), { tone: tone(all.netMonthly), href: '#/fixed/loans' }),
+    tile('Earning every day', money(all.cfTotal.perDay), h('span', null, `${money(all.cfTotal.perDay - all.loans.monthlyInterest / 30)} after `, h('span', { class: 'neg' }, `${money(all.loans.monthlyInterest / 30)} loan interest`)), { href: '#/fixed', pop: h('div', null, earningBody(all, false), h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income'))) }),
     tile('Markets today', anyDay ? sgn(dayAll) : '–', anyDay ? `${sgp(dayPctAll)} · shares, funds, ETFs, gold` : 'refresh prices to see', { tone: anyDay ? tone(dayAll) : '', href: '#/equity', pop: h('div', null, todayBody(all), h('p', null, h('a', { href: '#/equity' }, 'Open Shares & funds'))) }),
     tile('Spent this month', money(spent), (mc.totalExpected ? `${pct(spent / mc.totalExpected, 0)} of ${money(mc.totalExpected)} budget` : 'no budget income yet') + (mc.notCounted > 0 ? ` · ${compact(mc.notCounted)} not counted` : ''), { tone: mc.totalExpected && spent > mc.totalReceived ? 'neg' : '', href: '#/flow', pop: spentBody(mc, spent), right: true }));
 }
@@ -130,13 +129,6 @@ function todayBody(all) {
 }
 /** Phone only: on a computer this lives in the "Markets today" tile. */
 const todayCard = (all) => section('Today', todayBody(all));
-
-function breakupCard(all) {
-  const { rows, total } = marketGroups(all);
-  const line = (r, bold) => ({ title: bold ? h('b', null, r.name) : r.name, sub: `${money(r.invested)} in → ${money(r.current)} now`, value: h('span', { class: tone(r.gain) }, `${r.gain >= 0 ? '▲' : '▼'} ${money(Math.abs(r.gain))}`), valueSub: pct(r.ret) });
-  return section('Shares, ETFs & funds: how each did', h('div', null, rowList(rows.map((r) => line(r)).concat([line(total, true)])),
-    h('p', { class: 'note' }, 'Gain is today’s value minus what you put in. Details are on each tab under Shares & funds.')));
-}
 
 const DISMISS = 'fw.dismissed';
 const dismissed = () => { try { const o = JSON.parse(localStorage.getItem(DISMISS) || '{}'), t = C.todayISO(); return Object.fromEntries(Object.entries(o).filter(([, d]) => d === t)); } catch (e) { return {}; } };
@@ -210,7 +202,7 @@ function earningBody(all, fold) {
       h('div', null, h('span', { class: 'mini-title' }, 'a day'), h('b', { class: 'pos' }, money(cf.perDay))),
       h('div', null, h('span', { class: 'mini-title' }, 'a month'), h('b', { class: 'pos' }, money(cf.perMonth))),
       h('div', null, h('span', { class: 'mini-title' }, 'a year'), h('b', { class: 'pos' }, compact(cf.perYear)))),
-    h('p', { class: 'summary-line' }, 'After loan interest ', h('b', { class: tone(cf.perDay - out) }, money(cf.perDay - out) + ' a day')),
+    h('p', { class: 'summary-line' }, out > 0 ? [h('span', { class: 'neg' }, 'Loan interest − ' + money(out) + ' a day · ' + money(ln.monthlyInterest) + ' a month'), h('br')] : null, 'After loan interest ', h('b', { class: tone(cf.perDay - out) }, money(cf.perDay - out) + ' a day')),
     fold ? h('details', { class: 'more' }, h('summary', null, `Show the ${rows.length} sources`), list) : list,
     h('p', { class: 'note' }, 'Covers EPF, PPF, chits, RD and LIC, bonds, fixed deposits and private lending. Shares, funds and gold pay no fixed interest, so they are not counted.'));
 }
@@ -226,17 +218,17 @@ function returnsCard(data, all, rets, cov) {
     const invested = it.reduce((a, r) => a + r.invested, 0), value = it.reduce((a, r) => a + r.value, 0), gain = value - invested;
     // the group's XIRR comes from all its rows' dated cash flows together; estimates from an assumed rate stay out
     const gx = C.groupXirr(it), x = gx.xirr;
-    return { it, invested, value, gain, x, partial: gx.count < it.length, ret: invested ? gain / invested : null };
+    return { it, invested, value, gain, x, approx: gx.approx, partial: gx.count < it.length, ret: invested ? gain / invested : null };
   };
   const rows = GROUPS.map((g) => ({ g, p: parent(g) })).filter((x) => x.p.it.length);
   const tbl = h('div', { class: 'rets' }, rows.map(({ g, p }, i) => h('details', { class: 'ret-grp', open: false },
     h('summary', null, h('span', { class: 'rg-name' }, h('i', { class: 'dot', style: { background: color(i) } }), h('b', null, g.label)), h('span', { class: 'rg-flow' }, `${compact(p.invested)} in → ${compact(p.value)} now`),
       h('span', { class: 'rg-gain ' + tone(p.gain) }, `${p.gain >= 0 ? '▲' : '▼'} ${compact(Math.abs(p.gain))}`),
-      h('span', { class: 'rg-x' }, [p.ret != null && g.id !== 'debt' ? 'Return ' + pct(p.ret) : null, p.x == null ? null : `XIRR ${pct(p.x)}${p.partial ? '*' : ''}`].filter(Boolean).join(' · ') || '–')),
+      h('span', { class: 'rg-x' }, [p.ret != null && g.id !== 'debt' ? 'Return ' + pct(p.ret) : null, p.x == null ? null : `XIRR ${p.approx ? '≈ ' : ''}${pct(p.x)}${p.partial ? '*' : ''}`].filter(Boolean).join(' · ') || '–')),
     rowList(p.it.map((r) => ({
       title: r.name, sub: `${compact(r.invested)} in → ${compact(r.value)} now`,
       value: h('span', { class: tone(r.gain) }, `${r.gain >= 0 ? '▲' : '▼'} ${compact(Math.abs(r.gain))}`),
-      valueSub: [showRet(r) ? 'Return ' + pct(r.ret) : null, xirrTxt(r)].filter(Boolean).join(' · ') || null,
+      valueSub: [showRet(r) ? 'Return ' + pct(r.ret) : null, xirrTxt(r), r.xirrSuspect ? 'XIRR hidden: imported trades do not add up' : null].filter(Boolean).join(' · ') || null,
     }))))));
   return section('How your investments did', h('div', null, tbl,
     h('p', { class: 'note' }, '“Return” is the plain gain on the money put in; XIRR is the yearly return that accounts for when each rupee went in, so the two are different numbers. It needs dated cash flows, so shares and funds show plain return until buy dates are added. XIRR rows cover ' + pct(cov.coverage, 0) + ' of your assets.' + (cov.xirr != null ? ' Overall XIRR across everything with dates is ' + pct(cov.xirr, 1) + (cov.xirrNoPf != null ? ' (' + pct(cov.xirrNoPf, 1) + ' without EPF and PPF)' : '') + '. It is money-weighted: long-held money, such as EPF at a steady rate, counts for more than newer money.' : '') + ' Bond and lending XIRR assume coupons arrive on schedule. “≈” marks an estimate from an assumed rate (chits and savings); it is left out of the overall figure until the chit is closed with the real amount. A group’s XIRR is worked out from all its rows’ dated cash flows together; * means some rows are left out because they have no dates or are only estimates. Tap a group to see its rows.')));
@@ -315,7 +307,6 @@ export function render() {
     place(toReceiveCard(data, all), 'span-6'), place(comingUp(data, all), 'span-6'),
     place(thisMonth(data, all, months), 'span-12'),
     place(todayCard(all), 'm-only'), place(earning(all), 'm-only'),
-    place(breakupCard(all), 'span-7'), place(loansCard(all), 'span-5'),
     place(allocation(all), 'span-7'), place(riskAlerts(all), 'span-5'),
     place(returnsCard(data, all, rets, ox), 'span-12')];
   root.append(...parts.filter(Boolean));

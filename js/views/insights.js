@@ -3,10 +3,10 @@ import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
 import * as P from '../projector.js';
 import * as I from '../insights.js';
-import { h, money, compact, pct, dateStr, monthLabel, section, stat, table, btn, segTabs, subTab, setOptions, formDialog, toast, canEdit } from '../ui.js';
+import { h, money, compact, pct, dateStr, monthLabel, section, stat, table, btn, segTabs, subTab, setOptions, formDialog, dialog, toast, canEdit } from '../ui.js';
 import { barChart, lineChart } from '../charts.js';
 import { plannedByMonth } from './networth.js';
-import { groupedTable, groupOfAlloc } from './groupmix.js';
+import { groupedTable } from './groupmix.js';
 
 const TABS = [['tax', 'Tax summary'], ['calendar', 'Cash calendar'], ['review', 'Annual review'], ['anomalies', 'Spending anomalies'], ['allocation', 'Allocation goal']];
 const rerender = () => window.dispatchEvent(new Event('rerender'));
@@ -195,80 +195,139 @@ function anomalies(root) {
 
 // ---------- 5. Allocation goal ----------
 const OUTLOOK_OPTS = P.OUTLOOKS.map((o) => ({ value: o.id, label: `${o.name} (${pct(o.rate, 0)} a year)` }));
+const gname = (id) => (I.GOAL_GROUPS.find((x) => x.id === id) || {}).label || id;
 function allocation(root) {
   const { data, all } = S;
-  const g = data.allocGoal || null;
-  const outlookId = (g && g.outlook) || 'steady';
-  const rate = P.OUTLOOKS.find((o) => o.id === outlookId).rate;
-  const now = I.allocNow(data, all, rate);
-  const total = now.reduce((s, x) => s + x.value, 0);
-  const monthly = g && g.monthly != null ? g.monthly : I.defaultMonthly(data, all);
+  const goal = I.normGoal(data.allocGoal);
+  const outlookId = (goal && goal.outlook) || 'steady';
+  const outlook = P.OUTLOOKS.find((o) => o.id === outlookId);
+  const now = I.allocNow(data, all, outlook.rate);
+  const total = now.reduce((x, y) => x + y.value, 0);
+  const monthly = goal && goal.monthly != null ? goal.monthly : I.defaultMonthly(data, all);
   const link = h('a', { class: 'crosslink', href: '#/projector/ahead' }, 'Wealth outlook');
-  const edit = () => goalForm(g, monthly, outlookId);
-  if (!g || !g.targets) {
+  const edit = () => goalForm(goal, now, monthly, outlookId);
+  if (!goal) {
     root.append(h('div', { class: 'card' }, h('h3', null, 'Set the mix you want to reach'),
-      note('Pick a goal for the seven groups below. The page then shows how long it takes to get there by adding new money each month (without selling anything) and where that money should go.'),
-      h('div', { class: 'row-actions' }, ...I.PRESETS.map((p) => btn(p.name, () => canEdit() ? saveGoal({ targets: p.pct, monthly, outlook: outlookId }) : toast('This device has read-only access.'), 'small')), canEdit() ? btn('Set my own', edit, 'primary small') : null),
+      note('Choose a target for the groups you care about, for example Debts & fixed income 50% and Equity 25%. Anything you leave blank keeps the share it has today, and the rest is split for you. Inside a group you can do the same for its rows.'),
+      h('div', { class: 'row-actions' }, ...I.PRESETS.map((p) => btn(p.name, () => (canEdit() ? saveGoal({ ...I.presetGoal(p.pct), monthly, outlook: outlookId }) : toast('This device has read-only access.')), 'small')), canEdit() ? btn('Set my own', edit, 'primary small') : null),
       note('The three presets are only starting points, not advice. You can change every number.')));
-    root.append(h('h4', null, 'Where you are today'), table([{ label: 'Group', host: true, get: (x) => x.label }, { label: 'Value', cls: 'r', get: (x) => money(x.value) }, { label: 'Share', cls: 'r', get: (x) => pct(total ? x.value / total : 0, 1) }], now, {}));
+    root.append(h('h4', null, 'Where you are today'), groupedTable({ rows: now, groupOf: (x) => I.GROUP_OF[x.key], cols: [{ label: 'Group' }, { label: 'Value', cls: 'r', parent: (it) => money(it.reduce((a, x) => a + x.value, 0)), child: (x) => money(x.value), total: () => money(total) }, { label: 'Share', cls: 'r', parent: (it) => pct(total ? it.reduce((a, x) => a + x.value, 0) / total : 0, 1), child: (x) => pct(total ? x.value / total : 0, 1) }] }));
     return;
   }
-  const res = I.allocPath(now, g.targets, monthly);
-  const tgt = (k) => (g.targets[k] || 0) / 100;
-  const rows = now.map((x) => { const sh = total ? x.value / total : 0, want = tgt(x.key) * total; return { ...x, share: sh, goal: tgt(x.key), gap: sh - tgt(x.key), move: want - x.value, add: res.firstSplit[x.key] || 0 }; });
-  const worst = rows.slice().sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap))[0];
+  const res = I.resolveGoal(goal, now);
+  const pathGoal = Object.fromEntries(Object.entries(res.items).map(([k, v]) => [k, v]));
+  const path = I.allocPath(now, pathGoal, monthly);
+  const gNow = (id) => now.filter((x) => I.GROUP_OF[x.key] === id).reduce((a, x) => a + x.value, 0);
+  const rows = now.map((x) => {
+    const id = I.GROUP_OF[x.key], gv = gNow(id), sh = total ? x.value / total : 0, goalSh = res.items[x.key] / 100, want = goalSh * total;
+    return { ...x, gid: id, share: sh, goal: goalSh, withinNow: gv ? x.value / gv : 0, withinGoal: res.within[x.key] / 100, gap: sh - goalSh, move: want - x.value, add: path.firstSplit[x.key] || 0, auto: !res.itemSet[x.key] };
+  });
+  const grp = I.GOAL_GROUPS.map((g) => { const it = rows.filter((r) => r.gid === g.id); const v = it.reduce((a, r) => a + r.value, 0), goalSh = res.groups[g.id] / 100; return { id: g.id, label: g.label, value: v, share: total ? v / total : 0, goal: goalSh, gap: (total ? v / total : 0) - goalSh, move: goalSh * total - v, auto: res.autoG.includes(g.id) }; });
+  const worst = grp.slice().sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap))[0];
+  const toMove = rows.reduce((a, r) => a + Math.max(0, r.move), 0);
   root.append(h('div', { class: 'pagebar' }, h('span', { class: 'muted' }, 'Set the mix you want and see how long it takes'), h('span', null, link), canEdit() ? btn('Change goal', edit, 'small') : null));
+  if (!res.ok) root.append(h('div', { class: 'card' }, ...res.errors.map((e) => h('p', { class: 'neg' }, e)), note('Open “Change goal” and fix these.')));
   root.append(h('div', { class: 'stats' },
-    stat('Time to reach it', I.monthsText(res.reached), res.reached == null ? 'raise the monthly amount or relax the goal' : `by ${monthLabel(C.addMonths(all.asOf.slice(0, 7) + '-01', res.reached).slice(0, 7), true)}`),
+    stat('Time to reach it', I.monthsText(path.reached), path.reached == null ? 'raise the monthly amount or relax the goal' : `by ${monthLabel(C.addMonths(all.asOf.slice(0, 7) + '-01', path.reached).slice(0, 7), true)}`),
     stat('New money each month', money(monthly), 'from income less spending'),
-    stat('Furthest from goal', worst.label, `${worst.gap > 0 ? 'over' : 'under'} by ${(Math.abs(worst.gap) * 100).toFixed(1)} points`),
-    stat('Market outlook', P.OUTLOOKS.find((o) => o.id === outlookId).name, 'for shares, funds and gold')));
+    stat('Furthest group from goal', worst.label, `${worst.gap > 0 ? 'over' : 'under'} by ${(Math.abs(worst.gap) * 100).toFixed(1)} points`),
+    stat('Would have to move today', money(toMove), 'if you rebalanced at once instead of adding money')));
   const sm = (it, k) => it.reduce((a, x) => a + x[k], 0);
   const gapTxt = (gap) => h('span', { class: Math.abs(gap) <= 0.02 ? 'pos' : 'neg' }, (gap > 0 ? '+' : gap < 0 ? '−' : '') + (Math.abs(gap) * 100).toFixed(1) + ' pts');
   const moveTxt = (mv) => h('span', { class: mv > 0 ? 'pos' : mv < 0 ? 'neg' : '' }, mv > 0 ? 'add ' + money(mv) : mv < 0 ? 'trim ' + money(-mv) : '–');
+  const tag = (auto) => (auto ? h('small', { class: 'muted' }, ' auto') : null);
+  const multi = (id) => rows.filter((r) => r.gid === id).length > 1;
   root.append(section('Goal against today', h('div', null, groupedTable({
-    rows, groupOf: (x) => groupOfAlloc(x.key),
+    rows, groupOf: (x) => x.gid,
     cols: [
       { label: 'Group' },
       { label: 'Now', cls: 'r', parent: (it) => money(sm(it, 'value')), child: (x) => money(x.value), total: () => money(total) },
-      { label: 'Now %', cls: 'r', parent: (it) => pct(sm(it, 'share'), 1), child: (x) => pct(x.share, 1) },
-      { label: 'Goal %', cls: 'r', parent: (it) => pct(sm(it, 'goal'), 1), child: (x) => pct(x.goal, 1), total: () => pct(I.goalTotal(g.targets) / 100, 0) },
-      { label: 'Gap', cls: 'r', hide: true, parent: (it) => gapTxt(sm(it, 'gap')), child: (x) => gapTxt(x.gap) },
+      { label: 'Now %', cls: 'r', parent: (it) => pct(sm(it, 'share'), 1), child: (x) => (multi(x.gid) ? pct(x.withinNow, 1) : '') },
+      { label: 'Goal %', cls: 'r', parent: (it) => h('span', null, pct(sm(it, 'goal'), 1), tag(grp.find((g) => g.id === it[0].gid).auto)), child: (x) => (multi(x.gid) ? h('span', null, pct(x.withinGoal, 1), tag(x.auto)) : '') },
+      { label: 'Gap', cls: 'r', hide: true, parent: (it) => gapTxt(sm(it, 'gap')), child: (x) => (multi(x.gid) ? gapTxt(x.withinNow - x.withinGoal) : '') },
       { label: 'To reach goal today', cls: 'r', hide: true, parent: (it) => moveTxt(sm(it, 'move')), child: (x) => moveTxt(x.move) },
     ],
   }),
-  note('Within 2 points of the goal counts as reached. “To reach goal today” is what would have to move now; the plan below avoids selling and uses new money instead.'))));
-  root.append(section('Where new money should go', h('div', null, res.reached === 0 ? h('p', null, 'You are already inside the goal. Keep adding in the goal proportions:') : null, table([
-    { label: 'Group', host: true, get: (x) => x.label },
-    { label: 'Per month', cls: 'r', get: (x) => money(x.add || (res.reached === 0 ? monthly * x.goal : 0)) },
-    { label: 'Share of new money', cls: 'r', mob: 'under', mlabel: '', get: (x) => (monthly ? pct((x.add || (res.reached === 0 ? monthly * x.goal : 0)) / monthly, 0) : '–') },
-  ], rows.filter((x) => x.add > 0 || res.reached === 0), { empty: 'Add a monthly amount above zero to see the split.' }), note('This is the split for the first month. It shifts toward the groups still short of the goal as the months go by.'))));
-  const scen = [1, 1.5, 2].map((k) => { const r = I.allocPath(now, g.targets, Math.round(monthly * k), {}); return { label: k === 1 ? 'As now' : `${k}× as much`, monthly: Math.round(monthly * k), months: r.reached }; });
-  root.append(section('If you put in more', table([{ label: 'New money', host: true, get: (x) => `${x.label} (${money(x.monthly)} a month)` }, { label: 'Time to reach', cls: 'r', get: (x) => I.monthsText(x.months) }], scen, {})));
-  const keys = I.ALLOC.map((a) => a.key);
-  const yearly = res.path.filter((p) => p.m % 12 === 0 || p.m === res.reached).slice(0, 16);
+  note('A group row is its share of everything you own. The rows inside show the share within that group. “auto” means you left it blank and it follows your current mix. Within 2 points counts as reached. The plan below avoids selling and uses new money instead.'))));
+  root.append(section('Where new money should go', h('div', null, path.reached === 0 ? h('p', null, 'You are already inside the goal. Keep adding in the goal proportions:') : null, groupedTable({
+    rows: rows.map((x) => ({ ...x, amt: x.add || (path.reached === 0 ? monthly * x.goal : 0) })), groupOf: (x) => x.gid,
+    cols: [
+      { label: 'Group' },
+      { label: 'Per month', cls: 'r', parent: (it) => money(sm(it, 'amt')), child: (x) => money(x.amt), total: (rs) => money(sm(rs, 'amt')) },
+      { label: 'Share of new money', cls: 'r', parent: (it) => (monthly ? pct(sm(it, 'amt') / monthly, 0) : '–'), child: (x) => (monthly ? pct(x.amt / monthly, 0) : '–') },
+    ],
+  }), note('This is the split for the first month. It shifts toward the groups still short of the goal as the months go by. Add a monthly amount above zero to see it.'))));
+  const scen = [1, 1.5, 2].map((k) => { const r = I.allocPath(now, pathGoal, Math.round(monthly * k), {}); return { label: k === 1 ? 'As now' : `${k}× as much`, monthly: Math.round(monthly * k), months: r.reached }; });
+  const need = [3, 5, 10].map((y) => ({ y, m: I.monthlyFor(now, pathGoal, y) }));
+  root.append(section('If you put in more', h('div', null, table([{ label: 'New money', host: true, get: (x) => `${x.label} (${money(x.monthly)} a month)` }, { label: 'Time to reach', cls: 'r', get: (x) => I.monthsText(x.months) }], scen, {}),
+    h('h4', null, 'What it takes to get there by a date'),
+    table([{ label: 'Reach the goal in', host: true, get: (x) => `${x.y} years` }, { label: 'Needs a month', cls: 'r', get: (x) => (x.m == null ? 'not possible without selling' : x.m === 0 ? 'nothing extra' : money(x.m)) }, { label: 'Compared with now', cls: 'r', mob: 'under', mlabel: '', get: (x) => (x.m == null || !monthly ? '' : x.m <= monthly ? 'within your usual amount' : `${(x.m / monthly).toFixed(1)}× your usual amount`) }], need, {}))));
+  // Year by year, grouped: group rows first, tap to see the rows inside
+  const snaps = path.path.filter((p) => p.m % 12 === 0 || p.m === path.reached).slice(0, 16);
+  const pick = [0, 12, 24, 36, 60, 84, 120].map((m) => snaps.find((p) => p.m === m)).filter(Boolean);
+  const last = snaps[snaps.length - 1];
+  if (last && !pick.includes(last)) pick.push(last);
+  const lbl = (p) => (p.m ? monthsShort(p.m) : 'Now');
+  const gShare = (p, id) => I.ALLOC.filter((a) => I.GROUP_OF[a.key] === id).reduce((a, x) => a + p.shares[x.key], 0);
+  const yrRows = I.ALLOC.map((a) => ({ key: a.key, label: a.label, gid: I.GROUP_OF[a.key] }));
   root.append(section('Year by year', h('div', null,
-    lineChart({ labels: yearly.map((p) => (p.m ? (p.m % 12 ? monthsShort(p.m) : p.m / 12 + 'y') : 'Now')), fmt: (v) => pct(v, 0), height: 220, series: I.ALLOC.map((a, i) => ({ name: a.label, values: yearly.map((p) => p.shares[a.key]), color: i })) }),
-    table([{ label: 'When', host: true, get: (p) => (p.m ? monthsShort(p.m) : 'Now') }, { label: 'Total', cls: 'r', get: (p) => compact(p.total) }, ...I.ALLOC.map((a) => ({ label: a.label.split(',')[0].split(' (')[0], cls: 'r', mob: 'hide', get: (p) => pct(p.shares[a.key], 0) }))], yearly, {}),
-    note('Each group grows at the rate it has earned so far (shares, funds and gold at the market outlook chosen). Real returns will differ. Nothing is sold.'))));
+    lineChart({ labels: snaps.map(lbl), fmt: (v) => pct(v, 0), height: 220, series: I.GOAL_GROUPS.map((g, i) => ({ name: g.label, values: snaps.map((p) => gShare(p, g.id)), color: i })) }),
+    groupedTable({
+      rows: yrRows, groupOf: (r) => r.gid,
+      cols: [{ label: 'Group' }, ...pick.map((p, i) => ({ label: lbl(p), cls: 'r', hide: i > 2 && i < pick.length - 1, parent: (it) => pct(gShare(p, it[0].gid), 0), child: (r) => { const gs = gShare(p, r.gid); return multi(r.gid) ? pct(gs ? p.shares[r.key] / gs : 0, 0) : ''; } }))],
+    }),
+    note('Group rows show their share of everything. Tap one to see the rows inside it, as a share of that group. Each group grows at the rate it has earned so far (shares, funds and gold at the market outlook chosen). Real returns will differ. Nothing is sold.'))));
 }
 const monthsShort = (m) => (m >= 12 ? `${Math.floor(m / 12)}y ${m % 12 ? (m % 12) + 'm' : ''}`.trim() : `${m}m`);
-function saveGoal(goal) { try { mutate((d) => { d.allocGoal = goal; }); rerender(); } catch (e) { toast(e.message, 'error'); } }
-function goalForm(g, monthly, outlook) {
-  const t = (g && g.targets) || I.PRESETS[1].pct;
-  formDialog({
-    title: 'Target allocation',
-    value: { ...t, monthly, outlook },
-    fields: [
-      ...I.ALLOC.map((a) => ({ key: a.key, label: `${a.label} (%)`, type: 'number', half: true, step: 1 })),
-      { key: 'monthly', label: 'New money each month (₹)', type: 'number', half: true, hint: 'Leave your usual savings here' },
-      { key: 'outlook', label: 'Market outlook', type: 'select', options: OUTLOOK_OPTS, half: true, hint: 'Used for shares, funds and gold' },
-    ],
-    onSave: (v) => {
-      const targets = Object.fromEntries(I.ALLOC.map((a) => [a.key, Number(v[a.key]) || 0]));
-      const sum = I.goalTotal(targets);
-      if (Math.abs(sum - 100) > 0.5) { toast(`The seven groups add up to ${sum}%. They must add up to 100%.`, 'error'); return false; }
-      saveGoal({ targets, monthly: Math.max(0, Number(v.monthly) || 0), outlook: v.outlook || 'steady' });
-    },
-  });
+function saveGoal(goal) { try { mutate((d) => { delete d.allocGoal; d.allocGoal = goal; }); rerender(); } catch (e) { toast(e.message, 'error'); } }
+function goalForm(g0, now, monthly, outlook) {
+  const goal = g0 || { groupTargets: {}, subTargets: {} };
+  const total = now.reduce((a, x) => a + x.value, 0);
+  const num = (ph, val) => h('input', { type: 'number', inputmode: 'decimal', step: '0.5', min: '0', max: '100', placeholder: ph, value: val == null ? '' : String(Math.round(val * 10) / 10), class: 'pct-in' });
+  const gIn = {}, kIn = {}, resTxt = {}, blocks = [];
+  const gNowV = (id) => now.filter((x) => I.GROUP_OF[x.key] === id).reduce((a, x) => a + x.value, 0);
+  for (const gr of I.GOAL_GROUPS) {
+    const ks = now.filter((x) => I.GROUP_OF[x.key] === gr.id);
+    if (!ks.length) continue;
+    gIn[gr.id] = num('auto', goal.groupTargets[gr.id]);
+    resTxt[gr.id] = h('small', { class: 'muted' });
+    const gv = gNowV(gr.id);
+    const head = h('div', { class: 'goal-row goal-head' }, h('div', null, h('strong', null, gr.label), h('small', { class: 'muted' }, ` now ${pct(total ? gv / total : 0, 1)}`)), h('div', { class: 'goal-in' }, gIn[gr.id], h('span', null, '%')), resTxt[gr.id]);
+    const kids = ks.length > 1 ? ks.map((x) => {
+      kIn[x.key] = num('auto', (goal.subTargets || {})[x.key]); resTxt[x.key] = h('small', { class: 'muted' });
+      return h('div', { class: 'goal-row goal-kid' }, h('div', null, I.ALLOC.find((a) => a.key === x.key).label, h('small', { class: 'muted' }, ` now ${pct(gv ? x.value / gv : 0, 1)} of group`)), h('div', { class: 'goal-in' }, kIn[x.key], h('span', null, '%')), resTxt[x.key]);
+    }) : [];
+    blocks.push(h('div', { class: 'goal-grp' }, head, ...kids));
+  }
+  const mIn = h('input', { type: 'number', step: '1000', min: '0', value: String(monthly) });
+  const oSel = h('select', null); setOptions(oSel, OUTLOOK_OPTS, outlook);
+  const summary = h('p', { class: 'note' }), errBox = h('p', { class: 'neg' });
+  const read = () => {
+    const groupTargets = {}, subTargets = {};
+    for (const id in gIn) if (gIn[id].value !== '') groupTargets[id] = Number(gIn[id].value);
+    for (const k in kIn) if (kIn[k].value !== '') subTargets[k] = Number(kIn[k].value);
+    return { groupTargets, subTargets };
+  };
+  const refresh = () => {
+    const r = I.resolveGoal(read(), now);
+    for (const id in gIn) resTxt[id].textContent = gIn[id].value === '' ? `auto ${r.groups[id].toFixed(1)}%` : '';
+    for (const k in kIn) resTxt[k].textContent = kIn[k].value === '' ? `auto ${r.within[k].toFixed(1)}% of group` : '';
+    summary.textContent = `You set ${r.setSum.toFixed(1)}% across ${r.setG.length} group${r.setG.length === 1 ? '' : 's'}. ${r.autoG.length ? `The other ${r.autoG.length} share the remaining ${Math.max(0, 100 - r.setSum).toFixed(1)}% in the proportion you hold them today.` : ''}`;
+    errBox.textContent = r.errors.join(' ');
+  };
+  [...Object.values(gIn), ...Object.values(kIn)].forEach((i) => i.addEventListener('input', refresh));
+  refresh();
+  const body = h('div', { class: 'goal-form' },
+    note('Fill in only what you want to decide. Blank means “keep my current mix”; the rest is worked out for you and shown beside each box. Inside Debts & fixed income you can set a row (for example Bonds 25% of the group) and the other rows follow.'),
+    ...blocks, summary, errBox,
+    h('div', { class: 'row-actions' }, h('label', { class: 'field half' }, h('span', null, 'New money each month (₹)'), mIn), h('label', { class: 'field half' }, h('span', null, 'Market outlook'), oSel)));
+  dialog('Target allocation', body, [
+    { label: 'Cancel', onclick: (c) => c() },
+    { label: 'Clear targets', onclick: (c) => { c(); Object.values(gIn).concat(Object.values(kIn)).forEach((i) => (i.value = '')); saveGoal({ groupTargets: {}, subTargets: {}, monthly: Math.max(0, Number(mIn.value) || 0), outlook: oSel.value || 'steady' }); } },
+    { label: 'Save goal', class: 'primary', onclick: (c) => {
+      const r = I.resolveGoal(read(), now);
+      if (!r.ok) { toast(r.errors[0], 'error'); return; }
+      c(); saveGoal({ ...read(), monthly: Math.max(0, Number(mIn.value) || 0), outlook: oSel.value || 'steady' });
+    } },
+  ]);
 }

@@ -1,0 +1,15 @@
+import fs from 'node:fs';
+import { archiveBefore, restoreArchive } from '../js/archive.js';
+import { accountBalances } from '../js/calc.js';
+const d = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const bal = () => Object.fromEntries(accountBalances(d).map((a) => [a.id, Math.round(a.balance)]));
+const before = bal(), n0 = d.ledger.length;
+const rec = archiveBefore(d, '2026-06-01');
+const after = bal();
+const ok = (c, m) => { if (!c) { console.error('FAIL', m); process.exit(1); } };
+ok(JSON.stringify(before) === JSON.stringify(after), 'balances unchanged after archive');
+ok(d.ledger.length < n0 && d.archive.length === 1, 'ledger shrank');
+ok(Object.keys(rec.months).length >= 1, 'months summarised');
+restoreArchive(d, rec.id);
+ok(d.ledger.length === n0 && JSON.stringify(bal()) === JSON.stringify(before), 'restore brings everything back');
+console.log('archive ok', n0, '->', n0 - rec.count + rec.openingIds.length);

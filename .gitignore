@@ -6,16 +6,25 @@ portfolio-data.json
 *.xls
 *.csv
 
-# Not needed for the website
+# Private helpers that contain real names, balances or figures
 tools/
-tests/
-docs/
-backend/
+tests/calc.test.mjs
+tests/features.test.mjs
+
+# Secrets
+.env
+.env.*
+*.key
+*.pem
+*secret*
+*credentials*
+.clasp.json
+.clasprc.json
+
+# Build leftovers
 node_modules/
 *.zip
 
 # Misc
 .DS_Store
 Thumbs.db
-.env
-*.key

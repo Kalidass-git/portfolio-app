@@ -703,3 +703,10 @@ tr.proj-row td { color: var(--muted); font-style: italic; }
 .rl li:has(.dismiss) { position: relative; }
 .rl .dismiss { position: absolute; top: 1px; right: 0; margin: 0; padding: 0 2px; min-height: 0; height: auto; font-size: .68rem; line-height: 1.2; background: none; border: 0; color: var(--muted); text-decoration: underline; cursor: pointer; }
 .rl .dismiss:hover { color: var(--text, inherit); }
+
+/* allocation goal editor */
+.goal-grp { border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; margin: 8px 0; }
+.goal-row { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center; padding: 6px 0; }
+.goal-row > small { grid-column: 1 / -1; text-align: right; }
+.goal-kid { padding-left: 14px; border-top: 1px dashed var(--line-2); font-size: .92rem; }
+.goal-in { display: flex; align-items: center; gap: 4px; } .pct-in { width: 5.2rem; text-align: right; }
