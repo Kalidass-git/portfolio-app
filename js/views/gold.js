@@ -126,18 +126,19 @@ function schemeAsChit(x) {
 }
 function chitBestCard(c, rate, scheme) {
   const o = chitOptions(c, rate);
-  const mk = (title, big, sub, win) => h('div', { class: 'stat', style: win ? { borderColor: 'var(--accent, #1b7f3b)', borderWidth: '2px', borderStyle: 'solid' } : null },
-    h('span', { class: 'stat-label' }, title + (win ? ' · better today' : '')), h('strong', { class: 'stat-value' }, big), h('span', { class: 'sub' }, sub));
+  const profit = (n) => h('span', { class: n > 0.5 ? 'pos' : n < -0.5 ? 'neg' : '' }, `Profit over what you paid: ${n > 0.5 ? '+' : n < -0.5 ? '−' : ''}${money(Math.abs(n))}`);
+  const mk = (title, big, sub, win, pr) => h('div', { class: 'stat', style: win ? { borderColor: 'var(--accent, #1b7f3b)', borderWidth: '2px', borderStyle: 'solid' } : null },
+    h('span', { class: 'stat-label' }, title + (win ? ' · better today' : '')), h('strong', { class: 'stat-value' }, big), h('span', { class: 'sub' }, sub), h('span', { class: 'sub' }, pr));
   return h('div', { class: 'card' },
     h('h3', null, 'Best option today · ' + c.name),
     h('div', { class: 'stats' },
-      mk('Take it by value', dec(o.byValueGrams, 2) + ' g', `${money(o.paid)} paid in, buys this much at ${money(rate)} / g`, o.best === 'value'),
-      o.known ? mk('Take it by gold saved', dec(o.grams, 2) + ' g', `worth ${money(o.goldValue)} today${o.complete ? '' : ' (only payments with a rate are counted)'}`, o.best === 'gold')
+      mk('Take it by value', dec(o.byValueGrams, 2) + ' g', `${money(o.paid)} paid in, buys this much at ${money(rate)} / g`, o.best === 'value', profit(0)),
+      o.known ? mk('Take it by gold saved', dec(o.grams, 2) + ' g', `worth ${money(o.goldValue)} today${o.complete ? '' : ' (only payments with a rate are counted)'}`, o.best === 'gold', profit(o.goldValue - o.paid))
         : mk('Take it by gold saved', '–', 'add the gold rate on the payments to compare')),
     h('p', { class: 'note' }, o.known
       ? (o.best === 'gold'
-        ? `Gold basis is better: ${dec(o.grams - o.byValueGrams, 2)} g more, worth ${money(o.edge)} extra at today's rate.`
-        : `Value basis is better: ${dec(o.byValueGrams - o.grams, 2)} g more, worth ${money(o.edge)} extra at today's rate.`)
+        ? `Choose gold basis: ${dec(o.grams - o.byValueGrams, 2)} g more, which is ${money(o.edge)} more than the value basis and a profit of ${money(o.goldValue - o.paid)} over the ${money(o.paid)} you paid.`
+        : `Choose value basis: ${dec(o.byValueGrams - o.grams, 2)} g more, which is ${money(o.edge)} more than the gold basis. Gold basis would be ${money(o.paid - o.goldValue)} below what you paid.`)
       : 'Value basis gives you the money paid in as gold at today\'s rate.'),
     canEdit() ? h('div', { class: 'actions' }, btn('Close this chit', () => closeChit(c, scheme))) : null);
 }

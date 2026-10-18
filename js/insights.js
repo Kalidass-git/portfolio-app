@@ -335,4 +335,63 @@ export function allocPath(groups, goal, monthly, { tol = 0.02, maxMonths = 360 }
   }
   return { reached: null, path, firstSplit, target };
 }
+
+// ---- group-level goals: set what you care about, the rest follows your current mix ----
+export const GOAL_GROUPS = [
+  { id: 'debt', label: 'Debts & fixed income' }, { id: 'gold', label: 'Gold' },
+  { id: 'equity', label: 'Equity, ETFs & mutual funds' }, { id: 'other', label: 'Others' },
+];
+export const GROUP_OF = { bonds: 'debt', lending: 'debt', safe: 'debt', chits: 'debt', equity: 'equity', gold: 'gold', other: 'other' };
+const isSet = (v) => v !== undefined && v !== null && v !== '' && Number.isFinite(Number(v));
+/** A goal saved by an older release (one overall % for each of the seven groups) turned into group and within-group targets. */
+export function normGoal(g) {
+  if (!g) return null;
+  if (g.groupTargets || g.subTargets) return { groupTargets: g.groupTargets || {}, subTargets: g.subTargets || {}, monthly: g.monthly, outlook: g.outlook };
+  if (!g.targets) return null;
+  const groupTargets = {}, subTargets = {};
+  for (const gr of GOAL_GROUPS) {
+    const ks = ALLOC.filter((a) => GROUP_OF[a.key] === gr.id), tot = sum(ks, (a) => Number(g.targets[a.key]) || 0);
+    groupTargets[gr.id] = tot;
+    if (ks.length > 1 && tot > 0) for (const a of ks) subTargets[a.key] = Math.round(((Number(g.targets[a.key]) || 0) / tot) * 1000) / 10;
+  }
+  return { groupTargets, subTargets, monthly: g.monthly, outlook: g.outlook };
+}
+/** Turns what you typed into the full picture. Blank groups share what is left in the proportion they hold today; the same inside a group. */
+export function resolveGoal(goal, now) {
+  const val = (k) => Math.max(0, (now.find((x) => x.key === k) || {}).value || 0);
+  const gNow = (id) => sum(now.filter((x) => GROUP_OF[x.key] === id), (x) => Math.max(0, x.value));
+  const gt = (goal && goal.groupTargets) || {}, stt = (goal && goal.subTargets) || {};
+  const setG = GOAL_GROUPS.map((g) => g.id).filter((id) => isSet(gt[id]));
+  const autoG = GOAL_GROUPS.map((g) => g.id).filter((id) => !setG.includes(id));
+  const setSum = sum(setG, (id) => Number(gt[id]));
+  const remain = Math.max(0, 100 - setSum), autoNow = sum(autoG, gNow);
+  const groups = {}, items = {}, within = {}, itemSet = {}, errors = [];
+  for (const id of setG.concat(autoG)) groups[id] = setG.includes(id) ? Number(gt[id]) : autoNow > 0 ? (remain * gNow(id)) / autoNow : remain / autoG.length;
+  if (setSum > 100.05) errors.push(`The groups you set add up to ${setSum.toFixed(1)}%. They cannot go above 100%.`);
+  else if (!autoG.length && Math.abs(setSum - 100) > 0.05) errors.push(`All four groups are set and add up to ${setSum.toFixed(1)}%. Leave one blank to take the rest, or make it 100%.`);
+  for (const gr of GOAL_GROUPS) {
+    const ks = ALLOC.filter((a) => GROUP_OF[a.key] === gr.id).map((a) => a.key);
+    if (ks.length === 1) { within[ks[0]] = 100; itemSet[ks[0]] = false; }
+    else {
+      const sk = ks.filter((k) => isSet(stt[k])), ak = ks.filter((k) => !sk.includes(k));
+      const ss = sum(sk, (k) => Number(stt[k])), rem = Math.max(0, 100 - ss), av = sum(ak, val);
+      for (const k of ks) { itemSet[k] = sk.includes(k); within[k] = sk.includes(k) ? Number(stt[k]) : av > 0 ? (rem * val(k)) / av : rem / ak.length; }
+      if (ss > 100.05) errors.push(`Inside ${gr.label}, the rows you set add up to ${ss.toFixed(1)}%. They cannot go above 100%.`);
+      else if (!ak.length && Math.abs(ss - 100) > 0.05) errors.push(`Inside ${gr.label} every row is set and they add up to ${ss.toFixed(1)}%. Leave one blank or make it 100%.`);
+    }
+    for (const k of ks) items[k] = (groups[gr.id] * within[k]) / 100;
+  }
+  return { groups, items, within, setG, autoG, itemSet, setSum, errors, ok: !errors.length };
+}
+/** A preset (overall % for the seven groups) written as group and within-group targets. */
+export const presetGoal = (pct) => normGoal({ targets: pct });
+/** Monthly amount needed to reach the goal within `years`, or null when even a very large amount is not enough. */
+export function monthlyFor(groups, goal, years, hi = 5000000) {
+  const ok = (m) => { const r = allocPath(groups, goal, m); return r.reached != null && r.reached <= years * 12; };
+  if (ok(0)) return 0;
+  if (!ok(hi)) return null;
+  let lo = 0, up = hi;
+  for (let i = 0; i < 22; i++) { const mid = (lo + up) / 2; if (ok(mid)) up = mid; else lo = mid; }
+  return Math.ceil(up / 1000) * 1000;
+}
 export const monthsText = (m) => { if (m == null) return 'more than 30 years'; const y = Math.floor(m / 12), r = m % 12; return [y ? `${y} year${y > 1 ? 's' : ''}` : '', r ? `${r} month${r > 1 ? 's' : ''}` : ''].filter(Boolean).join(' ') || 'already there'; };

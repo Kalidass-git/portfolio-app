@@ -700,7 +700,15 @@ export function xirrNear(flows, guess = 0.1) {
 }
 const weightedGuess = (rows) => { const w = rows.filter((r) => r.xirr != null && r.value > 0); const t = w.reduce((a, r) => a + r.value, 0); return t ? w.reduce((a, r) => a + r.xirr * r.value, 0) / t : 0.1; };
 /** The XIRR of several return rows together. */
-export const groupXirr = (rows) => { const good = rows.filter((r) => r.xirr != null && r.flows && !r.estimated); return good.length ? { xirr: xirrNear(good.flatMap((r) => r.flows), weightedGuess(good)), count: good.length } : { xirr: null, count: 0 }; };
+export const groupXirr = (rows) => {
+  const good = rows.filter((r) => r.xirr != null && r.flows && !r.estimated);
+  if (!good.length) return { xirr: null, count: 0 };
+  let x = xirrNear(good.flatMap((r) => r.flows), weightedGuess(good)), approx = false;
+  const lo = Math.min(...good.map((r) => r.xirr)), hi = Math.max(...good.map((r) => r.xirr));
+  // the combined rate of several rows cannot sensibly sit far outside the rows themselves; when it does, the flows have more than one answer, so use the value-weighted average
+  if (x == null || x < lo - 0.05 || x > hi + 0.05) { const w = good.reduce((a, r) => a + Math.max(0, r.value), 0); x = w > 0 ? good.reduce((a, r) => a + r.xirr * Math.max(0, r.value), 0) / w : (lo + hi) / 2; approx = true; }
+  return { xirr: x, count: good.length, approx };
+};
 
 /** Return metrics per asset class. XIRR needs dated cash flows, so only classes that carry dates are included. */
 export function returns(data, all) {
@@ -764,6 +772,10 @@ export function returns(data, all) {
   // Equity: no purchase dates in the workbook, so only absolute return
   out.push({ name: 'Stocks & ETFs', invested: all.stocks.invested, value: all.stocks.current, gain: all.stocks.pl, ret: all.stocks.ret, xirr: all.stocks.xirr ?? null, flows: all.stocks.xirr != null ? flowsFor(all.stocks.eq, [...all.stocks.eq.flows.keys()], all.stocks.current, asOf) : null, note: all.stocks.eq ? 'XIRR from your imported trades, including sold shares and dividends' : 'Import your Groww history to get XIRR' });
   out.push({ name: 'Mutual funds', invested: all.mf.invested, value: all.mf.current, gain: all.mf.pl, ret: all.mf.ret, xirr: all.mf.xirr ?? null, flows: all.mf.xflows || null, note: all.mf.book ? 'XIRR from your imported transactions' : 'Import your Groww history to get XIRR' });
+  // a yearly return that points the opposite way to the plain gain means the imported trades do not add up (a missing buy or sell); better to show no XIRR than a wrong one
+  for (const r of out) {
+    if (r.xirr != null && r.ret != null && ((r.ret > 0.02 && r.xirr < -0.05) || (r.ret < -0.02 && r.xirr > 0.05))) { r.rawXirr = r.xirr; r.xirr = null; r.xirrSuspect = true; }
+  }
   return out;
 }
 
