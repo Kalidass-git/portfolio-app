@@ -197,6 +197,12 @@ No backend change. The Wealth projector now has five tabs: This year, Years ahea
 - **Measured against** is now a setting. On the Risk limits tab, switch risk-group and kind limits between **Everything I own** and **Investments only** (bank balances left out). Each kind, each single-holding rule and each named holding can also choose **Market-linked only** (shares, ETFs, funds) or **Its own group**.
 - Name suggestions in the Risk and What-if forms now show up as you type.
 
+## Release 8.9.18 – Simpler Shares & funds menu
+
+- Nine tabs became four: **Overview** (today, alerts, where to look), **Holdings** (Shares, ETFs, Funds, and History with Sold and Dividends), **Watch** (Alerts & watchlist, Insights) and **Manage** (Investment planner, Import; the owner only, hidden on view-only devices).
+- One **Refresh** button fetches prices, NAVs and the P/E, 52-week and alert numbers together.
+- Old links and bookmarks (#/equity/today, /funds, /sold, /sip, /import and so on) still work and move to the new place.
+
 ## Release 8.9.17 – Alerts, watchlist, fundamentals and "where to look"
 
 - Shares & funds → **Alerts & watchlist**: set alerts for any share or fund, held or not. Rules: price or NAV below/above, P/E below/above, price-to-book, dividend yield, near the 52-week high or low, down X% from the high, below/above the 200-day average, big one-day move, fund 1-year return. Shares and funds you do not own go on the watchlist.

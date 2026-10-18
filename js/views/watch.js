@@ -22,9 +22,8 @@ export async function refreshIndicators(onProgress) {
 }
 export function refreshBar() {
   const at = W.metricsAt();
-  const b = h('button', { type: 'button', class: 'small', onclick: async (e) => { const el = e.currentTarget; el.disabled = true; try { await refreshIndicators((m) => { el.textContent = m; }); } finally { el.disabled = false; } } }, 'Refresh indicators');
   if (!auto && W.isStale() && (W.targetsOf(S.data, S.all).length)) { auto = true; setTimeout(() => { if (!busy) refreshIndicators().catch(() => {}); }, 300); }
-  return h('div', { class: 'price-bar' }, h('span', { class: 'stamp' + (at && !W.isStale(864e5) ? '' : ' warn') }, at ? `P/E, 52-week range and alerts updated ${ago(at)}` : 'Indicators not fetched yet'), b);
+  return h('div', { class: 'price-bar' }, h('span', { class: 'stamp' + (at && !W.isStale(864e5) ? '' : ' warn') }, at ? `P/E, 52-week range and alerts updated ${ago(at)}. Use Refresh above to update.` : 'Indicators not fetched yet. Use Refresh above.'));
 }
 
 const heldKeys = () => new Set(W.universe(S.data, S.all).filter((u) => u.held).map((u) => u.key));
@@ -36,7 +35,7 @@ export function triggeredCard({ link = true } = {}) {
   return section(`Price alerts${hit.length ? ` · ${hit.length} triggered` : ''}`, h('div', null,
     hit.length ? rowList(rows) : h('p', { class: 'empty' }, total ? 'None of your alerts has triggered right now.' : 'No alerts yet. Set one up to be told when a share or fund reaches a price, P/E or 52-week mark.'),
     waiting.length ? h('p', { class: 'note' }, `${waiting.length} alert${waiting.length > 1 ? 's are' : ' is'} waiting for the first indicator fetch.`) : null,
-    link ? h('p', null, h('a', { href: '#/equity/alerts' }, total ? 'Manage alerts and watchlist' : 'Set up alerts')) : null));
+    link ? h('p', null, h('a', { href: '#/equity/watch?v=alerts' }, total ? 'Manage alerts and watchlist' : 'Set up alerts')) : null));
 }
 
 // ---------- screens ----------
