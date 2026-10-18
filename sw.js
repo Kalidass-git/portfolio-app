@@ -1,5 +1,5 @@
 // Offline shell: the app files are cached; data lives in the browser's storage, so the last synced numbers show without internet.
-const CACHE = 'family-wealth-v40';
+const CACHE = 'family-wealth-v41';
 const FILES = ['./', './index.html', './css/app.css', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png',
   './js/main.js', './js/store.js', './js/remote.js', './js/calc.js', './js/prices.js', './js/ui.js', './js/charts.js',
   './js/views/home.js', './js/views/cash.js', './js/views/fixed.js', './js/views/equity.js', './js/views/gold.js', './js/views/flow.js', './js/views/plan.js', './js/views/report.js', './js/views/settings.js', './js/views/savings.js', './js/views/dividends.js', './js/version.js', './js/epf.js', './js/divfetch.js', './js/views/equity-fund.js', './js/projector.js', './js/bankimport.js', './js/views/cash-import.js',

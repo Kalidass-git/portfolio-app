@@ -120,7 +120,11 @@ function chitOptions(c, rate) {
   const best = !known ? 'value' : goldValue > paid ? 'gold' : 'value';
   return { paid, grams, rated, complete, byValueGrams, goldValue, known, best, edge: known ? Math.abs(goldValue - paid) : 0 };
 }
-function chitBestCard(c, rate) {
+/** A monthly gold-savings scheme (entries carry grams or a rate) shaped like a chit so the same card and close form work. */
+function schemeAsChit(x) {
+  return { id: x.id, name: x.name, entries: x.entries.map((e) => ({ date: e.date, amount: e.amount, rate: e.rate > 0 ? e.rate : e.grams > 0 ? e.amount / e.grams : 0 })) };
+}
+function chitBestCard(c, rate, scheme) {
   const o = chitOptions(c, rate);
   const mk = (title, big, sub, win) => h('div', { class: 'stat', style: win ? { borderColor: 'var(--accent, #1b7f3b)', borderWidth: '2px', borderStyle: 'solid' } : null },
     h('span', { class: 'stat-label' }, title + (win ? ' · better today' : '')), h('strong', { class: 'stat-value' }, big), h('span', { class: 'sub' }, sub));
@@ -134,9 +138,10 @@ function chitBestCard(c, rate) {
       ? (o.best === 'gold'
         ? `Gold basis is better: ${dec(o.grams - o.byValueGrams, 2)} g more, worth ${money(o.edge)} extra at today's rate.`
         : `Value basis is better: ${dec(o.byValueGrams - o.grams, 2)} g more, worth ${money(o.edge)} extra at today's rate.`)
-      : 'Value basis gives you the money paid in as gold at today\'s rate.'));
+      : 'Value basis gives you the money paid in as gold at today\'s rate.'),
+    canEdit() ? h('div', { class: 'actions' }, btn('Close this chit', () => closeChit(c, scheme))) : null);
 }
-function closeChit(c) {
+function closeChit(c, scheme) {
   const rate = S.all.gold.rate;
   const o = chitOptions(c, rate), paid = o.paid;
   const bestGrams = o.best === 'gold' ? o.grams : o.byValueGrams;
@@ -152,11 +157,12 @@ function closeChit(c) {
       if (!(v.grams > 0)) { toast('Enter the grams of gold you bought.', 'bad'); return false; }
       const amt = paid + (v.extra > 0 ? v.extra : 0);
       mutate((d) => {
-        const t = d.gold.chits.find((x) => x.id === c.id);
+        const t = scheme ? d.gold.schemes.find((x) => x.id === c.id) : d.gold.chits.find((x) => x.id === c.id);
         const pid = nextId('g', d.gold.purchases);
         d.gold.purchases.push({ id: pid, date: v.date, desc: `Gold from chit: ${c.name}`, grams: v.grams, amount: amt });
         d.gold.purchases.sort((a, b) => (a.date < b.date ? -1 : 1));
         t.closed = { date: v.date, grams: v.grams, amount: amt, extra: v.extra > 0 ? v.extra : 0, purchaseId: pid, note: v.note || '' };
+        if (scheme) t.active = false;
       });
       toast('Closed. The gold is now in your gold purchases.');
     },
@@ -188,6 +194,7 @@ function chitsTab(root) {
     stat('Invested in gold chits', money(runPaid), `${running.length} running chit${running.length === 1 ? '' : 's'}`),
     stat('Closed chits', String(g.closed.length + oldSch.length), g.closed.length + oldSch.length ? `${dec(g.closed.reduce((a, c) => a + c.closed.grams, 0), 1)} g received through chits closed here` : 'none yet')));
   for (const r of running) if (r.chit && r.paid > 0) root.append(chitBestCard(r.chit, all.gold.rate));
+  for (const x of runSch) if (x.entries.length) root.append(chitBestCard(schemeAsChit(x), all.gold.rate, true));
   root.append(section('Running chits', h('div', null, table([
     { label: 'Chit', host: true, get: (c) => c.name }, { label: 'Jeweller', mob: 'under', get: (c) => c.shop || '' },
     { label: 'Started', mob: 'under', mlabel: 'started ', get: (c) => dateStr(c.startDate) },
@@ -206,7 +213,7 @@ function chitsTab(root) {
       { label: 'Rate / g', mob: 'under', mlabel: 'rate ', cls: 'r', get: (e) => money(e.rate) }, { label: 'Grams', cls: 'r', get: (e) => dec(e.grams, 3), total: () => dec(grams, 3) },
       { label: 'Value now', mob: 'under', mlabel: 'now ', cls: 'r', get: (e) => money(e.grams * all.gold.rate), total: () => money(grams * all.gold.rate) },
     ], ents, { footer: { label: 'Total' }, onRow: canEdit() ? (e) => schemeEntryForm(x, e._i) : null })),
-      canEdit() ? [btn('Add instalment', () => schemeEntryForm(x))] : null);
+      canEdit() ? [btn('Add instalment', () => schemeEntryForm(x)), btn('Close this scheme', () => closeChit(schemeAsChit(x), true))] : null);
     sec.id = 'scheme-' + x.id; root.append(sec);
   }
   const closedRows = g.closed.map((c) => ({ name: c.name, startDate: c.startDate || (c.entries[0] && c.entries[0].date), closedOn: c.closed.date, paid: c.paid, grams: c.closed.grams, chit: c }))
