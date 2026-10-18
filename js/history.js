@@ -13,7 +13,9 @@ export async function fundNavs(code) {
   if (cache.has(key)) return cache.get(key);
   const r = await fetch(`https://api.mfapi.in/mf/${encodeURIComponent(code)}`);
   if (!r.ok) throw new Error('Could not load the NAV history.');
-  const rows = ((await r.json()).data || []).map((x) => ({ d: iso(x.date), v: parseFloat(x.nav) })).filter((x) => x.v > 0).reverse();
+  const body = await r.json();
+  cache.set('mfmeta:' + code, body.meta || null);
+  const rows = (body.data || []).map((x) => ({ d: iso(x.date), v: parseFloat(x.nav) })).filter((x) => x.v > 0).reverse();
   cache.set(key, rows);
   return rows;
 }
@@ -54,3 +56,6 @@ export function summarise(rows) {
   const change = b.v / a.v - 1;
   return { from: a, to: b, change, high: hi, low: lo, fromHigh: b.v / hi - 1, yearly: days >= 300 ? Math.pow(b.v / a.v, 365 / days) - 1 : null };
 }
+
+/** Fund house and category, known after the NAV history has been loaded. */
+export const fundMeta = (code) => cache.get('mfmeta:' + code) || null;

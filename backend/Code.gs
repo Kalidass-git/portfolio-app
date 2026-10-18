@@ -111,6 +111,8 @@ function doPost(e) {
       case 'quotes': return json_(quotes_(req.symbols || []));
       case 'dividends': return json_(dividends_(req.symbols || []));
       case 'history': return json_(history_(req.symbol, req.yahoo));
+      case 'fundamentals': return json_(fundamentals_(req.symbols || []));
+      case 'details': return json_(details_(req.symbol, req.yahoo));
       default: return json_({ error: 'Unknown action.' });
     }
   } catch (err) {
@@ -169,6 +171,80 @@ function history_(symbol, yahoo) {
     } catch (e) { /* try the next exchange */ }
   }
   return { error: 'No price history found for ' + (symbol || yahoo) + '.' };
+}
+
+// ---- Fundamentals (P/E, 52-week range, averages) from Yahoo Finance ----
+var UA_ = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36';
+/** Yahoo asks for a cookie and a "crumb" before it shares ratios. Kept for a few hours so most calls reuse it. */
+function yahooSession_(fresh) {
+  var cache = CacheService.getScriptCache();
+  if (!fresh) { var c = cache.get('yh_session'); if (c) return JSON.parse(c); }
+  var r = UrlFetchApp.fetch('https://fc.yahoo.com', { muteHttpExceptions: true, followRedirects: false, headers: { 'User-Agent': UA_ } });
+  var raw = r.getAllHeaders()['Set-Cookie'] || [];
+  if (typeof raw === 'string') raw = [raw];
+  var cookie = raw.map(function (x) { return String(x).split(';')[0]; }).join('; ');
+  var cr = UrlFetchApp.fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', { muteHttpExceptions: true, headers: { 'User-Agent': UA_, 'Cookie': cookie } });
+  var crumb = cr.getContentText();
+  if (cr.getResponseCode() !== 200 || !crumb || crumb.length > 40) throw new Error('Yahoo did not open a session (try again in a few minutes)');
+  var o = { cookie: cookie, crumb: crumb };
+  cache.put('yh_session', JSON.stringify(o), 4 * 3600);
+  return o;
+}
+function yahooGet_(path, query) {
+  for (var attempt = 0; attempt < 2; attempt++) {
+    var ss = yahooSession_(attempt > 0);
+    var r = UrlFetchApp.fetch('https://query1.finance.yahoo.com' + path + '?' + query + '&crumb=' + encodeURIComponent(ss.crumb), { muteHttpExceptions: true, headers: { 'User-Agent': UA_, 'Cookie': ss.cookie } });
+    var code = r.getResponseCode();
+    if (code === 401 || code === 403) continue;
+    if (code !== 200) throw new Error('Yahoo answered ' + code);
+    return JSON.parse(r.getContentText());
+  }
+  throw new Error('Yahoo refused the session');
+}
+function num_(x) { return x != null && isFinite(x) ? Number(x) : null; }
+function slimQuote_(q) {
+  var dy = num_(q.trailingAnnualDividendYield); dy = dy != null ? dy * 100 : num_(q.dividendYield);
+  return { name: q.longName || q.shortName || null, price: num_(q.regularMarketPrice), prevClose: num_(q.regularMarketPreviousClose), dayPct: q.regularMarketChangePercent != null ? q.regularMarketChangePercent / 100 : null,
+    pe: num_(q.trailingPE), fpe: num_(q.forwardPE), pb: num_(q.priceToBook), eps: num_(q.epsTrailingTwelveMonths), mcap: num_(q.marketCap), dy: dy,
+    hi52: num_(q.fiftyTwoWeekHigh), lo52: num_(q.fiftyTwoWeekLow), dma50: num_(q.fiftyDayAverage), dma200: num_(q.twoHundredDayAverage), volume: num_(q.regularMarketVolume) };
+}
+/** Ratios and 52-week range for many shares at once. symbols: [{symbol, yahoo}] -> { ok, data: { SYMBOL: {...} }, errors } */
+function fundamentals_(list) {
+  var out = {}, errors = {}, items = list.slice(0, 150);
+  function run(tickerOf, only) {
+    var map = {}, tickers = [];
+    only.forEach(function (i) { var t = tickerOf(items[i]); map[t] = i; tickers.push(t); });
+    for (var k = 0; k < tickers.length; k += 40) {
+      var chunk = tickers.slice(k, k + 40);
+      var j = yahooGet_('/v7/finance/quote', 'symbols=' + encodeURIComponent(chunk.join(',')));
+      var res = (j.quoteResponse && j.quoteResponse.result) || [];
+      res.forEach(function (q) { var i = map[q.symbol]; if (i != null && q.regularMarketPrice > 0) out[items[i].symbol] = slimQuote_(q); });
+    }
+  }
+  try {
+    run(function (s) { return s.yahoo || s.symbol + '.NS'; }, items.map(function (_, i) { return i; }));
+    var miss = []; items.forEach(function (s, i) { if (!out[s.symbol] && !s.yahoo) miss.push(i); });
+    if (miss.length) run(function (s) { return s.symbol + '.BO'; }, miss);
+  } catch (e) { return { error: 'Backend error: ' + e.message }; }
+  items.forEach(function (s) { if (!out[s.symbol]) errors[s.symbol] = 'not found'; });
+  return { ok: true, data: out, errors: errors };
+}
+/** Deeper numbers for one share: return on equity, debt, margins, growth, sector. */
+function details_(symbol, yahoo) {
+  if (!symbol && !yahoo) return { error: 'No symbol given.' };
+  var tickers = yahoo ? [yahoo] : [symbol + '.NS', symbol + '.BO'];
+  for (var i = 0; i < tickers.length; i++) {
+    try {
+      var j = yahooGet_('/v10/finance/quoteSummary/' + encodeURIComponent(tickers[i]), 'modules=financialData,defaultKeyStatistics,assetProfile,summaryDetail');
+      var r = j.quoteSummary && j.quoteSummary.result && j.quoteSummary.result[0];
+      if (!r) continue;
+      var fd = r.financialData || {}, ks = r.defaultKeyStatistics || {}, ap = r.assetProfile || {}, sd = r.summaryDetail || {};
+      function v(o) { return o && o.raw != null ? num_(o.raw) : null; }
+      return { ok: true, details: { roe: v(fd.returnOnEquity), roa: v(fd.returnOnAssets), de: v(fd.debtToEquity), margin: v(fd.profitMargins), opMargin: v(fd.operatingMargins), revGrowth: v(fd.revenueGrowth), earnGrowth: v(fd.earningsGrowth),
+        currentRatio: v(fd.currentRatio), beta: v(ks.beta) != null ? v(ks.beta) : v(sd.beta), bookValue: v(ks.bookValue), payout: v(sd.payoutRatio), sector: ap.sector || null, industry: ap.industry || null, target: v(fd.targetMeanPrice), recommendation: fd.recommendationKey || null } };
+    } catch (e) { if (i === tickers.length - 1) return { error: 'Backend error: ' + e.message }; }
+  }
+  return { error: 'No details found for ' + (symbol || yahoo) + '.' };
 }
 
 /** Dividends per share paid by each company, from Yahoo Finance (NSE first, then BSE). symbols: [{symbol:'INFY', yahoo:''}] */

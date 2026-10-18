@@ -1,5 +1,6 @@
 // Mutual funds: the fund page (buy and redeem history, XIRR) and the forms to add, edit and link a fund.
 import { historyCard } from './histcard.js';
+import { fundFundamentals } from './watch.js';
 import { fundNavs } from '../history.js';
 import { S, mutate, nextId } from '../store.js';
 import * as C from '../calc.js';
@@ -108,6 +109,7 @@ export function render(root) {
     realized ? stat('Already earned', money(realized), 'profit booked on units sold') : null));
   if (m.schemeCode) root.append(historyCard({ title: 'NAV history', load: () => fundNavs(m.schemeCode), avg: m.units ? m.invested / m.units : null, firstBuy: txns.length ? txns[txns.length - 1].date : null, unit: 'NAV' }));
   else root.append(h('div', { class: 'card' }, h('p', { class: 'note' }, 'Link this fund to its live NAV to see its price history.')));
+  if (m.schemeCode) root.append(fundFundamentals(m, m.schemeCode));
   const body = h('div', null);
   if (raw.opening) body.append(h('p', { class: 'note' }, `Before this history began you already held ${dec(raw.opening.units, 3)} units costing ${money(raw.opening.invested)}. They are included above and have no purchase date.`));
   if (!txns.length) body.append(h('p', { class: 'empty' }, 'No buy history for this fund yet.'), h('p', { class: 'note' }, canEdit() ? 'Press “Record a buy” each time you invest (SIP or lump sum). What you hold today stays as the starting point, and units, amount invested and XIRR then follow your history.' : ''));

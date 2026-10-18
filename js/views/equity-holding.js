@@ -1,5 +1,6 @@
 // One holding: lots, trades, dividends, and the buttons to buy, sell, add a split or edit details.
 import { historyCard } from './histcard.js';
+import { stockFundamentals } from './watch.js';
 import { stockCloses } from '../history.js';
 import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
@@ -43,6 +44,7 @@ export function render(root) {
     stat('XIRR', xi == null ? '–' : h('span', { class: posNeg(xi) }, pct(xi, 1)), eq ? (flows.length ? 'yearly return including timing' : 'no buy dates for this share') : 'import your history to see it'),
     realized || divTotal ? stat('Already earned', money(realized + divTotal), `${money(realized)} from sales · ${money(divTotal)} dividends`) : null));
   root.append(historyCard({ title: 'Price history', load: () => stockCloses(s.symbol, s.yahoo), avg: s.avgPrice || null, firstBuy: flows.length ? flows.map((f) => f.date).sort()[0] : null }));
+  root.append(stockFundamentals(s));
   if (eq) {
     const h0 = eq.holdings.find((x) => x.symbol === sym);
     if (h0) root.append(section('Purchase lots', h('div', null, table([

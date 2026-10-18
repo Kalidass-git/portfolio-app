@@ -1,0 +1,36 @@
+// Alerts and screens. Made-up numbers only: node tests/watch.test.mjs
+import * as W from '../js/watch.js';
+let fail = 0;
+const ok = (l, c, x = '') => { if (!c) fail++; console.log(c ? 'ok  ' : 'FAIL', l, x); };
+const m = { price: 90, pe: 18, pb: 2, dy: 2.5, hi52: 120, lo52: 85, dma50: 95, dma200: 100, dayPct: -0.05, ret1y: -0.12 };
+const t = (id, v) => W.ruleOf(id).test(m, v);
+ok('price below', t('priceBelow', 95) === true && t('priceBelow', 80) === false);
+ok('price above', t('priceAbove', 80) === true && t('priceAbove', 100) === false);
+ok('pe below 20 triggers at 18', t('peBelow', 20) && !t('peBelow', 15));
+ok('pe above', t('peAbove', 15) && !t('peAbove', 25));
+ok('pe rules ignore a missing or negative P/E', !W.ruleOf('peBelow').test({ price: 1, pe: null }, 20) && !W.ruleOf('peBelow').test({ price: 1, pe: -5 }, 20));
+ok('near 52-week low within 10%', t('near52Low', 10) && !t('near52Low', 3));
+ok('near 52-week high within 2% is false at 90 of 120', !t('near52High', 2));
+ok('at the high triggers', W.ruleOf('near52High').test({ price: 121, hi52: 120 }, 2));
+ok('fall from high of 20% (90 vs 120 is 25%)', t('fallFromHigh', 20) && !t('fallFromHigh', 30));
+ok('below 200-day average', t('belowDma200') && !W.ruleOf('aboveDma200').test(m));
+ok('day drop 4%', t('dayDrop', 4) && !t('dayDrop', 6));
+ok('1-year return below', t('ret1yBelow', -10) && !t('ret1yBelow', -20));
+const data = { alerts: [{ id: 'a1', kind: 'stock', ref: 'AAA', name: 'AAA', rule: 'priceBelow', value: 95 }, { id: 'a2', kind: 'stock', ref: 'BBB', name: 'BBB', rule: 'priceBelow', value: 10 }, { id: 'a3', kind: 'fund', ref: '1', name: 'F', rule: 'navAbove', value: 1 }, { id: 'a4', kind: 'stock', ref: 'AAA', name: 'AAA', rule: 'peBelow', value: 5, on: false }] };
+const store = { 'EQ:AAA': m, 'EQ:BBB': m };
+const r = W.evalAlerts(data, store);
+ok('only the true alert triggers', r.hit.length === 1 && r.hit[0].alert.id === 'a1', r.hit.map((x) => x.text).join());
+ok('quiet and waiting are separated; switched-off alerts are skipped', r.quiet.length === 1 && r.waiting.length === 1);
+// fund indicators from a steady 10% a year NAV
+const rows = []; const d0 = Date.parse('2021-01-01');
+for (let i = 0; i < 1800; i++) rows.push({ d: new Date(d0 + i * 86400000).toISOString().slice(0, 10), v: 100 * Math.pow(1.1, i / 365) });
+const f = W.fundIndicators(rows);
+ok('fund 1-year return is about 10%', Math.abs(f.ret1y - 0.1) < 0.005, f.ret1y.toFixed(4));
+ok('fund 3-year CAGR is about 10%', Math.abs(f.cagr3 - 0.1) < 0.005);
+ok('a rising fund sits at its high', f.fromAth === 0 && f.price >= f.hi52 - 1e-9);
+const mk = (kind, name, mm, extra = {}) => ({ kind, name, key: name, held: true, m: mm, ref: name, ...extra });
+const sc = W.buildScreens([mk('stock', 'Cheap', { price: 100, pe: 8, hi52: 101, lo52: 60, dma200: 90 }), mk('stock', 'Dear', { price: 50, pe: 90, hi52: 100, lo52: 40, dma200: 70 }), mk('fund', 'Fnd', { price: 10, ret1y: 0.2, hi52: 10, lo52: 8 })]);
+const ids = sc.map((s) => s.id);
+ok('screens: near high, low P/E, high P/E, fallen, below 200-day, funds', ['hi', 'lowpe', 'highpe', 'fall', 'dma', 'fbest'].every((x) => ids.includes(x)), ids.join());
+ok('lowest P/E list starts with the cheapest', sc.find((s) => s.id === 'lowpe').items[0].r.name === 'Cheap');
+console.log(fail ? `\n${fail} FAILED` : '\nall passed'); process.exit(fail ? 1 : 0);

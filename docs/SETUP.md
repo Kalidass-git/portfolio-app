@@ -197,6 +197,13 @@ No backend change. The Wealth projector now has five tabs: This year, Years ahea
 - **Measured against** is now a setting. On the Risk limits tab, switch risk-group and kind limits between **Everything I own** and **Investments only** (bank balances left out). Each kind, each single-holding rule and each named holding can also choose **Market-linked only** (shares, ETFs, funds) or **Its own group**.
 - Name suggestions in the Risk and What-if forms now show up as you type.
 
+## Release 8.9.17 – Alerts, watchlist, fundamentals and "where to look"
+
+- Shares & funds → **Alerts & watchlist**: set alerts for any share or fund, held or not. Rules: price or NAV below/above, P/E below/above, price-to-book, dividend yield, near the 52-week high or low, down X% from the high, below/above the 200-day average, big one-day move, fund 1-year return. Shares and funds you do not own go on the watchlist.
+- **Today** shows triggered alerts at the top (also on Home under "Needs a look") and a "Where to look" section: near 52-week high and low, lowest and highest P/E, fallen most from the high, below the 200-day average, biggest winners and positions you hold, highest dividend yield, strongest and weakest funds. Switch between your holdings and holdings plus watchlist.
+- Each share and fund page has a Fundamentals card: P/E, price to book, dividend yield, 52-week range bar, 50 and 200-day averages; business quality (ROE, debt, margins, growth) on demand; for funds 1m to 5y returns, ups and downs and how far below the all-time high.
+- **Backend update needed for shares:** `backend/Code.gs` has two new actions, `fundamentals` and `details`. Paste it into Apps Script and deploy a new version (Deploy, Manage deployments, pencil, New version). Funds work without it. Indicators are kept on each device; alerts are checked when you open the page or press Refresh indicators (there are no push notifications).
+
 ## Release 8.9.16 – Allocation goal by group, price history, tidier Home
 
 - Insights → Allocation goal: type targets at group level (Debts & fixed income, Gold, Equity, Others). Blank groups keep their current share and split what is left. Inside Debts & fixed income you can set a row (for example Bonds 25% of the group) and the other rows follow. Totals above 100% are refused. "Goal against today", "Where new money should go" and "Year by year" are grouped; tap a group to see its rows (shown as a share of the group). New: monthly amount needed to reach the goal in 3, 5 or 10 years, and how much would have to move today.
