@@ -163,7 +163,7 @@ function attention(data, all) {
   if (!shown.length) return null;
   const today = C.todayISO();
   return section('Needs a look', h('div', null, rowList(shown.map((o) => ({ title: o.title, sub: o.sub, value: o.value, tone: o.tone, onClick: () => { location.hash = o.href; },
-    extra: h('button', { type: 'button', class: 'small dismiss', title: 'Hide this until tomorrow', 'aria-label': 'Hide until tomorrow: ' + o.title, onclick: (e) => { e.stopPropagation(); setDismissed({ ...hid, [keyOf(o)]: today }); } }, 'Hide for today') }))),
+    extra: h('button', { type: 'button', class: 'small dismiss', title: 'Hide this until tomorrow', 'aria-label': 'Hide until tomorrow: ' + o.title, onclick: (e) => { e.stopPropagation(); setDismissed({ ...hid, [keyOf(o)]: today }); } }, 'Dismiss') }))),
     nHid ? h('p', { class: 'note' }, `${nHid} hidden until tomorrow. `, h('a', { href: '#', onclick: (e) => { e.preventDefault(); setDismissed({}); } }, 'Show again')) : null));
 }
 
