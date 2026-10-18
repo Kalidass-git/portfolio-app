@@ -8,6 +8,7 @@ import { lineChart, donut, legend } from '../charts.js';
 import { rerender, outlooks, signed, pc, tone, outlookToggle, datalistId } from './proj-shared.js';
 import { currentPlan } from './proj-year.js';
 import { statusTag, limitText, shareText } from './proj-risk.js';
+import { groupedTable, groupOfClass } from './groupmix.js';
 
 const KEY = 'pt.whatif';
 const load = () => { try { return JSON.parse(sessionStorage.getItem(KEY)) || null; } catch { return null; } };
@@ -166,16 +167,22 @@ function summary(cfg, ev, ev2, b) {
   const e = ev2 || ev;
   const bs = ev.buckets.filter((x) => x.value > 0).map((x) => ({ label: x.name, value: x.value }));
   const bs2 = e.buckets.filter((x) => x.value > 0).map((x) => ({ label: x.name, value: x.value }));
-  const table2 = table([
-    { label: 'Kind', host: true, get: (c) => c.name },
-    ev2 ? { label: 'Amount today', mob: 'hide', cls: 'r', get: (c) => money(ev.classes.find((x) => x.key === c.key).value) } : null,
-    ev2 ? { label: 'Amount after', mob: 'hide', cls: 'r', get: (c) => money(c.value) } : null,
-    { label: 'Today', cls: 'r', get: (c) => pcs(ev.classes.find((x) => x.key === c.key).pct) },
-    ev2 ? { label: 'After', cls: 'r', render: (c) => h('span', { class: c.over ? 'neg' : c.near ? 'warn' : '' }, pcs(c.pct)) } : null,
-    { label: 'Limit', cls: 'r', get: (c) => (c.max != null ? pcs(c.max) : '–') },
-    { label: 'Room left', mob: 'hide', cls: 'r', get: (c) => (c.room == null ? '–' : money(c.room)) },
-    { label: '', render: statusTag },
-  ].filter(Boolean), e.classes.filter((c) => c.value > 1 || ev.classes.find((x) => x.key === c.key).value > 1));
+  const was = (c) => ev.classes.find((x) => x.key === c.key);
+  const S_ = (it, f) => it.reduce((a, c) => a + f(c), 0);
+  const inS = (it, f) => S_(it.filter((c) => c.inScope), f);
+  const table2 = groupedTable({
+    rows: e.classes.filter((c) => c.value > 1 || was(c).value > 1), groupOf: (c) => groupOfClass(c.key),
+    cols: [
+      { label: 'Kind' },
+      ev2 ? { label: 'Amount today', hide: true, cls: 'r', parent: (it) => money(S_(it, (c) => was(c).value)), child: (c) => money(was(c).value) } : null,
+      ev2 ? { label: 'Amount after', hide: true, cls: 'r', parent: (it) => money(S_(it, (c) => c.value)), child: (c) => money(c.value) } : null,
+      { label: 'Today', cls: 'r', parent: (it) => pcs(inS(it, (c) => was(c).pct)), child: (c) => pcs(was(c).pct) },
+      ev2 ? { label: 'After', cls: 'r', parent: (it) => h('span', { class: it.some((c) => c.over) ? 'neg' : it.some((c) => c.near) ? 'warn' : '' }, pcs(inS(it, (c) => c.pct))), child: (c) => h('span', { class: c.over ? 'neg' : c.near ? 'warn' : '' }, pcs(c.pct)) } : null,
+      { label: 'Limit', cls: 'r', parent: () => '', child: (c) => (c.max != null ? pcs(c.max) : '–') },
+      { label: 'Room left', hide: true, cls: 'r', parent: () => '', child: (c) => (c.room == null ? '–' : money(c.room)) },
+      { label: '', parent: (it) => (it.some((c) => c.over) ? h('span', { class: 'tag bad' }, 'over') : it.some((c) => c.near) ? h('span', { class: 'tag warn' }, 'close') : ''), child: statusTag },
+    ].filter(Boolean),
+  });
   return h('div', null,
     ev2 ? h('div', { class: 'grid2' }, h('div', null, h('p', { class: 'mini-title' }, 'Today'), donut(bs, { fmt: money, center: compact(ev.total), sub: 'assets', size: 170 })), h('div', null, h('p', { class: 'mini-title' }, 'After'), donut(bs2, { fmt: money, center: compact(e.total), sub: 'assets', size: 170 }))) : h('div', null, donut(bs, { fmt: money, center: compact(ev.total), sub: 'assets', size: 190 }), legend(bs, { fmt: money })),
     ev2 ? legend(bs2, { fmt: money }) : null,

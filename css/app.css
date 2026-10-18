@@ -655,3 +655,15 @@ tr.proj-row td { color: var(--muted); font-style: italic; }
 .imp-block { margin: 8px 0; } .imp-block p { margin: 4px 0 8px; }
 .tbl.imp tr.row-warn td { background: color-mix(in srgb, var(--warn) 18%, var(--surface)); } .tbl.imp tr.row-warn td:first-child { box-shadow: inset 4px 0 0 var(--warn); }
 .tbl.imp tr.row-bad td:first-child { box-shadow: inset 4px 0 0 var(--neg); }
+
+/* grouped tables (Debts, Gold, Equity, Others) */
+.gt .gt-parent { cursor: pointer; background: color-mix(in srgb, var(--g, #1f5fb8) 11%, var(--card, #fff)); }
+.gt .gt-parent td { border-bottom: 1px solid color-mix(in srgb, var(--g, #1f5fb8) 24%, var(--card, #fff)); font-weight: 600; }
+.gt .gt-parent .caret { display: inline-block; width: 1em; transition: transform .12s; color: var(--g, #1f5fb8); }
+.gt .grp:not(.collapsed) .caret { transform: rotate(90deg); }
+.gt .gt-parent .cnt { font-weight: 400; color: var(--muted, #6b7a8c); font-size: .8em; }
+.gt .gt-child td { font-size: .92em; }
+.gt .gt-child td:first-child { padding-left: 1.7em; }
+.gt .grp.collapsed .gt-child { display: none; }
+.gt .gt-parent:focus-visible { outline: 2px solid var(--accent, #1f5fb8); outline-offset: -2px; }
+@media print { .gt .grp.collapsed .gt-child { display: table-row !important; } }

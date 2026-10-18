@@ -163,6 +163,18 @@ export function cashCalendar(data, all, nMonths) {
   return { months: rows, totalIn: sum(rows, (r) => r.inflow), totalOut: sum(rows, (r) => r.outflow), maturing: sum(rows, (r) => r.maturing) };
 }
 
+/** Everything that matures within `days` days (or is already past its date and still open), soonest first. */
+export function maturityAlerts(data, all, days = 31) {
+  const lim = new Date(C.toMs(all.asOf) + days * DAY).toISOString().slice(0, 10);
+  const out = [];
+  const push = (it, kind, amount) => { if (it.maturityDate && it.maturityDate <= lim) out.push({ name: it.name, kind, date: it.maturityDate, amount, daysLeft: spanDays(all.asOf, it.maturityDate), overdue: it.maturityDate < all.asOf }); };
+  for (const b of all.bonds) push(b, 'Bond', b.principal);
+  for (const f of all.fds) push(f, 'Fixed deposit', f.interestType === 'Compound' ? f.principal + f.totalInterest : f.principal);
+  for (const l of all.lending) if (l.principal > 0) push(l, 'Private lending', l.interestType === 'Compound' ? l.principal + l.totalInterest : l.principal);
+  for (const s of all.savings) push(s, s.type === 'Chit' ? 'Chit' : s.type || 'Savings', s.payout > 0 ? s.payout : s.principal);
+  return out.sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
 // ---------- 3. Annual review ----------
 /** Net worth readings from the Plan sheet, projector snapshots and the daily history, one per month (the latest in that month). */
 export function netWorthPoints(data, all) {

@@ -5,6 +5,7 @@ import * as R from '../risk.js';
 import { h, money, compact, section, stat, table, btn, formDialog, canEdit, toast } from '../ui.js';
 import { strip, legend } from '../charts.js';
 import { signed, datalistId, rerender } from './proj-shared.js';
+import { groupedTable, groupOfClass } from './groupmix.js';
 
 const pcs = (x, d = 1) => (x == null ? '–' : (Math.round(x * 100 * 10 ** d) / 10 ** d) + '%');
 const inPct = (x) => (x == null ? '' : Math.round(x * 1000) / 10);
@@ -104,16 +105,18 @@ export function render(root) {
 
   // ---------- kinds of holding ----------
   root.append(section('By kind of holding', h('div', null,
-    table([
-      { label: 'Kind', host: true, get: (c) => c.name },
-      { label: 'Risk group', mob: 'under', get: (c) => (cfg.buckets.find((b) => b.id === c.bucket) || {}).name },
-      { label: 'Now', cls: 'r', get: (c) => (c.inScope ? pcs(c.pct) : 'not counted'), mob: 'under', mlabel: 'now ' },
-      { label: 'Amount', mob: 'hide', cls: 'r', get: (c) => money(c.value), total: () => money(T) },
-      { label: 'Limit', cls: 'r', get: (c) => limitText({ ...c, base: undefined, of: c.of === cfg.basis ? undefined : c.of }) },
-      { label: 'Room left', mob: 'hide', cls: 'r', get: (c) => (c.room == null ? '–' : money(c.room)) },
-      { label: '', render: statusTag },
-    ], ev.classes.filter((c) => c.value > 1 || c.max != null), { onRow: canEdit() ? (c) => classForm(cfg, c) : null, footer: { label: 'Total' } }),
-    h('p', { class: 'note' }, 'Tap a row to change its risk group or its limit. Room left is how much more could go in, paid from cash, before the limit is reached.'))));
+    groupedTable({
+      rows: ev.classes.filter((c) => c.value > 1 || c.max != null), groupOf: (c) => groupOfClass(c.key), onRow: canEdit() ? (c) => classForm(cfg, c) : null,
+      cols: [
+        { label: 'Kind' },
+        { label: 'Now', cls: 'r', parent: (it) => pcs(it.filter((c) => c.inScope).reduce((a, c) => a + c.pct, 0)), child: (c) => (c.inScope ? pcs(c.pct) : 'not counted') },
+        { label: 'Amount', cls: 'r', hide: true, parent: (it) => money(it.reduce((a, c) => a + c.value, 0)), child: (c) => money(c.value), total: () => money(T) },
+        { label: 'Limit', cls: 'r', parent: () => '', child: (c) => limitText({ ...c, base: undefined, of: c.of === cfg.basis ? undefined : c.of }) },
+        { label: 'Room left', cls: 'r', hide: true, parent: () => '', child: (c) => (c.room == null ? '–' : money(c.room)) },
+        { label: '', parent: (it) => (it.some((c) => c.over) ? h('span', { class: 'tag bad' }, 'over') : it.some((c) => c.near) ? h('span', { class: 'tag warn' }, 'close') : ''), child: statusTag },
+      ],
+    }),
+    h('p', { class: 'note' }, 'Tap a group to see its kinds, then tap a kind to change its risk group or its limit. Room left is how much more could go in, paid from cash, before the limit is reached.'))));
 
   // ---------- single-holding rules ----------
   root.append(section('One holding at a time', h('div', null,

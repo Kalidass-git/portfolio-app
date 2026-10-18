@@ -6,6 +6,7 @@ import * as I from '../insights.js';
 import { h, money, compact, pct, dateStr, monthLabel, section, stat, table, btn, segTabs, subTab, setOptions, formDialog, toast, canEdit } from '../ui.js';
 import { barChart, lineChart } from '../charts.js';
 import { plannedByMonth } from './networth.js';
+import { groupedTable, groupOfAlloc } from './groupmix.js';
 
 const TABS = [['tax', 'Tax summary'], ['calendar', 'Cash calendar'], ['review', 'Annual review'], ['anomalies', 'Spending anomalies'], ['allocation', 'Allocation goal']];
 const rerender = () => window.dispatchEvent(new Event('rerender'));
@@ -35,6 +36,7 @@ function tax(root) {
   const t = I.taxSummary(data, all, st.fy);
   root.append(h('div', { class: 'filters' }, select(fys.map((f) => ({ value: String(f.y), label: f.label })), st.fy, 'Financial year', (v) => { st.fy = Number(v); rerender(); }),
     btn('Download CSV', () => download(`tax-summary-${t.fy.replace(/\s/g, '-')}.csv`, I.taxCsv(t)), 'small')));
+  if (t.bankOther.length) root.append(section('Other income credited to the bank', table([{ label: 'Category', host: true, get: (r) => r.category }, { label: 'Amount', cls: 'r', get: (r) => money(r.amount) }], t.bankOther, {})));
   root.append(h('div', { class: 'stats' },
     stat('Interest earned', money(t.interestGross), 'bonds, FDs and lending'),
     stat('Salary', money(t.salary), 'credited to the bank'),
@@ -62,14 +64,16 @@ function tax(root) {
     { label: 'Gain', cls: 'r', render: (g) => h('span', { class: tone(g.gain) }, signed(g.gain)) },
     { label: 'Term', mob: 'under', get: (g) => (g.term === 'LT' ? 'Long term' : 'Short term') },
   ], t.gains, {}) : h('p', { class: 'empty' }, 'No shares or funds sold in this year.')));
-  root.append(note('A guide for filing, not tax advice. Gains use oldest units first. Debt funds, gold ETFs, bonus and split adjustments and the grandfathering rules are taxed differently, so check these with your accountant. Rental income, interest on savings accounts and other bank interest appear under Income credited below only if you categorised them.'));
-  if (t.bankOther.length) root.append(section('Other income credited to the bank', table([{ label: 'Category', host: true, get: (r) => r.category }, { label: 'Amount', cls: 'r', get: (r) => money(r.amount) }], t.bankOther, {})));
+  root.append(note('A guide for filing, not tax advice. Gains use oldest units first. Debt funds, gold ETFs, bonus and split adjustments and the grandfathering rules are taxed differently, so check these with your accountant. Rental income, interest on savings accounts and other bank interest appear under Other income credited only if you categorised them.'));
 }
 
 // ---------- 2. Cash calendar ----------
 function calendar(root) {
   const { data, all } = S;
   const cal = I.cashCalendar(data, all, st.months);
+  const al = I.maturityAlerts(data, all);
+  if (al.length) root.append(h('div', { class: 'card alert-card', role: 'alert' }, h('h3', null, `Maturing within a month${al.some((x) => x.overdue) ? ' or already due' : ''}`),
+    h('ul', { class: 'findings' }, al.map((x) => h('li', { class: x.overdue || x.daysLeft <= 7 ? 'over' : 'amber' }, h('b', null, x.name), ` (${x.kind}) `, x.overdue ? h('span', { class: 'neg' }, `was due ${dateStr(x.date)}`) : h('span', { class: x.daysLeft <= 7 ? 'neg' : 'warn' }, x.daysLeft === 0 ? 'matures today' : `matures in ${x.daysLeft} day${x.daysLeft === 1 ? '' : 's'} (${dateStr(x.date)})`), ' · ', money(x.amount))))));
   root.append(h('div', { class: 'filters' }, select([3, 6, 12, 24].map((n) => ({ value: String(n), label: `Next ${n} months` })), st.months, 'Months ahead', (v) => { st.months = Number(v); rerender(); })));
   root.append(h('div', { class: 'stats' },
     stat('Money coming in', money(cal.totalIn), `next ${st.months} months`),
@@ -190,15 +194,21 @@ function allocation(root) {
     stat('New money each month', money(monthly), 'from income less spending'),
     stat('Furthest from goal', worst.label, `${worst.gap > 0 ? 'over' : 'under'} by ${(Math.abs(worst.gap) * 100).toFixed(1)} points`),
     stat('Market outlook', P.OUTLOOKS.find((o) => o.id === outlookId).name, 'for shares, funds and gold')));
-  root.append(section('Goal against today', table([
-    { label: 'Group', host: true, get: (x) => x.label },
-    { label: 'Now', cls: 'r', get: (x) => money(x.value), total: () => money(total) },
-    { label: 'Now %', cls: 'r', mob: 'under', mlabel: 'now ', get: (x) => pct(x.share, 1) },
-    { label: 'Goal %', cls: 'r', mob: 'under', mlabel: 'goal ', get: (x) => pct(x.goal, 1), total: () => pct(I.goalTotal(g.targets) / 100, 0) },
-    { label: 'Gap', cls: 'r', mob: 'hide', render: (x) => h('span', { class: Math.abs(x.gap) <= 0.02 ? 'pos' : 'neg' }, (x.gap > 0 ? '+' : x.gap < 0 ? '−' : '') + (Math.abs(x.gap) * 100).toFixed(1) + ' pts') },
-    { label: 'To reach goal today', cls: 'r', mob: 'hide', render: (x) => h('span', { class: x.move > 0 ? 'pos' : x.move < 0 ? 'neg' : '' }, x.move > 0 ? 'add ' + money(x.move) : x.move < 0 ? 'trim ' + money(-x.move) : '–') },
-  ], rows, { footer: {} }),
-  note('Within 2 points of the goal counts as reached. “To reach goal today” is what would have to move now; the plan below avoids selling and uses new money instead.')));
+  const sm = (it, k) => it.reduce((a, x) => a + x[k], 0);
+  const gapTxt = (gap) => h('span', { class: Math.abs(gap) <= 0.02 ? 'pos' : 'neg' }, (gap > 0 ? '+' : gap < 0 ? '−' : '') + (Math.abs(gap) * 100).toFixed(1) + ' pts');
+  const moveTxt = (mv) => h('span', { class: mv > 0 ? 'pos' : mv < 0 ? 'neg' : '' }, mv > 0 ? 'add ' + money(mv) : mv < 0 ? 'trim ' + money(-mv) : '–');
+  root.append(section('Goal against today', h('div', null, groupedTable({
+    rows, groupOf: (x) => groupOfAlloc(x.key),
+    cols: [
+      { label: 'Group' },
+      { label: 'Now', cls: 'r', parent: (it) => money(sm(it, 'value')), child: (x) => money(x.value), total: () => money(total) },
+      { label: 'Now %', cls: 'r', parent: (it) => pct(sm(it, 'share'), 1), child: (x) => pct(x.share, 1) },
+      { label: 'Goal %', cls: 'r', parent: (it) => pct(sm(it, 'goal'), 1), child: (x) => pct(x.goal, 1), total: () => pct(I.goalTotal(g.targets) / 100, 0) },
+      { label: 'Gap', cls: 'r', hide: true, parent: (it) => gapTxt(sm(it, 'gap')), child: (x) => gapTxt(x.gap) },
+      { label: 'To reach goal today', cls: 'r', hide: true, parent: (it) => moveTxt(sm(it, 'move')), child: (x) => moveTxt(x.move) },
+    ],
+  }),
+  note('Within 2 points of the goal counts as reached. “To reach goal today” is what would have to move now; the plan below avoids selling and uses new money instead.'))));
   root.append(section('Where new money should go', h('div', null, res.reached === 0 ? h('p', null, 'You are already inside the goal. Keep adding in the goal proportions:') : null, table([
     { label: 'Group', host: true, get: (x) => x.label },
     { label: 'Per month', cls: 'r', get: (x) => money(x.add || (res.reached === 0 ? monthly * x.goal : 0)) },
