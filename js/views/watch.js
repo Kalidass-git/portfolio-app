@@ -20,10 +20,9 @@ export async function refreshIndicators(onProgress) {
     toast(`Updated ${res.shares} shares and ${res.funds} funds` + (res.errors.length ? `. ${res.errors.length} issue${res.errors.length > 1 ? 's' : ''}: ${res.errors[0]}` : ''), res.errors.length ? 'bad' : '');
   } finally { busy = false; rerender(); }
 }
-export function refreshBar() {
-  const at = W.metricsAt();
+/** Quietly refreshes the P/E, 52-week and alert numbers once per visit when they are old. The Refresh button next to the tabs does it on request. */
+export function autoRefresh() {
   if (!auto && W.isStale() && (W.targetsOf(S.data, S.all).length)) { auto = true; setTimeout(() => { if (!busy) refreshIndicators().catch(() => {}); }, 300); }
-  return h('div', { class: 'price-bar' }, h('span', { class: 'stamp' + (at && !W.isStale(864e5) ? '' : ' warn') }, at ? `P/E, 52-week range and alerts updated ${ago(at)}. Use Refresh above to update.` : 'Indicators not fetched yet. Use Refresh above.'));
 }
 
 const heldKeys = () => new Set(W.universe(S.data, S.all).filter((u) => u.held).map((u) => u.key));
@@ -117,7 +116,8 @@ export function stockAdder() {
 }
 export function alertsTab(root) {
   const data = S.data, wl = data.watchlist || [], al = data.alerts || [];
-  root.append(refreshBar(), triggeredCard({ link: false }));
+  autoRefresh();
+  root.append(triggeredCard({ link: false }));
   const ev = W.evalAlerts(data), hitIds = new Set(ev.hit.map((x) => x.alert.id));
   const cur = (a) => { const m = W.metrics()[W.alertKey(a)]; if (!m) return '–'; return /^(price|nav)/.test(a.rule) || /Dma|52|fall|day/.test(a.rule) ? rs(m.price) : /^pe/.test(a.rule) ? (m.pe ? m.pe.toFixed(1) + ' times' : '–') : /^pb/.test(a.rule) ? (m.pb ? m.pb.toFixed(2) : '–') : /^dy/.test(a.rule) ? (m.dy != null ? m.dy.toFixed(2) + '%' : '–') : /ret1y/.test(a.rule) ? pc(m.ret1y) : '–'; };
   root.append(section('Your alerts', h('div', null, table([

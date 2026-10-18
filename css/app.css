@@ -718,3 +718,9 @@ tr.proj-row td { color: var(--muted); font-style: italic; }
 .kv { display: grid; gap: 2px; } .card.inner { margin: 0; box-shadow: none; border: 1px solid var(--line); }
 .form select, .form input { max-width: 100%; box-sizing: border-box; }
 .seg.sub { margin-top: 6px; } .seg.sub.small { font-size: .85rem; opacity: .9; }
+
+/* refresh sits beside the tabs */
+.pagebar .price-bar.inline { margin: 0 0 0 auto; gap: 8px; flex: 0 1 auto; justify-content: flex-end; }
+.price-bar.inline .stamp { font-size: .78rem; text-align: right; line-height: 1.2; }
+.price-bar.inline .refresh-btn { min-height: 34px; padding: 4px 10px; font-size: .85rem; }
+@media (max-width: 700px) { .pagebar .price-bar.inline { width: 100%; margin: 0; justify-content: space-between; } }
