@@ -2,7 +2,7 @@
 import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
 import { h, money, compact, pct, dateStr, monthLabel, section, monthPicker, rowList, kpi, dateChip, btn, canEdit, dec, toast, dialog } from '../ui.js';
-import { strip, legend, hbars, lineChart, donut, spark, color } from '../charts.js';
+import { strip, legend, hbars, lineChart, donut, spark, color, riskColor } from '../charts.js';
 import * as R from '../risk.js';
 import { rateHistory, ageText } from './gold.js';
 import { homeCard as loansCard } from './loans.js';
@@ -177,9 +177,9 @@ function allocation(all) {
   const { cfg, ev, pc1, lim } = riskState(all);
   const kinds = ev.classes.filter((c) => c.value > 1).sort((a, b) => b.value - a.value);
   const tot = kinds.reduce((a, c) => a + c.value, 0);
-  const groups = allocMode === 'cat' ? GROUPS : cfg.buckets.map((b) => ({ id: b.id, label: b.name }));
+  const groups = allocMode === 'cat' ? GROUPS : cfg.buckets.map((b, i) => ({ id: b.id, label: b.name, color: riskColor(b.id, i, cfg.buckets.length) }));
   const gOf = allocMode === 'cat' ? (c) => groupOfClass(c.key) : (c) => c.bucket;
-  const parents = groups.map((g) => ({ id: g.id, label: g.label, value: kinds.filter((c) => gOf(c) === g.id).reduce((a, c) => a + c.value, 0) })).filter((p) => p.value > 0);
+  const parents = groups.map((g) => ({ id: g.id, label: g.label, color: g.color, value: kinds.filter((c) => gOf(c) === g.id).reduce((a, c) => a + c.value, 0) })).filter((p) => p.value > 0);
   const drill = parents.find((p) => p.id === allocDrill) || null;
   const toneCls = (b) => (b.over ? 'neg' : b.near ? 'warn' : '');
   const share = (v, t) => (t > 0 ? (Math.round((v / t) * 1000) / 10) + '%' : '–');
@@ -253,14 +253,14 @@ function returnsCard(data, all, rets, cov) {
   const tbl = h('div', { class: 'rets' }, rows.map(({ g, p }, i) => h('details', { class: 'ret-grp', open: false },
     h('summary', null, h('span', { class: 'rg-name' }, h('i', { class: 'dot', style: { background: color(i) } }), h('b', null, g.label)), h('span', { class: 'rg-flow' }, `${compact(p.invested)} in → ${compact(p.value)} now`),
       h('span', { class: 'rg-gain ' + tone(p.gain) }, `${p.gain >= 0 ? '▲' : '▼'} ${compact(Math.abs(p.gain))}`),
-      h('span', { class: 'rg-x' }, [p.ret != null && g.id !== 'debt' ? pct(p.ret) : null, p.x == null ? null : `XIRR ${pct(p.x)}${p.partial ? '*' : ''}`].filter(Boolean).join(' · ') || '–')),
+      h('span', { class: 'rg-x' }, [p.ret != null && g.id !== 'debt' ? 'Return ' + pct(p.ret) : null, p.x == null ? null : `XIRR ${pct(p.x)}${p.partial ? '*' : ''}`].filter(Boolean).join(' · ') || '–')),
     rowList(p.it.map((r) => ({
       title: r.name, sub: `${compact(r.invested)} in → ${compact(r.value)} now`,
       value: h('span', { class: tone(r.gain) }, `${r.gain >= 0 ? '▲' : '▼'} ${compact(Math.abs(r.gain))}`),
-      valueSub: [showRet(r) ? pct(r.ret) : null, xirrTxt(r)].filter(Boolean).join(' · ') || null,
+      valueSub: [showRet(r) ? 'Return ' + pct(r.ret) : null, xirrTxt(r)].filter(Boolean).join(' · ') || null,
     }))))));
   return section('How your investments did', h('div', null, tbl,
-    h('p', { class: 'note' }, 'XIRR is the yearly return that accounts for when each rupee went in. It needs dated cash flows, so shares and funds show plain return until buy dates are added. XIRR rows cover ' + pct(cov.coverage, 0) + ' of your assets.' + (cov.xirr != null ? ' Overall XIRR across everything with dates is ' + pct(cov.xirr, 1) + (cov.xirrNoPf != null ? ' (' + pct(cov.xirrNoPf, 1) + ' without EPF and PPF)' : '') + '. It is money-weighted: long-held money, such as EPF at a steady rate, counts for more than newer money.' : '') + ' Bond and lending XIRR assume coupons arrive on schedule. “≈” marks an estimate from an assumed rate (chits and savings); it is left out of the overall figure until the chit is closed with the real amount. A group’s XIRR is worked out from all its rows’ dated cash flows together; * means some rows are left out because they have no dates or are only estimates. Tap a group to see its rows.')));
+    h('p', { class: 'note' }, '“Return” is the plain gain on the money put in; XIRR is the yearly return that accounts for when each rupee went in, so the two are different numbers. It needs dated cash flows, so shares and funds show plain return until buy dates are added. XIRR rows cover ' + pct(cov.coverage, 0) + ' of your assets.' + (cov.xirr != null ? ' Overall XIRR across everything with dates is ' + pct(cov.xirr, 1) + (cov.xirrNoPf != null ? ' (' + pct(cov.xirrNoPf, 1) + ' without EPF and PPF)' : '') + '. It is money-weighted: long-held money, such as EPF at a steady rate, counts for more than newer money.' : '') + ' Bond and lending XIRR assume coupons arrive on schedule. “≈” marks an estimate from an assumed rate (chits and savings); it is left out of the overall figure until the chit is closed with the real amount. A group’s XIRR is worked out from all its rows’ dated cash flows together; * means some rows are left out because they have no dates or are only estimates. Tap a group to see its rows.')));
 }
 
 function comingUp(data, all) {

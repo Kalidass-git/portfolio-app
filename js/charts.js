@@ -36,7 +36,7 @@ export function strip(items, { fmt, total } = {}) {
   const bar = h('div', { class: 'strip', role: 'img', 'aria-label': items.map((i) => `${i.label} ${((i.value / sum) * 100).toFixed(1)}%`).join(', ') });
   items.forEach((it, i) => {
     if (it.value <= 0) return;
-    const seg = h('span', { class: 'seg', style: { flexGrow: String(it.value), background: color(i) }, 'data-i': i });
+    const seg = h('span', { class: 'seg', style: { flexGrow: String(it.value), background: it.color || color(i) }, 'data-i': i });
     hover(seg, () => [h('b', null, it.label), h('div', null, (fmt ? fmt(it.value) : it.value) + '  ·  ' + ((it.value / sum) * 100).toFixed(1) + '%')]);
     bar.append(seg);
   });
@@ -45,7 +45,7 @@ export function strip(items, { fmt, total } = {}) {
 export function legend(items, { fmt, onSelect = null } = {}) {
   const sum = items.reduce((a, x) => a + Math.max(0, x.value), 0);
   return h('ul', { class: 'legend' }, items.map((it, i) => h('li', onSelect ? { class: 'click', tabindex: 0, onclick: () => onSelect(it, i), onkeydown: (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onSelect(it, i)) } : null,
-    h('i', { style: { background: color(i) } }),
+    h('i', { style: { background: it.color || color(i) } }),
     h('span', { class: 'lg-name' }, it.label),
     h('span', { class: 'lg-val' }, fmt ? fmt(it.value) : it.value),
     h('span', { class: 'lg-pct' }, sum ? ((it.value / sum) * 100).toFixed(1) + '%' : ''))));
@@ -166,7 +166,7 @@ export function donut(items, { fmt = (v) => v, center = '', sub = '', size = 200
       const [x1, y1] = pt(R, s), [x2, y2] = pt(R, e), [x3, y3] = pt(r, e), [x4, y4] = pt(r, s), big = e - s > Math.PI ? 1 : 0;
       d = `M${x1.toFixed(2)},${y1.toFixed(2)}A${R},${R} 0 ${big} 1 ${x2.toFixed(2)},${y2.toFixed(2)}L${x3.toFixed(2)},${y3.toFixed(2)}A${r},${r} 0 ${big} 0 ${x4.toFixed(2)},${y4.toFixed(2)}Z`;
     }
-    const seg = svg('path', { d, fill: color(i), class: 'dseg' + (onSelect ? ' click' : ''), 'fill-rule': 'evenodd' });
+    const seg = svg('path', { d, fill: it.color || color(i), class: 'dseg' + (onSelect ? ' click' : ''), 'fill-rule': 'evenodd' });
     if (onSelect) { seg.addEventListener('click', () => onSelect(it, i)); seg.setAttribute('tabindex', '0'); seg.setAttribute('role', 'button'); seg.setAttribute('aria-label', 'Show what is inside ' + it.label); seg.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(it, i); } }); }
     hover(seg, () => [h('b', null, it.label), h('div', null, fmt(it.value) + '  ·  ' + ((it.value / sum) * 100).toFixed(1) + '%')]);
     root.append(seg);
@@ -185,4 +185,47 @@ export function spark(values, { height = 36, width = 120, tone = 0 } = {}) {
   return svg('svg', { viewBox: `0 0 ${width} ${height}`, class: 'spark', 'aria-hidden': 'true', width, height },
     svg('path', { d: d + `L${x(values.length - 1)},${height}L${x(0)},${height}Z`, fill: color(tone), opacity: '.14' }),
     svg('path', { d, fill: 'none', stroke: color(tone), 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+}
+
+/** Green for safe through amber to deep red for very high risk. Known group ids get fixed colours; custom groups are spread along the same ramp in order. */
+const RISK = { safe: '#1b7f3b', low: '#7cb342', medium: '#f2b01e', mediumhigh: '#ef8a1f', high: '#e5483a', vhigh: '#a1171d' };
+const RAMP = ['#1b7f3b', '#7cb342', '#f2b01e', '#ef8a1f', '#e5483a', '#a1171d'];
+export function riskColor(id, index = 0, count = 1) {
+  if (RISK[id]) return RISK[id];
+  return RAMP[count <= 1 ? 2 : Math.round((index / (count - 1)) * (RAMP.length - 1))];
+}
+
+/** Stacked area: each series sits on top of the one before, filled in its own colour. series: [{name, values, color}] (color = palette index or a CSS colour). */
+export function stackedArea({ labels, series, fmt = (v) => v, height = 240, width }) {
+  const W = width || defaultWidth(), H = height, pad = { l: 44, r: 12, t: 12, b: 24 };
+  const n = labels.length;
+  const totals = labels.map((_, i) => series.reduce((a, s) => a + Math.max(0, s.values[i] || 0), 0));
+  const hi = niceMax(Math.max(1, ...totals));
+  const x = (i) => pad.l + (n < 2 ? 0 : (i / (n - 1)) * (W - pad.l - pad.r));
+  const y = (v) => pad.t + (1 - v / hi) * (H - pad.t - pad.b);
+  const col = (s, i) => (typeof s.color === 'string' ? s.color : color(s.color ?? i));
+  const root = svg('svg', { viewBox: `0 0 ${W} ${H}`, class: 'chart', role: 'img', 'aria-label': series.map((s) => s.name).join(', ') });
+  for (let i = 0; i <= 4; i++) { const v = (hi * i) / 4; root.append(svg('line', { x1: pad.l, x2: W - pad.r, y1: y(v), y2: y(v), class: 'grid' }), svg('text', { x: pad.l - 6, y: y(v) + 3.5, class: 'axis', 'text-anchor': 'end' }, short(v))); }
+  const step = Math.max(1, Math.ceil(n / 8));
+  labels.forEach((l, i) => { if (i % step === 0 || i === n - 1) root.append(svg('text', { x: x(i), y: H - 6, class: 'axis', 'text-anchor': i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle' }, l)); });
+  const base = labels.map(() => 0);
+  series.forEach((s, si) => {
+    const top = s.values.map((v, i) => base[i] + Math.max(0, v || 0));
+    let d = top.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('');
+    d += base.slice().reverse().map((v, k) => `L${x(n - 1 - k).toFixed(1)},${y(v).toFixed(1)}`).join('') + 'Z';
+    root.append(svg('path', { d, fill: col(s, si), opacity: '.85', stroke: 'var(--surface, #fff)', 'stroke-width': 1 }));
+    top.forEach((v, i) => { base[i] = v; });
+  });
+  const cross = svg('line', { y1: pad.t, y2: H - pad.b, class: 'cross', style: 'display:none' });
+  root.append(cross);
+  const hit = svg('rect', { x: pad.l, y: pad.t, width: W - pad.l - pad.r, height: H - pad.t - pad.b, fill: 'transparent' });
+  hit.addEventListener('pointermove', (e) => {
+    const r = root.getBoundingClientRect(), px = ((e.clientX - r.left) / r.width) * W;
+    const i = Math.max(0, Math.min(n - 1, Math.round(((px - pad.l) / (W - pad.l - pad.r)) * (n - 1))));
+    cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.style.display = '';
+    showTip(e, [h('b', null, labels[i]), ...series.map((s, si) => h('div', null, h('i', { class: 'tip-dot', style: { background: col(s, si) } }), `${s.name}: ${fmt(s.values[i] || 0)}`)), series.length > 1 ? h('div', null, `Total: ${fmt(totals[i])}`) : null].filter(Boolean));
+  });
+  hit.addEventListener('pointerleave', () => { cross.style.display = 'none'; hideTip(); });
+  root.append(hit);
+  return h('div', { class: 'chart-box' }, root, series.length > 1 ? h('ul', { class: 'legend inline' }, series.map((s, i) => h('li', null, h('i', { style: { background: col(s, i) } }), h('span', { class: 'lg-name' }, s.name)))) : null);
 }

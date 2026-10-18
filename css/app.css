@@ -698,3 +698,5 @@ tr.proj-row td { color: var(--muted); font-style: italic; }
 @media (min-width: 900px) { .alloc-grid { grid-template-columns: 200px minmax(0, 1fr); } }
 /* allocation: chart on top, list below at full width */
 .alloc-grid, .alloc-grid { grid-template-columns: minmax(0, 1fr) !important; }
+.chip-btn.on { background: var(--brand); color: #fff; border-color: var(--brand); } .chip-btn .gdot { margin-right: 6px; }
+.chips { margin: 8px 0; flex-wrap: wrap; }

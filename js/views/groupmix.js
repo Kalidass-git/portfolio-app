@@ -24,13 +24,13 @@ export function groupedTable({ cols, rows, groupOf, onRow, rowClass, footerLabel
   for (const g of groups) {
     const items = rows.filter((r) => groupOf(r) === g.id);
     if (!items.length) continue;
-    const gc = color(n++), isOpen = open || openIds.includes(g.id);
+    const gc = g.color || color(n), isOpen = open || openIds.includes(g.id);
     const tb = h('tbody', { class: 'grp' + (isOpen ? '' : ' collapsed'), style: { '--g': gc } });
     tb.append(h('tr', { class: 'gt-parent', style: { '--g': gc }, tabindex: 0, 'aria-expanded': isOpen ? 'true' : 'false', onclick: () => { tb.classList.toggle('collapsed'); tb.firstChild.setAttribute('aria-expanded', String(!tb.classList.contains('collapsed'))); }, onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click(); } }, title: 'Tap to show or hide the kinds inside' },
       cols.map((c, i) => h('td', { class: [c.cls || '', c.hide ? 'hide-sm' : ''].join(' ').trim() }, i === 0 ? [h('span', { class: 'caret', 'aria-hidden': 'true' }, '▸'), parentDot ? h('i', { class: 'gdot', style: { background: gc } }) : null, h('b', null, g.label), h('span', { class: 'cnt' }, ` ${items.length}`)] : c.parent ? c.parent(items) : ''))));
     items.forEach((r, ri) => tb.append(h('tr', { class: 'gt-child ' + (onRow ? 'click ' : '') + ((rowClass && rowClass(r)) || ''), onclick: onRow ? () => onRow(r) : null },
       cols.map((c, i) => h('td', { class: [c.cls || '', c.hide ? 'hide-sm' : ''].join(' ').trim() }, i === 0 && childDot && childDot(g, ri) ? [h('i', { class: 'gdot', style: { background: childDot(g, ri) } }), r.label || r.name] : c.child ? c.child(r) : i === 0 ? (r.label || r.name) : '')))));
-    t.append(tb);
+    t.append(tb); n++;
   }
   if (cols.some((c) => c.total)) t.append(h('tfoot', null, h('tr', null, cols.map((c, i) => h('td', { class: [c.cls || '', c.hide ? 'hide-sm' : ''].join(' ').trim() }, i === 0 ? footerLabel : c.total ? c.total(rows) : '')))));
   return h('div', { class: 'tbl-wrap' }, t);

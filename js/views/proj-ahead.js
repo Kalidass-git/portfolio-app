@@ -2,12 +2,12 @@
 import { S, mutate } from '../store.js';
 import * as P from '../projector.js';
 import { h, money, compact, pct, monthLabel, section, stat, table, btn, formDialog, canEdit, toast, setOptions } from '../ui.js';
-import { lineChart, donut, legend } from '../charts.js';
+import { lineChart, donut, legend, stackedArea, color } from '../charts.js';
 import { rerender, outlooks, ensure, signed, pc, tone, outlookToggle, outlookSelects } from './proj-shared.js';
 import { currentPlan } from './proj-year.js';
-import { groupedTable, groupOfClass } from './groupmix.js';
+import { groupedTable, groupOfClass, GROUPS } from './groupmix.js';
 
-let compare = false, viewHorizon = null;
+let compare = false, viewHorizon = null, netView = 'net', catPick = 'all';
 const frac = (x) => (x == null || x === '' ? 0 : Number(x) / 100);
 const pctIn = (x) => (x == null || x === '' ? '' : Math.round(x * 10000) / 100);
 
@@ -63,7 +63,7 @@ export function render(root) {
   const year0 = (r) => monthLabel(r.month);
 
   // ---------- controls ----------
-  const hz = h('select', { 'aria-label': 'Years to look ahead', onchange: (e) => { viewHorizon = +e.target.value; if (canEdit()) setOwn({ horizon: viewHorizon }); else rerender(); } }, [5, 10, 15, 20, 25].map((n) => h('option', { value: n, selected: n === s.horizon }, `${n} years`)));
+  const hz = h('select', { 'aria-label': 'Years to look ahead', onchange: (e) => { viewHorizon = +e.target.value; if (canEdit()) setOwn({ horizon: viewHorizon }); else rerender(); } }, [2, 3, 4, 5, 7, 10, 15, 20, 25].map((n) => h('option', { value: n, selected: n === s.horizon }, `${n} years`)));
   root.append(h('div', { class: 'filters' }, h('label', null, 'Look ahead ', hz), h('label', { class: 'check-inline' }, h('input', { type: 'checkbox', checked: compare, onchange: (e) => { compare = e.target.checked; rerender(); } }), ' Compare all outlooks')));
   root.append(section('Market outlook for the years ahead', h('div', null,
     outlookToggle(s.a.outlook, (id) => canEdit() && setOwn({ outlook: Object.fromEntries(P.MARKET.map((k) => [k, id])) }), { disabled: !canEdit() }),
@@ -90,7 +90,30 @@ export function render(root) {
     sc.forEach((x, i) => series.push({ name: `${x.outlook.name} (${pc(x.outlook.rate, 0)})`, values: [b.net, ...Array.from({ length: s.horizon }, (_, k) => x.rows[k * 12 + 11].nw)], color: i }));
   } else series.push({ name: 'Net worth', values: line(yearRows), color: 0 });
   if (s.target) series.push({ name: 'Target', values: labels.map(() => s.target), dashed: true, color: 7 });
-  root.append(section('Net worth over the years', lineChart({ labels, fmt: money, yMin: 0, series, area: !compare })));
+  // by category: debts, gold, equity and others, each in its own colour
+  const sumGroup = (vals, gid) => P.CLASSES.filter((c) => groupOfClass(c.key) === gid).reduce((a, c) => a + ((vals && vals[c.key]) || 0), 0);
+  const catSeries = GROUPS.map((g, gi) => ({ id: g.id, name: g.label, color: gi, values: [sumGroup(b.values, g.id), ...yearRows.map((r) => (r ? sumGroup(r.values, g.id) : null))] })).filter((x) => x.values.some((v) => v > 1));
+  const growth = catSeries.map((x) => { const a = x.values[0], z = x.values[x.values.length - 1]; return { ...x, now: a, far: z, change: z - a, mult: a > 1 ? z / a : null, cagr: a > 1 && s.horizon ? Math.pow(z / a, 1 / s.horizon) - 1 : null }; });
+  if (catPick !== 'all' && !catSeries.some((x) => x.id === catPick)) catPick = 'all';
+  const tabs = h('nav', { class: 'seg slim', 'aria-label': 'Chart view' }, [['net', 'Net worth'], ['cats', 'By category']].map(([k, l]) => h('a', { href: '#', class: netView === k ? 'on' : '', onclick: (e) => { e.preventDefault(); netView = k; rerender(); } }, l)));
+  let netBody;
+  if (netView === 'net' || !catSeries.length) netBody = lineChart({ labels, fmt: money, yMin: 0, series, area: !compare });
+  else {
+    const chips = h('div', { class: 'chips' }, [{ id: 'all', name: 'All together' }, ...catSeries].map((x) => h('button', { type: 'button', class: 'chip-btn' + (catPick === x.id ? ' on' : ''), onclick: () => { catPick = x.id; rerender(); } }, x.id !== 'all' ? [h('i', { class: 'gdot', style: { background: color(x.color) } }), x.name] : x.name)));
+    const shown = catPick === 'all' ? catSeries : catSeries.filter((x) => x.id === catPick);
+    const fastest = growth.filter((x) => x.cagr != null).sort((a, b) => b.cagr - a.cagr);
+    netBody = h('div', null, chips, stackedArea({ labels, fmt: money, series: shown, height: 250 }),
+      table([
+        { label: 'Category', host: true, render: (x) => h('span', null, h('i', { class: 'gdot', style: { background: color(x.color) } }), x.name, fastest[0] && fastest[0].id === x.id && fastest.length > 1 ? h('small', { class: 'now-tag' }, ' fastest') : null) },
+        { label: 'Today', cls: 'r', get: (x) => money(x.now) },
+        { label: `In ${s.horizon} years`, cls: 'r', get: (x) => money(x.far) },
+        { label: 'Grows by', cls: 'r', mob: 'under', mlabel: '', render: (x) => h('span', { class: x.change >= 0 ? 'pos' : 'neg' }, (x.change >= 0 ? '+' : '−') + money(Math.abs(x.change))) },
+        { label: 'Times', cls: 'r', mob: 'hide', get: (x) => (x.mult == null ? '–' : x.mult.toFixed(2) + '×') },
+        { label: 'Yearly growth', cls: 'r', mob: 'under', mlabel: 'per year ', get: (x) => (x.cagr == null ? '–' : pct(x.cagr, 1)) },
+      ], growth.slice().sort((a, b) => (b.cagr ?? -9) - (a.cagr ?? -9)), {}),
+      h('p', { class: 'note' }, 'Assets only (loans are left out). Growth includes the new money you add to each category as well as returns, so a category can grow fast simply because you keep feeding it. Yearly growth is the compound rate from today to the end of the period.'));
+  }
+  root.append(section('Net worth over the years', h('div', null, tabs, netBody)));
 
   // ---------- composition at the end ----------
   const v = end.values;

@@ -4,7 +4,7 @@ import { S } from '../store.js';
 import * as P from '../projector.js';
 import * as R from '../risk.js';
 import { h, money, compact, monthLabel, section, stat, table, btn, formDialog, toast } from '../ui.js';
-import { lineChart, donut, legend } from '../charts.js';
+import { lineChart, donut, legend, riskColor } from '../charts.js';
 import { rerender, outlooks, signed, pc, tone, outlookToggle, datalistId } from './proj-shared.js';
 import { currentPlan } from './proj-year.js';
 import { statusTag, limitText, shareText } from './proj-risk.js';
@@ -165,8 +165,8 @@ function firstBreach(cfg, rows, evAfter, b) {
 
 function summary(cfg, ev, ev2, b) {
   const e = ev2 || ev;
-  const bs = ev.buckets.filter((x) => x.value > 0).map((x) => ({ label: x.name, value: x.value }));
-  const bs2 = e.buckets.filter((x) => x.value > 0).map((x) => ({ label: x.name, value: x.value }));
+  const rc = (list) => list.map((x, i) => ({ label: x.name, value: x.value, color: riskColor(x.id || x.key, i, list.length) })).filter((x) => x.value > 0);
+  const bs = rc(ev.buckets), bs2 = rc(e.buckets);
   const was = (c) => ev.classes.find((x) => x.key === c.key);
   const S_ = (it, f) => it.reduce((a, c) => a + f(c), 0);
   const inS = (it, f) => S_(it.filter((c) => c.inScope), f);

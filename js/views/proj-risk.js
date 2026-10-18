@@ -3,7 +3,7 @@ import { S, mutate } from '../store.js';
 import * as P from '../projector.js';
 import * as R from '../risk.js';
 import { h, money, compact, section, stat, table, btn, formDialog, canEdit, toast } from '../ui.js';
-import { strip, legend } from '../charts.js';
+import { strip, legend, riskColor } from '../charts.js';
 import { signed, datalistId, rerender } from './proj-shared.js';
 import { groupedTable, groupOfClass } from './groupmix.js';
 
@@ -90,7 +90,7 @@ export function render(root) {
     ev.near.length ? h('ul', { class: 'findings' }, ev.near.map((b) => h('li', { class: 'amber' }, h('b', null, b.name), ` is ${shareText(b)}`, b.max != null ? `, limit ${pcs(b.max)}` : '', b.maxAmt != null ? `, limit ${money(b.maxAmt)}` : '', '. ', h('span', { class: 'warn' }, `${Math.round(b.used * 100)}% of the limit used, ${money(b.room == null ? 0 : b.room)} left.`)))) : null)));
 
   // ---------- risk groups ----------
-  const bs = ev.buckets.filter((b) => b.value > 0).map((b) => ({ label: b.name, value: b.value }));
+  const bs = ev.buckets.map((b, i) => ({ label: b.name, value: b.value, color: riskColor(b.key, i, ev.buckets.length) })).filter((b) => b.value > 0);
   root.append(section('By risk group', h('div', null,
     bs.length ? [strip(bs, { fmt: money }), legend(bs, { fmt: money })] : null,
     table([
