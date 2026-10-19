@@ -139,7 +139,7 @@ function chitBestCard(c, actualRate, scheme) {
     head.textContent = (mocked ? 'Best option at ' + money(rate) + ' / g · ' : 'Best option today · ') + c.name;
     hint.textContent = mocked ? '' : `blank = actual ${money(actualRate)} / g`;
     reset.style.display = mocked ? '' : 'none';
-    body.replaceChildren(
+    body.replaceChildren(...[
       mocked ? h('p', { class: 'note', style: { marginTop: 0 } }, `What-if only. Today's actual rate is ${money(actualRate)} / g.`) : null,
       h('div', { class: 'stats' },
         mk('Take it by value', dec(o.byValueGrams, 2) + ' g', `${money(o.paid)} paid in, buys this much at ${money(rate)} / g`, o.best === 'value', profit(0)),
@@ -150,7 +150,7 @@ function chitBestCard(c, actualRate, scheme) {
           ? `Choose gold basis: ${dec(o.grams - o.byValueGrams, 2)} g more, which is ${money(o.edge)} more than the value basis and a profit of ${money(o.goldValue - o.paid)} over the ${money(o.paid)} you paid.`
           : `Choose value basis: ${dec(o.byValueGrams - o.grams, 2)} g more, which is ${money(o.edge)} more than the gold basis. Gold basis would be ${money(o.paid - o.goldValue)} below what you paid.`)
         : 'Value basis gives you the money paid in as gold at the rate above.'),
-      canEdit() ? h('div', { class: 'actions' }, btn('Close this chit', () => closeChit(c, scheme))) : null);
+      canEdit() ? h('div', { class: 'actions' }, btn('Close this chit', () => closeChit(c, scheme))) : null].filter(Boolean));
   };
   card.append(head, h('div', { class: 'price-bar inline', style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' } },
     h('span', { class: 'note', style: { margin: 0 } }, 'Try a gold rate (₹ / g):'), input, reset, hint), body);
