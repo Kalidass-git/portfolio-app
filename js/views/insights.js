@@ -99,6 +99,7 @@ function projectionCard(data, all, people) {
   const lines = [
     row('Salary', money(p.salary.year), false, `${money(p.salary.soFar)} credited so far${p.salary.remaining ? ` + ${p.salary.remaining} month${p.salary.remaining > 1 ? 's' : ''} at ${money(p.salary.perMonth)}` : ''}`),
     row('Bond and FD interest', money(p.interest.year), false, `${money(p.interest.soFar)} earned so far, the rest to March from today's holdings`),
+    row('Dividends', money(p.dividends), false, 'recorded so far this year, none guessed for the rest'),
     row('Other income', money(p.other), false, 'typed in below'),
     row('Total income expected', money(c.gross), true),
     row('Standard deduction', '−' + money(c.stdDed), false, r.label),
@@ -109,13 +110,13 @@ function projectionCard(data, all, people) {
   const cmpTds = p.tds.year - c.tax;
   return section(`Expected tax, ${p.fy} (new regime)`, h('div', null,
     h('div', { class: 'stats' },
-      stat('Total income expected', money(c.gross), 'salary + bond & FD interest + other'),
+      stat('Total income expected', money(c.gross), 'salary + bond & FD interest + dividends + other'),
       stat('Expected tax', h('span', { class: c.tax > 0.5 ? 'neg' : 'pos' }, money(c.tax)), c.tax > 0.5 ? `about ${pct(c.gross ? c.tax / c.gross : 0, 1)} of income` : 'nil, covered by the rebate'),
       stat('TDS cut so far', money(p.tds.soFar), `about ${money(p.tds.year)} by March`),
       stat(hd.over > 0.5 ? 'Above the tax-free limit' : 'Room before tax starts', money(hd.over > 0.5 ? hd.over : hd.room), `tax-free up to ${money(hd.zeroLimit)} of income`)),
     table([{ label: 'Item', host: true, render: (x) => h('span', null, x.bold ? h('b', null, x.label) : x.label, x.sub ? h('small', { class: 'muted', style: { display: 'block' } }, x.sub) : null) }, { label: 'Amount', cls: 'r', render: (x) => (x.bold ? h('b', null, x.val) : x.val) }], lines, {}),
     h('div', { class: 'row-actions', style: { display: 'flex', gap: '14px', flexWrap: 'wrap', margin: '10px 0' } },
-      field('Other income for the year (₹)', 'other', plan.other, 'rent, dividends, gains, anything else. Blank means 0.'),
+      field('Other income for the year (₹)', 'other', plan.other, 'rent, savings interest, expected dividends, anything else. Blank means 0.'),
       field('Monthly salary from now (₹)', 'salaryMonthly', plan.salaryMonthly, `blank uses the latest month (${money(p.salary.perMonth)})`),
       field('Bond rate for the idea below (%)', 'bondRate', plan.bondRate ? +(plan.bondRate * 100).toFixed(2) : '', 'blank means 12', '12')),
     h('div', { class: 'card inner' }, h('h4', { style: { margin: '0 0 4px' } }, 'How much more can go into bonds'),
@@ -132,7 +133,7 @@ function projectionCard(data, all, people) {
         { label: 'TDS (est.)', cls: 'r', mob: 'hide', get: (x) => money(x.tdsYear), total: (rs) => money(rs.reduce((a, x) => a + x.tdsYear, 0)) },
       ], p.interest.holdings, { footer: {} }) : h('p', { class: 'empty' }, 'No bonds or FDs running in this year.'),
       note(`Worked out from each holding: principal × rate × days held inside the year, up to maturity or closing. It is the gross interest, so it does not matter whether TDS was cut on what you received. TDS is an estimate: ${pct(p.tdsRate, 0)} on bonds, and on an FD only when its year's interest is over 40,000. Private lending and chits are left out.`)),
-    note('A quick guide, not tax advice. It treats salary, bond and FD interest and the other income you type as ordinary income. It does not include capital gains (those are taxed at their own rates), 87A rebate does not apply to them, and it assumes you keep today’s bonds and FDs until maturity without reinvesting. Check with your accountant before filing.')));
+    note('A quick guide, not tax advice. It treats salary, bond and FD interest, recorded dividends and the other income you type as ordinary income. Interest on bank savings is not picked up, so add it under other income. Capital gains are not included (they are taxed at their own rates and the 87A rebate does not apply to them), and it assumes you keep today’s bonds and FDs until maturity without reinvesting. Check with your accountant before filing.')));
 }
 
 /** Who each account belongs to. Bonds, FDs, lending and savings already carry a holder; the Groww equity and fund accounts and the bank accounts are set here. */

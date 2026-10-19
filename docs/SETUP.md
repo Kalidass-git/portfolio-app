@@ -197,6 +197,12 @@ No backend change. The Wealth projector now has five tabs: This year, Years ahea
 - **Measured against** is now a setting. On the Risk limits tab, switch risk-group and kind limits between **Everything I own** and **Investments only** (bank balances left out). Each kind, each single-holding rule and each named holding can also choose **Market-linked only** (shares, ETFs, funds) or **Its own group**.
 - Name suggestions in the Risk and What-if forms now show up as you type.
 
+## Release 8.9.23 – Filters on fixed income, dividends in the tax estimate, "null" fix
+
+- Fixed income: Holder and Via (bank, borrower for lendings) filters above Bonds, FDs and Lendings. The default is everything.
+- Tax summary → Expected tax: recorded dividends now count as income. Savings interest is not picked up, so add it under other income.
+- The word "null" no longer appears in "What you own, month by month" or in the gold chit what-if.
+
 ## Release 8.9.22 – Tax estimate, bond due dates, fixes
 
 - Insights → Tax summary: new "Expected tax" card for the chosen financial year under the new regime. Salary is projected to March, bond and FD interest is worked out from the holdings (gross, so TDS does not matter), and you can type other income. It shows total income, expected tax, TDS so far and by March, how much room is left before tax starts, and how much more could go into bonds at a rate you choose and still pay no tax. Expand "Where the interest comes from" to see each holding. Private lending and chits are left out.

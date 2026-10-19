@@ -130,10 +130,10 @@ function mixChart(data, all, months, lbl) {
     const val = (classes, k) => Object.entries(classes).reduce((a, [c, v]) => a + ((mixDrill ? ALLOC_OF[c] === k : I.GROUP_OF[ALLOC_OF[c]] === k) ? Math.max(0, Number(v) || 0) : 0), 0);
     const series = keys.map((k, i) => ({ id: mixDrill ? k.key : k.id, name: k.label, color: i, values: ms.map((m) => val(by.get(m), mixDrill ? k.key : k.id)) }));
     const title = mixDrill ? (I.GOAL_GROUPS.find((g) => g.id === mixDrill) || {}).label : 'All groups';
-    box.replaceChildren(
+    box.replaceChildren(...[
       mixDrill && ms.filter((m) => m < cur).length >= 2 ? h('div', { style: { marginBottom: '6px' } }, btn('← All groups', () => { mixDrill = null; draw(); }, 'small'), h('b', { style: { marginLeft: '8px' } }, title)) : ms.filter((m) => m < cur).length >= 2 ? h('p', { class: 'note', style: { marginTop: 0 } }, 'Tap a colour to see what is inside it.') : null,
       ms.filter((m) => m < cur).length < 2 ? h('p', { class: 'note', style: { margin: 0 } }, 'Not enough history to draw this yet. It needs at least two saved month-end check-ins (Wealth outlook → Month-end check-in). Each one keeps how much sat in debts, equity, gold and others, and the chart then shows how that mix moved.')
-        : stackedArea({ labels: ms.map((m) => lbl(m, months.indexOf(m))), series, fmt: money, height: 240, onSelect: mixDrill ? null : (sr) => { mixDrill = sr.id; draw(); } }));
+        : stackedArea({ labels: ms.map((m) => lbl(m, months.indexOf(m))), series, fmt: money, height: 240, onSelect: mixDrill ? null : (sr) => { mixDrill = sr.id; draw(); } })].filter(Boolean));
   };
   draw();
   return section('What you own, month by month', box);
