@@ -27,9 +27,18 @@ function bondForm(b) {
       { key: 'platform', label: 'Bought through', required: true, hint: 'Golden Pi, Groww, AIOnion…' }, { key: 'company', label: 'Issuer', required: true },
       { key: 'principal', label: 'Amount invested (₹)', type: 'number', required: true }, { key: 'rate', label: 'Interest rate (0.1075 = 10.75%)', type: 'number', required: true },
       { key: 'credit', label: 'Interest paid', type: 'select', options: ['Monthly', 'Quarterly'] },
+      { key: 'dueRule', label: 'Interest due date (optional)', type: 'select', options: [{ value: '', label: 'Not set' }, { value: 'first', label: 'First day of the month' }, { value: 'last', label: 'Last day of the month' }, { value: 'day', label: 'A fixed day of the month' }], hint: 'When set, the bond shows under “Needs a look” on Home on that day.' },
+      { key: 'dueDay', label: 'Day of the month (1 to 31)', type: 'number', showIf: (v) => v.dueRule === 'day' },
       { key: 'depositDate', label: 'Bought on', type: 'date', required: true }, { key: 'maturityDate', label: 'Matures on', type: 'date', required: true },
     ],
-    onSave: (v) => mutate((d) => { if (isNew) d.bonds.push({ id: nextId('b', d.bonds), ...v }); else Object.assign(d.bonds.find((x) => x.id === b.id), v); }),
+    onSave: (v) => {
+      if (v.dueRule === 'day' && !(Number(v.dueDay) >= 1 && Number(v.dueDay) <= 31)) { toast('Enter a day between 1 and 31.', 'bad'); return false; }
+      mutate((d) => {
+        const rec = { ...v }; if (!rec.dueRule) { delete rec.dueRule; delete rec.dueDay; } else if (rec.dueRule !== 'day') delete rec.dueDay;
+        if (isNew) d.bonds.push({ id: nextId('b', d.bonds), ...rec });
+        else { const t = d.bonds.find((x) => x.id === b.id); Object.assign(t, rec); if (!rec.dueRule) { delete t.dueRule; delete t.dueDay; } else if (rec.dueRule !== 'day') delete t.dueDay; }
+      });
+    },
     onDelete: isNew ? null : () => mutate((d) => { d.bonds = d.bonds.filter((x) => x.id !== b.id); }),
     deleteMessage: 'Delete this bond completely? Use “Close it” instead to keep a history.',
     extraActions: isNew ? [] : [{ label: 'Close it', onclick: () => closeItem('bonds', 'b', b, b.principal, 'Bond') }],

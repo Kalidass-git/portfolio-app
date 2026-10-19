@@ -59,10 +59,10 @@ export function taxPeople(data) {
   Object.values(data.taxOwners || {}).forEach(add);
   return [...seen.values()].sort((a, b) => a.localeCompare(b));
 }
-export function taxSummary(data, all, y, who = 'all') {
+export function taxSummary(data, all, y, who = 'all', opts = {}) {
   const { from, to, label } = fyRange(y);
   const mine = (name) => who === 'all' || lc(name || NO_OWNER) === lc(who);
-  const end = to < all.asOf ? to : all.asOf;
+  const end = opts.full || to < all.asOf ? to : all.asOf;
   const tdsRate = data.settings.tdsRate ?? 0.1;
   const span = (it) => {
     if (!it.depositDate) return null;
@@ -395,3 +395,79 @@ export function monthlyFor(groups, goal, years, hi = 5000000) {
   return Math.ceil(up / 1000) * 1000;
 }
 export const monthsText = (m) => { if (m == null) return 'more than 30 years'; const y = Math.floor(m / 12), r = m % 12; return [y ? `${y} year${y > 1 ? 's' : ''}` : '', r ? `${r} month${r > 1 ? 's' : ''}` : ''].filter(Boolean).join(' ') || 'already there'; };
+
+// ---------- new tax regime: a quick yearly estimate ----------
+/** New-regime slabs by financial year (start year). Rebate (section 87A) makes income up to the limit tax free. */
+export function regimeFor(y) {
+  if (y >= 2025) return { slabs: [[400000, 0], [800000, 0.05], [1200000, 0.10], [1600000, 0.15], [2000000, 0.20], [2400000, 0.25], [Infinity, 0.30]], std: 75000, rebateLimit: 1200000, rebateMax: 60000, label: 'new regime, FY 2025-26 onwards' };
+  if (y === 2024) return { slabs: [[300000, 0], [700000, 0.05], [1000000, 0.10], [1200000, 0.15], [1500000, 0.20], [Infinity, 0.30]], std: 75000, rebateLimit: 700000, rebateMax: 25000, label: 'new regime, FY 2024-25' };
+  return { slabs: [[300000, 0], [600000, 0.05], [900000, 0.10], [1200000, 0.15], [1500000, 0.20], [Infinity, 0.30]], std: 50000, rebateLimit: 700000, rebateMax: 25000, label: 'new regime, before FY 2024-25' };
+}
+/** Tax on normal-slab income (interest, salary, other) under the new regime, with standard deduction, rebate with marginal relief, and 4% cess. */
+export function newRegimeTax(y, salary, otherIncome) {
+  const r = regimeFor(y);
+  const gross = Math.max(0, salary) + Math.max(0, otherIncome);
+  const stdDed = Math.min(r.std, Math.max(0, salary));
+  const taxable = Math.max(0, gross - stdDed);
+  let prev = 0, slab = 0;
+  for (const [hi, rate] of r.slabs) { if (taxable > prev) slab += (Math.min(taxable, hi) - prev) * rate; prev = hi; }
+  let rebate = 0;
+  if (taxable <= r.rebateLimit) rebate = Math.min(slab, r.rebateMax);
+  else slab = Math.min(slab, taxable - r.rebateLimit); // marginal relief: never more than the income above the limit
+  const base = Math.max(0, slab - rebate), cess = base * 0.04;
+  return { gross, stdDed, taxable, slab, rebate, cess, tax: base + cess, regime: r };
+}
+/**
+ * The year's expected income and tax: salary so far plus the months still to come, interest on bonds and FDs worked out from the
+ * holdings for the whole year (gross, so it does not matter whether TDS was cut), plus any other income typed in.
+ * Private lending and chits are left out on purpose.
+ */
+export function taxProjection(data, all, y, who = 'all', plan = {}) {
+  const now = taxSummary(data, all, y, who);
+  const full = taxSummary(data, all, y, who, { full: true });
+  const { from, to } = fyRange(y);
+  const mine = (name) => who === 'all' || lc(name || NO_OWNER) === lc(who);
+  const cur = C.monthKey(all.asOf);
+  const months = []; for (let m = from.slice(0, 7); m <= to.slice(0, 7); m = C.addMonths(m + '-01', 1).slice(0, 7)) months.push(m);
+  const curIn = months.includes(cur) ? cur : (cur > to.slice(0, 7) ? to.slice(0, 7) : null);
+  const sal = new Map();
+  for (const e of data.ledger) if (lc(e.category) === 'salary' && e.date >= from && e.date <= to && mine(acctOwner(data, e.acct))) sal.set(C.monthKey(e.date), (sal.get(C.monthKey(e.date)) || 0) + (Number(e.credit) || 0));
+  const credited = months.filter((m) => m <= cur && (sal.get(m) || 0) > 0);
+  const latest = credited.length ? sal.get(credited[credited.length - 1]) : 0;
+  const perMonth = Number(plan.salaryMonthly) > 0 ? Number(plan.salaryMonthly) : latest;
+  const salSoFar = sum(credited, (m) => sal.get(m));
+  const remaining = months.filter((m) => m > cur || (m === cur && !(sal.get(m) > 0))).length;
+  const salaryYear = salSoFar + perMonth * remaining;
+  const keep = (g) => g.rows.map((r) => r);
+  const part = (res, kind) => (res.interestBy.find((g) => g.kind === kind) || { rows: [] }).rows;
+  const holdings = [];
+  const tdsRate = data.settings.tdsRate ?? 0.1;
+  for (const kind of ['Bonds', 'Fixed deposits']) {
+    const fullRows = part(full, kind), nowRows = part(now, kind);
+    for (const r of fullRows) {
+      const n = nowRows.find((x) => x.name === r.name && x.holder === r.holder) || { gross: 0 };
+      const tdsFull = kind === 'Bonds' ? r.gross * tdsRate : (r.gross > 40000 ? r.gross * tdsRate : 0);
+      const tdsNow = kind === 'Bonds' ? n.gross * tdsRate : (r.gross > 40000 ? n.gross * tdsRate : 0);
+      holdings.push({ kind, name: r.name, holder: r.holder, yearInterest: r.gross, soFar: n.gross, tdsYear: tdsFull, tdsSoFar: tdsNow });
+    }
+  }
+  const interestYear = sum(holdings, (x) => x.yearInterest), interestSoFar = sum(holdings, (x) => x.soFar);
+  const other = Math.max(0, Number(plan.other) || 0);
+  const calc = newRegimeTax(y, salaryYear, interestYear + other);
+  // headroom: how much more income the year can take before tax starts, and what that means in bond money at the chosen rate
+  const r = regimeFor(y);
+  const stdDed = Math.min(r.std, Math.max(0, salaryYear));
+  const zeroLimit = r.rebateLimit + stdDed;                    // gross income at which tax is still nil
+  const room = Math.max(0, zeroLimit - calc.gross);
+  const rate = Number(plan.bondRate) > 0 ? Number(plan.bondRate) : 0.12;
+  const daysLeft = Math.max(0, spanDays(all.asOf, to));
+  return {
+    fy: fyRange(y).label, y, from, to, who, months: months.length,
+    salary: { soFar: salSoFar, perMonth, remaining, year: salaryYear },
+    interest: { year: interestYear, soFar: interestSoFar, holdings },
+    other, calc, tdsRate,
+    tds: { soFar: sum(holdings, (x) => x.tdsSoFar), year: sum(holdings, (x) => x.tdsYear) },
+    totalIncome: calc.gross,
+    headroom: { zeroLimit, room, over: Math.max(0, calc.gross - zeroLimit), rate, daysLeft, bondsFullYear: room / rate, bondsThisYear: daysLeft > 0 ? room / (rate * (daysLeft / 365)) : 0 },
+  };
+}

@@ -1,0 +1,10 @@
+import { newRegimeTax, regimeFor } from '../js/insights.js';
+let bad = 0; const ok = (n, c) => { console.log((c ? 'ok   ' : 'FAIL ') + n); if (!c) bad++; };
+const near = (a, b) => Math.abs(a - b) < 1;
+ok('12.75L salary is nil tax (FY25)', newRegimeTax(2025, 1275000, 0).tax === 0);
+ok('13L salary: marginal relief caps tax at income above 12L', near(newRegimeTax(2025, 1300000, 0).tax, 1225000 - 1200000 > 0 ? (1225000 - 1200000) * 1.04 : 0));
+ok('15L salary tax with cess', near(newRegimeTax(2025, 1500000, 0).tax, 93750 * 1.04));
+ok('interest only 5L: nil after rebate', newRegimeTax(2025, 0, 500000).tax === 0);
+ok('FY24 7L taxable nil', newRegimeTax(2024, 775000, 0).tax === 0);
+ok('regime label', regimeFor(2026).rebateLimit === 1200000);
+if (bad) { console.log('FAILED', bad); process.exit(1); } console.log('all passed');
