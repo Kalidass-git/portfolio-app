@@ -453,7 +453,12 @@ export function taxProjection(data, all, y, who = 'all', plan = {}) {
   }
   const interestYear = sum(holdings, (x) => x.yearInterest), interestSoFar = sum(holdings, (x) => x.soFar);
   const other = Math.max(0, Number(plan.other) || 0);
-  const calc = newRegimeTax(y, salaryYear, interestYear + other);
+  // savings-account interest credited to the bank (bond income is already counted from the holdings), carried forward at the pace so far
+  const savSoFar = sum(now.bankOther.filter((x) => /interest/.test(lc(x.category)) && !/bond|fd|deposit/.test(lc(x.category))), (x) => x.amount);
+  const elapsed = Math.max(1, months.filter((m) => m <= cur).length), monthsLeft = months.filter((m) => m > cur).length;
+  const savings = { soFar: savSoFar, year: curIn && cur <= to.slice(0, 7) ? savSoFar + (savSoFar / elapsed) * monthsLeft : savSoFar };
+  const dividends = now.dividendTotal;   // what is recorded so far; nothing is guessed for the months ahead
+  const calc = newRegimeTax(y, salaryYear, interestYear + savings.year + dividends + other);
   // headroom: how much more income the year can take before tax starts, and what that means in bond money at the chosen rate
   const r = regimeFor(y);
   const stdDed = Math.min(r.std, Math.max(0, salaryYear));
@@ -465,7 +470,7 @@ export function taxProjection(data, all, y, who = 'all', plan = {}) {
     fy: fyRange(y).label, y, from, to, who, months: months.length,
     salary: { soFar: salSoFar, perMonth, remaining, year: salaryYear },
     interest: { year: interestYear, soFar: interestSoFar, holdings },
-    other, calc, tdsRate,
+    other, dividends, savings, calc, tdsRate,
     tds: { soFar: sum(holdings, (x) => x.tdsSoFar), year: sum(holdings, (x) => x.tdsYear) },
     totalIncome: calc.gross,
     headroom: { zeroLimit, room, over: Math.max(0, calc.gross - zeroLimit), rate, daysLeft, bondsFullYear: room / rate, bondsThisYear: daysLeft > 0 ? room / (rate * (daysLeft / 365)) : 0 },

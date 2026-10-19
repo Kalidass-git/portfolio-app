@@ -1,6 +1,6 @@
 import { S, mutate, nextId } from '../store.js';
 import * as C from '../calc.js';
-import { h, money, dateStr, pct, section, table, btn, formDialog, canEdit, toast, stat, segTabs, subTab, dialog, confirmDialog, posNeg, datalistId } from '../ui.js';
+import { h, money, setOptions, dateStr, pct, section, table, btn, formDialog, canEdit, toast, stat, segTabs, subTab, dialog, confirmDialog, posNeg, datalistId } from '../ui.js';
 import { closeForm, reopen } from './closing.js';
 
 const FREQ = ['Monthly', 'Quarterly', 'Yearly', 'Daily'];
@@ -94,6 +94,22 @@ function receivableForm(r) {
 
 import * as loans from './loans.js';
 const TABS = [['bonds', 'Bonds'], ['fds', 'FDs'], ['lending', 'Lendings'], ['loans', 'Loans'], ['closed', 'Closed']];
+const flt = { bonds: { holder: 'all', via: 'all' }, fds: { holder: 'all', via: 'all' }, lending: { holder: 'all', via: 'all' } };
+const rerenderFixed = () => window.dispatchEvent(new Event('rerender'));
+/** Quick filters above a list: account holder and where it was bought. Default is everything. Returns the bar and the rows that pass. */
+function quickFilter(tab, items, holderOf, viaOf, viaLabel) {
+  const f = flt[tab];
+  const uniq = (fn) => [...new Set(items.map(fn).map((x) => String(x || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const holders = uniq(holderOf), vias = uniq(viaOf);
+  if (f.holder !== 'all' && !holders.includes(f.holder)) f.holder = 'all';
+  if (f.via !== 'all' && !vias.includes(f.via)) f.via = 'all';
+  const mk = (label, key, opts) => { const sel = h('select', { class: 'month-select', 'aria-label': label, onchange: (e) => { f[key] = e.target.value; rerenderFixed(); } }); setOptions(sel, [{ value: 'all', label: `${label}: all` }, ...opts.map((o) => ({ value: o, label: o }))], f[key]); return sel; };
+  const rows = items.filter((x) => (f.holder === 'all' || String(holderOf(x) || '').trim() === f.holder) && (f.via === 'all' || String(viaOf(x) || '').trim() === f.via));
+  const bar = holders.length > 1 || vias.length > 1 ? h('div', { class: 'filters' }, holders.length > 1 ? mk('Holder', 'holder', holders) : null, vias.length > 1 ? mk(viaLabel, 'via', vias) : null,
+    rows.length !== items.length ? h('span', { class: 'muted' }, `${rows.length} of ${items.length}`) : null) : null;
+  return { bar, rows };
+}
+
 export function render() {
   const { all, data } = S;
   const root = h('div', { class: 'page' });
@@ -109,7 +125,8 @@ export function render() {
   };
   if (stats[tab]) root.append(stats[tab]());
 
-  if (tab === 'bonds') root.append(section('Bonds',
+  const fb = tab === 'bonds' ? quickFilter('bonds', all.bonds, (b) => b.holder, (b) => b.platform, 'Via') : tab === 'fds' ? quickFilter('fds', all.fds, (x) => x.account, (x) => x.issuer, 'Bank') : tab === 'lending' ? quickFilter('lending', all.lending, (x) => x.account, (x) => x.borrower, 'Borrower') : null;
+  if (tab === 'bonds') root.append(section('Bonds', h('div', null, fb.bar,
     table([
       { label: 'Bond', host: true, get: (b) => b.name },
       { label: 'Holder', mob: 'under', get: (b) => b.holder },
@@ -118,7 +135,7 @@ export function render() {
       { label: 'Rate (paid)', key: true, cls: 'r', render: (b) => h('span', null, pct(b.rate, 2), h('span', { class: 'plain' }, ' (' + String(b.credit || 'Monthly').toLowerCase() + ')')) },
       { label: 'Net per month', key: true, cls: 'r', get: (b) => money(b.monthNet), total: (rs) => money(rs.reduce((a, b) => a + b.monthNet, 0)) },
       { label: 'Matures', mob: 'under', mlabel: 'matures ', get: (b) => dateStr(b.maturityDate) },
-    ], all.bonds, { footer: { label: 'Total', phone: false }, onRow: canEdit() ? (b) => bondForm(data.bonds.find((x) => x.id === b.id)) : null }),
+    ], fb.rows, { footer: { label: 'Total', phone: false }, onRow: canEdit() ? (b) => bondForm(data.bonds.find((x) => x.id === b.id)) : null })),
     canEdit() ? [btn('Add bond', () => bondForm(), 'primary')] : null));
 
   const depCols = [
@@ -129,10 +146,10 @@ export function render() {
     { label: 'Per day', cls: 'r', get: (x) => money(x.daily) },
     { label: 'Matures', mob: 'under', mlabel: 'matures ', get: (x) => dateStr(x.maturityDate) },
   ];
-  if (tab === 'fds') root.append(section('Fixed deposits', table(depCols, all.fds, { footer: { label: 'Total', phone: false }, onRow: canEdit() ? (x) => depositForm('fd', data.fds.find((y) => y.id === x.id)) : null }),
+  if (tab === 'fds') root.append(section('Fixed deposits', h('div', null, fb.bar, table(depCols, fb.rows, { footer: { label: 'Total', phone: false }, onRow: canEdit() ? (x) => depositForm('fd', data.fds.find((y) => y.id === x.id)) : null })),
     canEdit() ? [btn('Add FD', () => depositForm('fd'))] : null));
   if (tab === 'lending') root.append(section('Private lending',
-    table(depCols, all.lending, { footer: { label: 'Total', phone: false }, onRow: canEdit() ? (x) => depositForm('lending', data.lending.find((y) => y.id === x.id)) : null }),
+    h('div', null, fb.bar, table(depCols, fb.rows, { footer: { label: 'Total', phone: false }, onRow: canEdit() ? (x) => depositForm('lending', data.lending.find((y) => y.id === x.id)) : null })),
     canEdit() ? [btn('Add loan', () => depositForm('lending'))] : null));
 
   if (tab !== 'lending') return root;
