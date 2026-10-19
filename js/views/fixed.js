@@ -94,6 +94,8 @@ function receivableForm(r) {
 
 import * as loans from './loans.js';
 const TABS = [['bonds', 'Bonds'], ['fds', 'FDs'], ['lending', 'Lendings'], ['loans', 'Loans'], ['closed', 'Closed']];
+/** Interest that has reached you so far, after TDS unless the bond has a fixed payout amount. */
+const bondReceived = (b) => { const r = C.interestReceived(b, S.all.asOf); return b.payoutAmount > 0 ? r : r * (1 - (S.data.settings.tdsRate ?? 0.1)); };
 const flt = { bonds: { holder: 'all', via: 'all' }, fds: { holder: 'all', via: 'all' }, lending: { holder: 'all', via: 'all' } };
 const rerenderFixed = () => window.dispatchEvent(new Event('rerender'));
 /** Quick filters above a list: account holder and where it was bought. Default is everything. Returns the bar and the rows that pass. */
@@ -128,14 +130,14 @@ export function render() {
   const fb = tab === 'bonds' ? quickFilter('bonds', all.bonds, (b) => b.holder, (b) => b.platform, 'Via') : tab === 'fds' ? quickFilter('fds', all.fds, (x) => x.account, (x) => x.issuer, 'Bank') : tab === 'lending' ? quickFilter('lending', all.lending, (x) => x.account, (x) => x.borrower, 'Borrower') : null;
   if (tab === 'bonds') root.append(section('Bonds', h('div', null, fb.bar,
     table([
-      { label: 'Bond', host: true, get: (b) => b.name },
+      { label: 'Bond', host: true, render: (b) => h('span', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px' } }, h('span', null, b.name), h('small', { class: 'muted', style: { fontWeight: 400, whiteSpace: 'nowrap', opacity: 0.75 } }, 'matures ' + dateStr(b.maturityDate))) },
       { label: 'Holder', mob: 'under', get: (b) => b.holder },
       { label: 'Via', mob: 'under', get: (b) => b.platform },
       { label: 'Invested', cls: 'r', get: (b) => money(b.principal), total: (rs) => money(rs.reduce((a, b) => a + b.principal, 0)) },
       { label: 'Rate (paid)', key: true, cls: 'r', render: (b) => h('span', null, pct(b.rate, 2), h('span', { class: 'plain' }, ' (' + String(b.credit || 'Monthly').toLowerCase() + ')')) },
       { label: 'Net per month', key: true, cls: 'r', get: (b) => money(b.monthNet), total: (rs) => money(rs.reduce((a, b) => a + b.monthNet, 0)) },
-      { label: 'Matures', mob: 'under', mlabel: 'matures ', get: (b) => dateStr(b.maturityDate) },
-    ], fb.rows, { footer: { label: 'Total', phone: false }, onRow: canEdit() ? (b) => bondForm(data.bonds.find((x) => x.id === b.id)) : null })),
+      { label: 'Received so far', mob: 'under', mlabel: 'received ', cls: 'r', get: (b) => money(bondReceived(b)), total: (rs) => money(rs.reduce((a, b) => a + bondReceived(b), 0)) },
+    ], fb.rows, { footer: { label: 'Total' }, onRow: canEdit() ? (b) => bondForm(data.bonds.find((x) => x.id === b.id)) : null })),
     canEdit() ? [btn('Add bond', () => bondForm(), 'primary')] : null));
 
   const depCols = [

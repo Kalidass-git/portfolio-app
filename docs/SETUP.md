@@ -150,6 +150,13 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.9.25 – Simpler tax page, refund and bank check, bonds, shares tabs, month-by-month chart
+
+- Tax summary → Expected tax: TDS counts as tax already paid, projected to March. What is left is shown as "Still to pay" or "Refund expected" (all TDS comes back when income is inside the tax-free zone). There is also a check of the interest the bank received against what the bond holdings say, with a mismatch warning. The page is simpler: one card with the answer, then collapsible sections for how the income adds up, tax and TDS, assumptions, each holding's interest, and the older detail (by person, owners, bank income, interest, dividends, capital gains). Nothing was removed.
+- Bonds: maturity date sits at the right of the bond name in a lighter colour, the last column is now interest received so far (after TDS), and the total row also shows on phones.
+- Shares & funds → Where to look: All, Shares, ETFs and Funds sub tabs.
+- Income & expenses → Month by month: columns are stacked by category, with a range filter (this month, 2, 3, 6, 9 or 12 months). Tap a column to see what is inside it, for example one month of income.
+
 ## Release 8.2 – EPF / PPF return
 
 The EPF & PPF return now uses the interest rate EPFO declared each year (8.25% for 2023-25, and so on), applied to the deposits in your entries, instead of only the interest rows you typed in. For years after the built-in table, and for PPF, the account's own rate is used. The row note also shows what your recorded interest works out to. Edit the table in `js/epf.js` if a rate is wrong. No backend change.

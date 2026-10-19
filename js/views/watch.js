@@ -38,15 +38,18 @@ export function triggeredCard({ link = true } = {}) {
 }
 
 // ---------- screens ----------
-let scope = 'held';
+let scope = 'held', kindScope = 'all';
+const KINDS = [['all', 'All'], ['shares', 'Shares'], ['etfs', 'ETFs'], ['funds', 'Funds']];
+const inKind = (r) => kindScope === 'all' || (kindScope === 'funds' ? r.kind === 'fund' : kindScope === 'etfs' ? r.kind === 'stock' && r.etf : r.kind === 'stock' && !r.etf);
 export function screensSection() {
   const all = W.universe(S.data, S.all);
-  const rows = all.filter((r) => scope === 'all' || r.held).map((r) => ({ ...r, m: W.metrics()[r.key] || null }));
+  const rows = all.filter((r) => (scope === 'all' || r.held) && inKind(r)).map((r) => ({ ...r, m: W.metrics()[r.key] || null }));
   const hasWatch = all.some((r) => !r.held);
   const bar = h('div', { class: 'row-actions' }, [['held', 'My holdings'], ['all', 'Holdings + watchlist']].filter(([k]) => k === 'held' || hasWatch).map(([k, l]) => h('button', { type: 'button', class: 'chip-btn' + (scope === k ? ' on' : ''), onclick: () => { scope = k; rerender(); } }, l)));
   const have = rows.filter((r) => r.m).length;
   const secs = W.buildScreens(rows);
-  const wrap = h('div', null, bar);
+  const kinds = h('div', { class: 'row-actions' }, KINDS.filter(([k]) => k === 'all' || all.some((r) => (scope === 'all' || r.held) && (k === 'funds' ? r.kind === 'fund' : k === 'etfs' ? r.kind === 'stock' && r.etf : r.kind === 'stock' && !r.etf))).map(([k, l]) => h('button', { type: 'button', class: 'chip-btn' + (kindScope === k ? ' on' : ''), onclick: () => { kindScope = k; rerender(); } }, l)));
+  const wrap = h('div', null, bar, kinds.children.length > 2 ? kinds : null);
   if (!have) { wrap.append(h('p', { class: 'empty' }, 'Press Refresh indicators to load P/E, 52-week ranges and returns. Then this page lists what is near highs and lows, cheap, expensive and more.')); return section('Where to look', wrap); }
   wrap.append(h('div', { class: 'grid2' }, secs.map((s) => h('div', { class: 'card inner' }, h('h4', null, s.title), s.hint ? h('p', { class: 'note' }, s.hint) : null,
     rowList(s.items.map((it) => ({ title: it.r.name, sub: it.sub, value: h('span', { class: it.tone || '' }, it.main), valueSub: it.r.held ? '' : 'watchlist', onClick: it.r.href ? () => { location.hash = it.r.href; } : null })))))));

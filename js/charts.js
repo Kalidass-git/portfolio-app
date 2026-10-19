@@ -144,6 +144,46 @@ export function barChart({ groups, names, fmt = (v) => v, height = 220, width, c
   return h('div', { class: 'chart-box' }, root, h('ul', { class: 'legend inline' }, names.map((n, i) => h('li', null, h('i', { style: { background: col(i) } }), h('span', { class: 'lg-name' }, n)))));
 }
 
+/**
+ * Grouped columns where every column is stacked by its parts. groups: [{label, title, bars:[[{name, value}]]}] (one list of parts per series),
+ * names: the series names. Tap a column to select it: onSelect(groupIndex, seriesIndex). Parts get lighter the further down the list they are.
+ */
+export function stackedBars({ groups, names, colors, fmt = (v) => v, height = 230, width, onSelect = null, selected = null }) {
+  const col = (i) => color(colors ? colors[i] : i);
+  const W = width || defaultWidth(), H = height, pad = { l: 44, r: 8, t: 12, b: 24 };
+  const tot = (b) => b.reduce((a, x) => a + Math.max(0, x.value), 0);
+  const hi = niceMax(Math.max(1, ...groups.flatMap((g) => g.bars.map(tot))));
+  const y = (v) => pad.t + (1 - v / hi) * (H - pad.t - pad.b);
+  const gw = (W - pad.l - pad.r) / groups.length;
+  const bw = Math.min(34, (gw - 8) / names.length - 2);
+  const root = svg('svg', { viewBox: `0 0 ${W} ${H}`, class: 'chart', role: 'img', 'aria-label': names.join(', ') });
+  for (let i = 0; i <= 4; i++) { const v = (hi * i) / 4; root.append(svg('line', { x1: pad.l, x2: W - pad.r, y1: y(v), y2: y(v), class: 'grid' }), svg('text', { x: pad.l - 6, y: y(v) + 3.5, class: 'axis', 'text-anchor': 'end' }, short(v))); }
+  const op = (k) => Math.max(0.28, 1 - k * 0.17);
+  groups.forEach((g, gi) => {
+    const cx = pad.l + gw * gi + gw / 2, left = cx - ((bw + 2) * names.length) / 2;
+    g.bars.forEach((parts, si) => {
+      const x0 = left + si * (bw + 2), isSel = selected && selected.g === gi && selected.s === si, dim = selected && !isSel;
+      let acc = 0;
+      parts.forEach((pt, k) => {
+        const v = Math.max(0, pt.value); if (v <= 0) return;
+        const y1 = y(acc + v), y0 = y(acc); acc += v;
+        const r = svg('rect', { x: x0, y: y1, width: bw, height: Math.max(0.5, y0 - y1), fill: col(si), opacity: dim ? 0.25 : op(k), stroke: 'var(--surface, #fff)', 'stroke-width': 0.8 });
+        hover(r, () => [h('b', null, `${g.title || g.label} · ${names[si]}`), h('div', null, `${pt.name}: ${fmt(pt.value)}`), h('div', { class: 'muted' }, `Total: ${fmt(tot(parts))}`)]);
+        root.append(r);
+      });
+      if (isSel) root.append(svg('rect', { x: x0 - 1.5, y: y(acc) - 1.5, width: bw + 3, height: Math.max(3, y(0) - y(acc) + 3), fill: 'none', stroke: 'var(--text, #222)', 'stroke-width': 1.5, rx: 2 }));
+      if (onSelect) {
+        const hit = svg('rect', { x: x0 - 1, y: pad.t, width: bw + 2, height: H - pad.t - pad.b, fill: 'transparent', style: 'cursor:pointer', tabindex: 0, role: 'button', 'aria-label': `${g.title || g.label}, ${names[si]}, ${fmt(tot(parts))}. Show what is inside` });
+        hit.addEventListener('click', () => onSelect(gi, si));
+        hit.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(gi, si); } });
+        root.append(hit);
+      }
+    });
+    root.append(svg('text', { x: cx, y: H - 6, class: 'axis', 'text-anchor': 'middle' }, g.label));
+  });
+  return h('div', { class: 'chart-box' }, root, h('ul', { class: 'legend inline' }, names.map((n, i) => h('li', null, h('i', { style: { background: col(i) } }), h('span', { class: 'lg-name' }, n)))));
+}
+
 /** Tiny progress bar (value 0..1) */
 export const meter = (v, ci = 0) => h('span', { class: 'meter' }, h('span', { style: { width: Math.min(100, Math.max(0, v * 100)) + '%', background: color(ci) } }));
 

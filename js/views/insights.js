@@ -41,7 +41,7 @@ function tax(root) {
     btn('Download CSV', () => download(`tax-summary-${t.fy.replace(/\s/g, '-')}.csv`, I.taxCsv(t)), 'small')));
   if (st.who === 'all' && people.length > 1) {
     const bp = I.taxByPerson(data, all, st.fy);
-    if (bp.length) root.append(section('By person', h('div', null, table([
+    if (bp.length) folds.unshift(fold('By person', h('div', null, table([
       { label: 'Person', host: true, get: (r) => r.person },
       { label: 'Interest', cls: 'r', get: (r) => money(r.interest) }, { label: 'Salary', cls: 'r', mob: 'under', mlabel: 'salary ', get: (r) => money(r.salary) },
       { label: 'Dividends', cls: 'r', mob: 'under', mlabel: 'dividends ', get: (r) => money(r.dividends) },
@@ -49,27 +49,23 @@ function tax(root) {
     ], bp, {}), note('Pick a person above to see their full summary. Each person’s income is kept apart, so it can go into their own return.'))));
   }
   root.append(projectionCard(data, all, people));
-  root.append(ownersCard(data, people));
-  if (t.bankOther.length) root.append(section('Other income credited to the bank', table([{ label: 'Category', host: true, get: (r) => r.category }, { label: 'Amount', cls: 'r', get: (r) => money(r.amount) }], t.bankOther, {})));
-  root.append(h('div', { class: 'stats' },
-    stat('Interest earned', money(t.interestGross), 'bonds, FDs and lending'),
-    stat('Salary', money(t.salary), 'credited to the bank'),
-    stat('Dividends', money(t.dividendTotal), `${t.dividends.length} companies`),
-    stat('Short-term gains', h('span', { class: tone(t.stcg) }, signed(t.stcg)), 'sold within 12 months'),
-    stat('Long-term gains', h('span', { class: tone(t.ltcg) }, signed(t.ltcg)), 'held over 12 months')));
-  root.append(section(`Interest, ${t.fy}`, t.interestBy.length ? h('div', null, ...t.interestBy.map((g) => h('div', null, h('h4', null, g.kind), table([
+  const folds = [];
+  const fold = (title, content) => h('details', { class: 'more' }, h('summary', null, title), content);
+  folds.push(ownersCard(data, people));
+  if (t.bankOther.length) folds.push(fold(`Other income credited to the bank · ${money(t.bankOtherTotal)}`, table([{ label: 'Category', host: true, get: (r) => r.category }, { label: 'Amount', cls: 'r', get: (r) => money(r.amount) }], t.bankOther, {})));
+  folds.push(fold(`Interest on every holding, ${t.fy} · ${money(t.interestGross)}`, t.interestBy.length ? h('div', null, ...t.interestBy.map((g) => h('div', null, h('h4', null, g.kind), table([
     { label: 'Name', host: true, get: (r) => r.name },
     { label: 'Holder', mob: 'hide', get: (r) => r.holder || '–' },
     { label: 'Interest', cls: 'r', get: (r) => money(r.gross), total: (rs) => money(rs.reduce((a, r) => a + r.gross, 0)) },
     g.tds ? { label: `TDS at ${pct(t.tdsRate, 0)}`, cls: 'r', mob: 'under', mlabel: 'TDS ', get: (r) => money(r.tds), total: (rs) => money(rs.reduce((a, r) => a + r.tds, 0)) } : null,
   ].filter(Boolean), g.rows, { footer: {} }))),
   note(`Interest is worked out by days held inside the year, whether or not it has been paid out yet (accrual basis). TDS is an estimate for bonds only, at the rate in Settings; match it with Form 26AS.`)) : h('p', { class: 'empty' }, 'No interest-bearing holdings in this year.')));
-  root.append(section('Dividends', t.dividends.length ? table([
+  folds.push(fold(`Dividends · ${money(t.dividendTotal)}`, t.dividends.length ? table([
     { label: 'Company', host: true, get: (d) => d.name },
     { label: 'Payments', cls: 'r', mob: 'under', mlabel: 'x', get: (d) => d.count },
     { label: 'Amount', cls: 'r', get: (d) => money(d.amount) },
   ], t.dividends, {}) : h('p', { class: 'empty' }, 'No dividends recorded in this year.')));
-  root.append(section('Capital gains, shares and mutual funds', t.gains.length ? table([
+  folds.push(fold(`Capital gains, shares and mutual funds · short ${signed(t.stcg)}, long ${signed(t.ltcg)}`, t.gains.length ? table([
     { label: 'Name', host: true, get: (g) => g.name },
     { label: 'Type', mob: 'hide', get: (g) => g.kind },
     { label: 'Bought', mob: 'hide', get: (g) => dateStr(g.buyDate) },
@@ -78,10 +74,11 @@ function tax(root) {
     { label: 'Gain', cls: 'r', render: (g) => h('span', { class: tone(g.gain) }, signed(g.gain)) },
     { label: 'Term', mob: 'under', get: (g) => (g.term === 'LT' ? 'Long term' : 'Short term') },
   ], t.gains, {}) : h('p', { class: 'empty' }, 'No shares or funds sold in this year.')));
+  root.append(h('div', { class: 'tax-folds' }, ...folds));
   root.append(note('A guide for filing, not tax advice. Gains use oldest units first. Debt funds, gold ETFs, bonus and split adjustments and the grandfathering rules are taxed differently, so check these with your accountant. Rental income, interest on savings accounts and other bank interest appear under Other income credited only if you categorised them.'));
 }
 
-/** Quick yearly estimate under the new regime: salary and bond/FD interest projected to March, plus any other income typed in. */
+/** The expected tax for the year, new regime. One card: the answer first, then how it is made up, then the assumptions behind it. */
 function projectionCard(data, all, people) {
   const key = `${st.fy}|${st.who}`;
   const plan = (data.taxPlan && data.taxPlan[key]) || {};
@@ -92,49 +89,63 @@ function projectionCard(data, all, people) {
     mutate((d) => { d.taxPlan = { ...(d.taxPlan || {}) }; const cur = { ...(d.taxPlan[key] || {}) }; if (n == null || !Number.isFinite(n)) delete cur[field]; else cur[field] = field === 'bondRate' ? n / 100 : n; if (Object.keys(cur).length) d.taxPlan[key] = cur; else delete d.taxPlan[key]; });
     rerender();
   };
-  const field = (label, field, value, hint, ph) => h('label', { class: 'owner-row', style: { display: 'flex', flexDirection: 'column', gap: '2px', minWidth: '10em' } },
-    h('span', null, label), h('input', { type: 'number', step: 'any', inputmode: 'decimal', value: value == null || value === '' ? '' : String(value), placeholder: ph || '0', disabled: !canEdit(), 'aria-label': label, onchange: (e) => save(field, e.target.value), style: { maxWidth: '12em' } }), hint ? h('small', { class: 'muted' }, hint) : null);
-  const c = p.calc, hd = p.headroom, r = c.regime;
-  const row = (label, val, bold, sub) => ({ label, val, bold, sub });
-  const lines = [
-    row('Salary', money(p.salary.year), false, `${money(p.salary.soFar)} credited so far${p.salary.remaining ? ` + ${p.salary.remaining} month${p.salary.remaining > 1 ? 's' : ''} at ${money(p.salary.perMonth)}` : ''}`),
-    row('Bond and FD interest', money(p.interest.year), false, `${money(p.interest.soFar)} earned so far, the rest to March from today's holdings`),
-    row('Savings account interest', money(p.savings.year), false, `${money(p.savings.soFar)} credited so far, the rest at the same pace`),
-    row('Dividends', money(p.dividends), false, 'recorded so far this year, none guessed for the rest'),
-    row('Other income', money(p.other), false, 'typed in below'),
-    row('Total income expected', money(c.gross), true),
-    row('Standard deduction', '−' + money(c.stdDed), false, r.label),
-    row('Taxable income', money(c.taxable), true),
-    row('Tax on slabs', money(c.slab)), c.rebate ? row('Rebate (section 87A)', '−' + money(c.rebate)) : null,
-    row('Cess at 4%', money(c.cess)), row('Expected tax', money(c.tax), true),
+  const field = (label, name, value, hint, ph) => h('label', { style: { display: 'flex', flexDirection: 'column', gap: '2px', minWidth: '10em' } },
+    h('span', null, label), h('input', { type: 'number', step: 'any', inputmode: 'decimal', value: value == null || value === '' ? '' : String(value), placeholder: ph || '0', disabled: !canEdit(), 'aria-label': label, onchange: (e) => save(name, e.target.value), style: { maxWidth: '12em' } }), hint ? h('small', { class: 'muted' }, hint) : null);
+  const c = p.calc, hd = p.headroom, rc = p.recon, r = c.regime;
+  const tdsAll = p.tds.year + p.tds.other, refund = p.balance < -0.5;
+  const line = (label, val, o = {}) => ({ label, val, ...o });
+  const income = [
+    line('Salary', money(p.salary.year), { sub: `${money(p.salary.soFar)} credited so far${p.salary.remaining ? ` + ${p.salary.remaining} month${p.salary.remaining > 1 ? 's' : ''} at ${money(p.salary.perMonth)}` : ''}` }),
+    line('Bond and FD interest', money(p.interest.year), { sub: `${money(p.interest.soFar)} earned so far, the rest to March from the holdings` }),
+    line('Savings account interest', money(p.savings.year), { sub: `${money(p.savings.soFar)} credited so far, the rest at the same pace` }),
+    line('Dividends', money(p.dividends), { sub: 'recorded so far, none guessed for the rest' }),
+    line('Other income', money(p.other), { sub: 'typed under Adjust' }),
+    line('Total income expected', money(c.gross), { bold: true }),
+    line('Standard deduction', '−' + money(c.stdDed), { sub: r.label }),
+    line('Taxable income', money(c.taxable), { bold: true }),
+  ];
+  const taxLines = [
+    line('Tax on slabs', money(c.slab)), c.rebate ? line('Rebate (section 87A)', '−' + money(c.rebate)) : null, line('Cess at 4%', money(c.cess)),
+    line('Expected tax', money(c.tax), { bold: true }),
+    line('TDS cut so far', '−' + money(p.tds.soFar), { sub: `${pct(p.tdsRate, 0)} on bonds, and on FDs over 40,000 a year` }),
+    line('TDS by March', '−' + money(p.tds.year), { sub: 'worked out from the holdings for the whole year' }),
+    p.tds.other ? line('Other TDS already cut', '−' + money(p.tds.other)) : null,
+    line(refund ? 'Refund expected when you file' : 'Still to pay', money(Math.abs(p.balance)), { bold: true, tone: refund ? 'pos' : p.balance > 0.5 ? 'neg' : '' }),
   ].filter(Boolean);
-  const cmpTds = p.tds.year - c.tax;
+  const cols = [{ label: 'Item', host: true, render: (x) => h('span', null, x.bold ? h('b', null, x.label) : x.label, x.sub ? h('small', { class: 'muted', style: { display: 'block' } }, x.sub) : null) }, { label: 'Amount', cls: 'r', render: (x) => (x.bold ? h('b', { class: x.tone || '' }, x.val) : x.val) }];
+  const reconText = rc.status === 'ok'
+    ? `Matches. The bank got ${money(rc.received)} as bond interest this year; the holdings say ${money(rc.expectedPrev)} up to last month end and ${money(rc.expectedNow)} up to today, after TDS.`
+    : rc.status === 'short'
+      ? `Mismatch: the bank got ${money(rc.received)}, which is ${money(-rc.diff)} less than the ${money(rc.expectedPrev)} the holdings say should have arrived up to last month end (after TDS). A payment may be missing, or TDS was cut at a higher rate.`
+      : `Mismatch: the bank got ${money(rc.received)}, which is ${money(rc.diff)} more than the ${money(rc.expectedNow)} the holdings say is earned up to today (after TDS). A rate or amount on a bond may be out of date, or TDS was not cut.`;
   return section(`Expected tax, ${p.fy} (new regime)`, h('div', null,
     h('div', { class: 'stats' },
-      stat('Total income expected', money(c.gross), 'salary + interest + dividends + other'),
+      stat('Total income expected', money(c.gross), 'salary, interest, dividends, other'),
       stat('Expected tax', h('span', { class: c.tax > 0.5 ? 'neg' : 'pos' }, money(c.tax)), c.tax > 0.5 ? `about ${pct(c.gross ? c.tax / c.gross : 0, 1)} of income` : 'nil, covered by the rebate'),
-      stat('TDS cut so far', money(p.tds.soFar), `about ${money(p.tds.year)} by March`),
+      stat(refund ? 'Refund expected' : 'Still to pay', h('span', { class: refund ? 'pos' : p.balance > 0.5 ? 'neg' : '' }, money(Math.abs(p.balance))), `after ${money(tdsAll)} TDS by March${c.tax < 0.5 && tdsAll > 0.5 ? ', all of it comes back' : ''}`),
       stat(hd.over > 0.5 ? 'Above the tax-free limit' : 'Room before tax starts', money(hd.over > 0.5 ? hd.over : hd.room), `tax-free up to ${money(hd.zeroLimit)} of income`)),
-    table([{ label: 'Item', host: true, render: (x) => h('span', null, x.bold ? h('b', null, x.label) : x.label, x.sub ? h('small', { class: 'muted', style: { display: 'block' } }, x.sub) : null) }, { label: 'Amount', cls: 'r', render: (x) => (x.bold ? h('b', null, x.val) : x.val) }], lines, {}),
-    h('div', { class: 'row-actions', style: { display: 'flex', gap: '14px', flexWrap: 'wrap', margin: '10px 0' } },
-      field('Other income for the year (₹)', 'other', plan.other, 'rent, expected dividends, anything else. Blank means 0.'),
-      field('Monthly salary from now (₹)', 'salaryMonthly', plan.salaryMonthly, `blank uses the latest month (${money(p.salary.perMonth)})`),
-      field('Bond rate for the idea below (%)', 'bondRate', plan.bondRate ? +(plan.bondRate * 100).toFixed(2) : '', 'blank means 12', '12')),
-    h('div', { class: 'card inner' }, h('h4', { style: { margin: '0 0 4px' } }, 'How much more can go into bonds'),
+    h('div', { class: 'alert' + (rc.status === 'ok' ? ' good' : ' warn'), style: { margin: '8px 0' } }, h('b', null, 'Bank against holdings: '), reconText),
+    h('div', { class: 'card inner', style: { margin: '8px 0' } }, h('b', null, 'More into bonds? '),
       hd.over > 0.5
-        ? h('p', { style: { margin: 0 } }, `You are already ${money(hd.over)} above the tax-free limit, so any more bond interest would be taxed. To get back to nil tax, income has to come down by that much.`)
-        : h('div', null,
-          h('p', { style: { margin: '0 0 4px' } }, 'At ', h('b', null, pct(hd.rate, 1)), ' and still paying no tax, you could hold about ', h('b', null, money(hd.bondsFullYear)), ' more in bonds, for a full year of interest (', money(hd.room), ').'),
-          hd.daysLeft > 0 ? h('p', { style: { margin: 0 } }, `If you buy today, this year only gets ${hd.daysLeft} days of it, so up to ${money(hd.bondsThisYear)} would still fit in ${p.fy}. Next year the full-year figure applies.`) : null)),
-    h('details', { class: 'more' }, h('summary', null, 'Where the interest comes from'),
+        ? `You are already ${money(hd.over)} above the tax-free limit, so more bond interest would be taxed.`
+        : `At ${pct(hd.rate, 1)} you could hold about ${money(hd.bondsFullYear)} more in bonds and still pay no tax, on a full year of interest.${hd.daysLeft > 0 ? ` Bought today, this year only gets ${hd.daysLeft} days of it, so up to ${money(hd.bondsThisYear)} fits in ${p.fy}.` : ''}`),
+    h('details', { class: 'more', open: true }, h('summary', null, 'How the income adds up'), table(cols, income, {})),
+    h('details', { class: 'more', open: true }, h('summary', null, 'Tax, TDS and what is left'), table(cols, taxLines, {})),
+    h('details', { class: 'more' }, h('summary', null, 'Adjust the assumptions'),
+      h('div', { style: { display: 'flex', gap: '14px', flexWrap: 'wrap', margin: '8px 0' } },
+        field('Other income for the year (₹)', 'other', plan.other, 'rent, expected dividends, anything else. Blank means 0.'),
+        field('Monthly salary from now (₹)', 'salaryMonthly', plan.salaryMonthly, `blank uses the latest month (${money(p.salary.perMonth)})`),
+        field('Other TDS already cut (₹)', 'otherTds', plan.otherTds, 'for example on salary. Blank means 0.'),
+        field('Bond rate for the idea above (%)', 'bondRate', plan.bondRate ? +(plan.bondRate * 100).toFixed(2) : '', 'blank means 12', '12'))),
+    h('details', { class: 'more' }, h('summary', null, `Where the bond and FD interest comes from · ${money(p.interest.year)}`),
       p.interest.holdings.length ? table([
         { label: 'Holding', host: true, get: (x) => x.name }, { label: 'Type', mob: 'under', get: (x) => x.kind }, { label: 'Holder', mob: 'hide', get: (x) => x.holder || '–' },
         { label: 'Year interest', cls: 'r', get: (x) => money(x.yearInterest), total: (rs) => money(rs.reduce((a, x) => a + x.yearInterest, 0)) },
         { label: 'Earned so far', cls: 'r', mob: 'under', mlabel: 'so far ', get: (x) => money(x.soFar), total: (rs) => money(rs.reduce((a, x) => a + x.soFar, 0)) },
         { label: 'TDS (est.)', cls: 'r', mob: 'hide', get: (x) => money(x.tdsYear), total: (rs) => money(rs.reduce((a, x) => a + x.tdsYear, 0)) },
       ], p.interest.holdings, { footer: {} }) : h('p', { class: 'empty' }, 'No bonds or FDs running in this year.'),
-      note(`Worked out from each holding: principal × rate × days held inside the year, up to maturity or closing. It is the gross interest, so it does not matter whether TDS was cut on what you received. TDS is an estimate: ${pct(p.tdsRate, 0)} on bonds, and on an FD only when its year's interest is over 40,000. Private lending and chits are left out.`)),
-    note('A quick guide, not tax advice. It treats salary, bond and FD interest, recorded dividends and the other income you type as ordinary income. Capital gains are not included (they are taxed at their own rates and the 87A rebate does not apply to them), and it assumes you keep today’s bonds and FDs until maturity without reinvesting. Check with your accountant before filing.')));
+      note('Worked out from each holding: principal × rate × days held inside the year, up to maturity or closing. It is the gross interest, so it does not matter whether TDS was cut on what you received. Private lending and chits are left out.')),
+    note('A quick guide, not tax advice. Salary, bond and FD interest, savings interest, recorded dividends and the other income you type are taxed as ordinary income. Capital gains are not included (they have their own rates and the 87A rebate does not apply to them). It assumes you keep today’s bonds and FDs until maturity without reinvesting. Check with your accountant before filing.')));
 }
 
 /** Who each account belongs to. Bonds, FDs, lending and savings already carry a holder; the Groww equity and fund accounts and the bank accounts are set here. */

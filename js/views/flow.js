@@ -2,7 +2,7 @@
 import { S } from '../store.js';
 import * as C from '../calc.js';
 import { h, money, pct, dateStr, monthLabel, section, stat, table, dialog, segTabs, btn, canEdit, dec, route, setOptions, monthGroups } from '../ui.js';
-import { hbars, barChart, meter } from '../charts.js';
+import { hbars, barChart, stackedBars, meter } from '../charts.js';
 import * as CAT from '../categories.js';
 import * as categoriesView from './categories.js';
 import { openLedger, txnForm } from './cash.js';
@@ -172,16 +172,44 @@ function overview() {
   const unknown = data.ledger.filter((e) => (e.category || '').toLowerCase() === 'unknown').length;
   if (unknown && canEdit()) root.append(h('div', { class: 'card' }, h('p', null, `${unknown} entries are in “Unknown”, so they are not telling you what the money was for. `), btn('Review them', () => openLedger({ text: 'Unknown' }), 'small')));
 
-  const tr = C.monthlyTrend(data, months.slice(-12));
-  root.append(section('Last 12 months', barChart({
-    names: ['Income', 'Expenses', 'Invested'], colors: [2, 1, 0], fmt: money,
-    groups: tr.map((t) => ({ label: monthLabel(t.month).slice(0, 3), title: monthLabel(t.month), values: [t.income, t.expense, t.invest] })),
-  })));
+  root.append(monthsSection(data, months));
   if (s.otherIn > 0) root.append(h('p', { class: 'note' }, `${money(s.otherIn)} was received in categories that are not marked as income (refunds, loan repayments, sales). It is not counted as income. If some of it is real income, change that category’s type under Categories.`));
-  root.append(h('p', { class: 'note' }, 'Transfers between your own accounts and cash withdrawals are left out everywhere on this screen. Investments are never counted as expenses. The 12-month chart ignores the filter and counts loan EMI & tax inside expenses.'));
+  root.append(h('p', { class: 'note' }, 'Transfers between your own accounts and cash withdrawals are left out everywhere on this screen. Investments are never counted as expenses. The month-by-month chart ignores the filter and counts loan EMI & tax inside expenses.'));
   return root;
 }
 const passes = (name) => C.passesFilter(filter, name);
+
+// ----- month by month: each column is stacked by category; tap one to see what is inside it -----
+const RANGES = [[1, 'This month'], [2, '2 months'], [3, '3 months'], [6, '6 months'], [9, '9 months'], [12, '12 months']];
+let mRange = 12, mPick = null;
+function monthsSection(data, allMonths) {
+  const cur = C.monthKey(S.all.asOf);
+  const list = allMonths.filter((m) => m <= cur).slice(-mRange);
+  const none = { mode: 'all', cats: [] };
+  const sums = list.map((m) => C.rangeSummary(data, m + '-01', m + '-31', none));
+  const KEYS = [['income', 'Income', 'credit'], ['expense', 'Expenses', 'debit'], ['invest', 'Invested', 'debit']];
+  // the biggest categories over the whole window get their own shade, the rest are grouped
+  const order = KEYS.map(([k]) => { const t = new Map(); sums.forEach((s) => s[k].forEach((c) => t.set(c.category, (t.get(c.category) || 0) + c.amount))); return [...t.entries()].sort((a, b) => b[1] - a[1]).map((e) => e[0]); });
+  const parts = (s, ki) => { const top = order[ki].slice(0, 5); const rows = top.map((c) => ({ name: c, value: (s[KEYS[ki][0]].find((x) => x.category === c) || {}).amount || 0 })); const rest = s[KEYS[ki][0]].filter((x) => !top.includes(x.category)).reduce((a, x) => a + x.amount, 0); if (rest > 0) rows.push({ name: 'Everything else', value: rest }); return rows; };
+  if (mPick && !list.includes(mPick.month)) mPick = null;
+  const box = h('div');
+  const draw = () => {
+    const chips = h('div', { class: 'row-actions', style: { marginBottom: '6px' } }, RANGES.map(([n, l]) => h('button', { type: 'button', class: 'chip-btn' + (mRange === n ? ' on' : ''), onclick: () => { mRange = n; rerender(); } }, l)));
+    const chart = stackedBars({ names: KEYS.map((k) => k[1]), colors: [2, 1, 0], fmt: money,
+      groups: list.map((m, i) => ({ label: monthLabel(m).slice(0, 3), title: monthLabel(m, true), bars: KEYS.map((_, ki) => parts(sums[i], ki)) })),
+      selected: mPick ? { g: list.indexOf(mPick.month), s: mPick.ki } : null,
+      onSelect: (g, ki) => { mPick = mPick && mPick.month === list[g] && mPick.ki === ki ? null : { month: list[g], ki }; draw(); } });
+    let detail;
+    if (mPick) {
+      const [k, label, dir] = KEYS[mPick.ki], s = sums[list.indexOf(mPick.month)], rows = s[k], total = rows.reduce((a, x) => a + x.amount, 0);
+      detail = h('div', { class: 'card inner', style: { marginTop: '10px' } }, h('h4', { style: { margin: '0 0 6px' } }, `${label}, ${monthLabel(mPick.month, true)} · ${money(total)}`),
+        rows.length ? hbars(rows.map((x) => ({ label: x.category, value: x.amount })), { fmt: money, colorIndex: [2, 1, 0][mPick.ki], onClick: (x) => { location.hash = detailLink(x.label, dir); } }) : h('p', { class: 'empty' }, 'Nothing in this month.'));
+    } else detail = h('p', { class: 'note' }, 'Tap a column to see what it is made of, for example the income received in one month.');
+    box.replaceChildren(chips, chart, detail);
+  };
+  draw();
+  return section('Month by month', box);
+}
 
 // ----- drill-down page for one category (or all expenses) -----
 function detail(q) {
