@@ -330,8 +330,8 @@ export function allocPath(groups, goal, monthly, { tol = 0.02, maxMonths = 360 }
         v[g.key] += add; if (m === 1) firstSplit[g.key] = add;
       }
     }
-    if (m % 12 === 0) snap(m);
-    if (within(v)) { if (m % 12 !== 0) snap(m); return { reached: m, path, firstSplit, target }; }
+    if (m % 12 === 0 || m === maxMonths) snap(m);
+    if (within(v)) { if (m % 12 !== 0 && m !== maxMonths) snap(m); return { reached: m, path, firstSplit, target }; }
   }
   return { reached: null, path, firstSplit, target };
 }

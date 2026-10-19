@@ -137,6 +137,7 @@ export function render() {
       h('div', { class: 'stats' },
         stat('Received this month', money(rc.filter((r) => r.received).reduce((x, r) => x + (r.expected || 0), 0)), `${rc.filter((r) => r.received).length} of ${rc.length} payments in`),
         stat('Received so far', green(money(rc.reduce((x, r) => x + (r.total || 0), 0))), `${rc.reduce((x, r) => x + (r.installmentsPaid || 0), 0)} payments since each started`)),
+      h('details', { class: 'by-person hide-sm' }, h('summary', null, 'Received so far, by person'), personList()),
       !late.length && !waiting.length && rc.length ? h('p', { class: 'note', style: { marginTop: 0 } }, 'Everything due this month has been received.') : null,
       table([
       { label: 'From', host: true, get: (r) => r.name },
@@ -149,7 +150,17 @@ export function render() {
       { label: '', render: (r) => (canEdit() && r.active !== false && !r.received ? h('button', { class: 'small', onclick: (e) => { e.stopPropagation(); mutate((d) => { d.receivables.find((x) => x.id === r.id).lastReceived = C.todayISO(); }); toast('Marked as received'); } }, 'Mark received') : '') },
     ], rc, { rowClass: (r) => (r.overdue ? 'row-bad' : !r.received && !r.notStarted && C.monthKey(r.due) <= C.monthKey(all.asOf) ? 'row-warn' : ''), onRow: canEdit() ? (r) => receivableForm(data.receivables.find((x) => x.id === r.id)) : null })),
     canEdit() ? [btn('Add', () => receivableForm())] : null));
+  root.append(h('div', { class: 'phone-only' }, section('Received so far, by person', personList())));
   return root;
+}
+
+function personList() {
+  const list = C.receivedByPerson(S.data, S.all.asOf).filter((p) => p.total > 0 || p.open);
+  const tot = list.reduce((a, p) => a + p.total, 0);
+  if (!list.length) return h('p', { class: 'note' }, 'Nothing received yet.');
+  return h('div', { class: 'card inner' }, ...list.map((p) => h('div', { class: 'row-line', style: { display: 'flex', justifyContent: 'space-between', gap: '12px', padding: '6px 0', borderBottom: '1px solid var(--line, #ddd)' } },
+    h('span', null, h('b', null, p.name), h('small', { style: { display: 'block', opacity: 0.7 } }, `${p.payments} payment${p.payments === 1 ? '' : 's'}${p.last ? ' · last ' + dateStr(p.last) : ''}${p.open ? '' : ' · closed'}`)),
+    green(money(p.total)))), h('div', { style: { display: 'flex', justifyContent: 'space-between', paddingTop: '8px' } }, h('b', null, 'Total'), h('b', null, green(money(tot)))));
 }
 
 function closedView(root) {
@@ -159,6 +170,15 @@ function closedView(root) {
   const all3 = kinds.flatMap(([, k]) => all.closed[k]);
   const inn = all3.reduce((a, x) => a + Math.abs(x.principal), 0), back = all3.reduce((a, x) => a + x.closed.amount, 0);
   root.append(h('div', { class: 'stats' }, stat('Closed', String(all3.length + all.closed.receivables.length), 'bonds, deposits, loans and dues'), stat('Money in', money(inn), ''), stat('Came back', money(back), h('span', { class: posNeg(back - inn) }, (back - inn >= 0 ? 'gain ' : 'loss ') + money(Math.abs(back - inn))))));
+  const cs = C.closedSummary(data, all);
+  if (cs.types.length) root.append(section('What came back, by type', h('div', null, ...cs.types.map((t) => h('div', { style: { marginBottom: '14px' } }, h('h4', { style: { margin: '0 0 4px' } }, t.label),
+    table([
+      { label: t.id === 'lending' ? 'Person' : 'Name', host: true, get: (x) => x.name + (x.count > 1 ? ` (${x.count})` : '') },
+      { label: 'Put in', cls: 'r', get: (x) => money(x.invested), total: (rs) => money(rs.reduce((a, x) => a + x.invested, 0)) },
+      { label: t.id === 'fds' ? '' : 'Interest received', mob: 'under', mlabel: 'interest ', cls: 'r', get: (x) => (t.id === 'fds' ? '' : money(x.interest)), total: (rs) => (t.id === 'fds' ? '' : money(rs.reduce((a, x) => a + x.interest, 0))) },
+      { label: 'Principal back', mob: 'under', mlabel: 'back ', cls: 'r', get: (x) => money(x.back), total: (rs) => money(rs.reduce((a, x) => a + x.back, 0)) },
+      { label: 'Total received', key: true, cls: 'r', render: (x) => h('span', { class: posNeg(x.gain) }, money(x.total)), total: (rs) => money(rs.reduce((a, x) => a + x.total, 0)) },
+    ], t.items, { footer: { label: 'Total', phone: false }, empty: 'None' }))))));
   for (const [title, key] of kinds) {
     const list = all.closed[key].slice().sort((a, b) => (a.closed.date < b.closed.date ? 1 : -1));
     root.append(section(title + ` (${list.length})`, table([

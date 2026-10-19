@@ -4,7 +4,9 @@ import { S } from '../store.js';
 import * as C from '../calc.js';
 import * as P from '../projector.js';
 import { h, money, pct, dateStr, monthLabel, section, stat, table, setOptions } from '../ui.js';
-import { lineChart } from '../charts.js';
+import { lineChart, stackedArea } from '../charts.js';
+import * as I from '../insights.js';
+import { btn } from '../ui.js';
 import { model } from './proj-year.js';
 
 let range = 'year';
@@ -97,6 +99,8 @@ export function render() {
     lineChart({ labels, fmt: money, yMin: Math.floor((lo * 0.97) / 1e5) * 1e5, height: 260, series }),
     h('p', { class: 'note' }, `The solid line is each month-end snapshot, ending at today. ${havePlan ? 'The dotted line is the plan as it was made at the start (the Plan sheet, or the year plan in the Wealth outlook), so the gap between the two is how far you have moved from it. ' : ''}${prj.length ? `The dashed line carries today’s position to December using ${hasPlan ? 'your ' + year + ' plan' : 'the standard assumptions (no ' + year + ' plan saved yet)'} and the market outlook set under Wealth outlook.` : ''}`))));
 
+  root.append(mixChart(data, all, months, lbl));
+
   const rows = act.concat(prj).map((r, i, a) => ({ ...r, change: i ? r.value - a[i - 1].value : null, plan: planned.has(r.month) ? planned.get(r.month) : null, current: r.month === cur }));
   root.append(section('The numbers', h('div', null, table([
     { label: 'Month', host: true, render: (r) => h('span', null, monthLabel(r.month, true), r.current ? h('small', { class: 'now-tag' }, ' now') : null) },
@@ -108,4 +112,29 @@ export function render() {
   ].filter(Boolean), rows, { rowClass: (r) => (r.current ? 'cur-row' : r.src === 'Projected' ? 'proj-row' : '') }),
   h('p', { class: 'note' }, '“Plan sheet” months were typed in the Plan sheet before snapshots began; “Snapshot” months are saved on the Wealth outlook. Change is against the month before. “Against plan” is net worth minus the planned net worth for that month.'))));
   return root;
+}
+
+// Broad categories over time. Month-end snapshots that saved their asset classes, plus today's live position.
+const ALLOC_OF = Object.fromEntries(I.ALLOC.flatMap((a) => a.from.map((c) => [c, a.key])));
+let mixDrill = null;
+function mixChart(data, all, months, lbl) {
+  const cur = C.monthKey(all.asOf);
+  const by = new Map();
+  for (const s of (data.projector && data.projector.snapshots) || []) if (s.classes && s.month < cur) by.set(s.month, s.classes);
+  const live = P.baseline(data, all);
+  by.set(cur, live.values);
+  const ms = months.filter((m) => by.has(m));
+  const box = h('div');
+  const draw = () => {
+    const keys = mixDrill ? I.ALLOC.filter((a) => I.GROUP_OF[a.key] === mixDrill) : I.GOAL_GROUPS;
+    const val = (classes, k) => Object.entries(classes).reduce((a, [c, v]) => a + ((mixDrill ? ALLOC_OF[c] === k : I.GROUP_OF[ALLOC_OF[c]] === k) ? Math.max(0, Number(v) || 0) : 0), 0);
+    const series = keys.map((k, i) => ({ id: mixDrill ? k.key : k.id, name: k.label, color: i, values: ms.map((m) => val(by.get(m), mixDrill ? k.key : k.id)) }));
+    const title = mixDrill ? (I.GOAL_GROUPS.find((g) => g.id === mixDrill) || {}).label : 'All groups';
+    box.replaceChildren(
+      mixDrill ? h('div', { style: { marginBottom: '6px' } }, btn('← All groups', () => { mixDrill = null; draw(); }, 'small'), h('b', { style: { marginLeft: '8px' } }, title)) : h('p', { class: 'note', style: { marginTop: 0 } }, 'Tap a colour to see what is inside it.'),
+      ms.length < 2 ? h('p', { class: 'note' }, 'This chart fills in as month-end snapshots with their asset classes are saved (Wealth outlook → Month-end check-in). Today is already included.')
+        : stackedArea({ labels: ms.map((m) => lbl(m, months.indexOf(m))), series, fmt: money, height: 240, onSelect: mixDrill ? null : (sr) => { mixDrill = sr.id; draw(); } }));
+  };
+  draw();
+  return section('What you own, month by month', box);
 }

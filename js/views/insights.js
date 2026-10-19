@@ -4,7 +4,7 @@ import * as C from '../calc.js';
 import * as P from '../projector.js';
 import * as I from '../insights.js';
 import { h, money, compact, pct, dateStr, monthLabel, section, stat, table, btn, segTabs, subTab, setOptions, formDialog, dialog, toast, canEdit } from '../ui.js';
-import { barChart, lineChart } from '../charts.js';
+import { barChart, lineChart, donut, color } from '../charts.js';
 import { plannedByMonth } from './networth.js';
 import { groupedTable } from './groupmix.js';
 
@@ -257,26 +257,54 @@ function allocation(root) {
       { label: 'Share of new money', cls: 'r', parent: (it) => (monthly ? pct(sm(it, 'amt') / monthly, 0) : '–'), child: (x) => (monthly ? pct(x.amt / monthly, 0) : '–') },
     ],
   }), note('This is the split for the first month. It shifts toward the groups still short of the goal as the months go by. Add a monthly amount above zero to see it.'))));
-  const scen = [1, 1.5, 2].map((k) => { const r = I.allocPath(now, pathGoal, Math.round(monthly * k), {}); return { label: k === 1 ? 'As now' : `${k}× as much`, monthly: Math.round(monthly * k), months: r.reached }; });
-  const need = [3, 5, 10].map((y) => ({ y, m: I.monthlyFor(now, pathGoal, y) }));
-  root.append(section('If you put in more', h('div', null, table([{ label: 'New money', host: true, get: (x) => `${x.label} (${money(x.monthly)} a month)` }, { label: 'Time to reach', cls: 'r', get: (x) => I.monthsText(x.months) }], scen, {}),
-    h('h4', null, 'What it takes to get there by a date'),
-    table([{ label: 'Reach the goal in', host: true, get: (x) => `${x.y} years` }, { label: 'Needs a month', cls: 'r', get: (x) => (x.m == null ? 'not possible without selling' : x.m === 0 ? 'nothing extra' : money(x.m)) }, { label: 'Compared with now', cls: 'r', mob: 'under', mlabel: '', get: (x) => (x.m == null || !monthly ? '' : x.m <= monthly ? 'within your usual amount' : `${(x.m / monthly).toFixed(1)}× your usual amount`) }], need, {}))));
-  // Year by year, grouped: group rows first, tap to see the rows inside
-  const snaps = path.path.filter((p) => p.m % 12 === 0 || p.m === path.reached).slice(0, 16);
-  const pick = [0, 12, 24, 36, 60, 84, 120].map((m) => snaps.find((p) => p.m === m)).filter(Boolean);
-  const last = snaps[snaps.length - 1];
-  if (last && !pick.includes(last)) pick.push(last);
-  const lbl = (p) => (p.m ? monthsShort(p.m) : 'Now');
-  const gShare = (p, id) => I.ALLOC.filter((a) => I.GROUP_OF[a.key] === id).reduce((a, x) => a + p.shares[x.key], 0);
-  const yrRows = I.ALLOC.map((a) => ({ key: a.key, label: a.label, gid: I.GROUP_OF[a.key] }));
-  root.append(section('Year by year', h('div', null,
-    lineChart({ labels: snaps.map(lbl), fmt: (v) => pct(v, 0), height: 220, series: I.GOAL_GROUPS.map((g, i) => ({ name: g.label, values: snaps.map((p) => gShare(p, g.id)), color: i })) }),
-    groupedTable({
-      rows: yrRows, groupOf: (r) => r.gid,
-      cols: [{ label: 'Group' }, ...pick.map((p, i) => ({ label: lbl(p), cls: 'r', hide: i > 2 && i < pick.length - 1, parent: (it) => pct(gShare(p, it[0].gid), 0), child: (r) => { const gs = gShare(p, r.gid); return multi(r.gid) ? pct(gs ? p.shares[r.key] / gs : 0, 0) : ''; } }))],
-    }),
-    note('Group rows show their share of everything. Tap one to see the rows inside it, as a share of that group. Each group grows at the rate it has earned so far (shares, funds and gold at the market outlook chosen). Real returns will differ. Nothing is sold.'))));
+  root.append(projection(now, pathGoal, monthly));
+}
+/** Today's mix next to the mix after investing the monthly amount the way the goal says, for a chosen horizon. */
+function projection(now, pathGoal, monthly) {
+  const { all } = S;
+  const asOf = all.asOf, toYearEnd = 13 - Number(asOf.slice(5, 7)); // months until 31 Dec
+  const hz = [
+    { id: 'y0', label: 'This year end', m: Math.max(1, toYearEnd) }, { id: 'y1', label: 'Next year end', m: Math.max(1, toYearEnd) + 12 },
+    { id: 'y2', label: '2 years', m: 24 }, { id: 'y3', label: '3 years', m: 36 }, { id: 'y4', label: '4 years', m: 48 }, { id: 'y5', label: '5 years', m: 60 },
+  ];
+  let cur = 'y1', drill = null;
+  const box = h('div');
+  const snapAt = (m) => { const r = I.allocPath(now, pathGoal, monthly, { tol: -1, maxMonths: m }); return r.path[r.path.length - 1]; };
+  const draw = () => {
+    const hzo = hz.find((x) => x.id === cur), p = snapAt(hzo.m);
+    const nowVals = Object.fromEntries(now.map((x) => [x.key, x.value])), nowTot = Object.values(nowVals).reduce((a, b) => a + b, 0);
+    const label = (k) => I.ALLOC.find((a) => a.key === k).label;
+    const items = (vals, id) => (id ? I.ALLOC.filter((a) => I.GROUP_OF[a.key] === id).map((a) => ({ label: label(a.key), value: vals[a.key] || 0 }))
+      : I.GOAL_GROUPS.map((g, i) => ({ id: g.id, label: g.label, value: I.ALLOC.filter((a) => I.GROUP_OF[a.key] === g.id).reduce((x, a) => x + (vals[a.key] || 0), 0), color: color(i) })));
+    const pie = (title, vals, tot) => {
+      const it = items(vals, drill), sub = it.reduce((a, x) => a + x.value, 0);
+      return h('div', { class: 'alloc-chart', style: { textAlign: 'center' } }, h('h4', { style: { margin: '0 0 4px' } }, title),
+        donut(it.map((x, i) => ({ ...x, color: drill ? color(i) : x.color })), { fmt: money, center: compact(sub), sub: drill ? `${tot ? pct(sub / tot, 0) : '–'} of all` : 'total assets', size: 200, onSelect: drill ? null : (x) => { drill = x.id; draw(); } }),
+        h('ul', { class: 'legend-list', style: { listStyle: 'none', padding: 0, margin: '6px 0 0', fontSize: '0.9em' } }, it.map((x, i) => h('li', null, h('span', { style: { display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: drill ? color(i) : x.color, marginRight: '6px' } }), `${x.label} ${sub ? pct(x.value / sub, 1) : '–'}`))));
+    };
+    const gl = (id) => (I.GOAL_GROUPS.find((g) => g.id === id) || {}).label;
+    const rows = I.ALLOC.map((a) => ({ key: a.key, label: a.label, gid: I.GROUP_OF[a.key], now: nowVals[a.key] || 0, then: p.values[a.key] || 0 }));
+    const sm = (it, k) => it.reduce((a, x) => a + x[k], 0);
+    const multi = (id) => rows.filter((r) => r.gid === id).length > 1;
+    const gTot = (id, k) => sm(rows.filter((r) => r.gid === id), k);
+    const chg = (a, b) => h('span', { class: b - a >= 0 ? 'pos' : 'neg' }, (b - a >= 0 ? '+' : '−') + compact(Math.abs(b - a)));
+    box.replaceChildren(
+      h('div', { class: 'seg', style: { flexWrap: 'wrap', marginBottom: '8px' } }, hz.map((x) => h('button', { class: 'chip-btn' + (x.id === cur ? ' on' : ''), onclick: () => { cur = x.id; draw(); } }, x.label))),
+      h('p', { class: 'note', style: { marginTop: 0 } }, `If you put ${money(monthly)} a month into the groups that are short of the goal, here is the mix by ${monthLabel(C.addMonths(asOf.slice(0, 7) + '-01', hzo.id === 'y0' || hzo.id === 'y1' ? hzo.m - 1 : hzo.m).slice(0, 7), true)}. Growth follows the market outlook you chose. This is an illustration, not a forecast.`),
+      drill ? h('div', { style: { marginBottom: '6px' } }, btn('← All groups', () => { drill = null; draw(); }, 'small'), h('b', { style: { marginLeft: '8px' } }, gl(drill))) : h('p', { class: 'note', style: { margin: '0 0 6px' } }, 'Tap a slice to see what is inside it.'),
+      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' } }, pie('Today', nowVals, nowTot), pie(hzo.label, p.values, p.total)),
+      h('h4', null, 'Same in numbers'),
+      groupedTable({ rows, groupOf: (r) => r.gid, cols: [
+        { label: 'Group' },
+        { label: 'Today', cls: 'r', parent: (it) => money(sm(it, 'now')), child: (x) => money(x.now), total: (rs) => money(sm(rs, 'now')) },
+        { label: 'Today %', cls: 'r', hide: true, parent: (it) => pct(nowTot ? sm(it, 'now') / nowTot : 0, 1), child: (x) => (multi(x.gid) && gTot(x.gid, 'now') ? pct(x.now / gTot(x.gid, 'now'), 1) : '') },
+        { label: hzo.label, cls: 'r', parent: (it) => money(sm(it, 'then')), child: (x) => money(x.then), total: (rs) => money(sm(rs, 'then')) },
+        { label: 'Then %', cls: 'r', hide: true, parent: (it) => pct(p.total ? sm(it, 'then') / p.total : 0, 1), child: (x) => (multi(x.gid) && gTot(x.gid, 'then') ? pct(x.then / gTot(x.gid, 'then'), 1) : '') },
+        { label: 'Change', cls: 'r', parent: (it) => chg(sm(it, 'now'), sm(it, 'then')), child: (x) => chg(x.now, x.then) },
+      ] }));
+  };
+  draw();
+  return section('How the mix changes if you invest this way', box);
 }
 const monthsShort = (m) => (m >= 12 ? `${Math.floor(m / 12)}y ${m % 12 ? (m % 12) + 'm' : ''}`.trim() : `${m}m`);
 function saveGoal(goal) { try { mutate((d) => { delete d.allocGoal; d.allocGoal = goal; }); rerender(); } catch (e) { toast(e.message, 'error'); } }
