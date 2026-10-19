@@ -126,20 +126,20 @@ function schemeAsChit(x) {
 }
 function chitBestCard(c, actualRate, scheme) {
   const card = h('div', { class: 'card' });
-  let mock = '';
+  const head = h('h3'), hint = h('span', { class: 'note', style: { margin: 0 } }), reset = btn('Use actual rate', () => { input.value = ''; draw(); });
+  const body = h('div');
+  // the box is made once and kept, so typing is never interrupted by a redraw
+  const input = h('input', { type: 'number', step: 'any', inputmode: 'decimal', placeholder: String(Math.round(actualRate)), 'aria-label': 'Try a gold rate per gram', style: { width: '8em' }, oninput: () => draw() });
   const draw = () => {
-    const m = Number(mock), mocked = mock !== '' && m > 0, rate = mocked ? m : actualRate;
+    const m = Number(input.value), mocked = input.value !== '' && m > 0, rate = mocked ? m : actualRate;
     const o = chitOptions(c, rate);
     const profit = (n) => h('span', { class: n > 0.5 ? 'pos' : n < -0.5 ? 'neg' : '' }, `Profit over what you paid: ${n > 0.5 ? '+' : n < -0.5 ? '−' : ''}${money(Math.abs(n))}`);
     const mk = (title, big, sub, win, pr) => h('div', { class: 'stat', style: win ? { borderColor: 'var(--accent, #1b7f3b)', borderWidth: '2px', borderStyle: 'solid' } : null },
       h('span', { class: 'stat-label' }, title + (win ? (mocked ? ' · better at this rate' : ' · better today') : '')), h('strong', { class: 'stat-value' }, big), h('span', { class: 'sub' }, sub), h('span', { class: 'sub' }, pr));
-    const input = h('input', { type: 'number', step: 'any', inputmode: 'decimal', placeholder: String(Math.round(actualRate)), value: mock, 'aria-label': 'Try a gold rate per gram', style: { width: '8em' },
-      oninput: (e) => { mock = e.target.value; const pos = e.target.selectionStart; draw(); const n = card.querySelector('input'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (_) { /* number inputs */ } } } });
-    card.replaceChildren(
-      h('h3', null, (mocked ? 'Best option at ' + money(rate) + ' / g · ' : 'Best option today · ') + c.name),
-      h('div', { class: 'price-bar inline', style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' } },
-        h('span', { class: 'note', style: { margin: 0 } }, 'Try a gold rate (₹ / g):'), input,
-        mocked ? btn('Use actual rate', () => { mock = ''; draw(); }) : h('span', { class: 'note', style: { margin: 0 } }, `blank = actual ${money(actualRate)} / g`)),
+    head.textContent = (mocked ? 'Best option at ' + money(rate) + ' / g · ' : 'Best option today · ') + c.name;
+    hint.textContent = mocked ? '' : `blank = actual ${money(actualRate)} / g`;
+    reset.style.display = mocked ? '' : 'none';
+    body.replaceChildren(
       mocked ? h('p', { class: 'note', style: { marginTop: 0 } }, `What-if only. Today's actual rate is ${money(actualRate)} / g.`) : null,
       h('div', { class: 'stats' },
         mk('Take it by value', dec(o.byValueGrams, 2) + ' g', `${money(o.paid)} paid in, buys this much at ${money(rate)} / g`, o.best === 'value', profit(0)),
@@ -152,6 +152,8 @@ function chitBestCard(c, actualRate, scheme) {
         : 'Value basis gives you the money paid in as gold at the rate above.'),
       canEdit() ? h('div', { class: 'actions' }, btn('Close this chit', () => closeChit(c, scheme))) : null);
   };
+  card.append(head, h('div', { class: 'price-bar inline', style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' } },
+    h('span', { class: 'note', style: { margin: 0 } }, 'Try a gold rate (₹ / g):'), input, reset, hint), body);
   draw();
   return card;
 }

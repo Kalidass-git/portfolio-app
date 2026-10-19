@@ -886,6 +886,18 @@ export function familyReport(data, all) {
 
 // ---------- extras: coming up, net worth over time, cash runway ----------
 /** Things that fall due soon: maturities, overdue or due money to receive. */
+/** Bonds whose interest falls due on `date`, going by the due-date rule on the bond (first, last or a fixed day of the month). A bond with no rule is never listed. */
+export function bondsDueOn(all, date) {
+  const m = Number(date.slice(5, 7)), dim = new Date(Number(date.slice(0, 4)), m, 0).getDate(), day = Number(date.slice(8, 10));
+  return (all.bonds || []).filter((b) => {
+    if (!b.dueRule || date < b.depositDate || date > b.maturityDate) return false;
+    const want = b.dueRule === 'first' ? 1 : b.dueRule === 'last' ? dim : Math.min(dim, Math.max(1, Number(b.dueDay) || 0));
+    if (b.dueRule === 'day' && !(Number(b.dueDay) > 0)) return false;
+    if (day !== want) return false;
+    return b.credit !== 'Quarterly' || (m - 1) % 3 === 0;   // quarterly interest follows the same Jan / Apr / Jul / Oct months as the income calendar
+  });
+}
+
 export function upcoming(data, all, days = 60) {
   const from = all.asOf, to = iso(toMs(from) + days * DAY);
   const out = [];

@@ -131,8 +131,8 @@ function mixChart(data, all, months, lbl) {
     const series = keys.map((k, i) => ({ id: mixDrill ? k.key : k.id, name: k.label, color: i, values: ms.map((m) => val(by.get(m), mixDrill ? k.key : k.id)) }));
     const title = mixDrill ? (I.GOAL_GROUPS.find((g) => g.id === mixDrill) || {}).label : 'All groups';
     box.replaceChildren(
-      mixDrill ? h('div', { style: { marginBottom: '6px' } }, btn('← All groups', () => { mixDrill = null; draw(); }, 'small'), h('b', { style: { marginLeft: '8px' } }, title)) : h('p', { class: 'note', style: { marginTop: 0 } }, 'Tap a colour to see what is inside it.'),
-      ms.length < 2 ? h('p', { class: 'note' }, 'This chart fills in as month-end snapshots with their asset classes are saved (Wealth outlook → Month-end check-in). Today is already included.')
+      mixDrill && ms.filter((m) => m < cur).length >= 2 ? h('div', { style: { marginBottom: '6px' } }, btn('← All groups', () => { mixDrill = null; draw(); }, 'small'), h('b', { style: { marginLeft: '8px' } }, title)) : ms.filter((m) => m < cur).length >= 2 ? h('p', { class: 'note', style: { marginTop: 0 } }, 'Tap a colour to see what is inside it.') : null,
+      ms.filter((m) => m < cur).length < 2 ? h('p', { class: 'note', style: { margin: 0 } }, 'Not enough history to draw this yet. It needs at least two saved month-end check-ins (Wealth outlook → Month-end check-in). Each one keeps how much sat in debts, equity, gold and others, and the chart then shows how that mix moved.')
         : stackedArea({ labels: ms.map((m) => lbl(m, months.indexOf(m))), series, fmt: money, height: 240, onSelect: mixDrill ? null : (sr) => { mixDrill = sr.id; draw(); } }));
   };
   draw();

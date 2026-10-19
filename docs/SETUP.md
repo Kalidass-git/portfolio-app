@@ -197,6 +197,13 @@ No backend change. The Wealth projector now has five tabs: This year, Years ahea
 - **Measured against** is now a setting. On the Risk limits tab, switch risk-group and kind limits between **Everything I own** and **Investments only** (bank balances left out). Each kind, each single-holding rule and each named holding can also choose **Market-linked only** (shares, ETFs, funds) or **Its own group**.
 - Name suggestions in the Risk and What-if forms now show up as you type.
 
+## Release 8.9.22 – Tax estimate, bond due dates, fixes
+
+- Insights → Tax summary: new "Expected tax" card for the chosen financial year under the new regime. Salary is projected to March, bond and FD interest is worked out from the holdings (gross, so TDS does not matter), and you can type other income. It shows total income, expected tax, TDS so far and by March, how much room is left before tax starts, and how much more could go into bonds at a rate you choose and still pay no tax. Expand "Where the interest comes from" to see each holding. Private lending and chits are left out.
+- Bonds: optional interest due date (first day, last day or a fixed day of the month). On that day the bond shows under "Needs a look" on Home. Bonds with no date behave as before.
+- Gold chits: the "Try a gold rate" box no longer types backwards.
+- Net worth over time: the "What you own" chart shows a short message until two month-end check-ins with their asset mix are saved.
+
 ## Release 8.9.21 – Fix a stuck "pending" income line
 
 - Home → Money to receive this month: tap a pending income line to mark it received for the month, or remove it for good.

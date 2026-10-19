@@ -156,6 +156,8 @@ function attention(data, all) {
   const due = soon.filter((u) => u.days >= 0 && u.days <= 14);
   const when = (u) => (u.days === 0 ? 'today' : u.days === 1 ? 'tomorrow' : dateStr(u.date).replace(/ \d{4}$/, ''));
   if (due.length) out.push({ title: due.length === 1 ? `${due[0].title}: due ${when(due[0])}` : `${due.length} falling due in 14 days`, sub: due.slice(0, 3).map((u) => `${u.title} · ${when(u)}`).join(', ') + (due.length > 3 ? ` and ${due.length - 3} more` : ''), value: money(due.reduce((a, u) => a + u.amount, 0)), tone: due.some((u) => u.days === 0) ? 'warn' : '', href: due.every((u) => u.kind === 'Money to receive') ? '#/fixed/lending' : '#/home' });
+  const bd = C.bondsDueOn(all, all.asOf);
+  if (bd.length) out.push({ title: bd.length === 1 ? `${bd[0].name}: interest due today` : `${bd.length} bond interests due today`, sub: bd.slice(0, 3).map((b) => b.name).join(', ') + (bd.length > 3 ? ` and ${bd.length - 3} more` : ''), value: money(bd.reduce((a, b) => a + (b.credit === 'Quarterly' ? 3 : 1) * (b.monthNet || 0), 0)), tone: 'warn', href: '#/fixed/bonds' });
   const al = evalAlerts(data).hit;
   if (al.length) out.push({ title: al.length === 1 ? `Price alert: ${al[0].alert.name}` : `${al.length} price alerts triggered`, sub: al.slice(0, 2).map((x) => x.text).join(' · '), value: '', tone: 'warn', href: '#/equity/overview' });
   const at = data.settings.pricesUpdatedAt;

@@ -1,3 +1,3 @@
 // Shown in the side menu and in Settings. Raise it with every release.
-export const VERSION = '8.9.21';
+export const VERSION = '8.9.22';
 export const RELEASED = '19 Oct 2026';
