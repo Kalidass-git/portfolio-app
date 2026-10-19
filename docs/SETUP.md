@@ -197,6 +197,10 @@ No backend change. The Wealth projector now has five tabs: This year, Years ahea
 - **Measured against** is now a setting. On the Risk limits tab, switch risk-group and kind limits between **Everything I own** and **Investments only** (bank balances left out). Each kind, each single-holding rule and each named holding can also choose **Market-linked only** (shares, ETFs, funds) or **Its own group**.
 - Name suggestions in the Risk and What-if forms now show up as you type.
 
+## Release 8.9.21 – Fix a stuck "pending" income line
+
+- Home → Money to receive this month: tap a pending income line to mark it received for the month, or remove it for good.
+
 ## Release 8.9.20 – Received per person, closed summary, gold what-if, allocation outlook
 
 - Home "Money to receive this month" no longer shows a payment as pending once you mark the matching due as received.

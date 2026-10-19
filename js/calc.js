@@ -525,7 +525,7 @@ export function monthCashflow(data, all, month) {
   for (const m of data.manualMonthlyIncome || []) {
     const fromLedger = sum(rows.filter((e) => (e.desc || '').toLowerCase() === m.match), (e) => e.credit);
     // the same person can be marked received under "Money to receive" (Fixed income, Lendings): that counts too, without adding it twice
-    income.push({ name: m.name, expected: m.amount, received: Math.max(fromLedger, receivedFromDues(data, month, m.name)) });
+    income.push({ name: m.name, expected: m.amount, received: Math.max(fromLedger, receivedFromDues(data, month, m.name), (m.paidMonths || []).includes(month) ? m.amount : 0) });
   }
   const totalExpected = sum(income, (x) => x.expected), totalReceived = sum(income, (x) => x.received);
   const groupOf = (label, cats) => ({ name: label, amount: sum(cats, debit) });

@@ -101,16 +101,26 @@ function spentBody(mc, spent) {
 }
 
 /** Money you are waiting for this month, and anything overdue. */
+/** A monthly income line that keeps showing as pending: mark it received for the month, or remove it. */
+function fixIncome(name, month) {
+  const m = (S.data.manualMonthlyIncome || []).find((x) => x.name === name);
+  if (!m) return;
+  dialog(name, h('p', null, `Expected ${money(m.amount)} each month. Mark it received for ${monthLabel(month, true)}, or remove it if you no longer expect it.`), [
+    { label: 'Remove it for good', class: 'danger', onclick: (c) => { mutate((d) => { d.manualMonthlyIncome = d.manualMonthlyIncome.filter((x) => x.name !== name); }); c(); } },
+    { label: 'Received this month', class: 'primary', onclick: (c) => { mutate((d) => { const t = d.manualMonthlyIncome.find((x) => x.name === name); t.paidMonths = [...new Set([...(t.paidMonths || []), month])]; }); c(); } },
+    { label: 'Close', onclick: (c) => c() },
+  ]);
+}
 function toReceiveCard(data, all) {
   const monthEnd = C.addMonths(C.monthStart(all.asOf), 1);
   const rows = data.receivables.filter((x) => x.active !== false && x.balanceDue > 0).map((x) => C.receivableStatus(x, all.asOf))
     .filter((r) => !r.received && !r.notStarted && r.due < monthEnd).sort((a, b) => (a.due < b.due ? -1 : 1));
   const mc = C.monthCashflow(data, all, C.monthKey(all.asOf));
-  const pend = mc.income.filter((x) => x.expected - x.received > 1).map((x) => ({ due: null, name: x.name, expected: x.expected - x.received, income: true, sub: `expected ${money(x.expected)}, received ${money(x.received)}` }));
+  const pend = mc.income.filter((x) => x.expected - x.received > 1).map((x) => ({ due: null, name: x.name, expected: x.expected - x.received, income: true, sub: `expected ${money(x.expected)}, received ${money(x.received)}${canEdit() ? ' · tap to fix' : ''}` }));
   const total = rows.reduce((a, r) => a + (r.expected || 0), 0) + pend.reduce((a, r) => a + r.expected, 0), over = rows.filter((r) => r.overdue);
   const all2 = rows.concat(pend);
   return section('Money to receive this month', h('div', null,
-    all2.length ? rowList(all2.map((r) => r.income ? { title: r.name, sub: r.sub, value: money(r.expected), valueSub: h('span', { class: 'warn' }, 'pending') } : ({
+    all2.length ? rowList(all2.map((r) => r.income ? { title: r.name, sub: r.sub, onClick: canEdit() ? () => fixIncome(r.name, C.monthKey(all.asOf)) : null, value: money(r.expected), valueSub: h('span', { class: 'warn' }, 'pending') } : ({
       lead: dateChip(r.due), title: r.name, sub: r.overdue ? h('span', { class: 'neg' }, 'Overdue since ' + shortDate(r.due)) : r.dueToday ? h('span', { class: 'warn' }, 'Due today') : 'Due ' + shortDate(r.due),
       value: money(r.expected || 0), tone: r.overdue ? 'neg' : r.dueToday ? 'warn' : '',
     }))) : h('p', { class: 'empty' }, 'Everything due this month has been received.'),
