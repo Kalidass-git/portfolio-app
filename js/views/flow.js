@@ -114,7 +114,13 @@ function overview() {
     const mo = C.periodRange('this', all.asOf), yr = C.periodRange('ytd', all.asOf);
     const none = { mode: 'all', cats: [] };
     const al = CAT.budgetAlerts(data, C.rangeSummary(data, mo.from, mo.to, none).expense, C.rangeSummary(data, yr.from, yr.to, none).expense);
-    if (al.length) root.append(h('div', { class: 'alert' + (al.some((x) => x.over) ? '' : ' warn') },
+    const sig = al.map((x) => x.name + (x.over ? '!' : '')).join('|');
+    const DK = 'fw.budgetAlertDismissed';
+    const dismissedOn = () => { try { return (JSON.parse(localStorage.getItem(DK) || '{}'))[sig] || ''; } catch (_) { return ''; } };
+    const hidden = (() => { const d = dismissedOn(); return !!d && (new Date(C.todayISO()) - new Date(d)) / 86400000 < 5; })();
+    if (al.length && !hidden) root.append(h('div', { class: 'alert' + (al.some((x) => x.over) ? '' : ' warn'), style: { position: 'relative' } },
+      h('a', { href: '#', class: 'dismiss-link', title: 'Hide this for 5 days', style: { position: 'absolute', top: '8px', right: '12px', fontSize: '0.85em' },
+        onclick: (e) => { e.preventDefault(); try { const o = JSON.parse(localStorage.getItem(DK) || '{}'); o[sig] = C.todayISO(); localStorage.setItem(DK, JSON.stringify(o)); } catch (_) { /* private mode */ } e.target.closest('.alert').remove(); } }, 'Dismiss'),
       h('b', null, al.some((x) => x.over) ? `${al.filter((x) => x.over).length} over budget` + (al.some((x) => !x.over) ? `, ${al.filter((x) => !x.over).length} close to it` : '') : `${al.length} budget${al.length > 1 ? 's' : ''} nearly used up`),
       h('ul', { class: 'findings' }, al.map((x) => h('li', null, h('b', { class: x.over ? 'neg' : 'warn' }, x.name), ` ${x.scope === 'month' ? 'this month' : 'this year'}: ${pct(x.used, 0)} of the ${x.scope === 'month' ? 'monthly' : 'yearly'} budget used (${money(x.spent)} of ${money(x.budget)})${x.over ? ', over by ' + money(-x.left) : ''}`)))));
     const yl = CAT.yearlyLines(data, C.rangeSummary(data, yr.from, yr.to, none).expense).filter((l) => passes(l.name));

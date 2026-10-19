@@ -197,6 +197,16 @@ No backend change. The Wealth projector now has five tabs: This year, Years ahea
 - **Measured against** is now a setting. On the Risk limits tab, switch risk-group and kind limits between **Everything I own** and **Investments only** (bank balances left out). Each kind, each single-holding rule and each named holding can also choose **Market-linked only** (shares, ETFs, funds) or **Its own group**.
 - Name suggestions in the Risk and What-if forms now show up as you type.
 
+## Release 8.9.20 – Received per person, closed summary, gold what-if, allocation outlook
+
+- Home "Money to receive this month" no longer shows a payment as pending once you mark the matching due as received.
+- Lendings → Money to receive: "Received so far, by person" drop-down (a card at the bottom on phones).
+- Closed tab: new card at the top, by type. Bonds and deposits by item, private lending added up per person (put in, interest, principal back, total), including people whose dues were closed.
+- Gold chits: "Try a gold rate" box on the Best option card. Blank or cleared uses the live rate.
+- Income & expenses: budget alert has a Dismiss link, hidden for 5 days (until the alert changes).
+- Allocation: removed "If you put in more" and "Year by year". New "How the mix changes if you invest this way": today next to this year end / next year end / 2 to 5 years, tap a slice to see inside, with a grouped table.
+- Net worth over time: new area chart of debts, gold, equity and others by month; tap a colour to see inside.
+
 ## Release 8.9.19 – Tidier top bar and combined Shares & ETFs
 
 - The "Prices updated … ago" note and the Refresh button now sit on the right of the tabs (below them on a phone), smaller and on one line. The extra "P/E, 52-week range and alerts updated" line is gone; hover the note to see when each was last fetched.

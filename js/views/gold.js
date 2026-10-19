@@ -124,23 +124,36 @@ function chitOptions(c, rate) {
 function schemeAsChit(x) {
   return { id: x.id, name: x.name, entries: x.entries.map((e) => ({ date: e.date, amount: e.amount, rate: e.rate > 0 ? e.rate : e.grams > 0 ? e.amount / e.grams : 0 })) };
 }
-function chitBestCard(c, rate, scheme) {
-  const o = chitOptions(c, rate);
-  const profit = (n) => h('span', { class: n > 0.5 ? 'pos' : n < -0.5 ? 'neg' : '' }, `Profit over what you paid: ${n > 0.5 ? '+' : n < -0.5 ? '−' : ''}${money(Math.abs(n))}`);
-  const mk = (title, big, sub, win, pr) => h('div', { class: 'stat', style: win ? { borderColor: 'var(--accent, #1b7f3b)', borderWidth: '2px', borderStyle: 'solid' } : null },
-    h('span', { class: 'stat-label' }, title + (win ? ' · better today' : '')), h('strong', { class: 'stat-value' }, big), h('span', { class: 'sub' }, sub), h('span', { class: 'sub' }, pr));
-  return h('div', { class: 'card' },
-    h('h3', null, 'Best option today · ' + c.name),
-    h('div', { class: 'stats' },
-      mk('Take it by value', dec(o.byValueGrams, 2) + ' g', `${money(o.paid)} paid in, buys this much at ${money(rate)} / g`, o.best === 'value', profit(0)),
-      o.known ? mk('Take it by gold saved', dec(o.grams, 2) + ' g', `worth ${money(o.goldValue)} today${o.complete ? '' : ' (only payments with a rate are counted)'}`, o.best === 'gold', profit(o.goldValue - o.paid))
-        : mk('Take it by gold saved', '–', 'add the gold rate on the payments to compare')),
-    h('p', { class: 'note' }, o.known
-      ? (o.best === 'gold'
-        ? `Choose gold basis: ${dec(o.grams - o.byValueGrams, 2)} g more, which is ${money(o.edge)} more than the value basis and a profit of ${money(o.goldValue - o.paid)} over the ${money(o.paid)} you paid.`
-        : `Choose value basis: ${dec(o.byValueGrams - o.grams, 2)} g more, which is ${money(o.edge)} more than the gold basis. Gold basis would be ${money(o.paid - o.goldValue)} below what you paid.`)
-      : 'Value basis gives you the money paid in as gold at today\'s rate.'),
-    canEdit() ? h('div', { class: 'actions' }, btn('Close this chit', () => closeChit(c, scheme))) : null);
+function chitBestCard(c, actualRate, scheme) {
+  const card = h('div', { class: 'card' });
+  let mock = '';
+  const draw = () => {
+    const m = Number(mock), mocked = mock !== '' && m > 0, rate = mocked ? m : actualRate;
+    const o = chitOptions(c, rate);
+    const profit = (n) => h('span', { class: n > 0.5 ? 'pos' : n < -0.5 ? 'neg' : '' }, `Profit over what you paid: ${n > 0.5 ? '+' : n < -0.5 ? '−' : ''}${money(Math.abs(n))}`);
+    const mk = (title, big, sub, win, pr) => h('div', { class: 'stat', style: win ? { borderColor: 'var(--accent, #1b7f3b)', borderWidth: '2px', borderStyle: 'solid' } : null },
+      h('span', { class: 'stat-label' }, title + (win ? (mocked ? ' · better at this rate' : ' · better today') : '')), h('strong', { class: 'stat-value' }, big), h('span', { class: 'sub' }, sub), h('span', { class: 'sub' }, pr));
+    const input = h('input', { type: 'number', step: 'any', inputmode: 'decimal', placeholder: String(Math.round(actualRate)), value: mock, 'aria-label': 'Try a gold rate per gram', style: { width: '8em' },
+      oninput: (e) => { mock = e.target.value; const pos = e.target.selectionStart; draw(); const n = card.querySelector('input'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (_) { /* number inputs */ } } } });
+    card.replaceChildren(
+      h('h3', null, (mocked ? 'Best option at ' + money(rate) + ' / g · ' : 'Best option today · ') + c.name),
+      h('div', { class: 'price-bar inline', style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' } },
+        h('span', { class: 'note', style: { margin: 0 } }, 'Try a gold rate (₹ / g):'), input,
+        mocked ? btn('Use actual rate', () => { mock = ''; draw(); }) : h('span', { class: 'note', style: { margin: 0 } }, `blank = actual ${money(actualRate)} / g`)),
+      mocked ? h('p', { class: 'note', style: { marginTop: 0 } }, `What-if only. Today's actual rate is ${money(actualRate)} / g.`) : null,
+      h('div', { class: 'stats' },
+        mk('Take it by value', dec(o.byValueGrams, 2) + ' g', `${money(o.paid)} paid in, buys this much at ${money(rate)} / g`, o.best === 'value', profit(0)),
+        o.known ? mk('Take it by gold saved', dec(o.grams, 2) + ' g', `worth ${money(o.goldValue)} at ${money(rate)} / g${o.complete ? '' : ' (only payments with a rate are counted)'}`, o.best === 'gold', profit(o.goldValue - o.paid))
+          : mk('Take it by gold saved', '–', 'add the gold rate on the payments to compare')),
+      h('p', { class: 'note' }, o.known
+        ? (o.best === 'gold'
+          ? `Choose gold basis: ${dec(o.grams - o.byValueGrams, 2)} g more, which is ${money(o.edge)} more than the value basis and a profit of ${money(o.goldValue - o.paid)} over the ${money(o.paid)} you paid.`
+          : `Choose value basis: ${dec(o.byValueGrams - o.grams, 2)} g more, which is ${money(o.edge)} more than the gold basis. Gold basis would be ${money(o.paid - o.goldValue)} below what you paid.`)
+        : 'Value basis gives you the money paid in as gold at the rate above.'),
+      canEdit() ? h('div', { class: 'actions' }, btn('Close this chit', () => closeChit(c, scheme))) : null);
+  };
+  draw();
+  return card;
 }
 function closeChit(c, scheme) {
   const rate = S.all.gold.rate;

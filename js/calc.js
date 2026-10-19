@@ -523,10 +523,9 @@ export function monthCashflow(data, all, month) {
     { name: 'Bonds', expected: quarterMonth ? monthlyBonds + 3 * quarterlyBonds : monthlyBonds, received: credit('income bond') },
   ];
   for (const m of data.manualMonthlyIncome || []) {
-    income.push({
-      name: m.name, expected: m.amount,
-      received: sum(rows.filter((e) => (e.desc || '').toLowerCase() === m.match), (e) => e.credit),
-    });
+    const fromLedger = sum(rows.filter((e) => (e.desc || '').toLowerCase() === m.match), (e) => e.credit);
+    // the same person can be marked received under "Money to receive" (Fixed income, Lendings): that counts too, without adding it twice
+    income.push({ name: m.name, expected: m.amount, received: Math.max(fromLedger, receivedFromDues(data, month, m.name)) });
   }
   const totalExpected = sum(income, (x) => x.expected), totalReceived = sum(income, (x) => x.received);
   const groupOf = (label, cats) => ({ name: label, amount: sum(cats, debit) });
@@ -551,6 +550,50 @@ export function monthCashflow(data, all, month) {
   const notCounted = sum(others.filter((o) => !o.counted), (o) => o.amount);
   const totalSpent = sum(spend, (x) => x.amount); // sheet's G55 excludes the lifestyle line, we show it separately
   return { month, income, totalExpected, totalReceived, yetToReceive: totalExpected - totalReceived, spend, lifestyle, totalSpent, remaining: totalExpected - totalSpent, others, notCounted };
+}
+
+const nameKey = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+/** Same person or lender? Equal after tidying, or one name contains the other ("Lending Pandi" and "Pandi"). */
+export function sameName(a, b) { const x = nameKey(a), y = nameKey(b); return !!x && !!y && (x === y || (Math.min(x.length, y.length) >= 4 && (x.includes(y) || y.includes(x)))); }
+/** Money marked received in `month` under Money to receive, for a person or lender. */
+export function receivedFromDues(data, month, name) {
+  return sum((data.receivables || []).filter((r) => r.lastReceived && r.lastReceived.slice(0, 7) === month && sameName(r.name, name)), (r) => r.expected || 0);
+}
+
+/** What has been received from each person under Money to receive, closed ones included. */
+export function receivedByPerson(data, asOf) {
+  const m = new Map();
+  for (const r0 of data.receivables || []) {
+    const r = receivableStatus(r0, asOf), k = nameKey(r.name) || r.id;
+    const e = m.get(k) || { name: r.name, payments: 0, total: 0, last: '', open: 0, closed: 0, expected: 0 };
+    e.payments += r.installmentsPaid || 0; e.total += r.total || 0;
+    if (r.lastReceived && r.lastReceived > e.last) e.last = r.lastReceived;
+    if (r.active === false) e.closed++; else { e.open++; e.expected += r.expected || 0; }
+    m.set(k, e);
+  }
+  return [...m.values()].sort((a, b) => b.total - a.total);
+}
+/** Closed bonds, deposits and private lending: what went in, what was received on the way (interest, coupons), what came back. Private lending is added up per person. */
+export function closedSummary(data, all) {
+  const asOf = all.asOf;
+  const rcs = (data.receivables || []).map((r) => receivableStatus(r, asOf));
+  const row = (name, o) => { const total = o.interest + o.back; return { name, count: o.count, invested: o.invested, interest: o.interest, back: o.back, total, gain: total - o.invested, note: o.note || '' }; };
+  const items = (list, withInterest) => list.map((x) => row(x.name, { count: 1, invested: Math.abs(x.principal), interest: withInterest(x), back: x.closed.amount }));
+  const bonds = items(all.closed.bonds, (x) => interestReceived(x, asOf));
+  const fds = items(all.closed.fds, () => 0);
+  const people = new Map();
+  for (const it of all.closed.lending) {
+    const k = nameKey(it.name), e = people.get(k) || { name: it.name, count: 0, invested: 0, interest: 0, back: 0, dues: 0, hasDues: false };
+    e.count++; e.invested += Math.abs(it.principal); e.back += it.closed.amount; e.interest += it.interestType === 'Payout' ? interestReceived(it, asOf) : 0;
+    people.set(k, e);
+  }
+  for (const e of people.values()) { const m = rcs.filter((r) => sameName(r.name, e.name)); if (m.length) { e.dues = sum(m, (r) => r.total || 0); e.hasDues = true; } }
+  for (const r of rcs.filter((r) => r.active === false)) if (![...people.values()].some((e) => sameName(e.name, r.name))) people.set('dues:' + nameKey(r.name), { name: r.name, count: 0, invested: 0, interest: 0, back: 0, dues: r.total || 0, hasDues: true, note: 'closed in Money to receive' });
+  const lending = [...people.values()].map((e) => row(e.name, { ...e, interest: e.hasDues ? e.dues : e.interest })).sort((a, b) => b.total - a.total);
+  const types = [{ id: 'bonds', label: 'Bonds', items: bonds }, { id: 'fds', label: 'Fixed deposits', items: fds }, { id: 'lending', label: 'Private lending, by person', items: lending }].filter((t) => t.items.length);
+  const all2 = types.flatMap((t) => t.items);
+  const tot = (k) => sum(all2, (x) => x[k]);
+  return { types, invested: tot('invested'), interest: tot('interest'), back: tot('back'), total: tot('total'), gain: tot('gain'), count: all2.reduce((a, x) => a + x.count, 0) };
 }
 
 // ---------- receivables (Fixed Income!A50:L59) ----------

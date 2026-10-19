@@ -196,7 +196,7 @@ export function riskColor(id, index = 0, count = 1) {
 }
 
 /** Stacked area: each series sits on top of the one before, filled in its own colour. series: [{name, values, color}] (color = palette index or a CSS colour). */
-export function stackedArea({ labels, series, fmt = (v) => v, height = 240, width }) {
+export function stackedArea({ labels, series, fmt = (v) => v, height = 240, width, onSelect = null }) {
   const W = width || defaultWidth(), H = height, pad = { l: 44, r: 12, t: 12, b: 24 };
   const n = labels.length;
   const totals = labels.map((_, i) => series.reduce((a, s) => a + Math.max(0, s.values[i] || 0), 0));
@@ -226,6 +226,15 @@ export function stackedArea({ labels, series, fmt = (v) => v, height = 240, widt
     showTip(e, [h('b', null, labels[i]), ...series.map((s, si) => h('div', null, h('i', { class: 'tip-dot', style: { background: col(s, si) } }), `${s.name}: ${fmt(s.values[i] || 0)}`)), series.length > 1 ? h('div', null, `Total: ${fmt(totals[i])}`) : null].filter(Boolean));
   });
   hit.addEventListener('pointerleave', () => { cross.style.display = 'none'; hideTip(); });
-  root.append(hit);
-  return h('div', { class: 'chart-box' }, root, series.length > 1 ? h('ul', { class: 'legend inline' }, series.map((s, i) => h('li', null, h('i', { style: { background: col(s, i) } }), h('span', { class: 'lg-name' }, s.name)))) : null);
+  if (onSelect) {
+    hit.style.cursor = 'pointer';
+    hit.addEventListener('click', (e) => {
+      const r = root.getBoundingClientRect(), px = ((e.clientX - r.left) / r.width) * W, py = ((e.clientY - r.top) / r.height) * H;
+      const i = Math.max(0, Math.min(n - 1, Math.round(((px - pad.l) / (W - pad.l - pad.r)) * (n - 1))));
+      const v = (1 - (py - pad.t) / (H - pad.t - pad.b)) * hi;
+      let acc = 0;
+      for (const sr of series) { acc += Math.max(0, sr.values[i] || 0); if (v <= acc) { onSelect(sr); return; } }
+    });
+  }
+  return h('div', { class: 'chart-box' }, root, series.length > 1 ? h('ul', { class: 'legend inline' }, series.map((s, i) => h('li', onSelect ? { style: { cursor: 'pointer' }, onclick: () => onSelect(s) } : null, h('i', { style: { background: col(s, i) } }), h('span', { class: 'lg-name' }, s.name)))) : null);
 }

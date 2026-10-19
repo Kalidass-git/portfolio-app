@@ -724,3 +724,5 @@ tr.proj-row td { color: var(--muted); font-style: italic; }
 .price-bar.inline .stamp { font-size: .78rem; text-align: right; line-height: 1.2; }
 .price-bar.inline .refresh-btn { min-height: 34px; padding: 4px 10px; font-size: .85rem; }
 @media (max-width: 700px) { .pagebar .price-bar.inline { width: 100%; margin: 0; justify-content: space-between; } }
+@media (min-width: 701px) { .phone-only { display: none; } }
+.by-person summary { cursor: pointer; padding: 6px 0; color: var(--brand); } .by-person { margin: 8px 0; }
