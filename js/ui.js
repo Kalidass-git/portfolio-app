@@ -287,3 +287,38 @@ export function kpi(label, value, sub, { tone = '', href = null, spark: sp = nul
 }
 /** Calendar-style date badge: 13 / NOV */
 export const dateChip = (iso) => h('span', { class: 'datechip' }, h('b', null, String(Number(iso.slice(8, 10)))), h('small', null, MON[Number(iso.slice(5, 7)) - 1].toUpperCase()));
+
+// ----- popover: a small card opened by a click, closed by clicking anywhere else or pressing Escape -----
+let openPop = null;
+const closePop = () => { if (openPop) { openPop.el.remove(); openPop.trigger.setAttribute('aria-expanded', 'false'); openPop = null; } };
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', (e) => { if (openPop && !openPop.el.contains(e.target) && !openPop.trigger.contains(e.target)) closePop(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePop(); });
+  window.addEventListener('rerender', closePop); window.addEventListener('hashchange', closePop);
+}
+/**
+ * Make `trigger` open a popover. build() returns { title, rows: [{ l: label, v: value, n: short working }], foot }.
+ * Tapping the trigger again, tapping outside or pressing Escape closes it.
+ */
+export function popover(trigger, build) {
+  trigger.setAttribute('tabindex', '0'); trigger.setAttribute('role', 'button'); trigger.setAttribute('aria-expanded', 'false');
+  trigger.classList.add('pop-trigger');
+  const open = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    if (openPop && openPop.trigger === trigger) return closePop();
+    closePop();
+    const c = build();
+    const el = h('div', { class: 'popover', role: 'dialog' },
+      c.title ? h('div', { class: 'pop-title' }, c.title) : null,
+      ...(c.rows || []).map((r) => h('div', { class: 'pop-row' + (r.b ? ' b' : '') }, h('span', { class: 'pop-l' }, r.l), h('span', { class: 'pop-v' }, r.v), r.n ? h('span', { class: 'pop-n' }, r.n) : null)),
+      c.foot ? h('div', { class: 'pop-foot' }, c.foot) : null);
+    document.body.append(el);
+    const b = trigger.getBoundingClientRect(), w = el.offsetWidth, hh = el.offsetHeight;
+    el.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, b.right - w)) + 'px';
+    el.style.top = (b.bottom + hh + 12 > window.innerHeight && b.top > hh + 12 ? b.top - hh - 6 : b.bottom + 6) + 'px';
+    trigger.setAttribute('aria-expanded', 'true'); openPop = { el, trigger };
+  };
+  trigger.addEventListener('click', open);
+  trigger.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') open(e); });
+  return trigger;
+}

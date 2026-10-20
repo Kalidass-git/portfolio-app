@@ -250,7 +250,7 @@ function interestSection(data, all, year) {
   const box = h('div');
   const catTable = (title, list, tot) => h('div', null, h('h4', { style: { margin: '6px 0 4px' } }, `${title} · ${money(tot)}`), list.length ? table([{ label: 'Category', host: true, get: (x) => x.category }, { label: 'Amount', cls: 'r', get: (x) => money(x.amount) }], list, {}) : h('p', { class: 'empty' }, 'None'));
   const draw = () => {
-    const chart = stackedBars({ names: ['Bond and lending interest', 'Regular spending'], colors: [2, 7], fmt: money, height: 240,
+    const chart = stackedBars({ names: ['Monthly interest income', 'Monthly regular expense'], colors: [2, 7], fmt: money, height: 240,
       groups: rows.map((r) => ({ label: monthLabel(r.month).slice(0, 3), title: monthLabel(r.month, true), bars: [[{ name: 'Interest', value: r.interest }], [{ name: 'Regular spending', value: r.regular }]] })),
       selected: revPick ? { g: rows.findIndex((r) => r.month === revPick), s: 0 } : null,
       onSelect: (g) => { revPick = revPick === rows[g].month ? null : rows[g].month; draw(); } });
@@ -267,11 +267,10 @@ function interestSection(data, all, year) {
       h('h4', { style: { margin: '12px 0 4px' } }, 'The same in a table'),
       table([
         { label: 'Month', host: true, get: (r) => monthLabel(r.month, true) },
-        { label: 'Interest income', cls: 'r', get: (r) => money(r.interest), total: () => money(tot('interest')) },
-        { label: 'Regular spending', cls: 'r', mob: 'under', mlabel: 'regular ', get: (r) => money(r.regular), total: () => money(tot('regular')) },
-        { label: 'Interest less regular spending', cls: 'r', render: (r) => dev(r.deviation), total: () => dev(tot('deviation')) },
-        { label: 'One-time spending (not counted)', cls: 'r', mob: 'under', mlabel: 'one-time ', get: (r) => money(r.oneTime), total: () => money(tot('oneTime')) },
-        { label: 'Covered by interest?', mob: 'hide', render: (r) => h('span', { class: 'tag ' + (r.deviation >= 0 ? 'good' : 'bad') }, r.deviation >= 0 ? 'Interest covers it' : 'Short by ' + money(-r.deviation)) },
+        { label: 'Monthly income (bond and lending interest)', cls: 'r', render: (r) => h('span', { class: 'pos' }, money(r.interest)), total: () => h('span', { class: 'pos' }, money(tot('interest'))) },
+        { label: 'Regular expense', cls: 'r', mob: 'under', mlabel: 'regular ', render: (r) => h('span', { class: 'neg' }, money(r.regular)), total: () => h('span', { class: 'neg' }, money(tot('regular'))) },
+        { label: 'One-time expense', cls: 'r', mob: 'under', mlabel: 'one-time ', get: (r) => money(r.oneTime), total: () => money(tot('oneTime')) },
+        { label: 'Short by (income − regular expense)', cls: 'r', render: (r) => (r.deviation >= 0 ? h('span', { class: 'pos' }, 'Spare ' + money(r.deviation)) : h('span', { class: 'neg' }, 'Short by ' + money(-r.deviation))), total: () => { const v = tot('deviation'); return v >= 0 ? h('span', { class: 'pos' }, 'Spare ' + money(v)) : h('span', { class: 'neg' }, 'Short by ' + money(-v)); } },
       ], rows, { footer: { label: 'Year' }, rowClass: (r) => (r.deviation < 0 ? 'row-bad' : '') }),
       h('p', { class: 'note' }, `Interest income counts the bank credits in ${counted.length ? counted.join(', ') : 'categories with “bond” or “lend” in the name (none found)'}.${notCounted.length ? ` Not counted: ${notCounted.join(', ')}.` : ''} Loan EMI is left out of spending. One-time spending is: ${[...once].length ? [...once].join(', ') : 'nothing chosen'}; everything else is regular.`),
       needCard(data, rows),

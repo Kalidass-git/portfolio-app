@@ -154,6 +154,13 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.9.33 – Popovers, merged bond settings, review table
+
+- Wealth outlook: the breakdowns behind Salary + EPF, Interest, Spending and Growth open as a larger popover on click (close by clicking elsewhere or pressing Escape), with one short line per item.
+- Bonds: tax setting and Home reminders are one "Bond settings" card.
+- Home: the bond interest popup has Pending and Received tabs (Pending first). "Investing this month" sits below "This month in detail".
+- Annual review: chart and table compare monthly interest income with monthly regular expense; the table shows one-time expense and "Short by" (income − regular expense).
+
 ## Release 8.9.32 – Home investing card, bond interest by real days, snapshots, review
 
 - **Home: Investing this month.** What can still be invested (the higher of actual and planned money in and out, left over), what is already in, what is still to invest per plan line, and how much the bank can pay now after the spending still expected before month end.

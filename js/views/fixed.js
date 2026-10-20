@@ -196,14 +196,15 @@ function bondInsights(all, data) {
     h('div', { class: 'grid2' },
       section('Who holds the bonds', h('div', null, donut(owners, { fmt: money, center: compact(total), sub: 'invested', size: 190 }), legend(owners, { fmt: money }))),
       section('Which companies', firms.length ? hbars(firms, { fmt: money, colorIndex: 1 }) : h('p', { class: 'empty' }, 'No issuer set on the bonds.'))),
-    section('Calculation settings', h('div', null,
-      h('label', null, 'Tax deducted on bond interest (%) ', h('input', { type: 'number', step: 'any', min: '0', max: '100', value: String(Math.round((data.settings.tdsRate ?? 0.1) * 10000) / 100), disabled: !canEdit(), 'aria-label': 'Tax deducted on bond interest', style: { maxWidth: '6em' },
-        onchange: (e) => { const n = Number(e.target.value); if (!Number.isFinite(n) || n < 0 || n > 100) return toast('Enter a percentage between 0 and 100.', 'bad'); if (!canEdit()) return toast('This device has read-only access.'); mutate((d) => { d.settings.tdsRate = n / 100; }); } })),
-      h('p', { class: 'note' }, 'Used for the net interest of every bond. A month’s interest is worked out for the actual days in that month: the daily interest times 28, 30 or 31.'))),
-    section('Interest reminders on Home', h('div', null,
-      h('label', { class: 'check-inline' }, h('input', { type: 'checkbox', checked: bn.on, disabled: !canEdit(), onchange: (e) => save({ on: e.target.checked }) }), ' Remind me when bond interest is due'),
-      h('div', { style: { margin: '8px 0' } }, h('label', null, 'Tell me ', days)),
-      h('p', { class: 'note' }, 'One setting for every bond that has an interest due date (set it on the bond). It shows under “Needs a look” from that many days before, and under “Coming up” for the days before it, not on the day. Bonds without a due date are left alone.'))));
+    section('Bond settings', h('div', { class: 'assume' },
+      h('div', { class: 'assume-group' }, h('h4', null, 'Calculation'),
+        h('label', null, 'Tax deducted on bond interest (%) ', h('input', { type: 'number', step: 'any', min: '0', max: '100', value: String(Math.round((data.settings.tdsRate ?? 0.1) * 10000) / 100), disabled: !canEdit(), 'aria-label': 'Tax deducted on bond interest', style: { maxWidth: '6em' },
+          onchange: (e) => { const n = Number(e.target.value); if (!Number.isFinite(n) || n < 0 || n > 100) return toast('Enter a percentage between 0 and 100.', 'bad'); if (!canEdit()) return toast('This device has read-only access.'); mutate((d) => { d.settings.tdsRate = n / 100; }); } })),
+        h('p', { class: 'note' }, 'Used for the net interest of every bond. A month’s interest is the daily interest times the real days in that month: 28, 30 or 31.')),
+      h('div', { class: 'assume-group' }, h('h4', null, 'Reminders on Home'),
+        h('label', { class: 'check-inline' }, h('input', { type: 'checkbox', checked: bn.on, disabled: !canEdit(), onchange: (e) => save({ on: e.target.checked }) }), ' Remind me when bond interest is due'),
+        h('div', { style: { margin: '8px 0' } }, h('label', null, 'Tell me ', days)),
+        h('p', { class: 'note' }, 'One setting for every bond that has an interest due date (set it on the bond). It shows under “Needs a look” from that many days before, and under “Coming up” for the days before it, not on the day. Bonds without a due date are left alone.')))));
 }
 
 function personList() {

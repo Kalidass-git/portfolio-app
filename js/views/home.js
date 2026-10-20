@@ -117,10 +117,20 @@ function fixIncome(name, month) {
 const pendingText = (bonds) => bonds.filter((b) => b.pending > 0.5).map((b) => `${b.name}: ${money(b.pending)} due ${shortDate(b.due)}`).join('\n') || 'Nothing pending';
 function pendingBonds(bonds, month) {
   const list = bonds.slice().sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : 0));
-  const left = list.filter((b) => b.pending > 0.5);
-  dialog('Bond interest, ' + monthLabel(month, true), h('div', null,
-    h('p', { class: 'note' }, `${left.length} of ${list.length} still to come. Each amount is the interest for the actual days in the month, after TDS. The bank credit does not say which bond it paid, so credits are set against the bonds in due-date order.`),
-    rowList(list.map((b) => ({ title: b.name, sub: `${b.holder ? b.holder + ' · ' : ''}due ${shortDate(b.due)}`, value: b.pending > 0.5 ? h('span', { class: 'warn' }, money(b.pending)) : h('span', { class: 'pos' }, 'received'), valueSub: `of ${money(b.expected)}` })))), [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
+  const pend = list.filter((b) => b.pending > 0.5), got = list.filter((b) => b.received > 0.5);
+  let tab = 'pending';
+  const body = h('div');
+  const draw = () => {
+    const seg = h('nav', { class: 'seg', 'aria-label': 'Pending or received' }, [['pending', `Pending (${pend.length})`], ['received', `Received (${got.length})`]].map(([k, l]) => h('a', { href: 'javascript:void 0', class: tab === k ? 'on' : '', 'aria-selected': String(tab === k), onclick: (e) => { e.preventDefault(); tab = k; draw(); } }, l)));
+    const rows = tab === 'pending'
+      ? pend.map((b) => ({ title: b.name, sub: `${b.holder ? b.holder + ' · ' : ''}due ${shortDate(b.due)}`, value: h('span', { class: 'warn' }, money(b.pending)), valueSub: b.received > 0.5 ? `${money(b.received)} of ${money(b.expected)} in` : `of ${money(b.expected)}` }))
+      : got.map((b) => ({ title: b.name, sub: `${b.holder ? b.holder + ' · ' : ''}due ${shortDate(b.due)}`, value: h('span', { class: 'pos' }, money(b.received)), valueSub: b.pending > 0.5 ? `${money(b.pending)} still to come` : `of ${money(b.expected)}` }));
+    body.replaceChildren(seg,
+      rows.length ? rowList(rows) : h('p', { class: 'empty' }, tab === 'pending' ? 'Nothing pending: all the interest due this month has come.' : 'Nothing received yet this month.'),
+      h('p', { class: 'note' }, 'Interest for the real days in the month, after TDS. The bank credit does not say which bond it paid, so credits are set against the bonds in due-date order.'));
+  };
+  draw();
+  dialog('Bond interest, ' + monthLabel(month, true), body, [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
 }
 function toReceiveCard(data, all) {
   const monthEnd = C.addMonths(C.monthStart(all.asOf), 1);
@@ -356,9 +366,9 @@ export function render() {
   const parts = [
     hero(all, series, ox), tiles(all, data, C.monthCashflow(data, all, C.monthKey(all.asOf))),
     place(attention(data, all), 'span-12'),
-    place(investCard(data, all), 'span-12'),
     place(toReceiveCard(data, all), 'span-6'), place(comingUp(data, all), 'span-6'),
     place(thisMonth(data, all, months), 'span-12'),
+    place(investCard(data, all), 'span-12'),
     place(todayCard(all), 'm-only'), place(earning(all), 'm-only'),
     place(allocation(all), 'span-7'), place(riskAlerts(all), 'span-5'),
     place(returnsCard(data, all, rets, ox), 'span-12')];
