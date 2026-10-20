@@ -46,7 +46,8 @@ function assumptionsCard(s) {
   const hike = h('label', null, h('span', null, 'Month the raise lands'),
     h('select', { disabled: !canEdit(), 'aria-label': 'Month the raise lands', onchange: (e) => setOwn({ hikeMonth: Number(e.target.value) }) }, MONTH_NAMES.map((m, i) => h('option', { value: i + 1, selected: i + 1 === a.hikeMonth }, m))),
     h('small', null, 'Salary and EMI step up together from this month'));
-    return section('What the projection grows by', h('div', { class: 'assume' },
+    const summary = `Salary +${pct(a.growth.salary, 1)} a year from ${MONTH_NAMES[a.hikeMonth - 1]}, expenses +${pct(a.growth.expenses, 1)}`;
+  return section('What the projection grows by', h('details', { class: 'more assume-wrap' }, h('summary', { style: { cursor: 'pointer' } }, h('b', null, 'Show and change the assumptions'), ' ', h('small', { class: 'muted' }, summary)), h('div', { class: 'assume', style: { marginTop: '10px' } },
     group('Income',
       num('Salary each month today (₹)', 'salary', a.salary, 'take-home, to your bank'),
       num('Other income each month (₹)', 'otherIncome', a.otherIncome, 'rent, dividends and so on'),
@@ -57,13 +58,13 @@ function assumptionsCard(s) {
       num('Loan EMI each month today (₹)', 'emi', a.emi, 'rises with the salary raise'),
       num('One-time bills rise each year (%)', 'growthOneTime', pctIn(a.growth.oneTime), 'tax, fees, trips (set below)', { pctField: true })),
     group('Saving',
-      num('Added to EPF each month (₹)', 'pfAdd', a.pfAdd, 'goes in before salary reaches the bank'),
+      num('Added to EPF each month today (₹)', 'pfAdd', a.pfAdd, 'goes in before salary reaches the bank; rises with the salary raise'),
       num('Net worth I want at the end (₹, optional)', 'target', s.target || '', 'shows whether you get there')),
-    group('Markets',
+    h('div', { class: 'assume-group' }, h('h4', null, 'Markets'),
       outlookToggle(s.a.outlook, (id) => canEdit() && setOwn({ outlook: Object.fromEntries(P.MARKET.map((k) => [k, id])) }), { disabled: !canEdit() }),
-      h('details', { class: 'more' }, h('summary', null, 'Set each market class separately'), outlookSelects(s.a.outlook, (k, id) => canEdit() && setOwn({ outlook: { ...s.a.outlook, [k]: id } }))),
-      h('small', { class: 'muted' }, 'Shares, ETFs, funds and gold. Bonds and lending pay interest on what you hold and put in; deposits, EPF and chits grow at their own rates.')),
-    h('p', { class: 'note' }, 'New money is not a fixed figure. Each month the projection invests whatever is left after spending, EMI and one-time bills, split by the shares in your plan. A month with tax or school fees leaves little or nothing; if cash dipped, it is topped up to today’s level before investing again. Everything below follows these settings.')));
+      h('details', { class: 'more', style: { marginTop: '8px' } }, h('summary', null, 'Set each market class separately'), outlookSelects(s.a.outlook, (k, id) => canEdit() && setOwn({ outlook: { ...s.a.outlook, [k]: id } }))),
+      h('p', { class: 'reco' }, 'Shares, ETFs, funds and gold. Bonds and lending pay interest on what you hold and put in; deposits, EPF and chits grow at their own rates.')),
+    h('p', { class: 'note' }, 'New money is not a fixed figure. Each month the projection invests whatever is left after spending, EMI and one-time bills, split by the shares in your plan. A month with tax or school fees leaves little or nothing; if cash dipped, it is topped up to today’s level before investing again. Everything below follows these settings.'))));
 }
 
 function yearlyItemForm(s, it) {
