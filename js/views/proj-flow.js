@@ -1,6 +1,7 @@
 // Wealth outlook: what the projection does with income, spending and new investments, month by month or year by year.
 // Shared by This year and Years ahead. Rows come from simulate().
-import { h, money, compact, monthLabel, section, table } from '../ui.js';
+import { h, money, compact, pct, monthLabel, section, table } from '../ui.js';
+import * as P from '../projector.js';
 import { stackedBars } from '../charts.js';
 
 const sum = (a, f) => a.reduce((s, x) => s + (Number(f(x)) || 0), 0);
@@ -31,6 +32,32 @@ const cls = (c, v) => h('span', { class: c }, v);
 const inc = (v) => (v > 0.5 ? cls('inc', money(v)) : '–');
 const exp = (v) => (v > 0.5 ? cls('exp', money(v)) : '–');
 const inv = (v) => (v > 0.5 ? cls('inv', money(v)) : '–');
+
+/** Hover text: where a period's growth came from, class by class, and why it can be above zero when the market outlook is 0%. */
+function growthTip(rows) {
+  const by = {};
+  for (const r of rows) for (const [k, v] of Object.entries(r.growthBy || {})) { const e = by[k] || (by[k] = { amount: 0, base: 0, rate: v.rate }); e.amount += v.amount; e.base = v.base; e.rate = v.rate; }
+  const lines = Object.entries(by).filter(([, v]) => Math.abs(v.amount) > 0.5).sort((a, b) => b[1].amount - a[1].amount).map(([k, v]) => {
+    const c = P.classOf(k), label = c ? c.label : k, how = P.isMarket(k) ? `market outlook ${pct(v.rate, 1)} a year` : `${pct(v.rate, 1)} a year`;
+    return `${label}: ${money(v.amount)} (${rows.length === 1 ? `${money(v.base)} held × ${how} ÷ 12` : how})`;
+  });
+  const none = Object.entries(by).filter(([k, v]) => Math.abs(v.amount) <= 0.5 && P.isMarket(k) && v.base > 0.5).map(([k]) => (P.classOf(k) || {}).label || k);
+  return [`Growth added to balances: ${money(sum(rows, (r) => r.growth || 0))}`, ...lines, none.length ? `${none.join(', ')}: nothing, the outlook is 0%` : null, 'Bond and lending interest is not in this figure: it is paid out as income (see Interest).', 'Cash in banks, deposits, chits and EPF earn their own rate even when the market outlook is 0%.'].filter(Boolean).join('\n');
+}
+/** Hover text: interest paid out by bonds and lending. */
+function interestTip(rows) {
+  const by = {};
+  for (const r of rows) for (const [k, v] of Object.entries(r.interestBy || {})) { const e = by[k] || (by[k] = { amount: 0, base: 0, rate: v.rate }); e.amount += v.amount; e.base = v.base; e.rate = v.rate; }
+  const lines = Object.entries(by).filter(([, v]) => v.amount > 0.5).map(([k, v]) => `${(P.classOf(k) || {}).label || k}: ${money(v.amount)}${rows.length === 1 ? ` (${money(v.base)} × ${pct(v.rate, 1)} ÷ 12, after TDS)` : ''}`);
+  return [`Interest paid out: ${money(sum(rows, (r) => r.interest))}`, ...lines, 'It is cash income and already counted here, so it is not in Growth.'].join('\n');
+}
+const spendTip = (rows) => {
+  const one = rows.flatMap((r) => (r.items || []).filter((i) => i.kind !== 'income').map((i) => `${i.name} ${money(i.amount)}`));
+  return [`Everyday expenses: ${money(sum(rows, (r) => r.expenses))}`, `Loan EMI: ${money(sum(rows, (r) => r.emi))}`, `One-time: ${money(sum(rows, (r) => r.oneOut))}${one.length ? ' (' + one.join(', ') + ')' : ''}`].join('\n');
+};
+const salaryTip = (rows) => [`Salary to the bank: ${money(sum(rows, (r) => r.salary))}`, `Added to EPF: ${money(sum(rows, (r) => r.pfAdd || 0))}`, 'EPF goes in before the salary reaches the bank, so it adds to net worth but is not spendable.'].join('\n');
+const tipped = (rows, text, node) => h('span', { title: text(rows), style: { cursor: 'help', borderBottom: '1px dotted var(--muted, #888)' } }, node);
+
 /** Net worth at the start of a run of rows, worked back from its first month. */
 const openingNw = (r) => r.nw - (r.income - r.out) - (r.pfAdd || 0) - (r.growth || 0) - (r.loanPaid || 0);
 const oneNames = (r) => (r.items || []).filter((i) => i.kind !== 'income').map((i) => `${i.name} ${money(i.amount)}`).join(', ');
@@ -63,7 +90,7 @@ export function flowSection(rows, { mode = 'month', title = 'Income, spending an
   };
   draw();
   const body = h('div', null, box,
-    embed ? null : h('p', { class: 'note' }, 'Green is income, red is spending, blue is new investing. Each bar splits into its parts, from the darkest shade down: salary, interest, other income; everyday expenses, EMI, one-time items. Salary and EMI step up in the raise month. New investing is whatever is left after spending, split by the shares of your plan, so a month with tax or fees invests little or nothing.'));
+    embed ? null : h('p', { class: 'note' }, 'Green is income, red is spending, blue is new investing. Each bar splits into its parts, from the darkest shade down: salary, interest, other income; everyday expenses, EMI, one-time items. Salary and EPF step up in the raise month; the EMI stays the same. New investing is whatever is left after spending, split by the shares of your plan, so a month with tax or fees invests little or nothing.'));
   return embed ? h('div', { class: 'card inner', style: { marginTop: '10px' } }, h('h4', { style: { margin: '0 0 6px' } }, title), body) : section(title, body);
 }
 
@@ -72,16 +99,16 @@ function monthDetail(g) {
   const line = (label, val, sub, tone) => ({ label, val, sub, tone });
   const one = (r.items || []).filter((i) => i.kind !== 'income');
   const lines = [
-    line('Salary', cls('inc', money(t.salary)), 'today’s salary, raised in the raise month'), line('Interest paid out', cls('inc', money(t.interest)), 'bonds and lending after TDS, from the holdings'), t.other > 0.5 ? line('Other income and one-time income', cls('inc', money(t.other))) : null,
+    line('Salary', cls('inc', money(t.salary)), 'today’s salary, raised in the raise month'), line('Interest paid out', tipped([r], interestTip, cls('inc', money(t.interest))), 'bonds and lending after TDS (hover for each)'), t.other > 0.5 ? line('Other income and one-time income', cls('inc', money(t.other))) : null,
     line('Total income', cls('inc', money(t.income)), null, 'b'),
-    line('Everyday expenses', cls('exp', '−' + money(t.everyday)), 'today’s monthly spending, grown by the yearly rise'), t.emi > 0.5 ? line('Loan EMI', cls('exp', '−' + money(t.emi)), 'steps up with the salary raise') : null,
+    line('Everyday expenses', cls('exp', '−' + money(t.everyday)), 'today’s monthly spending, grown by the yearly rise'), t.emi > 0.5 ? line('Loan EMI', cls('exp', '−' + money(t.emi)), 'stays the same') : null,
     ...one.map((i) => line('One-time: ' + i.name, cls('exp', '−' + money(i.amount)), 'yearly item, grown by the one-time rise')),
     line('Left after spending', cls(t.left >= 0 ? 'inc' : 'exp', (t.left < 0 ? '−' : '') + money(Math.abs(t.left))), 'income − spending', 'b'),
     t.refill > 0.5 ? line('Kept back to rebuild cash', money(Math.min(t.refill, Math.max(0, t.left))), 'cash is topped up to what you hold today before investing') : null,
     line('New investments', cls('inv', '−' + money(t.invested)), t.invested > 0.5 ? 'what is left, split by the plan shares' : 'nothing left to invest this month'),
     line('Left in cash', money(r.surplus), 'left after spending − investments', 'b'),
     r.pfAdd > 0.5 ? line('Added to EPF', cls('inc', money(r.pfAdd)), 'goes in before salary reaches the bank') : null,
-    line('Growth and interest added to balances', money(r.growth || 0), 'market growth, deposits, chits, cash interest'),
+    line('Growth added to balances', tipped([r], growthTip, money(r.growth || 0)), 'market, deposits, chits, EPF, cash interest (hover for each)'),
     line('Net worth at the month end', money(r.nw), null, 'b'),
   ].filter(Boolean);
   return h('div', { class: 'card inner', style: { marginTop: '10px' } }, h('h4', { style: { margin: '0 0 6px' } }, g.title),
@@ -95,15 +122,12 @@ function monthsTable(rows) {
   const any = (f) => rows.some((r) => f(r) > 0.5);
   const cols = [
     { label: 'Month', host: true, get: (r) => monthLabel(r.month, true) },
-    { label: 'Salary', cls: 'r', mob: 'under', mlabel: 'salary ', render: (r) => inc(r.salary), total: () => inc(t.salary) },
-    { label: 'Interest', cls: 'r', mob: 'hide', render: (r) => inc(r.interest), total: () => inc(t.interest) },
+    { label: 'Salary + EPF', cls: 'r', mob: 'under', mlabel: 'salary ', render: (r) => tipped([r], salaryTip, cls('inc', money(r.salary + (r.pfAdd || 0)))), total: () => tipped(rows, salaryTip, cls('inc', money(t.salary + t.pf))) },
+    { label: 'Interest', cls: 'r', mob: 'hide', render: (r) => tipped([r], interestTip, inc(r.interest)), total: () => tipped(rows, interestTip, inc(t.interest)) },
     any((r) => r.other + r.oneIn) ? { label: 'Other income', cls: 'r', mob: 'hide', render: (r) => inc(r.other + r.oneIn), total: () => inc(t.other) } : null,
-    { label: 'Expenses', cls: 'r', mob: 'under', mlabel: 'expenses ', render: (r) => exp(r.expenses), total: () => exp(t.everyday) },
-    { label: 'EMI', cls: 'r', mob: 'hide', render: (r) => exp(r.emi), total: () => exp(t.emi) },
-    { label: 'One-time', cls: 'r', mob: 'under', mlabel: 'one-time ', render: (r) => (r.oneOut > 0.5 ? h('span', { class: 'exp', title: oneNames(r) }, money(r.oneOut), h('small', { class: 'muted', style: { display: 'block' } }, (r.items || []).filter((i) => i.kind !== 'income').map((i) => i.name).join(', '))) : '–'), total: () => exp(t.oneTime) },
+    { label: 'Spending', cls: 'r', mob: 'under', mlabel: 'spending ', render: (r) => tipped([r], spendTip, exp(r.expenses + r.emi + r.oneOut)), total: () => tipped(rows, spendTip, exp(t.everyday + t.emi + t.oneTime)) },
     { label: 'Invested', cls: 'r', mob: 'under', mlabel: 'invested ', render: (r) => inv(r.invested), total: () => inv(t.invested) },
-    any((r) => r.pfAdd) ? { label: 'EPF added', cls: 'r', mob: 'hide', render: (r) => inc(r.pfAdd), total: () => inc(t.pf) } : null,
-    { label: 'Growth', cls: 'r', mob: 'hide', get: (r) => money(r.growth || 0), total: () => money(t.growth) },
+    { label: 'Growth', cls: 'r', mob: 'hide', render: (r) => tipped([r], growthTip, money(r.growth || 0)), total: () => tipped(rows, growthTip, money(t.growth)) },
     any((r) => r.loanPaid) ? { label: 'Loan paid', cls: 'r', mob: 'hide', render: (r) => inc(r.loanPaid), total: () => inc(t.loanPaid) } : null,
     { label: 'Net worth', cls: 'r', mob: 'under', mlabel: 'net worth ', get: (r) => money(r.nw), total: () => money(t.nw) },
   ].filter(Boolean);
@@ -121,16 +145,47 @@ export function yearsTable(rows, { title = 'Year by year, and month by month' } 
   const grid = { display: 'grid', gridTemplateColumns: '1.1fr 1fr 1.3fr 1fr 1fr 1fr', gap: '8px' };
   const R = { textAlign: 'right' };
   const head = h('div', { class: 'yt-head', style: { ...grid, padding: '4px 8px', fontSize: '.82rem', opacity: 0.85 } },
-    h('span', null, 'Year'), h('span', { class: 'inc', style: R }, 'Salary'), h('span', { class: 'exp', style: R }, 'Spending'), h('span', { class: 'inc', style: R }, 'Interest'), h('span', { class: 'inv', style: R }, 'Invested'), h('span', { style: R }, 'Net worth'));
-  const spendCell = (monthly, once, items) => h('span', { class: 'exp', style: R, title: `Monthly ${money(monthly)}${once > 0.5 ? ` + one-time ${money(once)}${items ? ' (' + items + ')' : ''}` : ''}` },
+    h('span', null, 'Year'), h('span', { class: 'inc', style: R }, 'Salary + EPF'), h('span', { class: 'exp', style: R }, 'Spending'), h('span', { class: 'inc', style: R }, 'Interest'), h('span', { class: 'inv', style: R }, 'Invested'), h('span', { style: R }, 'Net worth'));
+  const spendCell = (monthly, once, items, yr) => h('span', { class: 'exp', style: R, title: spendTip(yr) },
     money(monthly + once), once > 0.5 ? h('small', { class: 'muted', style: { display: 'block', fontSize: '.75rem' } }, `incl. one-time ${money(once)}`) : null);
   const blocks = years.map((y, yi) => {
     const yr = rows.filter((r) => r.month.startsWith(y)), t = total(yr);
     const sumRow = h('summary', { style: { ...grid, cursor: 'pointer', padding: '8px', alignItems: 'baseline' } },
-      h('b', null, y + (yr.length < 12 ? ` (${yr.length} mo)` : '')), h('span', { class: 'inc', style: R }, money(t.salary)), spendCell(t.everyday + t.emi, t.oneTime, [...new Set(t.items.map((i) => i.name))].join(', ')),
-      h('span', { class: 'inc', style: R, title: t.accrual > 0.5 ? `plus ${money(t.accrual)} added to deposits, EPF and chits` : null }, money(t.interest)), h('span', { class: 'inv', style: R }, money(t.invested)), h('span', { style: R }, money(t.nw)));
+      h('b', null, y + (yr.length < 12 ? ` (${yr.length} mo)` : '')), h('span', { class: 'inc', style: R, title: salaryTip(yr) }, money(t.salary + t.pf)), spendCell(t.everyday + t.emi, t.oneTime, '', yr),
+      h('span', { class: 'inc', style: R, title: interestTip(yr) }, money(t.interest)), h('span', { class: 'inv', style: R }, money(t.invested)), h('span', { style: R }, money(t.nw)));
     return h('details', { class: 'cal-month', open: yi === 0 }, sumRow, monthsTable(yr));
   });
   return section(title, h('div', null, head, ...blocks,
     h('p', { class: 'note' }, 'Open a year to see its months. Spending is everyday expenses plus loan EMI, with one-time items under it (hover for the split). Interest is what bonds and lending pay out after TDS. Invested is what was left after spending and went into your plan. Net worth is the month end, and for a year its December.')));
+}
+
+/**
+ * Why the interest paid out changes from month to month. Bonds and lending pay interest on what is held at the start of the month, so
+ * money put into them one month raises the next month's interest by amount × rate ÷ 12, less TDS. Nothing else moves it.
+ */
+export function interestWhy(rows, { tds = 0.1, title = 'Interest: what changes it, month by month' } = {}) {
+  if (!rows.length) return null;
+  const PAY = Object.keys(rows[0].interestBy || {}).concat(rows.flatMap((r) => Object.keys(r.interestBy || {}))).filter((k, i, a) => a.indexOf(k) === i);
+  const why = (r, prev) => {
+    if (!prev) return { delta: null, lines: [`First month: ${money(r.interest)} comes from what you hold today.`] };
+    const lines = [];
+    for (const [k, amt] of Object.entries(prev.investedBy || {})) {
+      const e = (r.interestBy || {})[k]; if (!e || amt < 0.5) continue;
+      const extra = amt * (e.rate / 12) * (1 - tds);
+      lines.push(`${money(amt)} put into ${(P.classOf(k) || {}).label || k} in ${monthLabel(prev.month).slice(0, 3)} × ${pct(e.rate, 1)} ÷ 12 less ${Math.round(tds * 100)}% TDS = +${money(extra)} a month`);
+    }
+    return { delta: r.interest - prev.interest, lines: lines.length ? lines : ['No new money went into bonds or lending last month, so nothing changed.'] };
+  };
+  const years = [...new Set(rows.map((r) => r.month.slice(0, 4)))];
+  const blocks = years.map((y, yi) => {
+    const list = rows.map((r, i) => ({ r, prev: rows[i - 1] })).filter((x) => x.r.month.startsWith(y)).map((x) => ({ ...x, w: why(x.r, x.prev) }));
+    return h('details', { class: 'cal-month', open: yi === 0 }, h('summary', { style: { padding: '8px', cursor: 'pointer' } }, h('b', null, y), h('small', { class: 'muted' }, `  ${money(list[0].r.interest)} a month at the start, ${money(list[list.length - 1].r.interest)} at the end`)),
+      table([
+        { label: 'Month', host: true, get: (x) => monthLabel(x.r.month, true) },
+        { label: 'Interest a month', cls: 'r', mob: 'under', mlabel: 'interest ', render: (x) => inc(x.r.interest) },
+        { label: 'Change', cls: 'r', mob: 'under', mlabel: 'change ', render: (x) => (x.w.delta == null || Math.abs(x.w.delta) < 0.5 ? '–' : h('span', { class: x.w.delta > 0 ? 'inc' : 'exp' }, (x.w.delta > 0 ? '+' : '−') + money(Math.abs(x.w.delta)))) },
+        { label: 'Why', mob: 'hide', render: (x) => h('span', null, x.w.lines.map((l) => h('small', { class: 'muted', style: { display: 'block' } }, l))) },
+      ], list, {}));
+  });
+  return section(title, h('div', null, ...blocks, h('p', { class: 'note' }, 'Interest is worked out on what is held at the start of the month. New money only starts earning the month after it goes in, and the figure is after TDS. Deposits, EPF and chits do not pay out: their interest is added to the balance and shows as Growth.')));
 }

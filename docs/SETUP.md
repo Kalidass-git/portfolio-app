@@ -154,6 +154,15 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.9.32 – Home investing card, bond interest by real days, snapshots, review
+
+- **Home: Investing this month.** What can still be invested (the higher of actual and planned money in and out, left over), what is already in, what is still to invest per plan line, and how much the bank can pay now after the spending still expected before month end.
+- **Bank entries:** any entry can be changed to the Transfer category; the date filter has This year, Last year, This financial year and Last financial year.
+- **Bonds:** interest uses the real days of the month (28, 30 or 31, fewer in the month a bond is bought or closed). Calculation settings moved here from Settings (tax on bond interest); the fixed days-in-month setting is gone. Received interest is green. Home: Money to receive shows which bonds are still pending (tap or hover); Coming up uses the same amounts. A past month only expects bonds and lending you held then.
+- **Tax summary:** the bank check compares with holdings up to today; small gaps show as a note, not an alert.
+- **Annual review:** the one-time picker lists every category; interest is compared with regular spending only (no EMI, no one-time); a card shows how much more to invest at 10%, 12% and 15% to cover the gap.
+- **Wealth outlook:** the EMI stays flat; Salary + EPF, Spending and Growth columns with hover breakdowns; a new card explains each month's interest change; snapshots keep the plan for the month, the assumptions and the actuals ("See what was saved"); "Where it went right or wrong" is last.
+
 ## Release 8.9.31 – This year and Years ahead now agree
 
 - Both tabs project from today's position with the same assumptions (salary, EMI, EPF, raise and its month, expense rise, outlook, yearly and dated one-time bills, investment lines), so December of this year shows the same net worth on both. The This year plan used to start from the position saved when the plan was made and ignore the Years ahead settings.

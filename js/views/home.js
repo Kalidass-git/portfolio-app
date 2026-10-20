@@ -8,6 +8,8 @@ import * as R from '../risk.js';
 import { rateHistory, ageText } from './gold.js';
 import { GROUPS } from './groupmix.js';
 import { allocationBody } from './allocview.js';
+import { monthInvest } from '../monthinvest.js';
+import * as P from '../projector.js';
 
 let selMonth = null;
 const rerender = () => window.dispatchEvent(new Event('rerender'));
@@ -111,21 +113,53 @@ function fixIncome(name, month) {
     { label: 'Close', onclick: (c) => c() },
   ]);
 }
+/** Which bonds still have interest to come this month, with the amount and day each is due. */
+const pendingText = (bonds) => bonds.filter((b) => b.pending > 0.5).map((b) => `${b.name}: ${money(b.pending)} due ${shortDate(b.due)}`).join('\n') || 'Nothing pending';
+function pendingBonds(bonds, month) {
+  const list = bonds.slice().sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : 0));
+  const left = list.filter((b) => b.pending > 0.5);
+  dialog('Bond interest, ' + monthLabel(month, true), h('div', null,
+    h('p', { class: 'note' }, `${left.length} of ${list.length} still to come. Each amount is the interest for the actual days in the month, after TDS. The bank credit does not say which bond it paid, so credits are set against the bonds in due-date order.`),
+    rowList(list.map((b) => ({ title: b.name, sub: `${b.holder ? b.holder + ' · ' : ''}due ${shortDate(b.due)}`, value: b.pending > 0.5 ? h('span', { class: 'warn' }, money(b.pending)) : h('span', { class: 'pos' }, 'received'), valueSub: `of ${money(b.expected)}` })))), [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
+}
 function toReceiveCard(data, all) {
   const monthEnd = C.addMonths(C.monthStart(all.asOf), 1);
   const rows = data.receivables.filter((x) => x.active !== false && x.balanceDue > 0).map((x) => C.receivableStatus(x, all.asOf))
     .filter((r) => !r.received && !r.notStarted && r.due < monthEnd).sort((a, b) => (a.due < b.due ? -1 : 1));
   const mc = C.monthCashflow(data, all, C.monthKey(all.asOf));
-  const pend = mc.income.filter((x) => x.expected - x.received > 1).map((x) => ({ due: null, name: x.name, expected: x.expected - x.received, income: true, sub: `expected ${money(x.expected)}, received ${money(x.received)}${canEdit() ? ' · tap to fix' : ''}` }));
+  const pend = mc.income.filter((x) => x.expected - x.received > 1).map((x) => ({ due: null, name: x.name, expected: x.expected - x.received, income: true, bonds: x.bonds, sub: `expected ${money(x.expected)}, received ${money(x.received)}${x.bonds ? ' · tap to see which bonds' : canEdit() ? ' · tap to fix' : ''}` }));
   const total = rows.reduce((a, r) => a + (r.expected || 0), 0) + pend.reduce((a, r) => a + r.expected, 0), over = rows.filter((r) => r.overdue);
   const all2 = rows.concat(pend);
   return section('Money to receive this month', h('div', null,
-    all2.length ? rowList(all2.map((r) => r.income ? { title: r.name, sub: r.sub, onClick: canEdit() ? () => fixIncome(r.name, C.monthKey(all.asOf)) : null, value: money(r.expected), valueSub: h('span', { class: 'warn' }, 'pending') } : ({
+    all2.length ? rowList(all2.map((r) => r.income ? { title: r.name, sub: r.sub, onClick: r.bonds ? () => pendingBonds(r.bonds, C.monthKey(all.asOf)) : canEdit() ? () => fixIncome(r.name, C.monthKey(all.asOf)) : null, value: money(r.expected), valueSub: h('span', { class: 'warn', title: r.bonds ? pendingText(r.bonds) : 'pending' }, 'pending') } : ({
       lead: dateChip(r.due), title: r.name, sub: r.overdue ? h('span', { class: 'neg' }, 'Overdue since ' + shortDate(r.due)) : r.dueToday ? h('span', { class: 'warn' }, 'Due today') : 'Due ' + shortDate(r.due),
       value: money(r.expected || 0), tone: r.overdue ? 'neg' : r.dueToday ? 'warn' : '',
     }))) : h('p', { class: 'empty' }, 'Everything due this month has been received.'),
     all2.length ? h('p', { class: 'summary-line' }, `Waiting for ${money(total)}`, over.length ? h('span', { class: 'neg' }, ` · ${over.length} overdue`) : null, rows.some((r) => r.dueToday) ? h('span', { class: 'warn' }, ` · ${rows.filter((r) => r.dueToday).length} due today`) : null) : null,
     h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income'))));
+}
+
+/** What can still be invested this month, where it should go, and what the bank can pay for right now. */
+function investCard(data, all) {
+  let m;
+  try { m = monthInvest(data, all, P.cfg(data).outlooks); } catch (e) { return null; }
+  if (!m.rows.length && m.investable < 1 && m.done < 1) return null;
+  const cell = (cls, v) => (v > 0.5 ? h('span', { class: cls }, money(v)) : '–');
+  const k = (label, val, sub, cls) => h('div', { class: 'stat' }, h('div', { class: 'stat-label' }, label), h('div', { class: 'stat-value ' + (cls || '') }, val), h('div', { class: 'stat-sub' }, sub));
+  const rows = m.rows.filter((r) => r.target > 0.5 || r.done > 0.5).sort((a, b) => b.left - a.left);
+  const worksOut = `${money(m.income)} in (${m.planIn > m.actualIn ? 'expected' : 'received'}) − ${money(m.spend)} out (${m.planOut > m.actualOut ? 'expected' : 'spent so far'})`;
+  return section('Investing this month · ' + monthLabel(m.month), h('div', null,
+    h('div', { class: 'stats' },
+      k('Can be invested this month', money(m.investable), worksOut, 'inv'),
+      k('Already invested', money(m.done), 'bank entries and asset records this month'),
+      k('Still to invest', money(m.stillToInvest), rows.length ? `${rows.filter((r) => r.left > 0.5).length} place${rows.filter((r) => r.left > 0.5).length === 1 ? '' : 's'} below` : 'no plan lines'),
+      k('Can go in from the bank now', money(m.investNow), `bank ${money(m.bank)} − ${money(m.moreSpend)} still to spend before month end`, m.notEnough ? 'warn' : 'pos')),
+    m.notEnough ? h('p', { class: 'note warn' }, `The bank cannot cover all of it yet: ${money(m.stillToInvest - m.investNow)} more has to wait for money to arrive.`) : null,
+    rows.length ? rowList(rows.map((r) => ({ title: r.name, sub: `${P.classOf(r.cls).label} · ${Math.round(r.share * 100)}% of the month’s money`,
+      value: r.left > 0.5 ? h('span', { class: 'inv' }, money(r.left)) : h('span', { class: 'pos' }, 'done'), valueSub: `${money(r.done)} of ${money(r.target)}` }))) : h('p', { class: 'empty' }, m.hasPlan ? 'No investment lines are planned. Add them under Wealth outlook.' : 'Make a plan under Wealth outlook to split the money.'),
+    m.unplanned.length ? h('p', { class: 'note' }, 'Also invested this month outside the plan: ' + m.unplanned.map((u) => `${P.classOf(u.cls).label} ${money(u.done)}`).join(', ') + '.') : null,
+    h('p', { class: 'note' }, 'Money in and out is the higher of what has happened so far and what the plan expects for the month. What is left is split by the shares of your plan lines. EPF is not included because it never reaches the bank.'),
+    h('p', null, h('a', { href: '#/projector' }, 'Open Wealth outlook'))));
 }
 
 function todayBody(all) {
@@ -322,6 +356,7 @@ export function render() {
   const parts = [
     hero(all, series, ox), tiles(all, data, C.monthCashflow(data, all, C.monthKey(all.asOf))),
     place(attention(data, all), 'span-12'),
+    place(investCard(data, all), 'span-12'),
     place(toReceiveCard(data, all), 'span-6'), place(comingUp(data, all), 'span-6'),
     place(thisMonth(data, all, months), 'span-12'),
     place(todayCard(all), 'm-only'), place(earning(all), 'm-only'),

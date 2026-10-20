@@ -213,7 +213,7 @@ export function yearsWithLedger(data, asOf) {
   if (asOf) { const y = Number(asOf.slice(0, 4)); set.add(String(y)); set.add(String(y - 1)); }
   return [...set].sort().reverse();
 }
-export { oneTimeSet, expenseCategoryNames } from './categories.js';
+export { oneTimeSet, expenseCategoryNames, allCategories } from './categories.js';
 import { oneTimeSet } from './categories.js';
 const INTEREST_CAT = /bond|lend/i;
 export const isInterestCategory = (name) => INTEREST_CAT.test(name || '');
@@ -231,7 +231,7 @@ export function interestVsSpend(data, all, year) {
     const expense = s.expense.filter((x) => lc(x.category) !== 'loan');
     const income = s.income, interest = sum(income.filter((x) => isInterestCategory(x.category)), (x) => x.amount);
     const oneTime = sum(expense.filter((x) => once.has(lc(x.category))), (x) => x.amount), total = sum(expense, (x) => x.amount);
-    rows.push({ month, interest, regular: total - oneTime, oneTime, total, deviation: interest - total, income, expense, emi: s.expense.filter((x) => lc(x.category) === 'loan').reduce((a, x) => a + x.amount, 0) });
+    rows.push({ month, interest, regular: total - oneTime, oneTime, total, deviation: interest - (total - oneTime), afterOneTime: interest - total, income, expense, emi: s.expense.filter((x) => lc(x.category) === 'loan').reduce((a, x) => a + x.amount, 0) });
   }
   return rows;
 }
@@ -490,8 +490,8 @@ export function taxProjection(data, all, y, who = 'all', plan = {}) {
   const bondsNow = netOf(now), bondsPrev = prevEnd >= from ? netOf(taxSummary(data, { ...all, asOf: prevEnd }, y, who)) : 0;
   const received = sum(data.ledger.filter((e) => lc(e.category) === 'income bond' && e.date >= from && e.date <= all.asOf && mine(acctOwner(data, e.acct))), (e) => e.credit);
   const tol = Math.max(500, 0.02 * bondsNow);
-  const recon = { received, expectedNow: bondsNow, expectedPrev: bondsPrev, tol, status: received < bondsPrev - tol ? 'short' : received > bondsNow + tol ? 'over' : 'ok',
-    diff: received < bondsPrev - tol ? received - bondsPrev : received > bondsNow + tol ? received - bondsNow : 0 };
+  const diff = received - bondsNow;   // bank minus holdings, both up to today
+  const recon = { received, expectedNow: bondsNow, expectedPrev: bondsPrev, tol, diff, status: Math.abs(diff) <= tol ? 'ok' : diff < 0 ? 'short' : 'over' };
   const dividends = now.dividendTotal;   // what is recorded so far; nothing is guessed for the months ahead
   const calc = newRegimeTax(y, salaryYear, interestYear + savings.year + dividends + other);
   // headroom: how much more income the year can take before tax starts, and what that means in bond money at the chosen rate

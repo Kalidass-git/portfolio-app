@@ -138,7 +138,7 @@ export function render() {
       { label: 'Invested', cls: 'r', get: (b) => money(b.principal), total: (rs) => money(rs.reduce((a, b) => a + b.principal, 0)) },
       { label: 'Rate (paid)', key: true, cls: 'r', render: (b) => h('span', null, pct(b.rate, 2), h('span', { class: 'plain' }, ' (' + String(b.credit || 'Monthly').toLowerCase() + ')')) },
       { label: 'Net per month', key: true, cls: 'r', get: (b) => money(b.monthNet), total: (rs) => money(rs.reduce((a, b) => a + b.monthNet, 0)) },
-      { label: 'Received so far', mob: 'under', mlabel: 'received ', cls: 'r', get: (b) => money(bondReceived(b)), total: (rs) => money(rs.reduce((a, b) => a + bondReceived(b), 0)) },
+      { label: 'Received so far', mob: 'under', mlabel: 'received ', cls: 'r', render: (b) => green(money(bondReceived(b))), total: (rs) => green(money(rs.reduce((a, b) => a + bondReceived(b), 0))) },
     ], fb.rows, { footer: { label: 'Total' }, onRow: canEdit() ? (b) => bondForm(data.bonds.find((x) => x.id === b.id)) : null })),
     canEdit() ? [btn('Add bond', () => bondForm(), 'primary')] : null));
 
@@ -165,7 +165,7 @@ export function render() {
       late.length ? h('div', { class: 'alert' }, h('b', null, `${late.length} payment${late.length > 1 ? 's' : ''} overdue · ${money(lateSum)}`), h('p', null, late.map((r) => `${r.name} (${money(r.expected)}, was due ${dateStr(r.due)})`).join(' · '))) : null,
       waiting.length ? h('div', { class: 'alert warn', style: { marginTop: late.length ? 8 : 0 } }, h('b', null, `${waiting.length} still to come this month · ${money(waitSum)}`), h('p', null, waiting.map((r) => `${r.name} (${money(r.expected)}, due ${dateStr(r.due)})`).join(' · '))) : null,
       h('div', { class: 'stats' },
-        stat('Received this month', money(rc.filter((r) => r.received).reduce((x, r) => x + (r.expected || 0), 0)), `${rc.filter((r) => r.received).length} of ${rc.length} payments in`),
+        stat('Received this month', green(money(rc.filter((r) => r.received).reduce((x, r) => x + (r.expected || 0), 0))), `${rc.filter((r) => r.received).length} of ${rc.length} payments in`),
         stat('Received so far', green(money(rc.reduce((x, r) => x + (r.total || 0), 0))), `${rc.reduce((x, r) => x + (r.installmentsPaid || 0), 0)} payments since each started`)),
       h('details', { class: 'by-person hide-sm' }, h('summary', null, 'Received so far, by person'), personList()),
       !late.length && !waiting.length && rc.length ? h('p', { class: 'note', style: { marginTop: 0 } }, 'Everything due this month has been received.') : null,
@@ -196,6 +196,10 @@ function bondInsights(all, data) {
     h('div', { class: 'grid2' },
       section('Who holds the bonds', h('div', null, donut(owners, { fmt: money, center: compact(total), sub: 'invested', size: 190 }), legend(owners, { fmt: money }))),
       section('Which companies', firms.length ? hbars(firms, { fmt: money, colorIndex: 1 }) : h('p', { class: 'empty' }, 'No issuer set on the bonds.'))),
+    section('Calculation settings', h('div', null,
+      h('label', null, 'Tax deducted on bond interest (%) ', h('input', { type: 'number', step: 'any', min: '0', max: '100', value: String(Math.round((data.settings.tdsRate ?? 0.1) * 10000) / 100), disabled: !canEdit(), 'aria-label': 'Tax deducted on bond interest', style: { maxWidth: '6em' },
+        onchange: (e) => { const n = Number(e.target.value); if (!Number.isFinite(n) || n < 0 || n > 100) return toast('Enter a percentage between 0 and 100.', 'bad'); if (!canEdit()) return toast('This device has read-only access.'); mutate((d) => { d.settings.tdsRate = n / 100; }); } })),
+      h('p', { class: 'note' }, 'Used for the net interest of every bond. A month’s interest is worked out for the actual days in that month: the daily interest times 28, 30 or 31.'))),
     section('Interest reminders on Home', h('div', null,
       h('label', { class: 'check-inline' }, h('input', { type: 'checkbox', checked: bn.on, disabled: !canEdit(), onchange: (e) => save({ on: e.target.checked }) }), ' Remind me when bond interest is due'),
       h('div', { style: { margin: '8px 0' } }, h('label', null, 'Tell me ', days)),
