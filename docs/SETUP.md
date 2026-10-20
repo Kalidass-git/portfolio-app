@@ -154,6 +154,10 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.9.29 – Easier tapping
+
+- Stacked charts: each column's whole slot is tappable, not just the thin bar, so month columns are easy to hit on a phone.
+
 ## Release 8.9.27 – Wealth outlook: new money from what is left, hike month, one assumptions card
 
 - **New money is what is left.** Each month the projection invests whatever remains after spending, EMI and one-time bills, split by the shares of your plan lines. Tax or fee months invest little or nothing. After a dip, cash is topped up to today's level before investing again. The planned monthly amounts are now only a guide to the split. EPF is added every month as before.
