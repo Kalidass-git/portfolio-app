@@ -1,6 +1,6 @@
 // Wealth outlook: what the projection does with income, spending and new investments, month by month or year by year.
 // Shared by This year and Years ahead. Rows come from simulate().
-import { h, money, compact, pct, monthLabel, section, table } from '../ui.js';
+import { h, money, compact, pct, monthLabel, section, table, popover } from '../ui.js';
 import * as P from '../projector.js';
 import { stackedBars } from '../charts.js';
 
@@ -33,30 +33,33 @@ const inc = (v) => (v > 0.5 ? cls('inc', money(v)) : '–');
 const exp = (v) => (v > 0.5 ? cls('exp', money(v)) : '–');
 const inv = (v) => (v > 0.5 ? cls('inv', money(v)) : '–');
 
-/** Hover text: where a period's growth came from, class by class, and why it can be above zero when the market outlook is 0%. */
+/** Popover content: where a period's growth came from, class by class. */
 function growthTip(rows) {
   const by = {};
   for (const r of rows) for (const [k, v] of Object.entries(r.growthBy || {})) { const e = by[k] || (by[k] = { amount: 0, base: 0, rate: v.rate }); e.amount += v.amount; e.base = v.base; e.rate = v.rate; }
-  const lines = Object.entries(by).filter(([, v]) => Math.abs(v.amount) > 0.5).sort((a, b) => b[1].amount - a[1].amount).map(([k, v]) => {
-    const c = P.classOf(k), label = c ? c.label : k, how = P.isMarket(k) ? `market outlook ${pct(v.rate, 1)} a year` : `${pct(v.rate, 1)} a year`;
-    return `${label}: ${money(v.amount)} (${rows.length === 1 ? `${money(v.base)} held × ${how} ÷ 12` : how})`;
-  });
-  const none = Object.entries(by).filter(([k, v]) => Math.abs(v.amount) <= 0.5 && P.isMarket(k) && v.base > 0.5).map(([k]) => (P.classOf(k) || {}).label || k);
-  return [`Growth added to balances: ${money(sum(rows, (r) => r.growth || 0))}`, ...lines, none.length ? `${none.join(', ')}: nothing, the outlook is 0%` : null, 'Bond and lending interest is not in this figure: it is paid out as income (see Interest).', 'Cash in banks, deposits, chits and EPF earn their own rate even when the market outlook is 0%.'].filter(Boolean).join('\n');
+  const list = Object.entries(by).filter(([k, v]) => Math.abs(v.amount) > 0.5 || (P.isMarket(k) && v.base > 0.5)).sort((a, b) => b[1].amount - a[1].amount);
+  return {
+    title: 'Growth',
+    rows: [...list.map(([k, v]) => ({ l: (P.classOf(k) || {}).label || k, v: money(v.amount), n: rows.length === 1 ? `${money(v.base)} × ${pct(v.rate, 1)} ÷ 12` : `${pct(v.rate, 1)} a year` })), { l: 'Total', v: money(sum(rows, (r) => r.growth || 0)), b: true }],
+    foot: 'Bond and lending interest is under Interest.',
+  };
 }
-/** Hover text: interest paid out by bonds and lending. */
+/** Popover content: interest paid out by bonds and lending. */
 function interestTip(rows) {
   const by = {};
   for (const r of rows) for (const [k, v] of Object.entries(r.interestBy || {})) { const e = by[k] || (by[k] = { amount: 0, base: 0, rate: v.rate }); e.amount += v.amount; e.base = v.base; e.rate = v.rate; }
-  const lines = Object.entries(by).filter(([, v]) => v.amount > 0.5).map(([k, v]) => `${(P.classOf(k) || {}).label || k}: ${money(v.amount)}${rows.length === 1 ? ` (${money(v.base)} × ${pct(v.rate, 1)} ÷ 12, after TDS)` : ''}`);
-  return [`Interest paid out: ${money(sum(rows, (r) => r.interest))}`, ...lines, 'It is cash income and already counted here, so it is not in Growth.'].join('\n');
+  return {
+    title: 'Interest paid out',
+    rows: [...Object.entries(by).filter(([, v]) => v.amount > 0.5).map(([k, v]) => ({ l: (P.classOf(k) || {}).label || k, v: money(v.amount), n: rows.length === 1 ? `${money(v.base)} × ${pct(v.rate, 1)} ÷ 12, less TDS` : null })), { l: 'Total', v: money(sum(rows, (r) => r.interest)), b: true }],
+  };
 }
 const spendTip = (rows) => {
-  const one = rows.flatMap((r) => (r.items || []).filter((i) => i.kind !== 'income').map((i) => `${i.name} ${money(i.amount)}`));
-  return [`Everyday expenses: ${money(sum(rows, (r) => r.expenses))}`, `Loan EMI: ${money(sum(rows, (r) => r.emi))}`, `One-time: ${money(sum(rows, (r) => r.oneOut))}${one.length ? ' (' + one.join(', ') + ')' : ''}`].join('\n');
+  const one = [...new Set(rows.flatMap((r) => (r.items || []).filter((i) => i.kind !== 'income').map((i) => i.name)))].join(', ');
+  return { title: 'Spending', rows: [{ l: 'Everyday', v: money(sum(rows, (r) => r.expenses)) }, { l: 'EMI', v: money(sum(rows, (r) => r.emi)) }, { l: 'One-time', v: money(sum(rows, (r) => r.oneOut)), n: one || null }, { l: 'Total', v: money(sum(rows, (r) => r.expenses + r.emi + r.oneOut)), b: true }] };
 };
-const salaryTip = (rows) => [`Salary to the bank: ${money(sum(rows, (r) => r.salary))}`, `Added to EPF: ${money(sum(rows, (r) => r.pfAdd || 0))}`, 'EPF goes in before the salary reaches the bank, so it adds to net worth but is not spendable.'].join('\n');
-const tipped = (rows, text, node) => h('span', { title: text(rows), style: { cursor: 'help', borderBottom: '1px dotted var(--muted, #888)' } }, node);
+const salaryTip = (rows) => ({ title: 'Salary + EPF', rows: [{ l: 'Salary to bank', v: money(sum(rows, (r) => r.salary)) }, { l: 'EPF', v: money(sum(rows, (r) => r.pfAdd || 0)), n: 'goes in before the salary reaches the bank' }, { l: 'Total', v: money(sum(rows, (r) => r.salary + (r.pfAdd || 0))), b: true }] });
+/** A figure that opens its working in a popover when clicked. */
+const tipped = (rows, build, node) => popover(h('span', null, node), () => build(rows));
 
 /** Net worth at the start of a run of rows, worked back from its first month. */
 const openingNw = (r) => r.nw - (r.income - r.out) - (r.pfAdd || 0) - (r.growth || 0) - (r.loanPaid || 0);
@@ -146,13 +149,12 @@ export function yearsTable(rows, { title = 'Year by year, and month by month' } 
   const R = { textAlign: 'right' };
   const head = h('div', { class: 'yt-head', style: { ...grid, padding: '4px 8px', fontSize: '.82rem', opacity: 0.85 } },
     h('span', null, 'Year'), h('span', { class: 'inc', style: R }, 'Salary + EPF'), h('span', { class: 'exp', style: R }, 'Spending'), h('span', { class: 'inc', style: R }, 'Interest'), h('span', { class: 'inv', style: R }, 'Invested'), h('span', { style: R }, 'Net worth'));
-  const spendCell = (monthly, once, items, yr) => h('span', { class: 'exp', style: R, title: spendTip(yr) },
-    money(monthly + once), once > 0.5 ? h('small', { class: 'muted', style: { display: 'block', fontSize: '.75rem' } }, `incl. one-time ${money(once)}`) : null);
+  const spendCell = (monthly, once, items, yr) => h('span', { style: R }, tipped(yr, spendTip, h('span', { class: 'exp' }, money(monthly + once))), once > 0.5 ? h('small', { class: 'muted', style: { display: 'block', fontSize: '.75rem' } }, `incl. one-time ${money(once)}`) : null);
   const blocks = years.map((y, yi) => {
     const yr = rows.filter((r) => r.month.startsWith(y)), t = total(yr);
     const sumRow = h('summary', { style: { ...grid, cursor: 'pointer', padding: '8px', alignItems: 'baseline' } },
-      h('b', null, y + (yr.length < 12 ? ` (${yr.length} mo)` : '')), h('span', { class: 'inc', style: R, title: salaryTip(yr) }, money(t.salary + t.pf)), spendCell(t.everyday + t.emi, t.oneTime, '', yr),
-      h('span', { class: 'inc', style: R, title: interestTip(yr) }, money(t.interest)), h('span', { class: 'inv', style: R }, money(t.invested)), h('span', { style: R }, money(t.nw)));
+      h('b', null, y + (yr.length < 12 ? ` (${yr.length} mo)` : '')), h('span', { style: R }, tipped(yr, salaryTip, cls('inc', money(t.salary + t.pf)))), spendCell(t.everyday + t.emi, t.oneTime, '', yr),
+      h('span', { style: R }, tipped(yr, interestTip, cls('inc', money(t.interest)))), h('span', { class: 'inv', style: R }, money(t.invested)), h('span', { style: R }, money(t.nw)));
     return h('details', { class: 'cal-month', open: yi === 0 }, sumRow, monthsTable(yr));
   });
   return section(title, h('div', null, head, ...blocks,

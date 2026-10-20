@@ -737,3 +737,12 @@ tr.proj-row td { color: var(--muted); font-style: italic; }
 .assume-fields input, .assume-fields select { max-width: 100%; }
 .assume-fields small { color: var(--muted); }
 .reco { margin: 8px 0 0; font-size: .85rem; color: var(--muted); }
+/* popover */
+.pop-trigger { cursor: pointer; border-bottom: 1px dotted var(--muted, #888); }
+.popover { position: fixed; z-index: 90; background: var(--surface, #fff); color: var(--ink, #222); border: 1px solid var(--line, #ccc); border-radius: 12px; box-shadow: 0 8px 28px rgba(0,0,0,.22); padding: 10px 14px; font-size: 1rem; min-width: 15em; max-width: min(26em, calc(100vw - 16px)); text-align: left; }
+.pop-title { font-weight: 650; margin-bottom: 6px; }
+.pop-row { display: grid; grid-template-columns: 1fr auto; column-gap: 14px; padding: 3px 0; border-top: 1px solid var(--line-2, #eee); }
+.pop-row.b { font-weight: 650; }
+.pop-v { text-align: right; white-space: nowrap; }
+.pop-n { grid-column: 1 / -1; font-size: .86rem; color: var(--muted, #666); }
+.pop-foot { margin-top: 6px; font-size: .86rem; color: var(--muted, #666); }
