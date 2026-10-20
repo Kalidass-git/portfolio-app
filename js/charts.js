@@ -173,7 +173,7 @@ export function stackedBars({ groups, names, colors, fmt = (v) => v, height = 23
       });
       if (isSel) root.append(svg('rect', { x: x0 - 1.5, y: y(acc) - 1.5, width: bw + 3, height: Math.max(3, y(0) - y(acc) + 3), fill: 'none', stroke: 'var(--text, #222)', 'stroke-width': 1.5, rx: 2 }));
       if (onSelect) {
-        const hit = svg('rect', { x: x0 - 1, y: pad.t, width: bw + 2, height: H - pad.t - pad.b, fill: 'transparent', style: 'cursor:pointer', tabindex: 0, role: 'button', 'aria-label': `${g.title || g.label}, ${names[si]}, ${fmt(tot(parts))}. Show what is inside` });
+        const slot = (gw - 4) / names.length, hit = svg('rect', { x: cx - gw / 2 + 2 + si * slot, y: pad.t, width: slot, height: H - pad.t - pad.b, fill: 'transparent', style: 'cursor:pointer', tabindex: 0, role: 'button', 'aria-label': `${g.title || g.label}, ${names[si]}, ${fmt(tot(parts))}. Show what is inside` });
         hit.addEventListener('click', () => onSelect(gi, si));
         hit.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(gi, si); } });
         root.append(hit);

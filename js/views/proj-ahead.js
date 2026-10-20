@@ -26,7 +26,8 @@ export function aheadSetup() {
   const a = {
     ...base,
     salary: own.salary ?? base.salary, otherIncome: own.otherIncome ?? base.otherIncome, expenses: own.expenses ?? base.expenses, emi: own.emi ?? base.emi, pfAdd: own.pfAdd ?? base.pfAdd,
-    growth: { salary: own.growthSalary ?? 0.06, expenses: own.growthExpenses ?? 0.06, invest: own.growthInvest ?? 0.05 },
+    growth: { salary: own.growthSalary ?? 0.06, expenses: own.growthExpenses ?? 0.06, oneTime: own.growthOneTime ?? own.growthExpenses ?? 0.06, invest: 0 },
+    hikeMonth: own.hikeMonth ?? 3,
     outlook: { ...(own.outlook || base.outlook) },
     oneOffs: yearlyItems(own, base),
     invest: (base.invest || []).map((l) => ({ ...l, from: '', to: '' })),
@@ -35,36 +36,34 @@ export function aheadSetup() {
   return { a, horizon: viewHorizon || own.horizon || 10, target: own.target || null, plan, own };
 }
 
-function setupForm(s) {
+/** Every assumption of the long view, in one card: income, spending, saving and the market. Each field saves as soon as it is changed. */
+function assumptionsCard(s) {
   const { a } = s;
-  formDialog({
-    title: 'Years ahead: assumptions', saveLabel: 'Save',
-    value: { salary: a.salary, otherIncome: a.otherIncome, expenses: a.expenses, emi: a.emi, pfAdd: a.pfAdd, growthSalary: pctIn(a.growth.salary), growthExpenses: pctIn(a.growth.expenses), growthInvest: pctIn(a.growth.invest), target: s.target || '' },
-    fields: [
-      { key: 'salary', label: 'Salary each month today (₹)', type: 'number', half: true }, { key: 'growthSalary', label: 'Salary raise each year (%)', type: 'number', half: true, hint: 'Also applied to other income.' },
-      { key: 'otherIncome', label: 'Other income each month (₹)', type: 'number' },
-      { key: 'expenses', label: 'Everyday expenses each month today (₹)', type: 'number', half: true }, { key: 'growthExpenses', label: 'Expenses rise each year (%)', type: 'number', half: true, hint: 'Inflation and lifestyle.' },
-      { key: 'emi', label: 'Loan EMI each month (₹)', type: 'number', half: true }, { key: 'pfAdd', label: 'Added to EPF each month (₹)', type: 'number', half: true },
-      { key: 'growthInvest', label: 'Planned investments grow each year by (%)', type: 'number', hint: 'Your monthly investments from the This year plan, raised by this much each year.' },
-      { key: 'target', label: 'Net worth I want at the end (₹, optional)', type: 'number' },
-    ],
-    onSave: (v) => mutate((d) => {
-      const p = ensure(d);
-      p.ahead = { ...(p.ahead || {}), salary: v.salary || 0, otherIncome: v.otherIncome || 0, expenses: v.expenses || 0, emi: v.emi || 0, pfAdd: v.pfAdd || 0, growthSalary: frac(v.growthSalary), growthExpenses: frac(v.growthExpenses), growthInvest: frac(v.growthInvest), target: v.target || null };
-    }),
-  });
-}
-function growthCard(s) {
-  const { a } = s;
-  const field = (label, name, value, hint) => h('label', { style: { display: 'flex', flexDirection: 'column', gap: '2px', minWidth: '11em' } }, h('span', null, label),
-    h('input', { type: 'number', step: 'any', inputmode: 'decimal', value: String(value), disabled: !canEdit(), 'aria-label': label, style: { maxWidth: '8em' }, onchange: (e) => { const n = Number(e.target.value); if (Number.isFinite(n)) setOwn({ [name]: n / 100 }); } }), h('small', { class: 'muted' }, hint));
-  return section('What the projection grows by', h('div', null,
-    h('div', { style: { display: 'flex', gap: '16px', flexWrap: 'wrap' } },
-      field('Salary raise each year (%)', 'growthSalary', pctIn(a.growth.salary), `from ${money(a.salary)} a month today`),
-      field('Expenses and one-time bills rise each year (%)', 'growthExpenses', pctIn(a.growth.expenses), `from ${money(a.expenses)} a month today`),
-      field('New investments grow each year (%)', 'growthInvest', pctIn(a.growth.invest), 'the monthly amounts you plan to invest')),
-    h('p', { class: 'note' }, 'Shares, ETFs, funds and gold follow the market outlook below. Bonds and lending pay the interest on what you hold and put in. Deposits, EPF and chits grow at their own rates. Change any of these and everything below follows.'),
-    canEdit() ? h('div', { class: 'row-actions' }, btn('Edit salary, expenses and EMI', () => setupForm(s), 'small')) : null));
+  const num = (label, name, value, hint, { pctField = false, step = 'any' } = {}) => h('label', null, h('span', null, label),
+    h('input', { type: 'number', step, inputmode: 'decimal', value: value === '' || value == null ? '' : String(value), disabled: !canEdit(), 'aria-label': label,
+      onchange: (e) => { const n = e.target.value === '' ? 0 : Number(e.target.value); if (Number.isFinite(n)) setOwn({ [name]: pctField ? n / 100 : n }); } }), hint ? h('small', null, hint) : null);
+  const group = (title, ...fields) => h('div', { class: 'assume-group' }, h('h4', null, title), h('div', { class: 'assume-fields' }, ...fields));
+  const hike = h('label', null, h('span', null, 'Month the raise lands'),
+    h('select', { disabled: !canEdit(), 'aria-label': 'Month the raise lands', onchange: (e) => setOwn({ hikeMonth: Number(e.target.value) }) }, MONTH_NAMES.map((m, i) => h('option', { value: i + 1, selected: i + 1 === a.hikeMonth }, m))),
+    h('small', null, 'Salary and EMI step up together from this month'));
+    return section('What the projection grows by', h('div', { class: 'assume' },
+    group('Income',
+      num('Salary each month today (₹)', 'salary', a.salary, 'take-home, to your bank'),
+      num('Other income each month (₹)', 'otherIncome', a.otherIncome, 'rent, dividends and so on'),
+      num('Salary raise each year (%)', 'growthSalary', pctIn(a.growth.salary), 'also raises other income and EMI', { pctField: true }), hike),
+    group('Spending',
+      num('Everyday expenses each month today (₹)', 'expenses', a.expenses, 'without EMI and one-time bills'),
+      num('Expenses rise each year (%)', 'growthExpenses', pctIn(a.growth.expenses), 'each January', { pctField: true }),
+      num('Loan EMI each month today (₹)', 'emi', a.emi, 'rises with the salary raise'),
+      num('One-time bills rise each year (%)', 'growthOneTime', pctIn(a.growth.oneTime), 'tax, fees, trips (set below)', { pctField: true })),
+    group('Saving',
+      num('Added to EPF each month (₹)', 'pfAdd', a.pfAdd, 'goes in before salary reaches the bank'),
+      num('Net worth I want at the end (₹, optional)', 'target', s.target || '', 'shows whether you get there')),
+    group('Markets',
+      outlookToggle(s.a.outlook, (id) => canEdit() && setOwn({ outlook: Object.fromEntries(P.MARKET.map((k) => [k, id])) }), { disabled: !canEdit() }),
+      h('details', { class: 'more' }, h('summary', null, 'Set each market class separately'), outlookSelects(s.a.outlook, (k, id) => canEdit() && setOwn({ outlook: { ...s.a.outlook, [k]: id } }))),
+      h('small', { class: 'muted' }, 'Shares, ETFs, funds and gold. Bonds and lending pay interest on what you hold and put in; deposits, EPF and chits grow at their own rates.')),
+    h('p', { class: 'note' }, 'New money is not a fixed figure. Each month the projection invests whatever is left after spending, EMI and one-time bills, split by the shares in your plan. A month with tax or school fees leaves little or nothing; if cash dipped, it is topped up to today’s level before investing again. Everything below follows these settings.')));
 }
 
 function yearlyItemForm(s, it) {
@@ -93,14 +92,19 @@ function suggestDialog(s) {
 }
 function yearlyCard(s) {
   const list = s.a.oneOffs.slice().sort((x, y) => (x.month < y.month ? -1 : 1));
-  const total = list.filter((o) => o.kind !== 'income').reduce((a, o) => a + (o.amount || 0), 0);
-  return section('Yearly one-time bills', h('div', null,
+  const out = list.filter((o) => o.kind !== 'income');
+  const total = out.reduce((a, o) => a + (o.amount || 0), 0);
+  const names = [...new Set(out.map((o) => o.name))].slice(0, 4).join(', ');
+  const det = h('details', { class: 'more' },
+    h('summary', { style: { cursor: 'pointer', display: 'flex', gap: '12px', alignItems: 'baseline', flexWrap: 'wrap' } },
+      h('b', null, list.length ? `${list.length} yearly ${list.length === 1 ? 'item' : 'items'}` : 'None yet'), list.length ? h('span', { class: 'exp' }, `−${money(total)} a year at today’s prices`) : null, names ? h('small', { class: 'muted' }, names) : null, h('small', { class: 'muted' }, 'tap to open')),
     table([
       { label: 'What', host: true, get: (o) => o.name }, { label: 'Paid in', mob: 'under', get: (o) => MONTH_NAMES[Number(o.month) - 1] || o.month },
-      { label: 'Amount today', cls: 'r', render: (o) => h('span', { class: o.kind === 'income' ? 'pos' : 'neg' }, (o.kind === 'income' ? '+' : '−') + money(o.amount)), total: () => '−' + money(total) },
+      { label: 'Amount today', cls: 'r', render: (o) => h('span', { class: o.kind === 'income' ? 'inc' : 'exp' }, (o.kind === 'income' ? '+' : '−') + money(o.amount)), total: () => h('span', { class: 'exp' }, '−' + money(total)) },
     ], list, { footer: { label: 'Spending in a year' }, onRow: canEdit() ? (o) => yearlyItemForm(s, s.a.oneOffs.find((x) => x.id === o.id)) : null, empty: 'None yet. Add tax, school fees, vacations and so on, so the years ahead see them coming.' }),
-    h('p', { class: 'note' }, `Bills you pay once a year, outside the monthly spending. Each one repeats every year in its month and grows by ${pct(s.a.growth.expenses, 1)} a year. They are taken out of cash in the months they fall, so the projection no longer assumes they do not exist. Items entered in the This year plan as “every year” are picked up here until you save your own list.`)),
-    canEdit() ? [btn('Add a yearly bill', () => yearlyItemForm(s), 'primary', { keep: true }), btn('Find them in my bank entries', () => suggestDialog(s), '', { keep: true })] : null);
+    h('p', { class: 'note' }, `Bills you pay once a year, outside the monthly spending. Each repeats every year in its month and grows by ${pct(s.a.growth.oneTime, 1)} a year. They come out of that month’s money, so a month with tax leaves little to invest. Items entered in the This year plan as “every year” are picked up here until you save your own list.`),
+    canEdit() ? h('div', { class: 'row-actions' }, btn('Add a yearly bill', () => yearlyItemForm(s), 'primary', { keep: true }), btn('Find them in my bank entries', () => suggestDialog(s), '', { keep: true })) : null);
+  return section('Yearly one-time bills', det);
 }
 const setOwn = (patch) => mutate((d) => { const p = ensure(d); p.ahead = { ...(p.ahead || {}), ...patch }; });
 
@@ -117,15 +121,11 @@ export function render(root) {
   const year0 = (r) => monthLabel(r.month);
 
   // ---------- growth settings and yearly one-time bills: everything the projection grows by, in one place ----------
-  root.append(growthCard(s), yearlyCard(s));
+  root.append(assumptionsCard(s), yearlyCard(s));
 
   // ---------- controls ----------
   const hz = h('select', { 'aria-label': 'Years to look ahead', onchange: (e) => { viewHorizon = +e.target.value; if (canEdit()) setOwn({ horizon: viewHorizon }); else rerender(); } }, [1, 2, 3, 4, 5, 7, 10, 15, 20, 25].map((n) => h('option', { value: n, selected: n === s.horizon }, yrs(n))));
   root.append(h('div', { class: 'filters' }, h('label', null, 'Look ahead ', hz), h('label', { class: 'check-inline' }, h('input', { type: 'checkbox', checked: compare, onchange: (e) => { compare = e.target.checked; rerender(); } }), ' Compare all outlooks')));
-  root.append(section('Market outlook for the years ahead', h('div', null,
-    outlookToggle(s.a.outlook, (id) => canEdit() && setOwn({ outlook: Object.fromEntries(P.MARKET.map((k) => [k, id])) }), { disabled: !canEdit() }),
-    h('details', { class: 'more' }, h('summary', null, 'Set each market class separately'), outlookSelects(s.a.outlook, (k, id) => canEdit() && setOwn({ outlook: { ...s.a.outlook, [k]: id } }))),
-    h('p', { class: 'note' }, 'Applies to shares, ETFs, funds and gold, today’s holdings and new money alike. Over many years, a steady outlook matters far more than any single year.'))));
 
   // ---------- numbers ----------
   const expOut = end.expenses + end.emi;
@@ -135,7 +135,7 @@ export function render(root) {
   root.append(h('div', { class: 'stats' },
     stat(`Net worth in ${yrs(s.horizon)}`, money(end.nw), `${monthLabel(end.month)}, from ${money(b.net)} today`),
     stat('Interest income each month then', money(end.interest), cover != null ? `pays ${Math.round(cover * 100)}% of the ${money(expOut)} monthly spending` : ''),
-    s.target ? (hit ? stat('Target reached', monthLabel(hit.month), `${money(s.target)} · ${Math.round((rows.indexOf(hit) + 1) / 12 * 10) / 10} years`) : stat('Target not reached', h('span', { class: 'neg' }, `${money(s.target - end.nw)} short`), need > 0 ? `save ${money(need)} more a month (earn more or spend less) to get there` : 'in this time')) : stat('Target', 'Not set', 'add one in the assumptions'),
+    s.target ? (hit ? stat('Target reached', monthLabel(hit.month), `${money(s.target)} · ${Math.round((rows.indexOf(hit) + 1) / 12 * 10) / 10} years`) : stat('Target not reached', h('span', { class: 'neg' }, `${money(s.target - end.nw)} short`), need > 0 ? `save ${money(need)} more a month (earn more or spend less) to get there` : 'in this time')) : stat('Target', 'Not set', 'add one under Saving above'),
     stat('Saved each year at the end', money(yearRows[yearRows.length - 1] ? (byYearFlows(rows, s.horizon - 1)) : 0), 'income minus spending, before new investments')));
 
   // ---------- chart ----------
@@ -238,7 +238,7 @@ export function render(root) {
       { label: 'Interest covers spending', mob: 'under', mlabel: 'covers ', cls: 'r', get: (x) => { const sp = x.r.expenses + x.r.emi; return sp ? Math.round((x.r.interest / sp) * 100) + '%' : '–'; } },
     ], tbl, { empty: 'Nothing to show.' }),
     h('p', { class: 'note' }, 'Interest income is what bonds and lending pay out each month after tax. When it covers your monthly spending, your investments pay your living costs without selling anything. Saved that year = income − spending, before moving money into investments.')),
-    canEdit() ? [btn('Edit assumptions', () => setupForm(s), 'primary', { keep: true })] : null));
+    ));
   root.append(h('p', { class: 'note' }, s.plan ? `New investments and interest rates come from your ${s.plan.year} plan on the This year tab. Everything else is set on this page.` : 'No plan yet: investments and rates come from your recent history. Create a plan on the This year tab to set them.'));
 }
 /** Income minus spending (before new investments) in the i-th year of the run. */

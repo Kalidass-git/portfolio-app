@@ -726,3 +726,14 @@ tr.proj-row td { color: var(--muted); font-style: italic; }
 @media (max-width: 700px) { .pagebar .price-bar.inline { width: 100%; margin: 0; justify-content: space-between; } }
 @media (min-width: 701px) { .phone-only { display: none; } }
 .by-person summary { cursor: pointer; padding: 6px 0; color: var(--brand); } .by-person { margin: 8px 0; }
+/* Wealth outlook: income green, spending red, investing blue */
+.inc { color: var(--pos); } .exp { color: var(--neg); } .inv { color: var(--s1); }
+.yt-head .inc, .yt-head .exp, .yt-head .inv { font-weight: 600; }
+.assume { display: grid; gap: 14px; }
+.assume-group { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.assume-group h4 { margin: 0 0 8px; font-size: .95rem; }
+.assume-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(11.5em, 1fr)); gap: 10px 14px; }
+.assume-fields label { display: flex; flex-direction: column; gap: 2px; font-size: .9rem; }
+.assume-fields input, .assume-fields select { max-width: 100%; }
+.assume-fields small { color: var(--muted); }
+.reco { margin: 8px 0 0; font-size: .85rem; color: var(--muted); }

@@ -150,6 +150,22 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.9.28 – Fix
+
+- Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
+
+## Release 8.9.29 – Easier tapping
+
+- Stacked charts: each column's whole slot is tappable, not just the thin bar, so month columns are easy to hit on a phone.
+
+## Release 8.9.27 – Wealth outlook: new money from what is left, hike month, one assumptions card
+
+- **New money is what is left.** Each month the projection invests whatever remains after spending, EMI and one-time bills, split by the shares of your plan lines. Tax or fee months invest little or nothing. After a dip, cash is topped up to today's level before investing again. The planned monthly amounts are now only a guide to the split. EPF is added every month as before.
+- **One assumptions card** on Years ahead: salary, other income, expenses, EMI, EPF, raise %, expense rise %, one-time bill rise %, the month the raise lands (salary and EMI step up together), target and market outlook.
+- **Yearly one-time bills** sit in a drop-down under a summary line.
+- **Totals add up.** Month tables show salary, interest, expenses, EMI, one-time, invested, EPF, growth and net worth, with a line that adds them up.
+- **Year chart opens a month chart.** Income green, spending red, investing blue.
+
 ## Release 8.9.26 – Bond charts and reminders, clearer Wealth outlook, annual review
 
 - **Bonds**: pie of who owns what, bar of money per company, and one setting for Home reminders of bond interest (on or off, how many days before). It applies to all bonds.
