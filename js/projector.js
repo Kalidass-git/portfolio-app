@@ -117,51 +117,56 @@ export function simulate(start, a, outlooks, months) {
   const g = a.growth || {};
   let liab = start.liab || 0;
   const rows = [];
-  let cashBefore = 0;
+  const baseYear = a.baseYear != null ? Number(a.baseYear) : Number(start.month.slice(0, 4));
+  const hikeM = Number(a.hikeMonth) || 3;   // the month the yearly raise lands: salary and EMI step up together
+  const hikesTo = (y, m) => y + (m >= hikeM ? 1 : 0);
+  const sy = Number(start.month.slice(0, 4)), sm = Number(start.month.slice(5, 7));
+  const cashPot = all.find((p) => p.cls === 'cash' && !p.line);
+  const cushion = cashPot ? cashPot.value : 0;   // cash you start with is kept as the cushion
   for (let i = 0; i < months; i++) {
-    const month = addMonths(start.month + '-01', i + 1).slice(0, 7), mm = month.slice(5), yi = Math.floor(i / 12);
+    const month = addMonths(start.month + '-01', i + 1).slice(0, 7), mm = month.slice(5), my = Number(month.slice(0, 4));
     const f = (rate) => Math.pow(1 + rate, 1 / 12) - 1;
-    const salary = (a.salary || 0) * Math.pow(1 + (g.salary || 0), yi), other = (a.otherIncome || 0) * Math.pow(1 + (g.salary || 0), yi);
-    const expenses = (a.expenses || 0) * Math.pow(1 + (g.expenses || 0), yi), emi = a.emi || 0;
+    const raise = Math.pow(1 + (g.salary || 0), hikesTo(my, Number(mm)) - hikesTo(sy, sm));
+    const salary = (a.salary || 0) * raise, other = (a.otherIncome || 0) * raise, emi = (a.emi || 0) * raise;
+    const expenses = (a.expenses || 0) * Math.pow(1 + (g.expenses || 0), Math.max(0, my - baseYear));
     let oneIn = 0, oneOut = 0;
     const items = [];
-    const baseYear = a.baseYear != null ? Number(a.baseYear) : Number(start.month.slice(0, 4));
     for (const o of a.oneOffs || []) {
       if (!(o.month === mm || o.month === month)) continue;
       // a yearly item is entered at today's prices and grows with expenses, once for every calendar year after the current one
-      const yrs = o.month === mm && o.kind !== 'income' ? Math.max(0, Number(month.slice(0, 4)) - baseYear) : 0;
-      const amt = (o.amount || 0) * Math.pow(1 + (g.expenses || 0), yrs);
+      const yrs = o.month === mm && o.kind !== 'income' ? Math.max(0, my - baseYear) : 0;
+      const amt = (o.amount || 0) * Math.pow(1 + (g.oneTime ?? g.expenses ?? 0), yrs);
       if (o.kind === 'income') oneIn += amt; else oneOut += amt;
       items.push({ name: o.name, amount: amt, kind: o.kind === 'income' ? 'income' : 'expense' });
     }
     // interest paid out by bonds and lending (after TDS), growth for everything else
-    let interest = 0, accrual = 0;
+    let interest = 0, accrual = 0, growth = 0;
     for (const p of all) {
       const k = classOf(p.cls), r = p.rate ?? rateOf(p.cls, a, outlooks);
       if (k.kind === 'payout') interest += p.value * (r / 12) * (1 - (a.tds ?? 0.1));
-      else { const was = p.value; p.value *= 1 + f(r); if (k.kind === 'accrual') accrual += p.value - was; }
-    }
-    // planned new money moves from cash into its class
-    let invested = 0;
-    for (const p of linePots) {
-      const l = p.line;
-      if (l.from && month < l.from) continue;
-      if (l.to && month > l.to) continue;
-      const amt = (l.monthly || 0) * Math.pow(1 + (g.invest || 0), yi);
-      p.value += amt; invested += amt;
+      else { const was = p.value; p.value *= 1 + f(r); growth += p.value - was; if (k.kind === 'accrual') accrual += p.value - was; }
     }
     const pfAdd = a.pfAdd || 0;
     all.find((p) => p.cls === 'pf' && !p.line).value += pfAdd;
     const income = salary + other + interest + oneIn;
     const out = expenses + emi + oneOut;
-    const surplus = income - out - invested;
-    all.find((p) => p.cls === 'cash' && !p.line).value += surplus;
-    if (a.loanPrincipal) liab = Math.max(0, liab - a.loanPrincipal);
+    // New money comes from what is left this month, not from a fixed figure: a month with tax or school fees leaves little or nothing,
+    // the others leave more. After a short month, the cash cushion is rebuilt first. What remains is split by the shares of the plan lines.
+    const left = income - out;
+    const live = linePots.filter((p) => !(p.line.from && month < p.line.from) && !(p.line.to && month > p.line.to));
+    const weight = live.reduce((t, p) => t + Math.max(0, p.line.monthly || 0), 0);
+    const refill = a.refillCash === false || !cashPot ? 0 : Math.max(0, cushion - cashPot.value);
+    const avail = weight > 0 ? Math.max(0, left - refill) : 0;
+    let invested = 0;
+    for (const p of live) { const amt = weight > 0 ? avail * Math.max(0, p.line.monthly || 0) / weight : 0; p.value += amt; invested += amt; }
+    const surplus = left - invested;
+    cashPot.value += surplus;
+    const loanPaid = a.loanPrincipal ? Math.min(liab, a.loanPrincipal) : 0;
+    liab -= loanPaid;
     const values = {};
     for (const p of all) values[p.cls] = (values[p.cls] || 0) + p.value;
     const assets = sum(Object.values(values));
-    rows.push({ month, items, salary, other, interest, accrual, oneIn, expenses, emi, oneOut, invested, pfAdd, surplus, income, out, cash: values.cash, values, market: sum(MARKET, (k) => values[k] || 0), assets, liab, nw: assets - liab });
-    cashBefore = values.cash;
+    rows.push({ month, items, salary, other, interest, accrual, growth, loanPaid, left, refill, avail, oneIn, expenses, emi, oneOut, invested, pfAdd, surplus, income, out, cash: values.cash, values, market: sum(MARKET, (k) => values[k] || 0), assets, liab, nw: assets - liab });
   }
   return rows;
 }
