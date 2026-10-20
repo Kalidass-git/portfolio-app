@@ -168,3 +168,17 @@ export function budgetAlerts(data, monthSpent, yearSpent, nearAt = 0.8) {
   for (const l of yearlyLines(data, yearSpent)) if (l.used >= nearAt) out.push({ ...l, scope: 'year', over: l.used > 1 });
   return out.sort((a, b) => (b.over - a.over) || (b.used - a.used));
 }
+
+// ---- one-time spending: tax, school fees, a holiday, a function. Paid once or twice a year, not part of the monthly run. ----
+const ONE_TIME_GUESS = /tax|vacation|holiday|trip|school|tuition|fee|donat|function|gift|festival|insurance|premium|wedding/i;
+/** Expense categories seen in the bank entries. */
+export function expenseCategoryNames(data) {
+  const kind = kindOf(data);
+  return [...new Set((data.ledger || []).filter((e) => e.debit > 0 && kind(e.category) === 'expense').map((e) => e.category || 'Unknown'))];
+}
+/** Categories treated as one-time: the saved choice (data.settings.oneTimeCats), else a guess from the names. Lower case. */
+export function oneTimeSet(data) {
+  const saved = data.settings && data.settings.oneTimeCats;
+  if (Array.isArray(saved)) return new Set(saved.map(lc));
+  return new Set(expenseCategoryNames(data).filter((n) => ONE_TIME_GUESS.test(n)).map(lc));
+}

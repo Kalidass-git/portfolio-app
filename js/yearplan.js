@@ -5,7 +5,7 @@
 //                    retro: { wrong, why, better, savedAt } }]
 // Money out is stored as positive numbers here.
 import { monthLedger, monthKey, addMonths, monthEnd, netWorthSeries } from './calc.js';
-import { kindOf } from './categories.js';
+import { kindOf, oneTimeSet } from './categories.js';
 
 const sum = (a, f = (x) => x) => a.reduce((s, x) => s + (Number(f(x)) || 0), 0);
 const cat = (e) => (e.category || '').toLowerCase();
@@ -37,9 +37,11 @@ export function monthActual(data, month) {
   const income = cr((e) => kind(e.category) === 'income');   // refunds and loan repayments in other categories are not income
   const emi = db((e) => cat(e) === 'loan'), tax = db((e) => cat(e) === 'tax');
   const expenses = db((e) => kind(e.category) !== 'investment' && cat(e) !== 'loan' && cat(e) !== 'tax');
+  const once = oneTimeSet(data);
+  const oneTime = db((e) => kind(e.category) !== 'investment' && cat(e) !== 'loan' && cat(e) !== 'tax' && once.has(cat(e)));
   const invested = db((e) => kind(e.category) === 'investment');
   const pf = sum(data.savings.filter((s) => s.type === 'EPF'), (s) => sum(s.entries.filter((e) => monthKey(e.date) === month), (e) => (e.employee || 0) + (e.employer || 0)));
-  return { salary, income, otherIncome: income - salary, expenses, emi, tax, invested, pf, left: income - expenses - emi - tax, has: rows.length > 0 };
+  return { salary, income, otherIncome: income - salary, expenses, oneTime, regular: expenses - oneTime, emi, tax, invested, pf, left: income - expenses - emi - tax, has: rows.length > 0 };
 }
 
 const planMonth = (m, p) => {

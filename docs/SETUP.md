@@ -150,6 +150,14 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.9.26 – Bond charts and reminders, clearer Wealth outlook, annual review
+
+- **Bonds**: pie of who owns what, bar of money per company, and one setting for Home reminders of bond interest (on or off, how many days before). It applies to all bonds.
+- **Wealth outlook, This year**: "How this is worked out" shows every step behind "Available to invest each month" and checks it against what your bank history shows you actually kept. Yearly one-time bills (tax, school fees, trips) are set aside one twelfth a month.
+- **Wealth outlook, Years ahead**: salary raise, expense rise and growth of new investments are set on the page itself. Yearly bills (add by hand or find them in bank entries) repeat each year and grow with expenses. Income, spending and investing are shown as stacked bars, monthly for the first year and yearly after that. Open a year to see its months. A year-by-year table sits below the net worth graph.
+- **Cash calendar**: only the maturity chart remains. Tap a bar to see what matures.
+- **Annual review**: pick this or last year. New chart of bond and lending interest against spending without EMI. Tap a month for its category summary. A table shows interest, regular spending, one-time spending and the deviation. Choose which categories count as one-time.
+
 ## Release 8.9.25 – Simpler tax page, refund and bank check, bonds, shares tabs, month-by-month chart
 
 - Tax summary → Expected tax: TDS counts as tax already paid, projected to March. What is left is shown as "Still to pay" or "Refund expected" (all TDS comes back when income is inside the tax-free zone). There is also a check of the interest the bank received against what the bond holdings say, with a mismatch warning. The page is simpler: one card with the answer, then collapsible sections for how the income adds up, tax and TDS, assumptions, each holding's interest, and the older detail (by person, owners, bank income, interest, dividends, capital gains). Nothing was removed.

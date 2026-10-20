@@ -1,6 +1,7 @@
 import { S, mutate, nextId } from '../store.js';
 import * as C from '../calc.js';
-import { h, money, setOptions, dateStr, pct, section, table, btn, formDialog, canEdit, toast, stat, segTabs, subTab, dialog, confirmDialog, posNeg, datalistId } from '../ui.js';
+import { donut, legend, hbars } from '../charts.js';
+import { h, money, setOptions, dateStr, pct, section, table, btn, formDialog, canEdit, toast, stat, segTabs, subTab, dialog, confirmDialog, posNeg, datalistId, compact } from '../ui.js';
 import { closeForm, reopen } from './closing.js';
 
 const FREQ = ['Monthly', 'Quarterly', 'Yearly', 'Daily'];
@@ -126,6 +127,7 @@ export function render() {
     lending: () => h('div', { class: 'stats' }, stat('Lent out', money(f.lendPrincipal), `${all.lending.filter((l) => l.principal > 0).length} loans given`), stat('Interest so far', green(money(sumInterest(all.lending, all.asOf))), 'interest only, paid-out included')),
   };
   if (stats[tab]) root.append(stats[tab]());
+  if (tab === 'bonds' && all.bonds.length) root.append(bondInsights(all, data));
 
   const fb = tab === 'bonds' ? quickFilter('bonds', all.bonds, (b) => b.holder, (b) => b.platform, 'Via') : tab === 'fds' ? quickFilter('fds', all.fds, (x) => x.account, (x) => x.issuer, 'Bank') : tab === 'lending' ? quickFilter('lending', all.lending, (x) => x.account, (x) => x.borrower, 'Borrower') : null;
   if (tab === 'bonds') root.append(section('Bonds', h('div', null, fb.bar,
@@ -180,6 +182,24 @@ export function render() {
     canEdit() ? [btn('Add', () => receivableForm())] : null));
   root.append(h('div', { class: 'phone-only' }, section('Received so far, by person', personList())));
   return root;
+}
+
+/** Who holds the bonds, which companies they are with, and when you want to be told about interest. */
+function bondInsights(all, data) {
+  const group = (key) => { const m = new Map(); for (const b of all.bonds) { const k = String(b[key] || '').trim() || 'Not set'; m.set(k, (m.get(k) || 0) + b.principal); } return [...m.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value); };
+  const owners = group('holder'), firms = group('company'), total = all.bonds.reduce((a, b) => a + b.principal, 0);
+  const bn = C.bondNotify(data);
+  const save = (patch) => { if (!canEdit()) return toast('This device has read-only access.'); mutate((d) => { d.settings = { ...d.settings, bondNotify: { ...C.bondNotify(d), ...patch } }; }); };
+  const days = h('select', { 'aria-label': 'Days before', disabled: !canEdit() || !bn.on, onchange: (e) => save({ days: Number(e.target.value) }) });
+  setOptions(days, [0, 1, 2, 3, 5, 7, 10, 14].map((n) => ({ value: n, label: n === 0 ? 'On the day itself' : n === 1 ? '1 day before' : n + ' days before' })), bn.days);
+  return h('div', null,
+    h('div', { class: 'grid2' },
+      section('Who holds the bonds', h('div', null, donut(owners, { fmt: money, center: compact(total), sub: 'invested', size: 190 }), legend(owners, { fmt: money }))),
+      section('Which companies', firms.length ? hbars(firms, { fmt: money, colorIndex: 1 }) : h('p', { class: 'empty' }, 'No issuer set on the bonds.'))),
+    section('Interest reminders on Home', h('div', null,
+      h('label', { class: 'check-inline' }, h('input', { type: 'checkbox', checked: bn.on, disabled: !canEdit(), onchange: (e) => save({ on: e.target.checked }) }), ' Remind me when bond interest is due'),
+      h('div', { style: { margin: '8px 0' } }, h('label', null, 'Tell me ', days)),
+      h('p', { class: 'note' }, 'One setting for every bond that has an interest due date (set it on the bond). It shows under “Needs a look” from that many days before, and under “Coming up” for the days before it, not on the day. Bonds without a due date are left alone.'))));
 }
 
 function personList() {

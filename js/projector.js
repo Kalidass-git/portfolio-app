@@ -12,7 +12,8 @@
 //   ahead:     { horizon, ... }                           the long-range setup
 // }
 import { monthActual } from './yearplan.js';
-import { ledgerMonths, monthKey, addMonths, monthStart } from './calc.js';
+import { oneTimeSet } from './categories.js';
+import { ledgerMonths, monthKey, addMonths, monthStart, monthLedger as monthLedgerOf } from './calc.js';
 
 const sum = (a, f = (x) => x) => a.reduce((s, x) => s + (Number(f(x)) || 0), 0);
 const r0 = (n) => Math.round(n);
@@ -86,7 +87,7 @@ export function defaults(data, all) {
   const map = { 'EPF + RD + FDs': ['fds', 'EPF, RD and FDs'], Gold: ['gold', 'Gold'], Bonds: ['bonds', 'Bonds'], 'Lending Private': ['lending', 'Private lending'], Stocks: ['shares', 'Shares and funds'], Chits: ['chits', 'Chits'], 'Lending Family': ['fds', 'Lending to family'] };
   const invest = ((data.targets && data.targets.investmentPlan) || []).filter((p) => p.capital > 0 && map[p.name]).map((p, i) => ({ id: 'i' + (i + 1), name: map[p.name][1], cls: map[p.name][0], monthly: r0(p.capital / 12) }));
   return {
-    salary: r0(avg(last3, 'salary')), otherIncome: 0, expenses: r0(avg(last6, 'expenses')), emi: r0(avg(last3, 'emi')), pfAdd: r0(avg(last3, 'pf')),
+    salary: r0(avg(last3, 'salary')), otherIncome: 0, expenses: r0(avg(last6, 'regular')), emi: r0(avg(last3, 'emi')), pfAdd: r0(avg(last3, 'pf')),
     tds: (data.settings && data.settings.tdsRate) ?? 0.1,
     oneOffs: [...tax.entries()].sort().map(([mm, amount], i) => ({ id: 'o' + (i + 1), name: 'Tax', month: mm, amount: r0(amount), kind: 'expense' })),
     invest, rates: { ...b.rates }, growth: { salary: 0, expenses: 0, invest: 0 }, outlook: { gold: 'steady', shares: 'steady', etfs: 'steady', funds: 'steady' },
@@ -123,10 +124,15 @@ export function simulate(start, a, outlooks, months) {
     const salary = (a.salary || 0) * Math.pow(1 + (g.salary || 0), yi), other = (a.otherIncome || 0) * Math.pow(1 + (g.salary || 0), yi);
     const expenses = (a.expenses || 0) * Math.pow(1 + (g.expenses || 0), yi), emi = a.emi || 0;
     let oneIn = 0, oneOut = 0;
+    const items = [];
+    const baseYear = a.baseYear != null ? Number(a.baseYear) : Number(start.month.slice(0, 4));
     for (const o of a.oneOffs || []) {
       if (!(o.month === mm || o.month === month)) continue;
-      const amt = (o.amount || 0) * (o.month === mm && o.kind !== 'income' ? Math.pow(1 + (g.expenses || 0), yi) : 1);
+      // a yearly item is entered at today's prices and grows with expenses, once for every calendar year after the current one
+      const yrs = o.month === mm && o.kind !== 'income' ? Math.max(0, Number(month.slice(0, 4)) - baseYear) : 0;
+      const amt = (o.amount || 0) * Math.pow(1 + (g.expenses || 0), yrs);
       if (o.kind === 'income') oneIn += amt; else oneOut += amt;
+      items.push({ name: o.name, amount: amt, kind: o.kind === 'income' ? 'income' : 'expense' });
     }
     // interest paid out by bonds and lending (after TDS), growth for everything else
     let interest = 0, accrual = 0;
@@ -154,7 +160,7 @@ export function simulate(start, a, outlooks, months) {
     const values = {};
     for (const p of all) values[p.cls] = (values[p.cls] || 0) + p.value;
     const assets = sum(Object.values(values));
-    rows.push({ month, salary, other, interest, accrual, oneIn, expenses, emi, oneOut, invested, pfAdd, surplus, income, out, cash: values.cash, values, market: sum(MARKET, (k) => values[k] || 0), assets, liab, nw: assets - liab });
+    rows.push({ month, items, salary, other, interest, accrual, oneIn, expenses, emi, oneOut, invested, pfAdd, surplus, income, out, cash: values.cash, values, market: sum(MARKET, (k) => values[k] || 0), assets, liab, nw: assets - liab });
     cashBefore = values.cash;
   }
   return rows;
@@ -248,4 +254,22 @@ export function planPath(plan, outlooks) {
 export function forecast(plan, outlooks, from) {
   const start = { values: from.classes, liab: from.loans, month: from.month };
   return simulate(start, plan.a, outlooks, monthsTo(from.month, plan.year));
+}
+
+/**
+ * One-time bills found in the last 12 months of bank entries (tax, school fees, a holiday…): one line per category and month, ready to repeat every year.
+ * Amounts are what was paid; a yearly item then grows with the expense rise.
+ */
+export function suggestOneOffs(data, all) {
+  const cur = monthKey(all.asOf), once = oneTimeSet(data), from = addMonths(cur + '-01', -11).slice(0, 7);
+  const by = new Map();
+  for (const m of ledgerMonths(data).filter((x) => x >= from && x <= cur)) {
+    for (const e of monthLedgerOf(data, m)) {
+      const c = (e.category || '').toLowerCase();
+      if (!(e.debit > 0) || !(once.has(c) || c === 'tax')) continue;
+      const k = (e.category || 'Other') + '|' + m.slice(5);
+      by.set(k, (by.get(k) || 0) + e.debit);
+    }
+  }
+  return [...by.entries()].map(([k, amount]) => { const [name, month] = k.split('|'); return { name, month, amount: r0(amount), kind: 'expense' }; }).sort((a, b) => (a.month < b.month ? -1 : a.month > b.month ? 1 : a.name.localeCompare(b.name)));
 }

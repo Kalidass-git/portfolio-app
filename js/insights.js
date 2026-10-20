@@ -207,7 +207,34 @@ export function netWorthPoints(data, all) {
   by.set(C.monthKey(all.asOf), all.netAsset);
   return by;
 }
-export function yearsWithLedger(data) { return [...new Set(data.ledger.map((e) => e.date.slice(0, 4)))].sort().reverse(); }
+/** Years to pick from: every year with entries, and always this year and last year. */
+export function yearsWithLedger(data, asOf) {
+  const set = new Set(data.ledger.map((e) => e.date.slice(0, 4)));
+  if (asOf) { const y = Number(asOf.slice(0, 4)); set.add(String(y)); set.add(String(y - 1)); }
+  return [...set].sort().reverse();
+}
+export { oneTimeSet, expenseCategoryNames } from './categories.js';
+import { oneTimeSet } from './categories.js';
+const INTEREST_CAT = /bond|lend/i;
+export const isInterestCategory = (name) => INTEREST_CAT.test(name || '');
+/**
+ * Month by month for a year: interest received from bonds and private lending against spending, with loan EMI left out.
+ * Spending is split into regular and one-time (the categories chosen in oneTimeSet). deviation = interest − all spending.
+ */
+export function interestVsSpend(data, all, year) {
+  const kind = kindOf(data), once = oneTimeSet(data), cur = C.monthKey(all.asOf), rows = [];
+  for (let m = 1; m <= 12; m++) {
+    const month = `${year}-${String(m).padStart(2, '0')}`;
+    if (month > cur) break;
+    const s = C.rangeSummary(data, month + '-01', month + '-31');
+    if (!s.count) continue;
+    const expense = s.expense.filter((x) => lc(x.category) !== 'loan');
+    const income = s.income, interest = sum(income.filter((x) => isInterestCategory(x.category)), (x) => x.amount);
+    const oneTime = sum(expense.filter((x) => once.has(lc(x.category))), (x) => x.amount), total = sum(expense, (x) => x.amount);
+    rows.push({ month, interest, regular: total - oneTime, oneTime, total, deviation: interest - total, income, expense, emi: s.expense.filter((x) => lc(x.category) === 'loan').reduce((a, x) => a + x.amount, 0) });
+  }
+  return rows;
+}
 
 export function annualReview(data, all, year) {
   const from = `${year}-01-01`, to = `${year}-12-31`, end = to < all.asOf ? to : all.asOf;

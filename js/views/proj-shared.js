@@ -70,7 +70,7 @@ export function planForm(plan) {
 export function oneOffForm(plan, o) {
   const isNew = !o;
   const from = plan.baseline.month, to = `${plan.year}-12`;
-  const months = monthRange(from, to);
+  const months = monthRange(`${plan.year}-01`, to);   // every month of the year, also the ones already gone: a yearly item is used for the years ahead
   const mm = (x) => (x && x.length === 2 ? x : x ? x.slice(5) : '');
   formDialog({
     title: isNew ? 'Add a one-time item' : 'Edit ' + o.name, saveLabel: isNew ? 'Add' : 'Save', deleteMessage: 'Remove this item from the plan?',
@@ -80,7 +80,7 @@ export function oneOffForm(plan, o) {
       { key: 'kind', label: 'Type', type: 'select', options: [{ value: 'expense', label: 'Money going out' }, { value: 'income', label: 'Money coming in' }] },
       { key: 'month', label: 'Month', type: 'select', options: months.map((m) => ({ value: m, label: monthLabel(m) })) },
       { key: 'amount', label: 'Amount (₹)', type: 'number', required: true },
-      { key: 'repeat', label: 'It happens in this month every year', type: 'checkbox', hint: 'Used in the Years ahead projection too.' },
+      { key: 'repeat', label: 'It happens in this month every year', type: 'checkbox', hint: 'Tick this for yearly bills like tax and school fees. A month that has already passed is not counted again this year, but the Years ahead page uses it for every year to come.' },
     ],
     onSave: (v) => mutate((d) => {
       const p = ensure(d).years[plan.id]; p.a.oneOffs = p.a.oneOffs || [];
