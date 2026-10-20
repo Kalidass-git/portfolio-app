@@ -24,7 +24,7 @@ export function plannedByMonth(data, all) {
     for (const t of C.targets(data, C.projection(data, all))) if (t.estAsset != null) out.set(t.date.slice(0, 7), Math.round(t.estAsset - t.plannedLiab));
   } catch (e) { /* no Plan sheet in this file */ }
   const cfg = P.cfg(data);
-  for (const plan of Object.values(cfg.years)) {
+  for (const plan of Object.values(cfg.years).map((x) => P.effectivePlan(data, x))) {
     if (!out.has(plan.baseline.month)) out.set(plan.baseline.month, Math.round(plan.baseline.net));
     for (const r of P.planPath(plan, P.cfg(data).outlooks)) if (!out.has(r.month)) out.set(r.month, Math.round(r.nw));
   }
@@ -45,7 +45,7 @@ export function netWorthRows(data, all) {
   const actual = [...by.values()].sort((a, b) => (a.month < b.month ? -1 : 1));
   // projection to December from today's position, using this year's plan (or what a fresh plan would assume)
   const cfg = P.cfg(data);
-  const plan = cfg.years[year] || P.newYearPlan(data, all, Number(year));
+  const plan = P.effectivePlan(data, cfg.years[year] || P.newYearPlan(data, all, Number(year)));
   const m = model(plan);
   const live = P.baseline(data, all);
   const fc = (live.month === cur ? P.simulate({ values: live.values, liab: live.liab, month: live.month }, plan.a, m.oc, P.monthsTo(live.month, Number(year))) : []).filter((r) => r.month > cur && r.month <= year + '-12');

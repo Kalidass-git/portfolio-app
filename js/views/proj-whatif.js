@@ -110,7 +110,7 @@ export function render(root) {
 
   // ---------- over time ----------
   const years = wi.years, months = years * 12;
-  const a0 = plan ? plan.a : P.defaults(data, all);
+  const a0 = plan ? plan.a : P.effectiveA(data, P.defaults(data, all));
   const uni = Object.fromEntries(P.MARKET.map((k) => [k, wi.outlook]));
   const keepInv = wi.keep ? (a0.invest || []) : [];
   // a bond, loan or deposit with its own rate is its own pot from day one; everything else joins its kind at the usual rate
