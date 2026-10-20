@@ -154,6 +154,11 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.9.31 – This year and Years ahead now agree
+
+- Both tabs project from today's position with the same assumptions (salary, EMI, EPF, raise and its month, expense rise, outlook, yearly and dated one-time bills, investment lines), so December of this year shows the same net worth on both. The This year plan used to start from the position saved when the plan was made and ignore the Years ahead settings.
+- Editing salary and the other everyday figures in the plan form, or the outlook on This year or Market outlook, now updates the same settings Years ahead uses.
+
 ## Release 8.9.30 – Collapsible assumptions, EPF follows the raise
 
 - Years ahead: "What the projection grows by" is collapsed by default; the Markets group is tidied.

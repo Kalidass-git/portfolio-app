@@ -23,7 +23,7 @@ export function model(plan) {
   const snapBy = new Map(snaps.map((s) => [s.month, s]));
   // every month-end snapshot of the plan's year, including months before the plan started
   const yearSnapBy = new Map(cfg.snapshots.filter((s) => s.month.slice(0, 4) === String(plan.year)).map((s) => [s.month, s]));
-  const startFrom = live.month > plan.baseline.month && live.month <= `${plan.year}-12`;
+  const startFrom = live.month >= plan.baseline.month && live.month <= `${plan.year}-12`;   // always from where you stand today, so it matches Years ahead
   const fc = startFrom ? P.simulate({ values: live.values, liab: live.liab, month: live.month }, plan.a, oc, P.monthsTo(live.month, plan.year)) : path;
   const projected = fc.length ? fc[fc.length - 1].nw : live.month > `${plan.year}-12` ? (snaps.length ? snaps[snaps.length - 1].net : live.net) : plan.baseline.net;
   const planEnd = path.length ? path[path.length - 1].nw : plan.baseline.net;
@@ -105,7 +105,7 @@ export function currentPlan() {
   const cfg = P.cfg(S.data), yrs = Object.keys(cfg.years).sort(), cy = thisYear();
   const choices = [...new Set([...yrs, String(cy), String(cy + 1)])].sort();
   if (!selYear || !choices.includes(selYear)) selYear = yrs.includes(String(cy)) ? String(cy) : yrs[yrs.length - 1] || String(cy);
-  return { plan: cfg.years[selYear], year: selYear, choices, cfg };
+  return { plan: P.effectivePlan(S.data, cfg.years[selYear]), year: selYear, choices, cfg };
 }
 export function createPlanFor(year) { createPlan(year); }
 
@@ -140,7 +140,7 @@ export function render(root) {
   // ---------- outlook toggle ----------
   const sel = h('div', null,
     outlookToggle(plan.a.outlook, (id) => setAllOutlook(plan.id, id), { disabled: !canEdit() }),
-    h('details', { class: 'more' }, h('summary', null, 'Set each market class separately'), outlookSelects(plan.a.outlook, (k, id) => canEdit() && mutate((d) => { ensure(d).years[plan.id].a.outlook[k] = id; }))),
+    h('details', { class: 'more' }, h('summary', null, 'Set each market class separately'), outlookSelects(plan.a.outlook, (k, id) => canEdit() && mutate((d) => { const pl = ensure(d).years[plan.id]; pl.a.outlook[k] = id; d.projector.ahead = { ...(d.projector.ahead || {}), outlook: { ...pl.a.outlook } }; }))),
     h('p', { class: 'note' }, 'The outlook is the yearly return assumed for shares, ETFs, funds and gold (and fresh money put into them). Fixed income uses its own interest rates. Change it to see how the year end moves.'));
   root.append(section('Market outlook for this plan', sel));
 

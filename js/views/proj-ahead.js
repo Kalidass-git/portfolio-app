@@ -21,7 +21,7 @@ const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'Ju
 /** Assumptions for the long view: the plan's rates, investments and recurring items, plus the growth settings stored here. */
 export function aheadSetup() {
   const { plan } = currentPlan();
-  const base = plan ? plan.a : P.defaults(S.data, S.all);
+  const base = plan ? plan.a : P.effectiveA(S.data, P.defaults(S.data, S.all));
   const own = (S.data.projector && S.data.projector.ahead) || {};
   const a = {
     ...base,
@@ -29,11 +29,11 @@ export function aheadSetup() {
     growth: { salary: own.growthSalary ?? 0.06, expenses: own.growthExpenses ?? 0.06, oneTime: own.growthOneTime ?? own.growthExpenses ?? 0.06, invest: 0 },
     hikeMonth: own.hikeMonth ?? 3,
     outlook: { ...(own.outlook || base.outlook) },
-    oneOffs: yearlyItems(own, base),
-    invest: (base.invest || []).map((l) => ({ ...l, from: '', to: '' })),
+    oneOffs: base.oneOffs.map((o) => ({ ...o })),
+    invest: (base.invest || []).map((l) => ({ ...l })),
     loanPrincipal: 0,
   };
-  return { a, horizon: viewHorizon || own.horizon || 10, target: own.target || null, plan, own };
+  return { a, yearly: a.oneOffs.filter((o) => o.month && o.month.length === 2), horizon: viewHorizon || own.horizon || 10, target: own.target || null, plan, own };
 }
 
 /** Every assumption of the long view, in one card: income, spending, saving and the market. Each field saves as soon as it is changed. */
@@ -68,7 +68,7 @@ function assumptionsCard(s) {
 }
 
 function yearlyItemForm(s, it) {
-  const isNew = !it, list = s.a.oneOffs.map((o) => ({ ...o }));
+  const isNew = !it, list = s.yearly.map((o) => ({ ...o }));
   formDialog({
     title: isNew ? 'Add a yearly one-time item' : 'Edit ' + it.name, saveLabel: isNew ? 'Add' : 'Save', deleteMessage: 'Remove this yearly item?',
     value: it ? { name: it.name, kind: it.kind || 'expense', month: it.month, amount: it.amount } : { kind: 'expense', month: '04' },
@@ -89,10 +89,10 @@ function suggestDialog(s) {
   const rows = found.map((f) => ({ f, el: h('input', { type: 'checkbox', checked: true }) }));
   dialog('One-time bills from the last 12 months', h('div', null, h('p', { class: 'note' }, 'These were paid from your bank in the last year, in categories marked one-time (and tax). Tick the ones that come round every year. Each is added as a yearly item at what you paid.'),
     h('div', null, rows.map((x) => h('label', { class: 'check-inline', style: { display: 'block', padding: '3px 0' } }, x.el, ` ${x.f.name}, ${MONTH_NAMES[Number(x.f.month) - 1]} · ${money(x.f.amount)}`)))),
-    [{ label: 'Add the ticked ones', class: 'primary', onclick: (c) => { const list = s.a.oneOffs.map((o) => ({ ...o })); for (const x of rows) if (x.el.checked) list.push({ id: nextItemId(list), name: x.f.name, kind: 'expense', month: x.f.month, amount: x.f.amount }); setOwn({ oneOffs: list }); c(); } }, { label: 'Cancel', onclick: (c) => c() }]);
+    [{ label: 'Add the ticked ones', class: 'primary', onclick: (c) => { const list = s.yearly.map((o) => ({ ...o })); for (const x of rows) if (x.el.checked) list.push({ id: nextItemId(list), name: x.f.name, kind: 'expense', month: x.f.month, amount: x.f.amount }); setOwn({ oneOffs: list }); c(); } }, { label: 'Cancel', onclick: (c) => c() }]);
 }
 function yearlyCard(s) {
-  const list = s.a.oneOffs.slice().sort((x, y) => (x.month < y.month ? -1 : 1));
+  const list = s.yearly.slice().sort((x, y) => (x.month < y.month ? -1 : 1));
   const out = list.filter((o) => o.kind !== 'income');
   const total = out.reduce((a, o) => a + (o.amount || 0), 0);
   const names = [...new Set(out.map((o) => o.name))].slice(0, 4).join(', ');
@@ -102,7 +102,7 @@ function yearlyCard(s) {
     table([
       { label: 'What', host: true, get: (o) => o.name }, { label: 'Paid in', mob: 'under', get: (o) => MONTH_NAMES[Number(o.month) - 1] || o.month },
       { label: 'Amount today', cls: 'r', render: (o) => h('span', { class: o.kind === 'income' ? 'inc' : 'exp' }, (o.kind === 'income' ? '+' : '−') + money(o.amount)), total: () => h('span', { class: 'exp' }, '−' + money(total)) },
-    ], list, { footer: { label: 'Spending in a year' }, onRow: canEdit() ? (o) => yearlyItemForm(s, s.a.oneOffs.find((x) => x.id === o.id)) : null, empty: 'None yet. Add tax, school fees, vacations and so on, so the years ahead see them coming.' }),
+    ], list, { footer: { label: 'Spending in a year' }, onRow: canEdit() ? (o) => yearlyItemForm(s, s.yearly.find((x) => x.id === o.id)) : null, empty: 'None yet. Add tax, school fees, vacations and so on, so the years ahead see them coming.' }),
     h('p', { class: 'note' }, `Bills you pay once a year, outside the monthly spending. Each repeats every year in its month and grows by ${pct(s.a.growth.oneTime, 1)} a year. They come out of that month’s money, so a month with tax leaves little to invest. Items entered in the This year plan as “every year” are picked up here until you save your own list.`),
     canEdit() ? h('div', { class: 'row-actions' }, btn('Add a yearly bill', () => yearlyItemForm(s), 'primary', { keep: true }), btn('Find them in my bank entries', () => suggestDialog(s), '', { keep: true })) : null);
   return section('Yearly one-time bills', det);

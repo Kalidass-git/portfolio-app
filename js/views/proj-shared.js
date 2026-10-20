@@ -60,7 +60,9 @@ export function planForm(plan) {
     onSave: (v) => mutate((d) => {
       const p = ensure(d).years[plan.id];
       p.target = v.target;
-      Object.assign(p.a, { salary: v.salary || 0, otherIncome: v.otherIncome || 0, expenses: v.expenses || 0, emi: v.emi || 0, pfAdd: v.pfAdd || 0 });
+      const own = { salary: v.salary || 0, otherIncome: v.otherIncome || 0, expenses: v.expenses || 0, emi: v.emi || 0, pfAdd: v.pfAdd || 0 };
+      Object.assign(p.a, own);
+      d.projector.ahead = { ...(d.projector.ahead || {}), ...own };   // Years ahead reads the same figures
       p.a.rates = { ...p.a.rates, bonds: frac(v.bonds), lending: frac(v.lending), fds: frac(v.fds), pf: frac(v.pf), chits: frac(v.chits), lic: frac(v.lic), cash: frac(v.cash), other: frac(v.other) };
     }),
   });
@@ -121,6 +123,6 @@ export function investForm(plan, l) {
 }
 
 /** Set the outlook of all market classes (and of lines that had their own). */
-export const setAllOutlook = (planId, id) => mutate((d) => { const p = ensure(d).years[planId]; for (const k of P.MARKET) p.a.outlook[k] = id; for (const l of p.a.invest || []) if (P.isMarket(l.cls)) l.outlook = ''; });
+export const setAllOutlook = (planId, id) => mutate((d) => { const p = ensure(d).years[planId]; for (const k of P.MARKET) p.a.outlook[k] = id; d.projector.ahead = { ...(d.projector.ahead || {}), outlook: { ...p.a.outlook } }; for (const l of p.a.invest || []) if (P.isMarket(l.cls)) l.outlook = ''; });
 
 export { datalistId } from '../ui.js';

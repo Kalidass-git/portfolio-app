@@ -48,7 +48,7 @@ export function render(root) {
 
   root.append(section('Pick the outlook', h('div', null,
     outlookToggle(plan.a.outlook, (id) => setAllOutlook(plan.id, id), { disabled: !canEdit() }),
-    h('details', { class: 'more' }, h('summary', null, 'Set each market class separately'), outlookSelects(plan.a.outlook, (k, id) => canEdit() && mutate((d) => { ensure(d).years[plan.id].a.outlook[k] = id; }))))));
+    h('details', { class: 'more' }, h('summary', null, 'Set each market class separately'), outlookSelects(plan.a.outlook, (k, id) => canEdit() && mutate((d) => { const pl = ensure(d).years[plan.id]; pl.a.outlook[k] = id; d.projector.ahead = { ...(d.projector.ahead || {}), outlook: { ...pl.a.outlook } }; }))))));
 
   // ---------- every outlook against the target ----------
   const curId = (() => { const ids = P.MARKET.map((k) => plan.a.outlook[k]); return ids.every((x) => x === ids[0]) ? ids[0] : null; })();

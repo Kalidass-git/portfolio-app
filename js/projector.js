@@ -250,6 +250,26 @@ export function newYearPlan(data, all, year) {
   return { id: String(year), year: Number(year), target: end ? Math.ceil(end.nw / 100000) * 100000 : Math.ceil(b.net / 100000) * 100000, startMonth: b.month, baseline: { date: b.date, month: b.month, net: r0(b.net), assets: r0(b.assets), loans: r0(b.liab), classes: Object.fromEntries(Object.entries(b.values).map(([k, v]) => [k, r0(v)])) }, a: { ...a, loanPrincipal: 0 }, retro: { well: '', improve: '', savedAt: '' } };
 }
 
+/**
+ * The assumptions both Wealth outlook tabs use. A plan keeps its own copy of salary, expenses and so on, but the figures set on the Years ahead
+ * page (salary, raise and its month, expense rise, outlook, yearly bills) win, so This year and Years ahead always project the same way.
+ * One-off items dated to a single month stay with the plan.
+ */
+export function effectiveA(data, a) {
+  const own = (data.projector && data.projector.ahead) || {};
+  const all = a.oneOffs || [];
+  const yearly = all.filter((o) => o.month && o.month.length === 2), dated = all.filter((o) => !(o.month && o.month.length === 2));
+  return {
+    ...a,
+    salary: own.salary ?? a.salary, otherIncome: own.otherIncome ?? a.otherIncome, expenses: own.expenses ?? a.expenses, emi: own.emi ?? a.emi, pfAdd: own.pfAdd ?? a.pfAdd,
+    growth: { salary: own.growthSalary ?? 0.06, expenses: own.growthExpenses ?? 0.06, oneTime: own.growthOneTime ?? own.growthExpenses ?? 0.06, invest: 0 },
+    hikeMonth: own.hikeMonth ?? 3,
+    outlook: { ...(own.outlook || a.outlook) },
+    oneOffs: (own.oneOffs || yearly).map((o) => ({ ...o })).concat(dated.map((o) => ({ ...o }))),
+  };
+}
+export const effectivePlan = (data, plan) => (plan ? { ...plan, a: effectiveA(data, plan.a) } : plan);
+
 /** Planned path from the plan's starting position to December. */
 export function planPath(plan, outlooks) {
   const start = { values: plan.baseline.classes, liab: plan.baseline.loans, month: plan.baseline.month };
