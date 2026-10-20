@@ -39,6 +39,9 @@ function tax(root) {
   root.append(h('div', { class: 'filters' }, select(fys.map((f) => ({ value: String(f.y), label: f.label })), st.fy, 'Financial year', (v) => { st.fy = Number(v); rerender(); }),
     select([{ value: 'all', label: 'All people' }, ...people.map((p) => ({ value: p, label: p })), { value: I.NO_OWNER, label: 'Owner not set' }], st.who, 'Whose', (v) => { st.who = v; rerender(); }),
     btn('Download CSV', () => download(`tax-summary-${t.fy.replace(/\s/g, '-')}.csv`, I.taxCsv(t)), 'small')));
+  root.append(projectionCard(data, all, people));
+  const folds = [];
+  const fold = (title, content) => h('details', { class: 'more' }, h('summary', null, title), content);
   if (st.who === 'all' && people.length > 1) {
     const bp = I.taxByPerson(data, all, st.fy);
     if (bp.length) folds.unshift(fold('By person', h('div', null, table([
@@ -48,9 +51,6 @@ function tax(root) {
       { label: 'Short-term', cls: 'r', mob: 'hide', get: (r) => money(r.stcg) }, { label: 'Long-term', cls: 'r', mob: 'hide', get: (r) => money(r.ltcg) },
     ], bp, {}), note('Pick a person above to see their full summary. Each person’s income is kept apart, so it can go into their own return.'))));
   }
-  root.append(projectionCard(data, all, people));
-  const folds = [];
-  const fold = (title, content) => h('details', { class: 'more' }, h('summary', null, title), content);
   folds.push(ownersCard(data, people));
   if (t.bankOther.length) folds.push(fold(`Other income credited to the bank · ${money(t.bankOtherTotal)}`, table([{ label: 'Category', host: true, get: (r) => r.category }, { label: 'Amount', cls: 'r', get: (r) => money(r.amount) }], t.bankOther, {})));
   folds.push(fold(`Interest on every holding, ${t.fy} · ${money(t.interestGross)}`, t.interestBy.length ? h('div', null, ...t.interestBy.map((g) => h('div', null, h('h4', null, g.kind), table([
