@@ -154,6 +154,11 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.9.30 – Collapsible assumptions, EPF follows the raise
+
+- Years ahead: "What the projection grows by" is collapsed by default; the Markets group is tidied.
+- EPF now rises with the salary raise, in the same month and by the same %.
+
 ## Release 8.9.29 – Easier tapping
 
 - Stacked charts: each column's whole slot is tappable, not just the thin bar, so month columns are easy to hit on a phone.

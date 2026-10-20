@@ -146,7 +146,7 @@ export function simulate(start, a, outlooks, months) {
       if (k.kind === 'payout') interest += p.value * (r / 12) * (1 - (a.tds ?? 0.1));
       else { const was = p.value; p.value *= 1 + f(r); growth += p.value - was; if (k.kind === 'accrual') accrual += p.value - was; }
     }
-    const pfAdd = a.pfAdd || 0;
+    const pfAdd = (a.pfAdd || 0) * raise;   // EPF is a share of salary, so it steps up with the raise
     all.find((p) => p.cls === 'pf' && !p.line).value += pfAdd;
     const income = salary + other + interest + oneIn;
     const out = expenses + emi + oneOut;
