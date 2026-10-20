@@ -237,8 +237,8 @@ export function render(root) {
       stat('Salary with EPF', money((a.salary || 0) + (a.pfAdd || 0)), `${money(a.salary)} to bank + ${money(a.pfAdd)} to EPF`), stat('Everyday expenses', money(a.expenses), 'each month'),
       stat('Loan EMI', money(a.emi), 'each month'),
       stat('New investments', money(invTotal), 'each month, in total')),
-    h('p', { class: 'note' }, `Interest from bonds and lending (about ${money(m.path[0] ? m.path[0].interest : 0)} a month after tax at the start) is added automatically from your holdings. Planned investments beyond what you save come out of cash, so cash can go negative: that means the plan asks for more than you earn.`),
-    m.path.length && Math.min(...m.path.map((r) => r.cash)) < 0 ? h('p', { class: 'form-error' }, `Cash would run short: lowest point ${money(Math.min(...m.path.map((r) => r.cash)))} in ${monthLabel(m.path.reduce((b, r) => (r.cash < b.cash ? r : b)).month)}. Lower the monthly investments or raise income.`) : null),
+    h('p', { class: 'note' }, `Interest from bonds and lending (about ${money(m.path[0] ? m.path[0].interest : 0)} a month after tax at the start) is added automatically from your holdings. New money is not a fixed amount: each month invests what is left after spending, EMI and one-time bills. Cash only dips in a month that costs more than comes in, such as tax.`),
+    m.path.length && Math.min(...m.path.map((r) => r.cash)) < 0 ? h('p', { class: 'form-error' }, `Cash dips to its lowest point ${money(Math.min(...m.path.map((r) => r.cash)))} in ${monthLabel(m.path.reduce((b, r) => (r.cash < b.cash ? r : b)).month)}; the months after rebuild it before investing again. Check the one-time bills if that looks too low.`) : null),
     canEdit() ? [btn('Edit target and assumptions', () => planForm(plan), '', { keep: true })] : null));
 
   // money available to invest each month: what comes in, less everyday spending, EMI and the yearly one-time bills spread over twelve months
@@ -248,7 +248,7 @@ export function render(root) {
   const oneMonthly = yearOnce / 12;
   const availBefore = inc - spend, avail = availBefore - oneMonthly;
   const left = avail - invTotal;
-  const shareOf = (v) => (avail > 0 ? pct(v / avail, 0) : '–');
+  const shareOf = (v) => (invTotal > 0 ? pct(v / invTotal, 0) : '–');
   // interest income expected for the rest of the plan year
   if (m.path.length) {
     const paidYr = m.path.reduce((a, r) => a + r.interest, 0), addedYr = m.path.reduce((a, r) => a + (r.accrual || 0), 0), p0 = m.path[0], pL = m.path[m.path.length - 1];
@@ -265,18 +265,18 @@ export function render(root) {
   root.append(section('New money going in each month', h('div', null,
     h('div', { class: 'stats' },
       stat('Available to invest', h('span', { class: tone(avail) }, money(avail)), `each month · ${money(inc)} in, ${money(spend)} out${oneMonthly > 1 ? `, ${money(oneMonthly)} set aside for yearly bills` : ''}`),
-      stat(left >= 0 ? 'Still to plan' : 'Planned over', h('span', { class: left >= 0 ? '' : 'neg' }, money(Math.abs(left))), `${money(invTotal)} planned of ${money(Math.max(0, avail))}`)),
+      stat('New money is split', `${inv.length} ${inv.length === 1 ? 'line' : 'lines'}`, 'each month invests what is left, in the shares below; a month with tax or fees invests less')),
     (a.pfAdd || 0) > 0 ? h('p', { class: 'note' }, `Your EPF (${money(a.pfAdd)} a month, yours and the employer’s) goes in before salary reaches the bank, so it is already saved and is not part of the available amount.`) : null,
     availExplain(plan, a, m, { inc, spend, availBefore, oneMonthly, yearOnce, avail }),
-    avail <= 0 ? h('p', { class: 'form-error' }, 'Nothing is left each month after expenses and EMI, so new investments would come out of cash.') : null,
+    avail <= 0 ? h('p', { class: 'form-error' }, 'Nothing is left in an average month after expenses, EMI and the yearly bills, so little or nothing would be invested.') : null,
     table([
       { label: 'Investment', host: true, get: (l) => l.name }, { label: 'Goes into', mob: 'under', get: (l) => P.classOf(l.cls).label },
-      { label: 'Each month', cls: 'r', get: (l) => money(l.monthly), total: () => money(invTotal) },
-      { label: 'Of available', mob: 'under', mlabel: 'of available ', cls: 'r', get: (l) => shareOf(l.monthly), total: () => shareOf(invTotal) },
+      { label: 'Planned each month', cls: 'r', render: (l) => h('span', { class: 'inv' }, money(l.monthly)), total: () => h('span', { class: 'inv' }, money(invTotal)) },
+      { label: 'Share of new money', mob: 'under', mlabel: 'share ', cls: 'r', get: (l) => shareOf(l.monthly), total: () => shareOf(invTotal) },
       { label: 'Return', mob: 'under', mlabel: 'return ', cls: 'r', get: (l) => (P.isMarket(l.cls) ? (l.outlook ? (outlooks().find((o) => o.id === l.outlook) || {}).name : 'class outlook') : pc(l.rate != null ? l.rate : (a.rates || {})[l.cls] || 0)) },
       { label: 'Period', mob: 'hide', get: (l) => (l.from || l.to ? `${l.from ? monthLabel(l.from) : 'next month'} to ${l.to ? monthLabel(l.to) : 'Dec'}` : 'whole plan') },
     ], inv, { footer: { label: 'Total' }, onRow: canEdit() ? (l) => investForm(plan, inv.find((x) => x.id === l.id)) : null, empty: 'No new investments planned. Add where your savings will go.' }),
-    h('p', { class: 'note' }, 'Fixed-income money earns the rate shown (bonds and lending pay it out monthly; deposits, EPF and chits compound). Market-linked money follows its outlook.')),
+    h('p', { class: 'note' }, 'The planned amounts are a guide. In the projection each month, whatever is left after spending, EMI and one-time bills is invested in these shares, so a month with tax or fees invests less and a quiet month more. Fixed-income money earns the rate shown (bonds and lending pay it out monthly; deposits, EPF and chits compound). Market-linked money follows its outlook.')),
     canEdit() ? [btn('Add investment', () => investForm(plan), '', { keep: true })] : null));
 
   actual.render(root, plan);
