@@ -457,6 +457,14 @@ export function taxProjection(data, all, y, who = 'all', plan = {}) {
   const savSoFar = sum(now.bankOther.filter((x) => /interest/.test(lc(x.category)) && !/bond|fd|deposit/.test(lc(x.category))), (x) => x.amount);
   const elapsed = Math.max(1, months.filter((m) => m <= cur).length), monthsLeft = months.filter((m) => m > cur).length;
   const savings = { soFar: savSoFar, year: curIn && cur <= to.slice(0, 7) ? savSoFar + (savSoFar / elapsed) * monthsLeft : savSoFar };
+  // did the bank get what the bond holdings say it should? Interest comes in after the month ends, so a window is allowed.
+  const prevEnd = new Date(C.toMs(cur + '-01') - DAY).toISOString().slice(0, 10);
+  const netOf = (res) => sum(part(res, 'Bonds'), (r) => r.gross) * (1 - tdsRate);
+  const bondsNow = netOf(now), bondsPrev = prevEnd >= from ? netOf(taxSummary(data, { ...all, asOf: prevEnd }, y, who)) : 0;
+  const received = sum(data.ledger.filter((e) => lc(e.category) === 'income bond' && e.date >= from && e.date <= all.asOf && mine(acctOwner(data, e.acct))), (e) => e.credit);
+  const tol = Math.max(500, 0.02 * bondsNow);
+  const recon = { received, expectedNow: bondsNow, expectedPrev: bondsPrev, tol, status: received < bondsPrev - tol ? 'short' : received > bondsNow + tol ? 'over' : 'ok',
+    diff: received < bondsPrev - tol ? received - bondsPrev : received > bondsNow + tol ? received - bondsNow : 0 };
   const dividends = now.dividendTotal;   // what is recorded so far; nothing is guessed for the months ahead
   const calc = newRegimeTax(y, salaryYear, interestYear + savings.year + dividends + other);
   // headroom: how much more income the year can take before tax starts, and what that means in bond money at the chosen rate
@@ -470,8 +478,10 @@ export function taxProjection(data, all, y, who = 'all', plan = {}) {
     fy: fyRange(y).label, y, from, to, who, months: months.length,
     salary: { soFar: salSoFar, perMonth, remaining, year: salaryYear },
     interest: { year: interestYear, soFar: interestSoFar, holdings },
-    other, dividends, savings, calc, tdsRate,
-    tds: { soFar: sum(holdings, (x) => x.tdsSoFar), year: sum(holdings, (x) => x.tdsYear) },
+    other, dividends, savings, calc, tdsRate, recon,
+    tds: { soFar: sum(holdings, (x) => x.tdsSoFar), year: sum(holdings, (x) => x.tdsYear), other: Math.max(0, Number(plan.otherTds) || 0) },
+    // TDS already cut counts as tax paid: whatever is left over after the tax is a refund (all of it when the income sits in the tax-free zone)
+    balance: calc.tax - (sum(holdings, (x) => x.tdsYear) + Math.max(0, Number(plan.otherTds) || 0)),
     totalIncome: calc.gross,
     headroom: { zeroLimit, room, over: Math.max(0, calc.gross - zeroLimit), rate, daysLeft, bondsFullYear: room / rate, bondsThisYear: daysLeft > 0 ? room / (rate * (daysLeft / 365)) : 0 },
   };
