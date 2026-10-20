@@ -147,7 +147,7 @@ const setDismissed = (o) => { try { localStorage.setItem(DISMISS, JSON.stringify
 /** Things that need a look: overdue money, old prices, loans, behind plan. Each can be hidden for the rest of today (this device only). */
 function attention(data, all) {
   const out = [];
-  const soon = C.upcoming(data, all, 30).filter((u) => u.kind !== 'Loan EMI'), overdue = soon.filter((u) => u.days < 0);
+  const soon = C.upcoming(data, all, 30).filter((u) => u.kind !== 'Loan EMI' && u.kind !== 'Bond interest'), overdue = soon.filter((u) => u.days < 0);
   const emis = C.loanDues(data, all.asOf).filter((d) => !d.paid && d.days <= 7);
   const emiLate = emis.filter((d) => d.status === 'overdue'), emiSoon = emis.filter((d) => d.status !== 'overdue');
   if (emiLate.length) out.push({ title: `${emiLate.length} loan EMI${emiLate.length === 1 ? '' : 's'} overdue`, sub: emiLate.map((d) => `${d.name} (was due ${dateStr(d.date)})`).join(', '), value: money(emiLate.reduce((a, d) => a + d.emi, 0)), tone: 'neg', href: '#/fixed/loans' });
@@ -156,8 +156,11 @@ function attention(data, all) {
   const due = soon.filter((u) => u.days >= 0 && u.days <= 14);
   const when = (u) => (u.days === 0 ? 'today' : u.days === 1 ? 'tomorrow' : dateStr(u.date).replace(/ \d{4}$/, ''));
   if (due.length) out.push({ title: due.length === 1 ? `${due[0].title}: due ${when(due[0])}` : `${due.length} falling due in 14 days`, sub: due.slice(0, 3).map((u) => `${u.title} · ${when(u)}`).join(', ') + (due.length > 3 ? ` and ${due.length - 3} more` : ''), value: money(due.reduce((a, u) => a + u.amount, 0)), tone: due.some((u) => u.days === 0) ? 'warn' : '', href: due.every((u) => u.kind === 'Money to receive') ? '#/fixed/lending' : '#/home' });
-  const bd = C.bondsDueOn(all, all.asOf);
-  if (bd.length) out.push({ title: bd.length === 1 ? `${bd[0].name}: interest due today` : `${bd.length} bond interests due today`, sub: bd.slice(0, 3).map((b) => b.name).join(', ') + (bd.length > 3 ? ` and ${bd.length - 3} more` : ''), value: money(bd.reduce((a, b) => a + (b.credit === 'Quarterly' ? 3 : 1) * (b.monthNet || 0), 0)), tone: 'warn', href: '#/fixed/bonds' });
+  const bn = C.bondNotify(data), bd = bn.on ? C.bondsDueSoon(all, all.asOf, bn.days) : [];
+  if (bd.length) {
+    const when = (d) => (d.days === 0 ? 'today' : d.days === 1 ? 'tomorrow' : 'in ' + d.days + ' days');
+    out.push({ title: bd.length === 1 ? `${bd[0].b.name}: interest due ${when(bd[0])}` : `${bd.length} bond interests due${bd.every((d) => d.days === 0) ? ' today' : ' soon'}`, sub: bd.slice(0, 3).map((d) => `${d.b.name} · ${when(d)}`).join(', ') + (bd.length > 3 ? ` and ${bd.length - 3} more` : ''), value: money(bd.reduce((a, d) => a + (d.b.credit === 'Quarterly' ? 3 : 1) * (d.b.monthNet || 0), 0)), tone: 'warn', href: '#/fixed/bonds' });
+  }
   const al = evalAlerts(data).hit;
   if (al.length) out.push({ title: al.length === 1 ? `Price alert: ${al[0].alert.name}` : `${al.length} price alerts triggered`, sub: al.slice(0, 2).map((x) => x.text).join(' · '), value: '', tone: 'warn', href: '#/equity/overview' });
   const at = data.settings.pricesUpdatedAt;

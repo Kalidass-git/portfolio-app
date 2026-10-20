@@ -4,7 +4,7 @@ import * as C from '../calc.js';
 import * as P from '../projector.js';
 import * as I from '../insights.js';
 import { h, money, compact, pct, dateStr, monthLabel, section, stat, table, btn, segTabs, subTab, setOptions, formDialog, dialog, toast, canEdit } from '../ui.js';
-import { barChart, lineChart, donut, color } from '../charts.js';
+import { barChart, lineChart, donut, color, stackedBars } from '../charts.js';
 import { plannedByMonth } from './networth.js';
 import { groupedTable } from './groupmix.js';
 
@@ -165,42 +165,44 @@ function ownersCard(data, people) {
 }
 
 // ---------- 2. Cash calendar ----------
+let calPick = null;
 function calendar(root) {
   const { data, all } = S;
   const cal = I.cashCalendar(data, all, st.months);
   const al = I.maturityAlerts(data, all);
   if (al.length) root.append(h('div', { class: 'card alert-card', role: 'alert' }, h('h3', null, `Maturing within a month${al.some((x) => x.overdue) ? ' or already due' : ''}`),
     h('ul', { class: 'findings' }, al.map((x) => h('li', { class: x.overdue || x.daysLeft <= 7 ? 'over' : 'amber' }, h('b', null, x.name), ` (${x.kind}) `, x.overdue ? h('span', { class: 'neg' }, `was due ${dateStr(x.date)}`) : h('span', { class: x.daysLeft <= 7 ? 'neg' : 'warn' }, x.daysLeft === 0 ? 'matures today' : `matures in ${x.daysLeft} day${x.daysLeft === 1 ? '' : 's'} (${dateStr(x.date)})`), ' · ', x.basis === 'projected' ? '≈ ' : '', money(x.amount), x.basis === 'projected' ? h('small', { class: 'muted' }, ' projected from the rate') : x.basis === 'entered' ? h('small', { class: 'muted' }, ' expected payout') : x.basis === 'paid' ? h('small', { class: 'muted' }, ' paid in so far (no payout or rate entered)') : null)))));
-  root.append(h('div', { class: 'filters' }, select([3, 6, 12, 24].map((n) => ({ value: String(n), label: `Next ${n} months` })), st.months, 'Months ahead', (v) => { st.months = Number(v); rerender(); })));
-  root.append(h('div', { class: 'stats' },
-    stat('Money coming in', money(cal.totalIn), `next ${st.months} months`),
-    stat('Going out', money(cal.totalOut), 'loan EMIs'),
-    stat('Maturing', money(cal.maturing), 'bonds, FDs, lending, chits'),
-    stat('Cash then', money(cal.months[cal.months.length - 1].cash), `from ${money(all.cashTotal)} now`)));
-  root.append(section('Maturity ladder', h('div', null, barChart({ groups: cal.months.map((r) => ({ label: monthLabel(r.month).slice(0, 3), title: monthLabel(r.month, true), values: [r.maturing, r.inflow - r.maturing] })), names: ['Maturities', 'Interest and dues'], colors: [2, 0], fmt: compact, height: 220 }),
-    note('Overdue maturities are shown in this month, since the money is yet to be collected.'))));
-  root.append(section('Month by month', table([
-    { label: 'Month', host: true, get: (r) => monthLabel(r.month, true) },
-    { label: 'In', cls: 'r', get: (r) => money(r.inflow) },
-    { label: 'Out', cls: 'r', mob: 'under', mlabel: 'out ', get: (r) => money(r.outflow) },
-    { label: 'Net', cls: 'r', mob: 'under', mlabel: 'net ', render: (r) => h('span', { class: tone(r.net) }, signed(r.net)) },
-    { label: 'Cash after', cls: 'r', mob: 'hide', get: (r) => money(r.cash) },
-  ], cal.months, {})));
-  const dated = cal.months.filter((r) => r.items.some((x) => x.kind !== 'Interest'));
-  root.append(section('What falls due', dated.length ? h('div', null, ...dated.map((r) => h('details', { class: 'cal-month' }, h('summary', null, monthLabel(r.month, true), ' · ', h('span', { class: 'muted' }, `${r.items.filter((x) => x.kind !== 'Interest').length} items`)),
-    table([
-      { label: 'Date', get: (x) => (x.late ? 'Overdue' : dateStr(x.date)) },
-      { label: 'What', host: true, get: (x) => x.title },
-      { label: 'Kind', mob: 'hide', get: (x) => x.kind },
-      { label: 'Amount', cls: 'r', render: (x) => h('span', { class: x.dir === 'out' ? 'neg' : '' }, (x.dir === 'out' ? '−' : '') + money(x.amount)) },
-    ], r.items.filter((x) => x.kind !== 'Interest'), {})))) : h('p', { class: 'empty' }, 'Nothing falls due in this period.')));
-  root.append(note('Interest is shown as a monthly figure. Cash after = today’s bank and small savings balance plus the net of each month, before your day-to-day spending and salary.'));
+  root.append(h('div', { class: 'filters' }, select([3, 6, 12, 24].map((n) => ({ value: String(n), label: `Next ${n} months` })), st.months, 'Months ahead', (v) => { st.months = Number(v); calPick = null; rerender(); })));
+  const MAT = (x) => !['Interest', 'Money to receive', 'Loan EMI'].includes(x.kind);
+  const mats = cal.months.map((r) => ({ ...r, mat: r.items.filter(MAT) }));
+  const total = mats.reduce((a, r) => a + r.mat.reduce((b, x) => b + x.amount, 0), 0);
+  if (calPick && !mats.some((r) => r.month === calPick)) calPick = null;
+  const box = h('div');
+  const draw = () => {
+    const chart = stackedBars({ names: ['Maturing'], colors: [2], fmt: compact, height: 240,
+      groups: mats.map((r) => ({ label: monthLabel(r.month).slice(0, 3), title: monthLabel(r.month, true), bars: [Object.entries(r.mat.reduce((m, x) => ({ ...m, [x.kind]: (m[x.kind] || 0) + x.amount }), {})).map(([name, value]) => ({ name, value }))] })),
+      selected: calPick ? { g: mats.findIndex((r) => r.month === calPick), s: 0 } : null,
+      onSelect: (g) => { calPick = calPick === mats[g].month ? null : mats[g].month; draw(); } });
+    let detail;
+    if (calPick) {
+      const r = mats.find((x) => x.month === calPick);
+      detail = h('div', { class: 'card inner', style: { marginTop: '10px' } }, h('h4', { style: { margin: '0 0 6px' } }, `Maturing in ${monthLabel(r.month, true)} · ${money(r.mat.reduce((a, x) => a + x.amount, 0))}`),
+        r.mat.length ? table([
+          { label: 'Date', get: (x) => (x.late ? 'Overdue' : dateStr(x.date)) }, { label: 'What', host: true, get: (x) => x.title },
+          { label: 'Kind', mob: 'hide', get: (x) => x.kind }, { label: 'Amount', cls: 'r', get: (x) => money(x.amount) },
+        ], r.mat, { footer: { label: 'Total' } }) : h('p', { class: 'empty' }, 'Nothing matures this month.'));
+    } else detail = h('p', { class: 'note' }, 'Tap a column to see what matures in that month.');
+    box.replaceChildren(chart, detail);
+  };
+  draw();
+  root.append(section(`Money maturing, next ${st.months} months · ${money(total)}`, box));
+  root.append(note('Bonds, FDs, private lending, chits and other savings by the month they mature. Overdue maturities are shown in this month, since the money is yet to be collected.'));
 }
 
 // ---------- 3. Annual review ----------
 function review(root) {
   const { data, all } = S;
-  const years = I.yearsWithLedger(data);
+  const years = I.yearsWithLedger(data, all.asOf);
   if (!years.length) { root.append(h('div', { class: 'card' }, h('p', { class: 'empty' }, 'No transactions yet.'))); return; }
   if (!st.year || !years.includes(st.year)) st.year = years[0];
   const r = I.annualReview(data, all, Number(st.year));
@@ -220,6 +222,7 @@ function review(root) {
       r.taxFy.gains.length ? h('li', null, 'Gains booked: ', h('span', { class: tone(r.taxFy.stcg + r.taxFy.ltcg) }, signed(r.taxFy.stcg + r.taxFy.ltcg)), ` (${r.taxFy.fy})`) : null,
       h('li', null, 'Interest and other income: ', money(r.interest)))),
     section('Where the money went', r.topExpenses.length ? table([{ label: 'Category', host: true, get: (x) => x.category }, { label: 'Spent', cls: 'r', get: (x) => money(x.amount) }, { label: 'Share', cls: 'r', mob: 'under', mlabel: '', get: (x) => pct(x.amount / s.totalExpense, 0) }], r.topExpenses, {}) : h('p', { class: 'empty' }, 'No spending.'))));
+  root.append(interestSection(data, all, st.year));
   const planned = plannedByMonth(data, all);
   const havePlan = r.months.some((m) => planned.has(m.month) && m.nw != null);
   root.append(section('Month by month', table([
@@ -232,6 +235,56 @@ function review(root) {
     havePlan ? { label: 'Against plan', cls: 'r', mob: 'hide', render: (m) => (m.nw != null && planned.has(m.month) ? h('span', { class: tone(m.nw - planned.get(m.month)) }, signed(m.nw - planned.get(m.month))) : '–') } : null,
   ].filter(Boolean), r.months, {})));
   root.append(note('Spent includes loan EMIs and tax. Invested is money moved to investments, so Left is what stayed in the bank. Net worth comes from your month-end snapshots.'));
+}
+
+let revPick = null;
+/** Interest from bonds and lending against spending, month by month, with a regular / one-time split. */
+function interestSection(data, all, year) {
+  const rows = I.interestVsSpend(data, all, Number(year));
+  if (!rows.length) return section('Interest income against spending', h('p', { class: 'empty' }, 'No entries in this year yet.'));
+  if (revPick && !rows.some((r) => r.month === revPick)) revPick = null;
+  const incomeCats = [...new Set(rows.flatMap((r) => r.income.map((x) => x.category)))];
+  const counted = incomeCats.filter(I.isInterestCategory), notCounted = incomeCats.filter((c) => !I.isInterestCategory(c));
+  const once = I.oneTimeSet(data);
+  const box = h('div');
+  const catTable = (title, list, tot) => h('div', null, h('h4', { style: { margin: '6px 0 4px' } }, `${title} · ${money(tot)}`), list.length ? table([{ label: 'Category', host: true, get: (x) => x.category }, { label: 'Amount', cls: 'r', get: (x) => money(x.amount) }], list, {}) : h('p', { class: 'empty' }, 'None'));
+  const draw = () => {
+    const chart = stackedBars({ names: ['Bond and lending interest', 'Spending, no EMI'], colors: [2, 1], fmt: money, height: 240,
+      groups: rows.map((r) => ({ label: monthLabel(r.month).slice(0, 3), title: monthLabel(r.month, true), bars: [[{ name: 'Interest', value: r.interest }], [{ name: 'Regular', value: r.regular }, { name: 'One-time', value: r.oneTime }]] })),
+      selected: revPick ? { g: rows.findIndex((r) => r.month === revPick), s: 0 } : null,
+      onSelect: (g) => { revPick = revPick === rows[g].month ? null : rows[g].month; draw(); } });
+    const picks = null;
+    let detail = h('p', { class: 'note' }, 'Tap a month’s column to see its income and spending by category. In the spending column the darker part is regular spending and the lighter part is one-time.');
+    if (revPick) {
+      const r = rows.find((x) => x.month === revPick);
+      detail = h('div', { class: 'card inner' }, h('h4', { style: { margin: '0 0 4px' } }, monthLabel(r.month, true)),
+        h('div', { class: 'grid2' }, catTable('Income', r.income, r.income.reduce((a, x) => a + x.amount, 0)), catTable('Spending, no EMI', r.expense.filter((x) => x.category.toLowerCase() !== 'loan'), r.total)));
+    }
+    const tot = (k) => rows.reduce((a, r) => a + r[k], 0);
+    const dev = (v) => h('span', { class: v >= 0 ? 'pos' : 'neg' }, (v >= 0 ? '+' : '−') + money(Math.abs(v)));
+    box.replaceChildren(chart, detail,
+      h('h4', { style: { margin: '12px 0 4px' } }, 'The same in a table'),
+      table([
+        { label: 'Month', host: true, get: (r) => monthLabel(r.month, true) },
+        { label: 'Interest income', cls: 'r', get: (r) => money(r.interest), total: () => money(tot('interest')) },
+        { label: 'Regular spending', cls: 'r', mob: 'under', mlabel: 'regular ', get: (r) => money(r.regular), total: () => money(tot('regular')) },
+        { label: 'One-time spending', cls: 'r', mob: 'under', mlabel: 'one-time ', get: (r) => money(r.oneTime), total: () => money(tot('oneTime')) },
+        { label: 'Interest less spending', cls: 'r', render: (r) => dev(r.deviation), total: () => dev(tot('deviation')) },
+        { label: 'Within income?', mob: 'hide', render: (r) => h('span', { class: 'tag ' + (r.deviation >= 0 ? 'good' : 'bad') }, r.deviation >= 0 ? 'Within income' : 'Over by ' + money(-r.deviation)) },
+      ], rows, { footer: { label: 'Year' }, rowClass: (r) => (r.deviation < 0 ? 'row-bad' : '') }),
+      h('p', { class: 'note' }, `Interest income counts the bank credits in ${counted.length ? counted.join(', ') : 'categories with “bond” or “lend” in the name (none found)'}.${notCounted.length ? ` Not counted: ${notCounted.join(', ')}.` : ''} Loan EMI is left out of spending. One-time spending is: ${[...once].length ? [...once].join(', ') : 'nothing chosen'}; everything else is regular.`),
+      canEdit() ? btn('Choose the one-time categories', () => oneTimeDialog(data), 'small') : null);
+  };
+  draw();
+  return section('Interest income against spending', box);
+}
+function oneTimeDialog(data) {
+  const names = I.expenseCategoryNames(data).filter((n) => n.toLowerCase() !== 'loan').sort((a, b) => a.localeCompare(b));
+  const chosen = I.oneTimeSet(data);
+  const boxes = names.map((n) => ({ n, el: h('input', { type: 'checkbox', checked: chosen.has(n.toLowerCase()) }) }));
+  dialog('One-time categories', h('div', null, h('p', { class: 'note' }, 'Tick what you pay once or twice a year, like tax, school fees, a holiday or a function. Everything else counts as regular monthly spending.'),
+    h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(11em, 1fr))', gap: '4px 12px', maxHeight: '50vh', overflow: 'auto' } }, boxes.map((b) => h('label', { class: 'check-inline' }, b.el, ' ' + b.n)))),
+    [{ label: 'Save', class: 'primary', onclick: (c) => { mutate((d) => { d.settings = { ...d.settings, oneTimeCats: boxes.filter((b) => b.el.checked).map((b) => b.n) }; }); c(); } }, { label: 'Cancel', onclick: (c) => c() }]);
 }
 
 // ---------- 4. Spending anomalies ----------

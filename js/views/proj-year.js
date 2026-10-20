@@ -6,6 +6,7 @@ import { monthActual } from '../yearplan.js';
 import { h, money, compact, pct, dateStr, monthLabel, section, stat, table, btn, formDialog, canEdit, toast, confirmDialog } from '../ui.js';
 import { lineChart, hbars } from '../charts.js';
 import * as actual from './proj-actual.js';
+import { flowSection, yearsTable } from './proj-flow.js';
 import { rerender, outlooks, ensure, signed, pc, tone, outlookToggle, outlookSelects, planForm, oneOffForm, investForm, setAllOutlook, monthRange } from './proj-shared.js';
 
 let selYear = null;
@@ -33,6 +34,33 @@ export function model(plan) {
   return { oc, path, months, live, snaps, snapBy, yearSnapBy, fc, startFrom, projected, planEnd, gap, status, monthsLeft, extra };
 }
 const STATUS = { ahead: ['Ahead of target', 'pos'], 'on track': ['On track', 'pos'], close: ['Slightly behind', 'warn'], behind: ['Behind target', 'neg'] };
+
+/** "How is this worked out": every figure behind Available to invest, where it came from, and a check against what the bank shows you really kept. */
+function availExplain(plan, a, m, f) {
+  const { data, all } = S;
+  const cur = C.monthKey(all.asOf);
+  const hist = C.ledgerMonths(data).filter((x) => x < cur).slice(-6).map((x) => ({ month: x, ...monthActual(data, x) })).filter((x) => x.has);
+  const last3 = hist.slice(-3), avg = (rows, k) => (rows.length ? rows.reduce((t, x) => t + (x[k] || 0), 0) / rows.length : 0);
+  const b = P.baseline(data, all), tds = a.tds ?? 0.1;
+  const bi = (b.values.bonds || 0) * (b.rates.bonds || 0) / 12 * (1 - tds), li = (b.values.lending || 0) * (b.rates.lending || 0) / 12 * (1 - tds);
+  const kept = avg(hist, 'left'), diff = f.avail - kept;
+  const row = (label, val, src, bold) => ({ label, val, src, bold });
+  const list = (rows, k) => rows.map((x) => `${monthLabel(x.month).slice(0, 3)} ${money(x[k])}`).join(', ');
+  const lines = [
+    row('Salary reaching the bank', money(a.salary), `plan figure. Your last ${last3.length} months of salary credits averaged ${money(avg(last3, 'salary'))} (${list(last3, 'salary')})`),
+    row('Other income', money(a.otherIncome || 0), 'plan figure, empty unless you set it'),
+    row('Interest paid out by bonds and lending', money(bi + li), `from your holdings after ${pct(tds, 0)} TDS: bonds ${money(bi)}, private lending ${money(li)}. Deposits, EPF and chits add to their balances instead`),
+    row('Money in each month', money(f.inc), '', true),
+    row('Everyday expenses', '−' + money(a.expenses), `plan figure. Your last ${hist.length} months of everyday spending, without one-time bills, averaged ${money(avg(hist, 'regular'))} (${list(hist, 'regular')})`),
+    row('Loan EMI', '−' + money(a.emi), `plan figure. Your last ${last3.length} months of EMI averaged ${money(avg(last3, 'emi'))}`),
+    row('Yearly one-time bills, one twelfth', '−' + money(f.oneMonthly), `${money(f.yearOnce)} of tax, fees, trips and so on in ${plan.year}, spread evenly so the cash is there when they fall due`),
+    row('Available to invest each month', money(f.avail), 'in − spending − EMI − bills set aside', true),
+  ];
+  return h('details', { class: 'more' }, h('summary', null, 'How this is worked out'),
+    table([{ label: 'Step', host: true, render: (x) => h('span', null, x.bold ? h('b', null, x.label) : x.label, x.src ? h('small', { class: 'muted', style: { display: 'block', whiteSpace: 'normal' } }, x.src) : null) }, { label: 'Each month', cls: 'r', render: (x) => (x.bold ? h('b', null, x.val) : x.val) }], lines, {}),
+    hist.length ? h('p', { class: Math.abs(diff) > Math.max(5000, 0.2 * Math.abs(kept)) ? 'form-error' : 'note' }, `Check against the bank: in the last ${hist.length} months you actually kept about ${money(kept)} a month after all spending, tax and one-time bills, before investing. This page says ${money(f.avail)}. ${Math.abs(diff) > Math.max(5000, 0.2 * Math.abs(kept)) ? (diff > 0 ? 'The page is more hopeful than your history. Check that the salary and expense figures in the plan are realistic.' : 'The page is more cautious than your history. The plan may be assuming more spending or less income than you have seen.') : 'They are close, so the plan matches how you have really been living.'}`) : h('p', { class: 'note' }, 'There is not enough bank history to check this against.'),
+    h('p', { class: 'note' }, `Not in this figure: EPF (${money(a.pfAdd || 0)} a month goes in before the salary reaches the bank) and the new investments themselves. The plan figures can be changed under Edit target and assumptions.`));
+}
 
 function createPlan(year) {
   mutate((d) => { ensure(d).years[String(year)] = P.newYearPlan(d, S.all, year); });
@@ -213,11 +241,13 @@ export function render(root) {
     m.path.length && Math.min(...m.path.map((r) => r.cash)) < 0 ? h('p', { class: 'form-error' }, `Cash would run short: lowest point ${money(Math.min(...m.path.map((r) => r.cash)))} in ${monthLabel(m.path.reduce((b, r) => (r.cash < b.cash ? r : b)).month)}. Lower the monthly investments or raise income.`) : null),
     canEdit() ? [btn('Edit target and assumptions', () => planForm(plan), '', { keep: true })] : null));
 
-  // money available to invest each month, after the expenses and EMI set in the plan
+  // money available to invest each month: what comes in, less everyday spending, EMI and the yearly one-time bills spread over twelve months
   const r0m = m.path[0];
-  const inc = r0m ? r0m.salary + r0m.other + r0m.interest : 0, spend = r0m ? r0m.expenses + r0m.emi : 0, avail = inc - spend;
-  const oneNet = m.path.length ? m.path.reduce((x, r) => x + r.oneOut - r.oneIn, 0) / m.path.length : 0;
-  const availAfter = avail - oneNet, left = avail - invTotal;
+  const inc = r0m ? r0m.salary + r0m.other + r0m.interest : 0, spend = r0m ? r0m.expenses + r0m.emi : 0;
+  const yearOnce = (a.oneOffs || []).filter((o) => o.kind !== 'income' && (o.month.length === 2 || o.month.startsWith(String(plan.year)))).reduce((x, o) => x + (o.amount || 0), 0);
+  const oneMonthly = yearOnce / 12;
+  const availBefore = inc - spend, avail = availBefore - oneMonthly;
+  const left = avail - invTotal;
   const shareOf = (v) => (avail > 0 ? pct(v / avail, 0) : '–');
   // interest income expected for the rest of the plan year
   if (m.path.length) {
@@ -231,12 +261,13 @@ export function render(root) {
       h('p', { class: 'note' }, 'It grows as the plan adds to bonds, lending and deposits. See Years ahead for how it grows over many years.'))));
   }
 
+  if (m.fc.length) root.append(yearsTable(m.fc, { title: `Month by month, rest of ${plan.year}` }), flowSection(m.fc, { mode: 'month', title: `Income, spending and investing, rest of ${plan.year}` }));
   root.append(section('New money going in each month', h('div', null,
     h('div', { class: 'stats' },
-      stat('Available to invest', h('span', { class: tone(avail) }, money(avail)), `each month · ${money(inc)} in, ${money(spend)} out`),
+      stat('Available to invest', h('span', { class: tone(avail) }, money(avail)), `each month · ${money(inc)} in, ${money(spend)} out${oneMonthly > 1 ? `, ${money(oneMonthly)} set aside for yearly bills` : ''}`),
       stat(left >= 0 ? 'Still to plan' : 'Planned over', h('span', { class: left >= 0 ? '' : 'neg' }, money(Math.abs(left))), `${money(invTotal)} planned of ${money(Math.max(0, avail))}`)),
     (a.pfAdd || 0) > 0 ? h('p', { class: 'note' }, `Your EPF (${money(a.pfAdd)} a month, yours and the employer’s) goes in before salary reaches the bank, so it is already saved and is not part of the available amount.`) : null,
-    oneNet > 1 ? h('p', { class: 'note' }, `One-time items (tax, fees and so on) average ${money(oneNet)} a month over the rest of the year, which leaves ${money(availAfter)} a month to invest after them.`) : null,
+    availExplain(plan, a, m, { inc, spend, availBefore, oneMonthly, yearOnce, avail }),
     avail <= 0 ? h('p', { class: 'form-error' }, 'Nothing is left each month after expenses and EMI, so new investments would come out of cash.') : null,
     table([
       { label: 'Investment', host: true, get: (l) => l.name }, { label: 'Goes into', mob: 'under', get: (l) => P.classOf(l.cls).label },

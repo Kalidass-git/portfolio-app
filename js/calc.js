@@ -898,6 +898,15 @@ export function bondsDueOn(all, date) {
   });
 }
 
+/** The home-screen notice setting for bond interest: on or off, and how many days ahead to tell you. Unset means on, on the day itself. */
+export const bondNotify = (data) => { const n = (data.settings && data.settings.bondNotify) || {}; return { on: n.on !== false, days: Math.max(0, Math.min(30, Number(n.days) || 0)) }; };
+/** Bonds whose interest falls due from `asOf` up to `days` ahead, going by their due-date rule. */
+export function bondsDueSoon(all, asOf, days) {
+  const out = [];
+  for (let i = 0; i <= days; i++) { const date = iso(toMs(asOf) + i * DAY); for (const b of bondsDueOn(all, date)) out.push({ b, date, days: i }); }
+  return out;
+}
+
 export function upcoming(data, all, days = 60) {
   const from = all.asOf, to = iso(toMs(from) + days * DAY);
   const out = [];
@@ -906,6 +915,8 @@ export function upcoming(data, all, days = 60) {
   for (const f of all.fds) if (f.maturityDate >= from && f.maturityDate <= to) add(f.maturityDate, f.name + ' matures', f.value || f.principal, 'Fixed deposit');
   for (const l of all.lending) if (l.principal > 0 && l.maturityDate >= from && l.maturityDate <= to) add(l.maturityDate, l.name + ' due back', l.principal + (l.accrued || 0), 'Lending');
   for (const s of all.savings) { if (s.type === 'EPF' || s.type === 'PPF') continue; const end = savingEnd(s); if (end && end >= from && end <= to) { const m = savingMaturity(s); add(end, s.name + ' matures', m.amount, s.type); } }
+  const bn = bondNotify(data);
+  if (bn.on && bn.days > 0) for (const d of bondsDueSoon(all, from, bn.days)) if (d.days >= 1) add(d.date, d.b.name + ' interest due', (d.b.credit === 'Quarterly' ? 3 : 1) * (d.b.monthNet || 0), 'Bond interest');
   for (const r of data.receivables.filter((x) => x.active !== false && x.balanceDue > 0).map((x) => receivableStatus(x, from))) {
     if (r.received || r.notStarted) continue;
     if (r.due <= to) add(r.due, r.name + (r.overdue ? ' (overdue)' : r.dueToday ? ' (due today)' : ' to pay you'), r.expected, 'Money to receive');
