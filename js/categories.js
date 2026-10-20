@@ -176,6 +176,13 @@ export function expenseCategoryNames(data) {
   const kind = kindOf(data);
   return [...new Set((data.ledger || []).filter((e) => e.debit > 0 && kind(e.category) === 'expense').map((e) => e.category || 'Unknown'))];
 }
+/** Every category there is, from the category list and from bank entries, with its kind, so one-time choices can be made from the full set. */
+export function allCategories(data) {
+  const kind = kindOf(data), seen = new Map();
+  for (const c of categoryList(data)) seen.set(lc(c.name), { name: c.name, kind: c.kind || kind(c.name) });
+  for (const e of data.ledger || []) { const n = e.category || 'Unknown'; if (!seen.has(lc(n))) seen.set(lc(n), { name: n, kind: kind(n) }); }
+  return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
 /** Categories treated as one-time: the saved choice (data.settings.oneTimeCats), else a guess from the names. Lower case. */
 export function oneTimeSet(data) {
   const saved = data.settings && data.settings.oneTimeCats;

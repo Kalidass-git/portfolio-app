@@ -76,16 +76,6 @@ export function render() {
         btn('Download backup', () => { download(`portfolio-data-${C.todayISO()}.json`, JSON.stringify(data, null, 1)); toast('Backup downloaded'); }, 'primary'),
         canEdit() ? btn('Restore from file', async () => { const d = await pickFile(); if (!d) return; if (!validData(d)) return toast('That file is not a portfolio data file.', 'bad'); if (await confirmDialog('Replace everything in the app with this file?', 'Restore')) { await doRestore(d); } }) : null))));
 
-  if (canEdit()) {
-    root.append(section('Calculation settings', h('div', { class: 'kv' },
-      h('p', null, 'Tax deducted on bond interest: ', h('b', null, (data.settings.tdsRate * 100).toFixed(0) + '%'), ' · days in month used for monthly interest: ', h('b', null, data.settings.daysInMonth)),
-      btn('Change', () => formDialog({
-        title: 'Calculation settings', value: { tds: data.settings.tdsRate * 100, dim: data.settings.daysInMonth },
-        fields: [{ key: 'tds', label: 'Tax deducted on bond interest (%)', type: 'number' }, { key: 'dim', label: 'Days in month used for monthly interest', type: 'number' }],
-        onSave: (v) => mutate((d) => { d.settings.tdsRate = (v.tds || 0) / 100; d.settings.daysInMonth = v.dim || 30; }),
-      })))));
-  }
-
   root.append(section('About', h('p', null, 'Family Wealth version ', h('b', null, VERSION), ' · released ' + RELEASED + '. If this number is older than the one you expect, close the app fully and open it again so the new files load.')));
   root.append(section('This device',
     h('div', { class: 'kv' },

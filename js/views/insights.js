@@ -113,18 +113,19 @@ function projectionCard(data, all, people) {
     line(refund ? 'Refund expected when you file' : 'Still to pay', money(Math.abs(p.balance)), { bold: true, tone: refund ? 'pos' : p.balance > 0.5 ? 'neg' : '' }),
   ].filter(Boolean);
   const cols = [{ label: 'Item', host: true, render: (x) => h('span', null, x.bold ? h('b', null, x.label) : x.label, x.sub ? h('small', { class: 'muted', style: { display: 'block' } }, x.sub) : null) }, { label: 'Amount', cls: 'r', render: (x) => (x.bold ? h('b', { class: x.tone || '' }, x.val) : x.val) }];
+  const gap = Math.abs(rc.diff);
   const reconText = rc.status === 'ok'
-    ? `Matches. The bank got ${money(rc.received)} as bond interest this year; the holdings say ${money(rc.expectedPrev)} up to last month end and ${money(rc.expectedNow)} up to today, after TDS.`
+    ? `Matches up to today. The holdings say ${money(rc.expectedNow)} of bond interest is earned after TDS; the bank got ${money(rc.received)}${gap >= 1 ? `, a difference of ${money(gap)} ${rc.diff < 0 ? 'less' : 'more'}, which is small enough to ignore.` : '.'}`
     : rc.status === 'short'
-      ? `Mismatch: the bank got ${money(rc.received)}, which is ${money(-rc.diff)} less than the ${money(rc.expectedPrev)} the holdings say should have arrived up to last month end (after TDS). A payment may be missing, or TDS was cut at a higher rate.`
-      : `Mismatch: the bank got ${money(rc.received)}, which is ${money(rc.diff)} more than the ${money(rc.expectedNow)} the holdings say is earned up to today (after TDS). A rate or amount on a bond may be out of date, or TDS was not cut.`;
+      ? `Up to today the holdings say ${money(rc.expectedNow)} should have come after TDS, but the bank got ${money(rc.received)}: ${money(gap)} short. A payment may be missing, TDS may have been cut at a higher rate, or the last month's interest has not arrived yet.`
+      : `Up to today the holdings say ${money(rc.expectedNow)} after TDS, but the bank got ${money(rc.received)}: ${money(gap)} more. A rate or amount on a bond may be out of date, or TDS was not cut.`;
   return section(`Expected tax, ${p.fy} (new regime)`, h('div', null,
     h('div', { class: 'stats' },
       stat('Total income expected', money(c.gross), 'salary, interest, dividends, other'),
       stat('Expected tax', h('span', { class: c.tax > 0.5 ? 'neg' : 'pos' }, money(c.tax)), c.tax > 0.5 ? `about ${pct(c.gross ? c.tax / c.gross : 0, 1)} of income` : 'nil, covered by the rebate'),
       stat(refund ? 'Refund expected' : 'Still to pay', h('span', { class: refund ? 'pos' : p.balance > 0.5 ? 'neg' : '' }, money(Math.abs(p.balance))), `after ${money(tdsAll)} TDS by March${c.tax < 0.5 && tdsAll > 0.5 ? ', all of it comes back' : ''}`),
       stat(hd.over > 0.5 ? 'Above the tax-free limit' : 'Room before tax starts', money(hd.over > 0.5 ? hd.over : hd.room), `tax-free up to ${money(hd.zeroLimit)} of income`)),
-    h('div', { class: 'alert' + (rc.status === 'ok' ? ' good' : ' warn'), style: { margin: '8px 0' } }, h('b', null, 'Bank against holdings: '), reconText),
+    rc.status === 'ok' ? h('p', { class: 'note', style: { margin: '8px 0' } }, h('b', null, 'Bank against holdings: '), reconText) : h('div', { class: 'alert warn', style: { margin: '8px 0' } }, h('b', null, 'Bank against holdings: '), reconText),
     h('div', { class: 'card inner', style: { margin: '8px 0' } }, h('b', null, 'More into bonds? '),
       hd.over > 0.5
         ? `You are already ${money(hd.over)} above the tax-free limit, so more bond interest would be taxed.`
@@ -249,16 +250,16 @@ function interestSection(data, all, year) {
   const box = h('div');
   const catTable = (title, list, tot) => h('div', null, h('h4', { style: { margin: '6px 0 4px' } }, `${title} · ${money(tot)}`), list.length ? table([{ label: 'Category', host: true, get: (x) => x.category }, { label: 'Amount', cls: 'r', get: (x) => money(x.amount) }], list, {}) : h('p', { class: 'empty' }, 'None'));
   const draw = () => {
-    const chart = stackedBars({ names: ['Bond and lending interest', 'Spending, no EMI'], colors: [2, 1], fmt: money, height: 240,
-      groups: rows.map((r) => ({ label: monthLabel(r.month).slice(0, 3), title: monthLabel(r.month, true), bars: [[{ name: 'Interest', value: r.interest }], [{ name: 'Regular', value: r.regular }, { name: 'One-time', value: r.oneTime }]] })),
+    const chart = stackedBars({ names: ['Bond and lending interest', 'Regular spending'], colors: [2, 7], fmt: money, height: 240,
+      groups: rows.map((r) => ({ label: monthLabel(r.month).slice(0, 3), title: monthLabel(r.month, true), bars: [[{ name: 'Interest', value: r.interest }], [{ name: 'Regular spending', value: r.regular }]] })),
       selected: revPick ? { g: rows.findIndex((r) => r.month === revPick), s: 0 } : null,
       onSelect: (g) => { revPick = revPick === rows[g].month ? null : rows[g].month; draw(); } });
     const picks = null;
-    let detail = h('p', { class: 'note' }, 'Tap a month’s column to see its income and spending by category. In the spending column the darker part is regular spending and the lighter part is one-time.');
+    let detail = h('p', { class: 'note' }, 'Tap a month’s column to see its income and spending by category. Regular spending leaves out EMI and the one-time categories, so it is what your interest should pay for.');
     if (revPick) {
       const r = rows.find((x) => x.month === revPick);
       detail = h('div', { class: 'card inner' }, h('h4', { style: { margin: '0 0 4px' } }, monthLabel(r.month, true)),
-        h('div', { class: 'grid2' }, catTable('Income', r.income, r.income.reduce((a, x) => a + x.amount, 0)), catTable('Spending, no EMI', r.expense.filter((x) => x.category.toLowerCase() !== 'loan'), r.total)));
+        h('div', { class: 'grid2' }, catTable('Income', r.income, r.income.reduce((a, x) => a + x.amount, 0)), h('div', null, catTable('Regular spending', r.expense.filter((x) => x.category.toLowerCase() !== 'loan' && !once.has(x.category.toLowerCase())), r.regular), r.oneTime > 0.5 ? catTable('One-time spending', r.expense.filter((x) => once.has(x.category.toLowerCase())), r.oneTime) : null)));
     }
     const tot = (k) => rows.reduce((a, r) => a + r[k], 0);
     const dev = (v) => h('span', { class: v >= 0 ? 'pos' : 'neg' }, (v >= 0 ? '+' : '−') + money(Math.abs(v)));
@@ -268,23 +269,39 @@ function interestSection(data, all, year) {
         { label: 'Month', host: true, get: (r) => monthLabel(r.month, true) },
         { label: 'Interest income', cls: 'r', get: (r) => money(r.interest), total: () => money(tot('interest')) },
         { label: 'Regular spending', cls: 'r', mob: 'under', mlabel: 'regular ', get: (r) => money(r.regular), total: () => money(tot('regular')) },
-        { label: 'One-time spending', cls: 'r', mob: 'under', mlabel: 'one-time ', get: (r) => money(r.oneTime), total: () => money(tot('oneTime')) },
-        { label: 'Interest less spending', cls: 'r', render: (r) => dev(r.deviation), total: () => dev(tot('deviation')) },
-        { label: 'Within income?', mob: 'hide', render: (r) => h('span', { class: 'tag ' + (r.deviation >= 0 ? 'good' : 'bad') }, r.deviation >= 0 ? 'Within income' : 'Over by ' + money(-r.deviation)) },
+        { label: 'Interest less regular spending', cls: 'r', render: (r) => dev(r.deviation), total: () => dev(tot('deviation')) },
+        { label: 'One-time spending (not counted)', cls: 'r', mob: 'under', mlabel: 'one-time ', get: (r) => money(r.oneTime), total: () => money(tot('oneTime')) },
+        { label: 'Covered by interest?', mob: 'hide', render: (r) => h('span', { class: 'tag ' + (r.deviation >= 0 ? 'good' : 'bad') }, r.deviation >= 0 ? 'Interest covers it' : 'Short by ' + money(-r.deviation)) },
       ], rows, { footer: { label: 'Year' }, rowClass: (r) => (r.deviation < 0 ? 'row-bad' : '') }),
       h('p', { class: 'note' }, `Interest income counts the bank credits in ${counted.length ? counted.join(', ') : 'categories with “bond” or “lend” in the name (none found)'}.${notCounted.length ? ` Not counted: ${notCounted.join(', ')}.` : ''} Loan EMI is left out of spending. One-time spending is: ${[...once].length ? [...once].join(', ') : 'nothing chosen'}; everything else is regular.`),
+      needCard(data, rows),
       canEdit() ? btn('Choose the one-time categories', () => oneTimeDialog(data), 'small') : null);
   };
   draw();
   return section('Interest income against spending', box);
 }
 function oneTimeDialog(data) {
-  const names = I.expenseCategoryNames(data).filter((n) => n.toLowerCase() !== 'loan').sort((a, b) => a.localeCompare(b));
+  const cats = I.allCategories(data);
   const chosen = I.oneTimeSet(data);
-  const boxes = names.map((n) => ({ n, el: h('input', { type: 'checkbox', checked: chosen.has(n.toLowerCase()) }) }));
-  dialog('One-time categories', h('div', null, h('p', { class: 'note' }, 'Tick what you pay once or twice a year, like tax, school fees, a holiday or a function. Everything else counts as regular monthly spending.'),
-    h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(11em, 1fr))', gap: '4px 12px', maxHeight: '50vh', overflow: 'auto' } }, boxes.map((b) => h('label', { class: 'check-inline' }, b.el, ' ' + b.n)))),
-    [{ label: 'Save', class: 'primary', onclick: (c) => { mutate((d) => { d.settings = { ...d.settings, oneTimeCats: boxes.filter((b) => b.el.checked).map((b) => b.n) }; }); c(); } }, { label: 'Cancel', onclick: (c) => c() }]);
+  const boxes = cats.map((c) => ({ c, el: h('input', { type: 'checkbox', checked: chosen.has(c.name.toLowerCase()) }) }));
+  const kindWord = { expense: 'expense', income: 'income', investment: 'investment', transfer: 'transfer' };
+  dialog('One-time categories', h('div', null, h('p', { class: 'note' }, 'Every category is listed. Tick the ones you pay once or twice a year, like tax, school fees, a holiday or a function. Everything else counts as regular monthly spending.'),
+    h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(13em, 1fr))', gap: '4px 12px', maxHeight: '50vh', overflow: 'auto' } }, boxes.map((b) => h('label', { class: 'check-inline' }, b.el, ' ' + b.c.name, h('small', { class: 'muted' }, ' · ' + (kindWord[b.c.kind] || b.c.kind || ''))))),),
+    [{ label: 'Save', class: 'primary', onclick: (c) => { mutate((d) => { d.settings = { ...d.settings, oneTimeCats: boxes.filter((b) => b.el.checked).map((b) => b.c.name) }; }); c(); } }, { label: 'Cancel', onclick: (c) => c() }]);
+}
+
+/** How much more to put in at a given yearly rate for interest to pay the regular spending, from the average of the latest months. */
+function needCard(data, rows) {
+  const last = rows.slice(-6), n = last.length;
+  if (!n) return null;
+  const avg = (k) => last.reduce((a, r) => a + r[k], 0) / n;
+  const interest = avg('interest'), regular = avg('regular'), gap = regular - interest, tds = data.settings.tdsRate ?? 0.1;
+  const need = (rate) => (gap > 0 ? (gap * 12) / (rate * (1 - tds)) : 0);
+  const rates = [0.10, 0.12, 0.15];
+  return h('div', { class: 'card inner', style: { margin: '12px 0' } }, h('h4', { style: { margin: '0 0 6px' } }, gap > 0 ? 'How much more to invest so interest covers regular spending' : 'Interest covers your regular spending'),
+    h('p', { class: 'note', style: { marginTop: 0 } }, `Average of the last ${n} month${n === 1 ? '' : 's'}: interest ${money(interest)} a month, regular spending ${money(regular)} (no EMI, no one-time). `, gap > 0 ? h('b', { class: 'neg' }, `Short by ${money(gap)} a month.`) : h('b', { class: 'pos' }, `${money(-gap)} a month to spare.`)),
+    gap > 0 ? table([{ label: 'If the new money earns', host: true, get: (r) => pct(r, 0) + ' a year' }, { label: 'Invest about', cls: 'r', render: (r) => h('b', null, money(need(r))) }, { label: 'Which pays', mob: 'under', mlabel: 'pays ', cls: 'r', get: () => money(gap) + ' a month' }], rates, {}) : null,
+    gap > 0 ? h('p', { class: 'note' }, `Worked out as shortfall × 12 ÷ (rate × (1 − ${Math.round(tds * 100)}% TDS)), so the interest you keep after tax equals the shortfall.`) : null);
 }
 
 // ---------- 4. Spending anomalies ----------

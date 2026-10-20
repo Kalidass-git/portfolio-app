@@ -12,6 +12,7 @@
 //   ahead:     { horizon, ... }                           the long-range setup
 // }
 import { monthActual } from './yearplan.js';
+import { investedByMonth } from './actuals.js';
 import { oneTimeSet } from './categories.js';
 import { ledgerMonths, monthKey, addMonths, monthStart, monthLedger as monthLedgerOf } from './calc.js';
 
@@ -118,7 +119,7 @@ export function simulate(start, a, outlooks, months) {
   let liab = start.liab || 0;
   const rows = [];
   const baseYear = a.baseYear != null ? Number(a.baseYear) : Number(start.month.slice(0, 4));
-  const hikeM = Number(a.hikeMonth) || 3;   // the month the yearly raise lands: salary and EMI step up together
+  const hikeM = Number(a.hikeMonth) || 3;   // the month the yearly raise lands: salary, other income and EPF step up together
   const hikesTo = (y, m) => y + (m >= hikeM ? 1 : 0);
   const sy = Number(start.month.slice(0, 4)), sm = Number(start.month.slice(5, 7));
   const cashPot = all.find((p) => p.cls === 'cash' && !p.line);
@@ -127,7 +128,7 @@ export function simulate(start, a, outlooks, months) {
     const month = addMonths(start.month + '-01', i + 1).slice(0, 7), mm = month.slice(5), my = Number(month.slice(0, 4));
     const f = (rate) => Math.pow(1 + rate, 1 / 12) - 1;
     const raise = Math.pow(1 + (g.salary || 0), hikesTo(my, Number(mm)) - hikesTo(sy, sm));
-    const salary = (a.salary || 0) * raise, other = (a.otherIncome || 0) * raise, emi = (a.emi || 0) * raise;
+    const salary = (a.salary || 0) * raise, other = (a.otherIncome || 0) * raise, emi = a.emi || 0;   // the EMI stays the same: it is fixed by the loan
     const expenses = (a.expenses || 0) * Math.pow(1 + (g.expenses || 0), Math.max(0, my - baseYear));
     let oneIn = 0, oneOut = 0;
     const items = [];
@@ -141,10 +142,11 @@ export function simulate(start, a, outlooks, months) {
     }
     // interest paid out by bonds and lending (after TDS), growth for everything else
     let interest = 0, accrual = 0, growth = 0;
+    const growthBy = {}, interestBy = {};
     for (const p of all) {
       const k = classOf(p.cls), r = p.rate ?? rateOf(p.cls, a, outlooks);
-      if (k.kind === 'payout') interest += p.value * (r / 12) * (1 - (a.tds ?? 0.1));
-      else { const was = p.value; p.value *= 1 + f(r); growth += p.value - was; if (k.kind === 'accrual') accrual += p.value - was; }
+      if (k.kind === 'payout') { const x = p.value * (r / 12) * (1 - (a.tds ?? 0.1)); interest += x; const e = interestBy[p.cls] || (interestBy[p.cls] = { amount: 0, base: 0, rate: r }); e.amount += x; e.base += p.value; }
+      else { const was = p.value; p.value *= 1 + f(r); const g1 = p.value - was; growth += g1; if (k.kind === 'accrual') accrual += g1; const e = growthBy[p.cls] || (growthBy[p.cls] = { amount: 0, base: 0, rate: r }); e.amount += g1; e.base += was; }
     }
     const pfAdd = (a.pfAdd || 0) * raise;   // EPF is a share of salary, so it steps up with the raise
     all.find((p) => p.cls === 'pf' && !p.line).value += pfAdd;
@@ -158,7 +160,8 @@ export function simulate(start, a, outlooks, months) {
     const refill = a.refillCash === false || !cashPot ? 0 : Math.max(0, cushion - cashPot.value);
     const avail = weight > 0 ? Math.max(0, left - refill) : 0;
     let invested = 0;
-    for (const p of live) { const amt = weight > 0 ? avail * Math.max(0, p.line.monthly || 0) / weight : 0; p.value += amt; invested += amt; }
+    const investedBy = {};
+    for (const p of live) { const amt = weight > 0 ? avail * Math.max(0, p.line.monthly || 0) / weight : 0; p.value += amt; invested += amt; if (amt > 0) investedBy[p.cls] = (investedBy[p.cls] || 0) + amt; }
     const surplus = left - invested;
     cashPot.value += surplus;
     const loanPaid = a.loanPrincipal ? Math.min(liab, a.loanPrincipal) : 0;
@@ -166,7 +169,7 @@ export function simulate(start, a, outlooks, months) {
     const values = {};
     for (const p of all) values[p.cls] = (values[p.cls] || 0) + p.value;
     const assets = sum(Object.values(values));
-    rows.push({ month, items, salary, other, interest, accrual, growth, loanPaid, left, refill, avail, oneIn, expenses, emi, oneOut, invested, pfAdd, surplus, income, out, cash: values.cash, values, market: sum(MARKET, (k) => values[k] || 0), assets, liab, nw: assets - liab });
+    rows.push({ month, items, salary, other, interest, accrual, growth, growthBy, interestBy, investedBy, loanPaid, left, refill, avail, oneIn, expenses, emi, oneOut, invested, pfAdd, surplus, income, out, cash: values.cash, values, market: sum(MARKET, (k) => values[k] || 0), assets, liab, nw: assets - liab });
   }
   return rows;
 }
@@ -219,8 +222,26 @@ export const cfg = (data) => {
   return { outlooks: p.outlooks && p.outlooks.length ? p.outlooks : OUTLOOKS, years: p.years || {}, snapshots: p.snapshots || [], ahead: p.ahead || null };
 };
 const snapOf = (data, all, month, note = '') => {
-  const b = baseline(data, all), a = monthActual(data, month || b.month);
-  return { id: 's' + (month || b.month), month: month || b.month, date: b.date, net: r0(b.net), assets: r0(b.assets), loans: r0(b.liab), classes: Object.fromEntries(Object.entries(b.values).map(([k, v]) => [k, r0(v)])), income: r0(a.income), expenses: r0(a.expenses + a.emi + a.tax), note };
+  const b = baseline(data, all), m = month || b.month, a = monthActual(data, m);
+  const snap = { id: 's' + m, month: m, date: b.date, net: r0(b.net), assets: r0(b.assets), loans: r0(b.liab), classes: Object.fromEntries(Object.entries(b.values).map(([k, v]) => [k, r0(v)])), income: r0(a.income), expenses: r0(a.expenses + a.emi + a.tax), note };
+  // everything the plan said for this month, next to what really happened, so the month can be looked at later as it stood
+  const c = cfg(data), plan = c.years[m.slice(0, 4)];
+  const by = investedByMonth(data)[m] || {};
+  snap.actual = { salary: r0(a.salary), income: r0(a.income), expenses: r0(a.expenses), oneTime: r0(a.oneTime), emi: r0(a.emi), tax: r0(a.tax), invested: r0(a.invested), pf: r0(a.pf), bank: r0(all.cashTotal), investedByClass: Object.fromEntries(Object.entries(by).map(([k, v]) => [k, r0(v.amount)])) };
+  if (plan) {
+    const ep = effectivePlan(data, plan);
+    const row = planPath(ep, c.outlooks).find((r) => r.month === m);
+    snap.plan = { year: plan.year, target: plan.target, assumptions: JSON.parse(JSON.stringify(ep.a)) };
+    if (row) {
+      snap.projected = { net: r0(row.nw), salary: r0(row.salary), other: r0(row.other + row.oneIn), interest: r0(row.interest), expenses: r0(row.expenses), emi: r0(row.emi), oneOut: r0(row.oneOut), invested: r0(row.invested), pfAdd: r0(row.pfAdd), growth: r0(row.growth || 0), income: r0(row.income), out: r0(row.out), classes: Object.fromEntries(Object.entries(row.values).map(([k, v]) => [k, r0(v)])) };
+      snap.variance = snap.net - snap.projected.net;
+    } else if (m === plan.baseline.month) {
+      // the month the plan started in: the plan's position is where it began
+      snap.projected = { net: plan.baseline.net, classes: { ...plan.baseline.classes } };
+      snap.variance = snap.net - plan.baseline.net;
+    }
+  }
+  return snap;
 };
 export { snapOf as makeSnapshot };
 

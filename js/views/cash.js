@@ -7,6 +7,13 @@ import { closeForm, reopen } from './closing.js';
 import { openBankImport } from './cash-import.js';
 import { confirmDialog, pct, posNeg, stat, datalistId, icon } from '../ui.js';
 
+/** Calendar and financial year (April to March) choices for the date filter. */
+const PERIODS = (asOf) => {
+  const y = Number(asOf.slice(0, 4)), m = Number(asOf.slice(5, 7)), fy = m >= 4 ? y : y - 1;
+  return [['p:ty', `This year (${y})`, `${y}-01-01`, `${y}-12-31`], ['p:ly', `Last year (${y - 1})`, `${y - 1}-01-01`, `${y - 1}-12-31`],
+    ['p:tfy', `This financial year (Apr ${fy} – Mar ${fy + 1})`, `${fy}-04-01`, `${fy + 1}-03-31`], ['p:lfy', `Last financial year (Apr ${fy - 1} – Mar ${fy})`, `${fy - 1}-04-01`, `${fy}-03-31`]];
+};
+const inPeriod = (v, date, asOf) => { if (v === 'all') return true; if (v.startsWith('p:')) { const p = PERIODS(asOf).find((x) => x[0] === v); return !!p && date >= p[2] && date <= p[3]; } return C.monthKey(date) === v; };
 let fAcct = 'all', fMonth = null, fText = '', fKind = 'all', limit = 60;
 const TABS = [['accounts', 'Accounts'], ['ledger', 'Transactions']];
 /** Open the transactions list, optionally pre-filtered. Used by links from other screens. */
@@ -89,6 +96,7 @@ function categoryOptions(data, direction, current) {
     const inv = list.filter((c) => c.kind === 'investment' || (keep(c) && c.kind === 'investment'));
     if (inv.length) opts.push({ group: 'Money put into investments', options: names(inv) });
   }
+  opts.push({ group: 'Between my own accounts', options: [{ value: 'Transfer', label: 'Transfer (money moved between my own accounts)' }] });
   opts.push({ group: 'Not in the list', options: [{ value: NEW, label: '+ New category…' }] });
   return opts;
 }
@@ -161,6 +169,7 @@ export function txnForm(entry, preset) {
       mutate((d) => {
         let category = v.category;
         if (category === NEW) category = CAT.add(d, { name: v.newCategory, kind: v.kind === 'credit' ? 'income' : (v.newKind || 'expense') });
+        else if (String(category).toLowerCase() === 'transfer') category = CAT.add(d, { name: 'Transfer', kind: 'transfer' });
         const rec = { acct: v.acct, date: v.date, desc: v.desc, debit: v.kind === 'debit' ? v.amount : 0, credit: v.kind === 'credit' ? v.amount : 0, category };
         if (isNew) d.ledger.push({ id: Math.max(0, ...d.ledger.map((e) => e.id || 0)) + 1, ...rec });
         else Object.assign(d.ledger.find((e) => e.id === entry.id), rec);
@@ -183,7 +192,7 @@ function ledger() {
     h('select', { 'aria-label': 'Account', onchange: (e) => { fAcct = e.target.value; limit = 60; rerender(); } },
       h('option', { value: 'all' }, 'All accounts'), data.accounts.map((a) => h('option', { value: a.id, selected: a.id === fAcct }, `${a.name} · ${a.holder}`))),
     h('select', { 'aria-label': 'Month', onchange: (e) => { fMonth = e.target.value; limit = 60; rerender(); } },
-      h('option', { value: 'all', selected: fMonth === 'all' }, 'All months'), monthOptions(months, fMonth, monthLabel)),
+      h('option', { value: 'all', selected: fMonth === 'all' }, 'All months'), h('optgroup', { label: 'Periods' }, PERIODS(S.all.asOf).map(([v, l]) => h('option', { value: v, selected: fMonth === v }, l))), monthOptions(months, fMonth, monthLabel)),
     h('input', { type: 'search', placeholder: 'Search description or category', value: fText, 'aria-label': 'Search', oninput: (e) => { fText = e.target.value; clearTimeout(window.__ft); window.__ft = setTimeout(() => { limit = 60; rerender(); const i = document.querySelector('input[type=search]'); i && (i.focus(), i.setSelectionRange(fText.length, fText.length)); }, 250); } }));
   // running balance per account
   const bal = new Map();
@@ -191,7 +200,7 @@ function ledger() {
   const withBal = sorted.map((e) => { const b = (bal.get(e.acct) || 0) + (e.credit || 0) - (e.debit || 0); bal.set(e.acct, b); return { ...e, balance: b }; });
   const q = fText.toLowerCase();
   const inKind = (e) => fKind === 'all' || (fKind === 'income' ? kindOfCat(e.category) === 'income' && e.credit > 0 : kindOfCat(e.category) === fKind && e.debit > 0);
-  let rows = withBal.filter((e) => (fAcct === 'all' || e.acct === fAcct) && (fMonth === 'all' || C.monthKey(e.date) === fMonth) && inKind(e) && (!q || (e.desc + ' ' + e.category).toLowerCase().includes(q)));
+  let rows = withBal.filter((e) => (fAcct === 'all' || e.acct === fAcct) && inPeriod(fMonth, e.date, S.all.asOf) && inKind(e) && (!q || (e.desc + ' ' + e.category).toLowerCase().includes(q)));
   rows.reverse();
   const total = rows.length, credit = rows.reduce((a, e) => a + (e.credit || 0), 0), debit = rows.reduce((a, e) => a + (e.debit || 0), 0);
   const acctName = new Map(data.accounts.map((a) => [a.id, `${a.name} · ${a.holder}`]));

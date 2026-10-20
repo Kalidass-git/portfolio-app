@@ -32,9 +32,12 @@ const ceil3 = (x) => (x >= 0 ? Math.ceil(x * 1000 - 1e-9) / 1000 : Math.floor(x 
 const compFreq = (c) => ({ Yearly: 1, Monthly: 12, Daily: 365, Quarterly: 4 }[c] ?? 10);
 const tenureFactor = (t) => (t === 'Months' ? 12 : t === 'Days' ? 365 : 1);
 
+/** Days in the calendar month of a date (YYYY-MM-DD). */
+export const daysInMonthOf = (d) => new Date(Date.UTC(Number(d.slice(0, 4)), Number(d.slice(5, 7)), 0)).getUTCDate();
+
 /** Bonds (Fixed Income!A3:N22). Interest is paid out, nothing accrues into the principal. */
 export function calcBond(b, asOf, s) {
-  const dim = s.daysInMonth || 30;
+  const dim = daysInMonthOf(asOf);   // the real length of the month, not a fixed 30
   const completed = (toMs(asOf) - toMs(monthStart(asOf))) / DAY + 1; // Fixed Income!Q4
   const daily = (b.principal * b.rate) / 365; // N
   return {
@@ -44,6 +47,35 @@ export function calcBond(b, asOf, s) {
     monthNet: daily * dim * (1 - (s.tdsRate ?? 0.1)), // M ("TDS" column = payout after 10% TDS)
     accruedMonth: daily * completed, // K
   };
+}
+
+/**
+ * Days a bond earned interest in a calendar month ('YYYY-MM'): from the day it was bought up to the day before it matured or was closed.
+ * A bond bought after the month, or closed before it, earns nothing in that month.
+ */
+export function bondDaysIn(b, month) {
+  const start = month + '-01', next = addMonths(start, 1);
+  const from = b.depositDate && b.depositDate > start ? b.depositDate : start;
+  const stop = b.closed && b.closed.date ? b.closed.date : b.maturityDate;
+  const to = stop && stop < next ? stop : next;
+  return Math.max(0, Math.round((toMs(to) - toMs(from)) / DAY));
+}
+/**
+ * Interest a bond pays for one calendar month, after TDS: the daily interest times the days it was really held in that month
+ * (28, 30 or 31, fewer in the month it was bought or closed). An amount entered on the bond as "what reaches me" wins for a full month.
+ */
+export function bondNetIn(b, month, tdsRate = 0.1) {
+  const days = bondDaysIn(b, month);
+  if (!days) return 0;
+  const full = days === daysInMonthOf(month + '-01');
+  if (b.payoutAmount > 0 && full) return b.payoutAmount / (b.credit === 'Quarterly' ? 3 : 1);
+  return ((b.principal * b.rate) / 365) * days * (1 - tdsRate);
+}
+/** What a bond pays in `month` as a cash credit: every month for Monthly, the three months together in Jan, Apr, Jul and Oct for Quarterly. */
+export function bondDueAmount(b, month, tdsRate = 0.1) {
+  if (b.credit !== 'Quarterly') return bondNetIn(b, month, tdsRate);
+  if ((Number(month.slice(5, 7)) - 1) % 3 !== 0) return 0;
+  return [0, 1, 2].reduce((t, i) => t + bondNetIn(b, addMonths(month + '-01', i).slice(0, 7), tdsRate), 0);
 }
 
 /** FDs and private lending (Fixed Income!A27:P31 and A35:P45). */
@@ -515,14 +547,24 @@ export function monthCashflow(data, all, month) {
   const rows = monthLedger(data, month);
   const credit = (cat) => sum(rows.filter((e) => (e.category || '').toLowerCase() === cat), (e) => e.credit);
   const debit = (cat) => sum(rows.filter((e) => (e.category || '').toLowerCase() === cat), (e) => e.debit);
-  const monthNo = Number(month.slice(5, 7));
-  const quarterMonth = (monthNo - 1) % 3 === 0;
-  const monthlyBonds = sum(all.bonds.filter((b) => b.credit === 'Monthly'), (b) => b.monthNet);
-  const quarterlyBonds = sum(all.bonds.filter((b) => b.credit === 'Quarterly'), (b) => b.monthNet);
+  const tds = data.settings.tdsRate ?? 0.1;
+  // every bond that was held in this month, today's and closed ones, so an old month is judged by what you held then
+  const held = (all.bonds || []).concat((all.closed && all.closed.bonds) || []);
+  const per = held.map((b) => ({ name: b.name, holder: b.holder, due: bondDueDate(b, month), expected: bondDueAmount(b, month, tds) })).filter((x) => x.expected > 0.5);
+  const bondsExpected = sum(per, (x) => x.expected), bondsReceived = credit('income bond');
+  // the bank credit does not say which bond it was for, so it is set against the bonds in due-date order
+  let pool = bondsReceived;
+  for (const x of per.slice().sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : a.name.localeCompare(b.name)))) { const used = Math.min(pool, x.expected); x.received = used; x.pending = x.expected - used; pool -= used; }
   const income = [
-    { name: 'Bonds', expected: quarterMonth ? monthlyBonds + 3 * quarterlyBonds : monthlyBonds, received: credit('income bond') },
+    { name: 'Bonds', expected: bondsExpected, received: bondsReceived, bonds: per },
   ];
+  const mStart = month + '-01', mEnd = `${month}-${String(daysInMonthOf(mStart)).padStart(2, '0')}`;
   for (const m of data.manualMonthlyIncome || []) {
+    // money you started lending after this month, or that was closed before it, was not expected then
+    const rec = (data.receivables || []).find((r) => sameName(r.name, m.name)), len = (data.lending || []).concat(data.fds || []).find((l) => sameName(l.name, m.name));
+    const starts = (rec && rec.startDate) || (len && len.depositDate) || '';
+    const ends = (len && len.closed && len.closed.date) || (rec && rec.active === false && rec.closedDate) || '';
+    if ((starts && starts > mEnd) || (ends && ends < mStart)) continue;
     const fromLedger = sum(rows.filter((e) => (e.desc || '').toLowerCase() === m.match), (e) => e.credit);
     // the same person can be marked received under "Money to receive" (Fixed income, Lendings): that counts too, without adding it twice
     income.push({ name: m.name, expected: m.amount, received: Math.max(fromLedger, receivedFromDues(data, month, m.name), (m.paidMonths || []).includes(month) ? m.amount : 0) });
@@ -898,6 +940,12 @@ export function bondsDueOn(all, date) {
   });
 }
 
+/** The day a bond's interest falls due in a month, by its due-date rule (first, last or a fixed day); the end of the month when no rule is set. */
+export function bondDueDate(b, month) {
+  const dim = daysInMonthOf(month + '-01');
+  const day = b.dueRule === 'first' ? 1 : b.dueRule === 'day' && Number(b.dueDay) > 0 ? Math.min(dim, Number(b.dueDay)) : dim;
+  return `${month}-${String(day).padStart(2, '0')}`;
+}
 /** The home-screen notice setting for bond interest: on or off, and how many days ahead to tell you. Unset means on, on the day itself. */
 export const bondNotify = (data) => { const n = (data.settings && data.settings.bondNotify) || {}; return { on: n.on !== false, days: Math.max(0, Math.min(30, Number(n.days) || 0)) }; };
 /** Bonds whose interest falls due from `asOf` up to `days` ahead, going by their due-date rule. */
@@ -916,7 +964,7 @@ export function upcoming(data, all, days = 60) {
   for (const l of all.lending) if (l.principal > 0 && l.maturityDate >= from && l.maturityDate <= to) add(l.maturityDate, l.name + ' due back', l.principal + (l.accrued || 0), 'Lending');
   for (const s of all.savings) { if (s.type === 'EPF' || s.type === 'PPF') continue; const end = savingEnd(s); if (end && end >= from && end <= to) { const m = savingMaturity(s); add(end, s.name + ' matures', m.amount, s.type); } }
   const bn = bondNotify(data);
-  if (bn.on && bn.days > 0) for (const d of bondsDueSoon(all, from, bn.days)) if (d.days >= 1) add(d.date, d.b.name + ' interest due', (d.b.credit === 'Quarterly' ? 3 : 1) * (d.b.monthNet || 0), 'Bond interest');
+  if (bn.on && bn.days > 0) for (const d of bondsDueSoon(all, from, bn.days)) if (d.days >= 1) add(d.date, d.b.name + ' interest due', bondDueAmount(d.b, d.date.slice(0, 7), data.settings.tdsRate ?? 0.1), 'Bond interest');
   for (const r of data.receivables.filter((x) => x.active !== false && x.balanceDue > 0).map((x) => receivableStatus(x, from))) {
     if (r.received || r.notStarted) continue;
     if (r.due <= to) add(r.due, r.name + (r.overdue ? ' (overdue)' : r.dueToday ? ' (due today)' : ' to pay you'), r.expected, 'Money to receive');

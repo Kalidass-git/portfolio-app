@@ -3,10 +3,10 @@ import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
 import * as P from '../projector.js';
 import { monthActual } from '../yearplan.js';
-import { h, money, compact, pct, dateStr, monthLabel, section, stat, table, btn, formDialog, canEdit, toast, confirmDialog } from '../ui.js';
+import { h, money, compact, pct, dateStr, monthLabel, section, stat, table, btn, formDialog, canEdit, toast, confirmDialog, dialog } from '../ui.js';
 import { lineChart, hbars } from '../charts.js';
 import * as actual from './proj-actual.js';
-import { flowSection, yearsTable } from './proj-flow.js';
+import { flowSection, yearsTable, interestWhy } from './proj-flow.js';
 import { rerender, outlooks, ensure, signed, pc, tone, outlookToggle, outlookSelects, planForm, oneOffForm, investForm, setAllOutlook, monthRange } from './proj-shared.js';
 
 let selYear = null;
@@ -67,6 +67,23 @@ function createPlan(year) {
   selYear = String(year); toast(`Plan ${year} created from today’s numbers`);
 }
 
+/** What a saved snapshot holds: the plan for that month beside what really happened. */
+function snapshotDetail(s) {
+  const pr = s.projected, ac = s.actual || {}, has = !!(pr && pr.salary != null);
+  const rows = [
+    ['Net worth', pr ? pr.net : null, s.net],
+    ['Salary', has ? pr.salary : null, ac.salary], ['Interest and other income', has ? pr.interest + pr.other : null, ac.income != null && ac.salary != null ? ac.income - ac.salary : null],
+    ['Everyday spending', has ? pr.expenses : null, ac.expenses], ['Loan EMI', has ? pr.emi : null, ac.emi], ['One-time and tax', has ? pr.oneOut : null, ac.tax != null ? ac.tax : null],
+    ['Invested', has ? pr.invested : null, ac.invested], ['Added to EPF', has ? pr.pfAdd : null, ac.pf],
+  ];
+  const cls = P.CLASSES.filter((c) => (s.classes && s.classes[c.key] > 0) || (pr && pr.classes[c.key] > 0)).map((c) => [c.label, pr ? pr.classes[c.key] || 0 : null, (s.classes && s.classes[c.key]) || 0]);
+  const t = (list) => table([{ label: 'Item', host: true, get: (x) => x[0] }, { label: 'Plan', cls: 'r', get: (x) => (x[1] == null ? '–' : money(x[1])) }, { label: 'Actual', cls: 'r', get: (x) => (x[2] == null ? '–' : money(x[2])) },
+    { label: 'Difference', cls: 'r', render: (x) => (x[1] == null || x[2] == null ? '–' : h('span', { class: tone(x[2] - x[1]) }, signed(x[2] - x[1]))) }], list, {});
+  dialog(`${monthLabel(s.month, true)} snapshot`, h('div', null,
+    h('p', { class: 'note' }, `Saved ${s.date}. ${s.plan ? `Plan ${s.plan.year}, target ${money(s.plan.target)}. ` : 'No plan existed for this year when it was saved. '}${s.note ? 'Note: ' + s.note : ''}`),
+    t(rows), h('h4', { style: { margin: '10px 0 4px' } }, 'Where the money sat'), t(cls),
+    s.plan ? h('p', { class: 'note' }, 'The plan column is what the plan said for that month with the assumptions of the day: salary ' + money(s.plan.assumptions.salary) + ', everyday expenses ' + money(s.plan.assumptions.expenses) + ', EMI ' + money(s.plan.assumptions.emi) + '.') : null), [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
+}
 function snapshotForm(plan, mo) {
   const s = P.cfg(S.data).snapshots.find((x) => x.month === mo);
   formDialog({
@@ -84,6 +101,7 @@ function snapshotForm(plan, mo) {
       p.snapshots.sort((a, b) => (a.month < b.month ? -1 : 1));
     }),
     onDelete: s ? () => mutate((d) => { ensure(d).snapshots = d.projector.snapshots.filter((x) => x.month !== mo); }) : null,
+    extraActions: s && (s.projected || s.actual) ? [{ label: 'See what was saved', onclick: () => snapshotDetail(s) }] : [],
   });
 }
 /** Record today's real position as the month-end snapshot. */
@@ -198,7 +216,8 @@ export function render(root) {
     ], rows, { rowClass: (r) => (r.month === nowM ? 'cur-row' : ''), onRow: canEdit() ? (r) => snapshotForm(plan, r.month) : null }),
     h('p', { class: 'note' }, 'The highlighted row is the current month. Plan net worth is the planned position at each month end; months before the plan started have no plan figure. Tap a month to type in its month-end position by hand. Spending includes loan EMI and one-time items; income includes interest that reached your bank.'))));
 
-  // ---------- where it went ----------
+  // ---------- where it went (shown last) ----------
+  let whereWent = null;
   const latest = lastSnap || (m.startFrom ? { month: m.live.month, classes: m.live.values, net: m.live.net, assets: m.live.assets, loans: m.live.liab, live: true } : null);
   if (latest && latest.classes) {
     const prow = m.path.find((r) => r.month === latest.month);
@@ -216,7 +235,7 @@ export function render(root) {
     if (Math.abs(cash) > 1) notes.push(h('li', null, `Cash is ${money(Math.abs(cash))} ${cash >= 0 ? 'higher' : 'lower'} than planned, which reflects saving ${cash >= 0 ? 'more' : 'less'} (or investing ${cash >= 0 ? 'less' : 'more'}) than the plan.`));
     if (worst && worst.diff < -1) notes.push(h('li', null, `Biggest shortfall: ${worst.label} (${signed(worst.diff)}).`));
     if (best && best.diff > 1) notes.push(h('li', null, `Biggest gain over plan: ${best.label} (${signed(best.diff)}).`));
-    root.append(section(`Where it went right or wrong, up to ${monthLabel(latest.month)}`, h('div', null,
+    whereWent = (section(`Where it went right or wrong, up to ${monthLabel(latest.month)}`, h('div', null,
       h('ul', { class: 'findings' }, notes),
       table([
         { label: 'Asset class', host: true, get: (x) => x.label },
@@ -261,6 +280,7 @@ export function render(root) {
       h('p', { class: 'note' }, 'It grows as the plan adds to bonds, lending and deposits. See Years ahead for how it grows over many years.'))));
   }
 
+  if (m.fc.length) root.append(interestWhy(m.fc, { tds: plan.a.tds ?? 0.1 }));
   if (m.fc.length) root.append(yearsTable(m.fc, { title: `Month by month, rest of ${plan.year}` }), flowSection(m.fc, { mode: 'month', title: `Income, spending and investing, rest of ${plan.year}` }));
   root.append(section('New money going in each month', h('div', null,
     h('div', { class: 'stats' },
@@ -300,4 +320,5 @@ export function render(root) {
       fields: [{ key: 'well', label: 'What went well', type: 'textarea' }, { key: 'improve', label: 'What to do better next year', type: 'textarea', hint: 'Spending, saving, how you chose market outlooks, one-time costs you missed.' }],
       onSave: (v) => mutate((d) => { ensure(d).years[plan.id].retro = { well: v.well, improve: v.improve, savedAt: new Date().toISOString() }; }),
     }), '', { keep: true }), btn('Start from today’s numbers again', async () => { if (await confirmDialog(`Reset the starting point of plan ${plan.year} to today’s holdings and assumptions? Month-end snapshots stay, but the plan path changes.`, 'Reset')) mutate((d) => { const old = ensure(d).years[plan.id]; const fresh = P.newYearPlan(d, S.all, plan.year); fresh.target = old.target; fresh.retro = old.retro; d.projector.years[plan.id] = fresh; }); }, '', { keep: true })] : null));
+  if (whereWent) root.append(whereWent);
 }

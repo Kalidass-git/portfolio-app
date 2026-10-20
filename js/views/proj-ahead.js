@@ -6,7 +6,7 @@ import { lineChart, donut, legend, stackedArea, color } from '../charts.js';
 import { rerender, outlooks, ensure, signed, pc, tone, outlookToggle, outlookSelects } from './proj-shared.js';
 import { currentPlan } from './proj-year.js';
 import { groupedTable, groupOfClass, GROUPS } from './groupmix.js';
-import { flowSection, yearsTable } from './proj-flow.js';
+import { flowSection, yearsTable, interestWhy } from './proj-flow.js';
 
 const yrs = (n) => (n === 1 ? '1 year' : n + ' years');
 let compare = false, viewHorizon = null, netView = 'net', catPick = 'all';
@@ -45,17 +45,17 @@ function assumptionsCard(s) {
   const group = (title, ...fields) => h('div', { class: 'assume-group' }, h('h4', null, title), h('div', { class: 'assume-fields' }, ...fields));
   const hike = h('label', null, h('span', null, 'Month the raise lands'),
     h('select', { disabled: !canEdit(), 'aria-label': 'Month the raise lands', onchange: (e) => setOwn({ hikeMonth: Number(e.target.value) }) }, MONTH_NAMES.map((m, i) => h('option', { value: i + 1, selected: i + 1 === a.hikeMonth }, m))),
-    h('small', null, 'Salary and EMI step up together from this month'));
+    h('small', null, 'Salary and EPF step up together from this month'));
     const summary = `Salary +${pct(a.growth.salary, 1)} a year from ${MONTH_NAMES[a.hikeMonth - 1]}, expenses +${pct(a.growth.expenses, 1)}`;
   return section('What the projection grows by', h('details', { class: 'more assume-wrap' }, h('summary', { style: { cursor: 'pointer' } }, h('b', null, 'Show and change the assumptions'), ' ', h('small', { class: 'muted' }, summary)), h('div', { class: 'assume', style: { marginTop: '10px' } },
     group('Income',
       num('Salary each month today (₹)', 'salary', a.salary, 'take-home, to your bank'),
       num('Other income each month (₹)', 'otherIncome', a.otherIncome, 'rent, dividends and so on'),
-      num('Salary raise each year (%)', 'growthSalary', pctIn(a.growth.salary), 'also raises other income and EMI', { pctField: true }), hike),
+      num('Salary raise each year (%)', 'growthSalary', pctIn(a.growth.salary), 'also raises other income and EPF', { pctField: true }), hike),
     group('Spending',
       num('Everyday expenses each month today (₹)', 'expenses', a.expenses, 'without EMI and one-time bills'),
       num('Expenses rise each year (%)', 'growthExpenses', pctIn(a.growth.expenses), 'each January', { pctField: true }),
-      num('Loan EMI each month today (₹)', 'emi', a.emi, 'rises with the salary raise'),
+      num('Loan EMI each month today (₹)', 'emi', a.emi, 'stays the same, it is fixed by the loan'),
       num('One-time bills rise each year (%)', 'growthOneTime', pctIn(a.growth.oneTime), 'tax, fees, trips (set below)', { pctField: true })),
     group('Saving',
       num('Added to EPF each month today (₹)', 'pfAdd', a.pfAdd, 'goes in before salary reaches the bank; rises with the salary raise'),
@@ -225,6 +225,8 @@ export function render(root) {
       { label: 'Added to balances that year', mob: 'under', mlabel: 'added ', cls: 'r', get: (x) => money(x.added) },
     ], iy, { empty: 'Nothing to show.' }),
     h('p', { class: 'note' }, 'Debt investments are bonds, private lending, FDs, EPF and PPF, chits, insurance and recurring deposits at that year end, growing with new money and their own rates. Paid out is cash from bonds and lending after tax; added to balances is interest that compounds inside deposits, EPF and chits. Credit a day counts both.'))));
+
+  root.append(interestWhy(rows.slice(0, Math.min(rows.length, 36)), { tds: s.a.tds ?? 0.1 }));
 
   // ---------- table ----------
   const tbl = yearRows.map((r, i) => ({ r, i, flow: byYearFlows(rows, i) }));
