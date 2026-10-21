@@ -1,6 +1,6 @@
 # Handover for a new Claude session
 
-**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.9.36 (cache `family-wealth-v62`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
+**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.9.37 (cache `family-wealth-v63`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
 
 Read this first, then `docs/SETUP.md` (release notes, newest first) and `README.md`.
 
@@ -45,6 +45,14 @@ A no-build installable web app (PWA, vanilla ES modules) that mirrors the owner'
 
 ## Release process
 Branch off `origin/main` (`release-X.Y.Z`), change files, bump `js/version.js` and the cache name in `sw.js`, add notes at the top of the release list in `docs/SETUP.md`, push, and open a PR to `main` with `gh api` (GraphQL is blocked). The owner merges it. Always base on `origin/main` so stacked PRs do not leave main behind.
+
+## State after 8.9.37
+
+- `chitPending` (monthinvest.js): every running chit, gold chit and active GRT scheme (`gold.schemes[].active`) is paid (anything paid this month) or pending (last month's amount, else `monthly`). Gold chits run `settings.goldChitMonths` (optional, default 11), set on the Gold chits tab; over when payments reach it or that many months have passed since the first payment. Home popup `mandatoryDialog` has Pending/Received tabs.
+- `monthCashflow` bonds: received = the due date has come (`x.due <= all.asOf`), not the bank. The bank match (`matchBondCredits`) is kept as `credited` per bond for the tax check only. The income line is named "Income Bond".
+- `splitForm` (cash.js): Edit transaction → Split closes the edit window and opens the split window; the original ledger entry is replaced in place by new entries (new ids).
+- Tax: `holdingMonths` counts interest to today and a payment only once due; `taxProjection.recon` compares payments due so far (`dueTo`) with "Income Bond" credits. Card layout classes: `details.tax-sec` in app.css.
+- Ask the owner to check on real data: which bonds show in the Income Bond Pending tab, that the chit popup lists gold chits and GRT, a real split, and the tax card on his phone.
 
 ## State after 8.9.35
 

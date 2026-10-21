@@ -3,6 +3,7 @@ import { S, mutate, nextId } from '../store.js';
 import * as C from '../calc.js';
 import { h, money, dec, dateStr, gainText, section, table, btn, formDialog, canEdit, toast, stat, num, segTabs, subTab, pct, posNeg, dialog, confirmDialog } from '../ui.js';
 import { reopen } from './closing.js';
+import { goldChitMonths, GOLD_CHIT_MONTHS } from '../monthinvest.js';
 
 const rerender = () => window.dispatchEvent(new Event('rerender'));
 
@@ -197,6 +198,22 @@ function openChit(row) {
   acts.push({ label: 'Close window', onclick: (cl) => cl() });
   dialog(c.name, h('div', null, c.closed ? null : chitBestCard(c, S.all.gold.rate), h('p', { class: 'note' }, `${c.shop || 'Gold chit'}${c.monthly ? ' · ' + money(c.monthly) + ' a month' : ''}${c.closed ? ` · closed ${dateStr(c.closed.date)}, ${dec(c.closed.grams, 2)} g received` : ''}`), c.desc ? h('p', null, c.desc) : null, list), acts);
 }
+/** How long a gold chit runs. Home stops counting a chit as pending once this many months have passed since its first payment. */
+function chitLengthCard(data) {
+  const cur = goldChitMonths(data);
+  const input = h('input', { type: 'number', min: '1', max: '60', step: '1', inputmode: 'numeric', value: String(cur), 'aria-label': 'Gold chit length in months', style: { width: '5em' } });
+  const save = () => {
+    const v = Math.round(Number(input.value));
+    if (!(v >= 1 && v <= 60)) return toast('Enter the number of months a gold chit runs, for example ' + GOLD_CHIT_MONTHS + '.', 'bad');
+    mutate((d) => { d.settings.goldChitMonths = v; });
+    toast('Gold chits now run ' + v + ' months.');
+  };
+  input.addEventListener('keydown', (e) => e.key === 'Enter' && save());
+  return section('Gold chit length', h('div', null,
+    h('p', { style: { margin: '0 0 6px' } }, `Gold chits run for ${cur} months${data.settings.goldChitMonths ? '' : ' (the usual length)'}.`),
+    canEdit() ? h('div', { class: 'row', style: { alignItems: 'center', gap: '8px' } }, input, h('span', null, 'months'), btn('Save', save)) : null,
+    h('p', { class: 'note', style: { margin: '6px 0 0' } }, 'On Home, a gold chit that has no payment this month is shown as pending, until this many months have passed since its first payment. Any payment this month counts, whatever the amount.')));
+}
 function chitsTab(root) {
   const { all, data } = S;
   const g = all.gold.chits;
@@ -209,6 +226,7 @@ function chitsTab(root) {
   root.append(h('div', { class: 'stats' },
     stat('Invested in gold chits', money(runPaid), `${running.length} running chit${running.length === 1 ? '' : 's'}`),
     stat('Closed chits', String(g.closed.length + oldSch.length), g.closed.length + oldSch.length ? `${dec(g.closed.reduce((a, c) => a + c.closed.grams, 0), 1)} g received through chits closed here` : 'none yet')));
+  root.append(chitLengthCard(data));
   for (const r of running) if (r.chit && r.paid > 0) root.append(chitBestCard(r.chit, all.gold.rate));
   for (const x of runSch) if (x.entries.length) root.append(chitBestCard(schemeAsChit(x), all.gold.rate, true));
   root.append(section('Running chits', h('div', null, table([

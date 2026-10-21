@@ -122,11 +122,11 @@ function pendingBonds(bonds, month) {
   const draw = () => {
     const seg = h('nav', { class: 'seg', 'aria-label': 'Pending or received' }, [['pending', `Pending (${pend.length})`], ['received', `Received (${got.length})`]].map(([k, l]) => h('a', { href: 'javascript:void 0', class: tab === k ? 'on' : '', 'aria-selected': String(tab === k), onclick: (e) => { e.preventDefault(); tab = k; draw(); } }, l)));
     const rows = tab === 'pending'
-      ? pend.map((b) => ({ title: b.name, sub: `${b.holder ? b.holder + ' · ' : ''}due ${shortDate(b.due)}`, value: h('span', { class: 'warn' }, money(b.pending)), valueSub: b.received > 0.5 ? `${money(b.received)} of ${money(b.expected)} in` : `of ${money(b.expected)}` }))
-      : got.map((b) => ({ title: b.name, sub: `${b.holder ? b.holder + ' · ' : ''}due ${shortDate(b.due)}`, value: h('span', { class: 'pos' }, money(b.received)), valueSub: b.pending > 0.5 ? `${money(b.pending)} still to come` : `of ${money(b.expected)}` }));
+      ? pend.map((b) => ({ title: b.name, sub: `${b.holder ? b.holder + ' · ' : ''}due ${shortDate(b.due)}`, value: h('span', { class: 'warn' }, money(b.pending)), valueSub: `not due yet` }))
+      : got.map((b) => ({ title: b.name, sub: `${b.holder ? b.holder + ' · ' : ''}due ${shortDate(b.due)}`, value: h('span', { class: 'pos' }, money(b.received)), valueSub: `due date passed` }));
     body.replaceChildren(seg,
-      rows.length ? rowList(rows) : h('p', { class: 'empty' }, tab === 'pending' ? 'Nothing pending: all the interest due this month has come.' : 'Nothing received yet this month.'),
-      h('p', { class: 'note' }, 'Interest for the real days in the month, after TDS. The bank credit does not say which bond it paid, so credits are set against the bonds in due-date order.'));
+      rows.length ? rowList(rows) : h('p', { class: 'empty' }, tab === 'pending' ? 'Nothing pending: every bond due this month has passed its due date.' : 'No bond has reached its due date yet this month.'),
+      h('p', { class: 'note' }, 'Interest for the real days in the month, after TDS. A bond is received once its due date has come; bank entries are not used here because they often come late or several together.'));
   };
   draw();
   dialog('Bond interest, ' + monthLabel(month, true), body, [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
@@ -156,6 +156,24 @@ const tapStat = (label, val, sub, cls, onClick) => h('div', { class: 'stat tappa
   h('div', { class: 'stat-label' }, label), h('div', { class: 'stat-value ' + (cls || '') }, val), h('div', { class: 'stat-sub' }, sub));
 const detail = (title, rows, notes) => dialog(title, h('div', null, rows.length ? rowList(rows) : h('p', { class: 'empty' }, 'Nothing to show.'), ...notes.map((n) => h('p', { class: 'note' }, n))), [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
 
+/** Chit and gold chit payments for the month: Pending first, then Received (paid this month). Any payment this month counts, since the amount can change. */
+function mandatoryDialog(mand) {
+  let tab = 'pending';
+  const body = h('div');
+  const kindText = (r) => `${r.kind === 'gold' ? 'Gold chit' : 'Chit'}${r.duration ? ` · ${r.count} of ${r.duration} payments` : ''}`;
+  const draw = () => {
+    const seg = h('nav', { class: 'seg', 'aria-label': 'Pending or received' }, [['pending', `Pending (${mand.pending.length})`], ['received', `Received (${mand.done.length})`]].map(([k, l]) => h('a', { href: 'javascript:void 0', class: tab === k ? 'on' : '', 'aria-selected': String(tab === k), onclick: (e) => { e.preventDefault(); tab = k; draw(); } }, l)));
+    const rows = tab === 'pending'
+      ? mand.pending.map((r) => ({ title: r.name, sub: `${kindText(r)} · took ${money(r.last)} last month`, value: h('span', { class: 'warn' }, money(r.pending)) }))
+      : mand.done.map((r) => ({ title: r.name, sub: `${kindText(r)}${r.last > 0 ? ' · last month ' + money(r.last) : ''}`, value: h('span', { class: 'pos' }, money(r.paid)), valueSub: 'paid this month' }));
+    body.replaceChildren(seg,
+      rows.length ? rowList(rows) : h('p', { class: 'empty' }, tab === 'pending' ? 'Every running chit has a payment this month.' : 'No chit has been paid yet this month.'),
+      h('p', { class: 'note' }, 'A chit counts as paid once anything is paid into it this month, because the amount can change every month. Pending shows what it took last month. Gold chits run for the number of months set on Gold & others → Gold chits (11 by default); chits use their tenure.'));
+  };
+  draw();
+  dialog('Chit payments, ' + monthLabel(C.monthKey(S.all.asOf), true), body, [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
+}
+
 /** Where this month's money stands: what came in, what is already promised (chits), what will be spent, and what that leaves to invest. */
 function investCard(data, all) {
   let m;
@@ -167,8 +185,7 @@ function investCard(data, all) {
     { title: 'Money out this month', sub: `the higher of ${money(m.actualOut)} paid so far and ${money(m.planOut)} the plan expects (expenses, EMI, tax, yearly bills)`, value: '− ' + money(m.spend) },
     { title: 'Investable income added', sub: 'what is left to invest from this month’s money', value: h('b', { class: 'inv' }, money(m.investable)) },
   ], ['EPF is not counted: it goes straight to the EPF account and never reaches the bank.', 'This is the month’s income, not the bank balance. The bank balance is used for “Current investable amount” below.']);
-  const showMandatory = () => detail('Pending mandatory investments', mand.rows.map((r) => ({ title: r.name, sub: `${r.kind === 'gold' ? 'Gold chit' : 'Chit'} · last month ${money(r.last)}${r.paid > 0 ? ', ' + money(r.paid) + ' already paid this month' : ''} · payment ${r.count + (r.paid > 0 ? 0 : 1)}${r.duration ? ' of ' + r.duration : ''}`, value: r.pending > 0.5 ? h('span', { class: 'warn' }, money(r.pending)) : h('span', { class: 'pos' }, 'paid') })),
-    ['Only chits and gold chits are counted here. The amount is what each one took last month; a chit is left out once its payments reach its tenure or its end date has passed.', 'Set the tenure on each chit (Cash → Chits & savings), or the start and end dates on a gold chit (Gold & others → Gold chits), so finished chits stop showing.']);
+  const showMandatory = () => mandatoryDialog(mand);
   const showSpend = () => detail('Expenses still to come this month', pr.rows.map((r) => ({ title: r.name, sub: `${money(r.spent)} spent in ${pr.days} day${pr.days === 1 ? '' : 's'} = ${money(r.perDay)} a day × ${pr.left} days left`, value: money(r.more) })),
     ['Projected from the Spent column in “This month in detail”: regular spending only. Rent, clothes, entertainment, vacation, gifts, EMI and tax are not projected.']);
   const showCurrent = () => detail('Current investable amount', [
@@ -181,7 +198,7 @@ function investCard(data, all) {
   return section('Investing this month · ' + monthLabel(m.month), h('div', null,
     h('div', { class: 'stats' },
       tapStat('Investable income added this month', money(m.investable), `${money(m.income)} in − ${money(m.spend)} out · tap for working`, 'inv', showInvestable),
-      tapStat('Pending mandatory investments (approx.)', money(mand.total), mand.rows.length ? `${mand.rows.length} chit${mand.rows.length === 1 ? '' : 's'}, from last month · chits and gold chits only` : 'no chit instalments pending · chits and gold chits only', mand.total > 0.5 ? 'warn' : '', showMandatory),
+      tapStat('Pending mandatory investments (approx.)', money(mand.total), mand.pending.length ? `${mand.pending.length} chit${mand.pending.length === 1 ? '' : 's'} not paid yet this month${mand.done.length ? ', ' + mand.done.length + ' paid' : ''} · chits and gold chits` : (mand.done.length ? `all ${mand.done.length} paid this month · chits and gold chits` : 'no chits running · chits and gold chits'), mand.total > 0.5 ? 'warn' : '', showMandatory),
       tapStat('Expenses still to come (projected)', money(pr.total), `${pr.left} day${pr.left === 1 ? '' : 's'} left · regular spending, no rent`, '', showSpend),
       tapStat('Current investable amount', money(m.current), `bank ${money(m.bank)} − ${money(mand.total)} chits − ${money(pr.total)} expenses`, m.current >= 0 ? 'pos' : 'neg', showCurrent)),
     m.current < 0 ? h('p', { class: 'note warn' }, `The bank is short by ${money(-m.current)} for what is still expected this month.`) : null,

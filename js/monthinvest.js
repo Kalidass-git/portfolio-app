@@ -67,33 +67,44 @@ import { monthCashflow, accountBalances, daysInMonthOf } from './calc.js';
 const monthsBetween = (a, b) => (Number(b.slice(0, 4)) - Number(a.slice(0, 4))) * 12 + Number(b.slice(5, 7)) - Number(a.slice(5, 7));
 /** Total of a chit's payments in a month ('YYYY-MM'). */
 const paidIn = (c, m) => sum((c.entries || []).filter((e) => (e.date || '').slice(0, 7) === m && e.amount > 0), (e) => e.amount);
+/** Gold chits run for 11 months unless the owner sets another length (Gold & others → Gold chits). */
+export const GOLD_CHIT_MONTHS = 11;
+export const goldChitMonths = (data) => { const n = Number(data && data.settings && data.settings.goldChitMonths); return n >= 1 ? Math.round(n) : GOLD_CHIT_MONTHS; };
 /**
- * How many months a chit runs: from its tenure, else from its start and end dates, else a duration entered in an older version (still read, no longer asked for). 0 when unknown.
- * Gold chits have no tenure, so they use their dates.
+ * How many months a chit runs. Chits: from the tenure, else the start and end dates, else a duration entered in an older version. Gold chits: the length set for gold chits
+ * (11 months unless changed), or a duration entered on that chit in an older version. 0 when unknown.
  */
-export function chitMonths(c, kind) {
-  if (kind !== 'gold' && c.tenure > 0) return Math.round(c.tenure * (c.tenureType === 'Years' ? 12 : c.tenureType === 'Days' ? 1 / 30.4 : 1));
+export function chitMonths(c, kind, goldDefault = GOLD_CHIT_MONTHS) {
+  if (kind === 'gold') return Number(c.months) > 0 ? Number(c.months) : goldDefault;
+  if (c.tenure > 0) return Math.round(c.tenure * (c.tenureType === 'Years' ? 12 : c.tenureType === 'Days' ? 1 / 30.4 : 1));
   const a = c.startDate || c.depositDate;
   if (a && c.maturityDate) return Math.max(1, monthsBetween(a.slice(0, 7), c.maturityDate.slice(0, 7)) + 1);
-  const old = Number(kind === 'gold' ? c.months : c.chitMonths);
-  return old > 0 ? old : 0;
+  return Number(c.chitMonths) > 0 ? Number(c.chitMonths) : 0;
 }
 /**
- * Chit instalments still to be paid this month, from last month: for every chit and gold chit that is not over, what was paid last month
- * less what has already been paid this month. A chit is over when its payments reach its tenure, its end date has passed or it is closed.
+ * Chit and gold chit payments for this month. Every running chit (gold schemes such as GRT Savings Account included) is either paid, if anything was paid into it this month
+ * (the amount can change every month, so any payment counts), or pending, for what it took last month (else its monthly instalment). A chit is over, and not listed, when it is closed,
+ * its end date has passed, or its payments reach its length (gold chits: also when their length in months has passed since the first payment).
  */
 export function chitPending(data, cur) {
-  const prev = addMonths(cur + '-01', -1).slice(0, 7), rows = [];
+  const prev = addMonths(cur + '-01', -1).slice(0, 7), rows = [], gdef = goldChitMonths(data);
+  const monthsPaid = (c) => new Set((c.entries || []).filter((e) => e.amount > 0 && e.date).map((e) => e.date.slice(0, 7))).size;
   const add = (c, kind) => {
     if (c.closed) return;
-    const last = paidIn(c, prev), now = paidIn(c, cur), dur = chitMonths(c, kind), count = (c.entries || []).length;
-    const over = (dur > 0 && count >= dur && !now) || (c.maturityDate && c.maturityDate.slice(0, 7) < cur);
-    if (over || !(last > 0)) return;
-    rows.push({ name: c.name, kind, last, paid: now, pending: Math.max(0, last - now), count, duration: dur });
+    const last = paidIn(c, prev), now = paidIn(c, cur), dur = chitMonths(c, kind, gdef), count = monthsPaid(c);
+    const first = c.startDate || c.depositDate || (c.entries || []).map((e) => e.date).filter(Boolean).sort()[0] || '';
+    const ended = !!c.maturityDate && c.maturityDate.slice(0, 7) < cur;
+    const finished = dur > 0 && !now && (count >= dur || (kind === 'gold' && !!first && monthsBetween(first.slice(0, 7), cur) >= dur));
+    if (ended || finished) return;
+    const amount = last > 0 ? last : Number(c.monthly) > 0 ? Number(c.monthly) : 0;
+    if (!(amount > 0) && !(now > 0)) return;
+    rows.push({ name: c.name, kind, last: amount, paid: now, done: now > 0, pending: now > 0 ? 0 : amount, count, duration: dur });
   };
   for (const c of data.savings || []) if (c.type === 'Chit') add(c, 'chit');
   for (const c of (data.gold && data.gold.chits) || []) add(c, 'gold');
-  return { rows, total: sum(rows, (r) => r.pending), chits: sum(rows.filter((r) => r.kind === 'chit'), (r) => r.pending), gold: sum(rows.filter((r) => r.kind === 'gold'), (r) => r.pending) };
+  for (const x of (data.gold && data.gold.schemes) || []) if (x.active) add(x, 'gold');
+  const pending = rows.filter((r) => !r.done), done = rows.filter((r) => r.done);
+  return { rows, pending, done, total: sum(pending, (r) => r.pending), paidTotal: sum(done, (r) => r.paid), chits: sum(pending.filter((r) => r.kind === 'chit'), (r) => r.pending), gold: sum(pending.filter((r) => r.kind === 'gold'), (r) => r.pending) };
 }
 /** Regular spending still to come this month: what was spent so far per day, for the days left. Rent is left out, so are one-off and optional lines. */
 export function expenseProjection(mc, asOf) {

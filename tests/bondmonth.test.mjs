@@ -53,7 +53,14 @@ const e1 = Math.round(bondDueAmount(bonds[0], '2026-10') * 100) / 100;
 const dat = { settings: { tdsRate: 0.1 }, categories: [{ name: 'Income Bond', kind: 'income' }], ledger: [{ date: '2026-10-05', desc: 'One', category: 'Income Bond', credit: e1, debit: 0 }, { date: '2026-10-02', desc: 'quarterly bond', category: 'Income Bond', credit: 20000, debit: 0 }], bonds, receivables: [], manualMonthlyIncome: [], lending: [], fds: [] };
 const mc = monthCashflow(dat, { bonds, closed: { bonds: [] }, asOf: '2026-10-21' }, '2026-10');
 ok(mc.income[0].bonds.filter((x) => x.pending > 1).map((x) => x.name).join() === 'Two' && mc.yetToReceive > 1, 'bond Two stays pending: ' + mc.yetToReceive);
-ok(near(mc.income[0].received, e1) && mc.income[0].otherCredits > 19000, 'only the credit that paid bond One counts as received');
+ok(mc.income[0].name === 'Income Bond' && near(mc.income[0].received, e1) && near(mc.income[0].bonds.find((x) => x.name === 'One').credited, e1), 'bond One is received (its due date passed) and the bank credit that paid it is kept as credited');
+// received follows the due date, not the bank: no bank entry at all, still received once due; due later, still pending
+const none = monthCashflow({ ...dat, ledger: [] }, { bonds, closed: { bonds: [] }, asOf: '2026-10-21' }, '2026-10');
+ok(near(none.income[0].received, e1) && none.income[0].bonds.find((x) => x.name === 'Two').pending > 1 && none.income[0].bonds.find((x) => x.name === 'One').pending === 0, 'received by due date alone: One yes, Two (due the 24th) no');
+const onDay = monthCashflow({ ...dat, ledger: [] }, { bonds, closed: { bonds: [] }, asOf: '2026-10-24' }, '2026-10');
+ok(onDay.income[0].bonds.every((x) => x.pending === 0) && onDay.yetToReceive < 1, 'on the due day itself the bond counts as received');
+const early = monthCashflow({ ...dat, ledger: [{ date: '2026-10-02', desc: 'Two', category: 'Income Bond', credit: 99999, debit: 0 }] }, { bonds, closed: { bonds: [] }, asOf: '2026-10-21' }, '2026-10');
+ok(early.income[0].bonds.find((x) => x.name === 'Two').pending > 1, 'a bank credit, early or large, does not make a bond not yet due received');
 // monthly lending lines: several loans share one name, so the amount says which one an income line is
 const recs = [{ id: 'r1', name: 'Pat Lee', expected: 8750, startDate: '2025-08-01', active: true, lastReceived: '2026-10-01' }, { id: 'r2', name: 'Pat Lee', expected: 17500, startDate: '2026-09-19', active: true, lastReceived: '2026-10-19' }];
 const w = incomeWindow({ receivables: recs }, { name: 'Pat Lee', amount: 17500 });
