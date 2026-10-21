@@ -59,6 +59,23 @@ export function taxPeople(data) {
   Object.values(data.taxOwners || {}).forEach(add);
   return [...seen.values()].sort((a, b) => a.localeCompare(b));
 }
+/**
+ * Month by month for one bond in a financial year, to set against the bank statement: days held, interest, TDS, what should reach the bank that month
+ * (a quarterly bond pays every third month) and what the bank really credited, matched with the same rule as Home.
+ */
+export function holdingMonths(data, all, row, from, end) {
+  const b = row.ref, out = [], tds = data.settings.tdsRate ?? 0.1;
+  if (!b || row.kind !== 'Bonds') return out;
+  for (let m = from.slice(0, 7); m <= end.slice(0, 7); m = C.addMonths(m + '-01', 1).slice(0, 7)) {
+    const days = C.bondDaysIn(b, m), gross = (b.principal * b.rate * days) / 365;
+    const due = C.bondDueAmount(b, m, tds);
+    const cf = C.monthCashflow(data, all, m).income[0];
+    const hit = cf && cf.bonds ? cf.bonds.find((x) => x.name === b.name) : null;
+    if (!days && !due && !(hit && hit.received)) continue;
+    out.push({ month: m, days, gross, tds: gross * tds, net: gross - gross * tds, due, received: hit ? hit.received : 0 });
+  }
+  return out;
+}
 export function taxSummary(data, all, y, who = 'all', opts = {}) {
   const { from, to, label } = fyRange(y);
   const mine = (name) => who === 'all' || lc(name || NO_OWNER) === lc(who);
@@ -73,7 +90,7 @@ export function taxSummary(data, all, y, who = 'all', opts = {}) {
   };
   const compound = (it, date) => { const cap = it.maturityDate && it.maturityDate < date ? it.maturityDate : date; return C.calcDeposit({ ...it, accruedOverride: undefined }, cap).accrued; };
   const interest = [];
-  for (const b of data.bonds || []) { const s = span(b); if (!s || !mine(itemOwner(b))) continue; const gross = (b.principal * b.rate * s.days) / 365; interest.push({ kind: 'Bonds', name: b.name, holder: itemOwner(b) || NO_OWNER, gross, tds: gross * tdsRate }); }
+  for (const b of data.bonds || []) { const s = span(b); if (!s || !mine(itemOwner(b))) continue; const gross = (b.principal * b.rate * s.days) / 365; interest.push({ kind: 'Bonds', name: b.name, holder: itemOwner(b) || NO_OWNER, gross, tds: gross * tdsRate, ref: b, closedOn: b.closed ? b.closed.date || 'closed' : '' }); }
   for (const [list, kind] of [[data.fds || [], 'Fixed deposits'], [data.lending || [], 'Private lending']]) {
     for (const it of list) {
       const s = span(it); if (!s || !mine(itemOwner(it))) continue;
@@ -82,7 +99,7 @@ export function taxSummary(data, all, y, who = 'all', opts = {}) {
         const before = it.depositDate < from ? compound(it, new Date(C.toMs(from) - DAY).toISOString().slice(0, 10)) : 0;
         gross = compound(it, s.b) - before;
       } else gross = (it.principal * it.rate * s.days) / 365;
-      interest.push({ kind, name: it.name, holder: itemOwner(it) || NO_OWNER, party: it.borrower || it.issuer, gross, tds: 0 });
+      interest.push({ kind, name: it.name, holder: itemOwner(it) || NO_OWNER, party: it.borrower || it.issuer, gross, tds: 0, ref: it, closedOn: it.closed ? it.closed.date || 'closed' : '' });
     }
   }
   const interestBy = ['Bonds', 'Fixed deposits', 'Private lending'].map((kind) => { const rows = interest.filter((r) => r.kind === kind); return { kind, rows, gross: sum(rows, (r) => r.gross), tds: sum(rows, (r) => r.tds) }; }).filter((g) => g.rows.length);
@@ -215,7 +232,7 @@ export function yearsWithLedger(data, asOf) {
 }
 export { oneTimeSet, expenseCategoryNames, allCategories } from './categories.js';
 import { oneTimeSet } from './categories.js';
-const INTEREST_CAT = /bond|lend/i;
+const INTEREST_CAT = /^\s*income\s*(bond|lend)/i;   // only "Income Bond" and "Income Lending" count as interest; everything else is ignored here
 export const isInterestCategory = (name) => INTEREST_CAT.test(name || '');
 /**
  * Month by month for a year: interest received from bonds and private lending against spending, with loan EMI left out.
@@ -229,9 +246,13 @@ export function interestVsSpend(data, all, year) {
     const s = C.rangeSummary(data, month + '-01', month + '-31');
     if (!s.count) continue;
     const expense = s.expense.filter((x) => lc(x.category) !== 'loan');
-    const income = s.income, interest = sum(income.filter((x) => isInterestCategory(x.category)), (x) => x.amount);
+    // interest is read straight from the bank credits of those two categories, whatever kind the category is marked as
+    const mRows = data.ledger.filter((e) => C.monthKey(e.date) === month && e.credit > 0 && isInterestCategory(e.category));
+    const income = s.income, interest = sum(mRows, (e) => e.credit);
+    const cm = new Map(); for (const e of mRows) cm.set(e.category, (cm.get(e.category) || 0) + e.credit);
+    const counted = [...cm].map(([category, amount]) => ({ category, amount }));
     const oneTime = sum(expense.filter((x) => once.has(lc(x.category))), (x) => x.amount), total = sum(expense, (x) => x.amount);
-    rows.push({ month, interest, regular: total - oneTime, oneTime, total, deviation: interest - (total - oneTime), afterOneTime: interest - total, income, expense, emi: s.expense.filter((x) => lc(x.category) === 'loan').reduce((a, x) => a + x.amount, 0) });
+    rows.push({ month, counted, interest, regular: total - oneTime, oneTime, total, deviation: interest - (total - oneTime), afterOneTime: interest - total, income, expense, emi: s.expense.filter((x) => lc(x.category) === 'loan').reduce((a, x) => a + x.amount, 0) });
   }
   return rows;
 }

@@ -28,6 +28,7 @@ function bondForm(b) {
       { key: 'platform', label: 'Bought through', required: true, hint: 'Golden Pi, Groww, AIOnion…' }, { key: 'company', label: 'Issuer', required: true },
       { key: 'principal', label: 'Amount invested (₹)', type: 'number', required: true }, { key: 'rate', label: 'Interest rate (0.1075 = 10.75%)', type: 'number', required: true },
       { key: 'credit', label: 'Interest paid', type: 'select', options: ['Monthly', 'Quarterly'] },
+      { key: 'quarterMonth', label: 'Quarterly interest is paid in', type: 'select', options: C.QUARTER_CHOICES, showIf: (v) => v.credit === 'Quarterly', hint: 'Each payment covers the three months up to the month it is paid in.' },
       { key: 'dueRule', label: 'Interest due date (optional)', type: 'select', options: [{ value: '', label: 'Not set' }, { value: 'first', label: 'First day of the month' }, { value: 'last', label: 'Last day of the month' }, { value: 'day', label: 'A fixed day of the month' }], hint: 'When set, the bond shows under “Needs a look” on Home on that day.' },
       { key: 'dueDay', label: 'Day of the month (1 to 31)', type: 'number', showIf: (v) => v.dueRule === 'day' },
       { key: 'depositDate', label: 'Bought on', type: 'date', required: true }, { key: 'maturityDate', label: 'Matures on', type: 'date', required: true },
@@ -35,9 +36,9 @@ function bondForm(b) {
     onSave: (v) => {
       if (v.dueRule === 'day' && !(Number(v.dueDay) >= 1 && Number(v.dueDay) <= 31)) { toast('Enter a day between 1 and 31.', 'bad'); return false; }
       mutate((d) => {
-        const rec = { ...v }; if (!rec.dueRule) { delete rec.dueRule; delete rec.dueDay; } else if (rec.dueRule !== 'day') delete rec.dueDay;
+        const rec = { ...v }; if (rec.credit === 'Quarterly') rec.quarterMonth = Number(rec.quarterMonth) || 0; else delete rec.quarterMonth; if (!rec.dueRule) { delete rec.dueRule; delete rec.dueDay; } else if (rec.dueRule !== 'day') delete rec.dueDay;
         if (isNew) d.bonds.push({ id: nextId('b', d.bonds), ...rec });
-        else { const t = d.bonds.find((x) => x.id === b.id); Object.assign(t, rec); if (!rec.dueRule) { delete t.dueRule; delete t.dueDay; } else if (rec.dueRule !== 'day') delete t.dueDay; }
+        else { const t = d.bonds.find((x) => x.id === b.id); Object.assign(t, rec); if (!('quarterMonth' in rec)) delete t.quarterMonth; if (!rec.dueRule) { delete t.dueRule; delete t.dueDay; } else if (rec.dueRule !== 'day') delete t.dueDay; }
       });
     },
     onDelete: isNew ? null : () => mutate((d) => { d.bonds = d.bonds.filter((x) => x.id !== b.id); }),
@@ -97,6 +98,7 @@ import * as loans from './loans.js';
 const TABS = [['bonds', 'Bonds'], ['fds', 'FDs'], ['lending', 'Lendings'], ['loans', 'Loans'], ['closed', 'Closed']];
 /** Interest that has reached you so far, after TDS unless the bond has a fixed payout amount. */
 const bondReceived = (b) => { const r = C.interestReceived(b, S.all.asOf); return b.payoutAmount > 0 ? r : r * (1 - (S.data.settings.tdsRate ?? 0.1)); };
+const shortD = (d) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 const flt = { bonds: { holder: 'all', via: 'all' }, fds: { holder: 'all', via: 'all' }, lending: { holder: 'all', via: 'all' } };
 const rerenderFixed = () => window.dispatchEvent(new Event('rerender'));
 /** Quick filters above a list: account holder and where it was bought. Default is everything. Returns the bar and the rows that pass. */
@@ -132,13 +134,11 @@ export function render() {
   const fb = tab === 'bonds' ? quickFilter('bonds', all.bonds, (b) => b.holder, (b) => b.platform, 'Via') : tab === 'fds' ? quickFilter('fds', all.fds, (x) => x.account, (x) => x.issuer, 'Bank') : tab === 'lending' ? quickFilter('lending', all.lending, (x) => x.account, (x) => x.borrower, 'Borrower') : null;
   if (tab === 'bonds') root.append(section('Bonds', h('div', null, fb.bar,
     table([
-      { label: 'Bond', host: true, render: (b) => h('span', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px' } }, h('span', null, b.name), h('small', { class: 'muted', style: { fontWeight: 400, whiteSpace: 'nowrap', opacity: 0.75 } }, 'matures ' + dateStr(b.maturityDate))) },
-      { label: 'Holder', mob: 'under', get: (b) => b.holder },
-      { label: 'Via', mob: 'under', get: (b) => b.platform },
+      { label: 'Bond', host: true, render: (b) => h('span', null, h('span', null, b.name), h('small', { class: 'muted', style: { display: 'block', fontWeight: 400, opacity: 0.75 } }, [b.holder, b.platform].filter(Boolean).join(' · ') + (b.maturityDate ? ' · matures ' + dateStr(b.maturityDate) : ''))) },
       { label: 'Invested', cls: 'r', get: (b) => money(b.principal), total: (rs) => money(rs.reduce((a, b) => a + b.principal, 0)) },
       { label: 'Rate (paid)', key: true, cls: 'r', render: (b) => h('span', null, pct(b.rate, 2), h('span', { class: 'plain' }, ' (' + String(b.credit || 'Monthly').toLowerCase() + ')')) },
-      { label: 'Net per month', key: true, cls: 'r', get: (b) => money(b.monthNet), total: (rs) => money(rs.reduce((a, b) => a + b.monthNet, 0)) },
-      { label: 'Received so far', mob: 'under', mlabel: 'received ', cls: 'r', render: (b) => green(money(bondReceived(b))), total: (rs) => green(money(rs.reduce((a, b) => a + bondReceived(b), 0))) },
+      { label: 'Next due', key: true, cls: 'r', render: (b) => { const d = C.bondNextDue(b, S.all.asOf); return d ? h('span', { class: 'due-next' }, shortD(d)) : h('span', { class: 'muted' }, '–'); } },
+      { label: 'Net per month', key: true, cls: 'r', render: (b) => h('span', null, h('b', null, money(b.monthNet)), h('small', { style: { display: 'block' } }, green('received ' + money(bondReceived(b))))), total: (rs) => h('span', null, h('b', null, money(rs.reduce((a, b) => a + b.monthNet, 0))), h('small', { style: { display: 'block' } }, green('received ' + money(rs.reduce((a, b) => a + bondReceived(b), 0))))) },
     ], fb.rows, { footer: { label: 'Total' }, onRow: canEdit() ? (b) => bondForm(data.bonds.find((x) => x.id === b.id)) : null })),
     canEdit() ? [btn('Add bond', () => bondForm(), 'primary')] : null));
 
@@ -196,15 +196,11 @@ function bondInsights(all, data) {
     h('div', { class: 'grid2' },
       section('Who holds the bonds', h('div', null, donut(owners, { fmt: money, center: compact(total), sub: 'invested', size: 190 }), legend(owners, { fmt: money }))),
       section('Which companies', firms.length ? hbars(firms, { fmt: money, colorIndex: 1 }) : h('p', { class: 'empty' }, 'No issuer set on the bonds.'))),
-    section('Bond settings', h('div', { class: 'assume' },
-      h('div', { class: 'assume-group' }, h('h4', null, 'Calculation'),
-        h('label', null, 'Tax deducted on bond interest (%) ', h('input', { type: 'number', step: 'any', min: '0', max: '100', value: String(Math.round((data.settings.tdsRate ?? 0.1) * 10000) / 100), disabled: !canEdit(), 'aria-label': 'Tax deducted on bond interest', style: { maxWidth: '6em' },
-          onchange: (e) => { const n = Number(e.target.value); if (!Number.isFinite(n) || n < 0 || n > 100) return toast('Enter a percentage between 0 and 100.', 'bad'); if (!canEdit()) return toast('This device has read-only access.'); mutate((d) => { d.settings.tdsRate = n / 100; }); } })),
-        h('p', { class: 'note' }, 'Used for the net interest of every bond. A month’s interest is the daily interest times the real days in that month: 28, 30 or 31.')),
-      h('div', { class: 'assume-group' }, h('h4', null, 'Reminders on Home'),
-        h('label', { class: 'check-inline' }, h('input', { type: 'checkbox', checked: bn.on, disabled: !canEdit(), onchange: (e) => save({ on: e.target.checked }) }), ' Remind me when bond interest is due'),
-        h('div', { style: { margin: '8px 0' } }, h('label', null, 'Tell me ', days)),
-        h('p', { class: 'note' }, 'One setting for every bond that has an interest due date (set it on the bond). It shows under “Needs a look” from that many days before, and under “Coming up” for the days before it, not on the day. Bonds without a due date are left alone.')))));
+    h('details', { class: 'card simple-settings' }, h('summary', null, 'Bond settings'),
+      h('label', { style: { display: 'block', margin: '10px 0' } }, 'Tax deducted on interest (%) ', h('input', { type: 'number', step: 'any', min: '0', max: '100', value: String(Math.round((data.settings.tdsRate ?? 0.1) * 10000) / 100), disabled: !canEdit(), 'aria-label': 'Tax deducted on bond interest', style: { maxWidth: '6em' },
+        onchange: (e) => { const n = Number(e.target.value); if (!Number.isFinite(n) || n < 0 || n > 100) return toast('Enter a percentage between 0 and 100.', 'bad'); if (!canEdit()) return toast('This device has read-only access.'); mutate((d) => { d.settings.tdsRate = n / 100; }); } })),
+      h('label', { class: 'check-inline', style: { display: 'block', margin: '10px 0' } }, h('input', { type: 'checkbox', checked: bn.on, disabled: !canEdit(), onchange: (e) => save({ on: e.target.checked }) }), ' Remind me when interest is due, ', days),
+      h('p', { class: 'note' }, 'Interest is the daily amount times the real days of the month. Reminders work for bonds with a due date set on the bond.')));
 }
 
 function personList() {

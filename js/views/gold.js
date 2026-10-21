@@ -86,7 +86,7 @@ function chitForm(c) {
     title: isNew ? 'Add gold chit' : 'Edit ' + c.name, value: c || { startDate: C.todayISO() },
     fields: [
       { key: 'name', label: 'Name', required: true, hint: 'For example GRT Gold savings 5' }, { key: 'shop', label: 'Jeweller' },
-      { key: 'monthly', label: 'Monthly instalment (₹, optional)', type: 'number' }, { key: 'months', label: 'Number of months (optional)', type: 'number', half: true },
+      { key: 'monthly', label: 'Monthly instalment (₹, optional)', type: 'number' }, { key: 'months', label: 'Chit duration (months)', type: 'number', half: true, hint: 'Home stops counting it as pending once this many payments are in.' },
       { key: 'startDate', label: 'Started on', type: 'date', half: true }, { key: 'maturityDate', label: 'Ends on', type: 'date' },
       { key: 'desc', label: 'Notes / who to contact', type: 'textarea' },
     ],

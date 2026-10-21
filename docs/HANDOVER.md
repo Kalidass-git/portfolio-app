@@ -1,5 +1,7 @@
 # Handover for a new Claude session
 
+**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.9.34 (cache `family-wealth-v60`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
+
 Read this first, then `docs/SETUP.md` (release notes, newest first) and `README.md`.
 
 ## What this is
@@ -40,6 +42,17 @@ A no-build installable web app (PWA, vanilla ES modules) that mirrors the owner'
 
 ## Tests
 `node tests/<name>.test.mjs <path-to-data-json>` for calc, categories, archive, merge, safety, buys, projector, risk. `epf` takes no argument. They need a copy of the real data file (not in the zip). Browser checks used Playwright at 390px and 1360px width.
+
+## Release process
+Branch off `origin/main` (`release-X.Y.Z`), change files, bump `js/version.js` and the cache name in `sw.js`, add notes at the top of the release list in `docs/SETUP.md`, push, and open a PR to `main` with `gh api` (GraphQL is blocked). The owner merges it. Always base on `origin/main` so stacked PRs do not leave main behind.
+
+## State after 8.9.34
+- Bonds: per-bond optional `quarterMonth` (0, 1 or 2) sets the payout months of quarterly bonds; the payment covers the three months up to the payout month (`bondPaysIn`, `bondDueAmount`, `bondNextDue` in calc.js). Bank "Income Bond" credits are matched to bonds in `matchBondCredits` (exact amount, then name or issuer in the description, then due date, never before the due date). Manual monthly income such as private lending starts the month after its start date.
+- Annual review: interest is read from "Income Bond" and "Income Lending" bank credits only (`isInterestCategory`). One-time category picker lists expense and investment categories only.
+- Tax summary: closed bonds are flagged "Closed" (interest to the closing day); tap a bond for `holdingMonths`, a month-by-month check against the bank.
+- Home "Investing this month" (`monthPlan` in `js/monthinvest.js`): investable income added, pending chit instalments from last month (optional `savings[].chitMonths`, gold chit `months` for duration), projected expenses for the rest of the month (rent and one-offs left out), current investable amount (bank minus wallets, optional `accounts[].wallet`) and its allocation by plan line weights.
+- Tests that pass on synthetic data: allocgoal, watch, tax, monthinvest, bondmonth. projector, risk, safety, categories and features fail on synthetic data and did before.
+- Verified with Playwright on synthetic data only, never on the real file. Ask the owner to check Annapurna, Navi, BelStar, Pandi and the new Home cards on his real data.
 
 ## Not testable by Claude
 Live Apps Script sync, Yahoo and mfapi prices, a real Android device. Ask the owner to try those after a release.

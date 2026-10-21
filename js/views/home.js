@@ -8,7 +8,7 @@ import * as R from '../risk.js';
 import { rateHistory, ageText } from './gold.js';
 import { GROUPS } from './groupmix.js';
 import { allocationBody } from './allocview.js';
-import { monthInvest } from '../monthinvest.js';
+import { monthPlan } from '../monthinvest.js';
 import * as P from '../projector.js';
 
 let selMonth = null;
@@ -149,26 +149,49 @@ function toReceiveCard(data, all) {
     h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income'))));
 }
 
-/** What can still be invested this month, where it should go, and what the bank can pay for right now. */
+/** A card the person can tap for the working behind a figure. */
+const tapStat = (label, val, sub, cls, onClick) => h('div', { class: 'stat tappable', role: 'button', tabindex: '0', onclick: onClick, onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } },
+  h('div', { class: 'stat-label' }, label), h('div', { class: 'stat-value ' + (cls || '') }, val), h('div', { class: 'stat-sub' }, sub));
+const detail = (title, rows, notes) => dialog(title, h('div', null, rows.length ? rowList(rows) : h('p', { class: 'empty' }, 'Nothing to show.'), ...notes.map((n) => h('p', { class: 'note' }, n))), [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
+
+/** Where this month's money stands: what came in, what is already promised (chits), what will be spent, and what that leaves to invest. */
 function investCard(data, all) {
   let m;
-  try { m = monthInvest(data, all, P.cfg(data).outlooks); } catch (e) { return null; }
-  if (!m.rows.length && m.investable < 1 && m.done < 1) return null;
-  const cell = (cls, v) => (v > 0.5 ? h('span', { class: cls }, money(v)) : '–');
-  const k = (label, val, sub, cls) => h('div', { class: 'stat' }, h('div', { class: 'stat-label' }, label), h('div', { class: 'stat-value ' + (cls || '') }, val), h('div', { class: 'stat-sub' }, sub));
-  const rows = m.rows.filter((r) => r.target > 0.5 || r.done > 0.5).sort((a, b) => b.left - a.left);
-  const worksOut = `${money(m.income)} in (${m.planIn > m.actualIn ? 'expected' : 'received'}) − ${money(m.spend)} out (${m.planOut > m.actualOut ? 'expected' : 'spent so far'})`;
+  try { m = monthPlan(data, all, P.cfg(data).outlooks); } catch (e) { return null; }
+  const mand = m.mandatory, pr = m.proj;
+  const incomeNote = m.planIn > m.actualIn ? 'expected' : 'received';
+  const showInvestable = () => detail('Investable income added, ' + monthLabel(m.month, true), [
+    { title: 'Money in this month', sub: `the higher of ${money(m.actualIn)} received so far and ${money(m.planIn)} the plan expects (${incomeNote})`, value: money(m.income) },
+    { title: 'Money out this month', sub: `the higher of ${money(m.actualOut)} paid so far and ${money(m.planOut)} the plan expects (expenses, EMI, tax, yearly bills)`, value: '− ' + money(m.spend) },
+    { title: 'Investable income added', sub: 'what is left to invest from this month’s money', value: h('b', { class: 'inv' }, money(m.investable)) },
+  ], ['EPF is not counted: it goes straight to the EPF account and never reaches the bank.', 'This is the month’s income, not the bank balance. The bank balance is used for “Current investable amount” below.']);
+  const showMandatory = () => detail('Pending mandatory investments', mand.rows.map((r) => ({ title: r.name, sub: `${r.kind === 'gold' ? 'Gold chit' : 'Chit'} · last month ${money(r.last)}${r.paid > 0 ? ', ' + money(r.paid) + ' already paid this month' : ''} · payment ${r.count + (r.paid > 0 ? 0 : 1)}${r.duration ? ' of ' + r.duration : ''}`, value: r.pending > 0.5 ? h('span', { class: 'warn' }, money(r.pending)) : h('span', { class: 'pos' }, 'paid') })),
+    ['Only chits and gold chits are counted here. The amount is what each one took last month; a chit is left out once its payments reach its duration or its end date has passed.', 'Set the duration on each chit (Cash → Chits & savings, Gold & others → Gold chits) so finished chits stop showing.']);
+  const showSpend = () => detail('Expenses still to come this month', pr.rows.map((r) => ({ title: r.name, sub: `${money(r.spent)} spent in ${pr.days} day${pr.days === 1 ? '' : 's'} = ${money(r.perDay)} a day × ${pr.left} days left`, value: money(r.more) })),
+    ['Projected from the Spent column in “This month in detail”: regular spending only. Rent, clothes, entertainment, vacation, gifts, EMI and tax are not projected.']);
+  const showCurrent = () => detail('Current investable amount', [
+    ...m.banks.map((a) => ({ title: a.name, sub: a.holder, value: money(a.balance) })),
+    { title: 'Bank balance', sub: m.wallets.length ? 'wallets left out: ' + m.wallets.map((w) => w.name).join(', ') : 'all accounts', value: h('b', null, money(m.bank)) },
+    { title: 'Pending mandatory investments', sub: 'chits and gold chits', value: '− ' + money(mand.total) },
+    { title: 'Expenses still to come', sub: 'projected for the rest of the month', value: '− ' + money(pr.total) },
+    { title: 'Current investable amount', value: h('b', { class: m.current >= 0 ? 'inv' : 'neg' }, money(m.current)) },
+  ], ['Mark an account as a wallet in its settings (or put “wallet” in its name) to leave it out.']);
   return section('Investing this month · ' + monthLabel(m.month), h('div', null,
     h('div', { class: 'stats' },
-      k('Can be invested this month', money(m.investable), worksOut, 'inv'),
-      k('Already invested', money(m.done), 'bank entries and asset records this month'),
-      k('Still to invest', money(m.stillToInvest), rows.length ? `${rows.filter((r) => r.left > 0.5).length} place${rows.filter((r) => r.left > 0.5).length === 1 ? '' : 's'} below` : 'no plan lines'),
-      k('Can go in from the bank now', money(m.investNow), `bank ${money(m.bank)} − ${money(m.moreSpend)} still to spend before month end`, m.notEnough ? 'warn' : 'pos')),
-    m.notEnough ? h('p', { class: 'note warn' }, `The bank cannot cover all of it yet: ${money(m.stillToInvest - m.investNow)} more has to wait for money to arrive.`) : null,
-    rows.length ? rowList(rows.map((r) => ({ title: r.name, sub: `${P.classOf(r.cls).label} · ${Math.round(r.share * 100)}% of the month’s money`,
-      value: r.left > 0.5 ? h('span', { class: 'inv' }, money(r.left)) : h('span', { class: 'pos' }, 'done'), valueSub: `${money(r.done)} of ${money(r.target)}` }))) : h('p', { class: 'empty' }, m.hasPlan ? 'No investment lines are planned. Add them under Wealth outlook.' : 'Make a plan under Wealth outlook to split the money.'),
-    m.unplanned.length ? h('p', { class: 'note' }, 'Also invested this month outside the plan: ' + m.unplanned.map((u) => `${P.classOf(u.cls).label} ${money(u.done)}`).join(', ') + '.') : null,
-    h('p', { class: 'note' }, 'Money in and out is the higher of what has happened so far and what the plan expects for the month. What is left is split by the shares of your plan lines. EPF is not included because it never reaches the bank.'),
+      tapStat('Investable income added this month', money(m.investable), `${money(m.income)} in − ${money(m.spend)} out · tap for working`, 'inv', showInvestable),
+      tapStat('Pending mandatory investments (approx.)', money(mand.total), mand.rows.length ? `${mand.rows.length} chit${mand.rows.length === 1 ? '' : 's'}, from last month · chits and gold chits only` : 'no chit instalments pending · chits and gold chits only', mand.total > 0.5 ? 'warn' : '', showMandatory),
+      tapStat('Expenses still to come (projected)', money(pr.total), `${pr.left} day${pr.left === 1 ? '' : 's'} left · regular spending, no rent`, '', showSpend),
+      tapStat('Current investable amount', money(m.current), `bank ${money(m.bank)} − ${money(mand.total)} chits − ${money(pr.total)} expenses`, m.current >= 0 ? 'pos' : 'neg', showCurrent)),
+    m.current < 0 ? h('p', { class: 'note warn' }, `The bank is short by ${money(-m.current)} for what is still expected this month.`) : null,
+    h('h4', { style: { margin: '12px 0 4px' } }, 'Where the current investable amount can go'),
+    m.current > 0.5 ? rowList([
+      mand.chits > 0.5 ? { title: 'Chits', sub: 'already set aside, from last month', value: money(mand.chits) } : null,
+      mand.gold > 0.5 ? { title: 'Gold chits', sub: 'already set aside, from last month', value: money(mand.gold) } : null,
+      m.goldWanted > 0.5 ? { title: 'Gold', sub: 'what you bought last month, less this month so far', value: money(m.goldWanted) } : null,
+      ...m.alloc.filter((r) => r.amount > 0.5).map((r) => ({ title: r.name, sub: `${P.classOf(r.cls).label} · ${Math.round(r.share * 100)}% of the rest, by your plan`, value: h('span', { class: 'inv' }, money(r.amount)) })),
+    ].filter(Boolean)) : h('p', { class: 'empty' }, 'Nothing is free to invest right now.'),
+    m.current > 0.5 && !m.hasLines ? h('p', { class: 'note' }, 'Make a plan under Wealth outlook to split the rest.') : null,
+    h('p', { class: 'note' }, 'Gold and chits come from what actually happened. The rest of the amount is split by the shares of your plan lines. Figures are approximate.'),
     h('p', null, h('a', { href: '#/projector' }, 'Open Wealth outlook'))));
 }
 

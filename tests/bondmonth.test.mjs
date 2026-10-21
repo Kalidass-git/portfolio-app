@@ -1,4 +1,4 @@
-import { bondDaysIn, bondNetIn, bondDueAmount, bondDueDate, daysInMonthOf } from '../js/calc.js';
+import { matchBondCredits, bondPaysIn, bondDaysIn, bondNetIn, bondDueAmount, bondDueDate, daysInMonthOf } from '../js/calc.js';
 let bad = 0; const ok = (c, m) => { if (!c) { bad++; console.log('FAIL', m); } };
 const near = (a, b) => Math.abs(a - b) < 0.01;
 const b = { principal: 100000, rate: 0.1, depositDate: '2026-02-10', maturityDate: '2027-02-10', credit: 'Monthly' };
@@ -12,7 +12,21 @@ ok(near(bondNetIn(b, '2026-04', 0.1), 100000 * 0.1 / 365 * 30 * 0.9), '30 days')
 ok(!(near(bondNetIn(b, '2026-03', 0.1), bondNetIn(b, '2026-04', 0.1))), 'months differ');
 const q = { ...b, credit: 'Quarterly', depositDate: '2025-01-01' };
 ok(bondDueAmount(q, '2026-02') === 0, 'quarterly pays nothing in Feb');
-ok(near(bondDueAmount(q, '2026-01'), [31, 28, 31].reduce((t, d) => t + 100000 * 0.1 / 365 * d * 0.9, 0)), 'quarterly sums the quarter by days');
+ok(near(bondDueAmount(q, '2026-01'), [30, 31, 31].reduce((t, d) => t + 100000 * 0.1 / 365 * d * 0.9, 0)), 'quarterly pays the three months ending in the payout month');
+const q2 = { ...q, quarterMonth: 2 };
+ok(bondDueAmount(q2, '2026-01') === 0 && bondPaysIn(q2, '2026-03') && bondPaysIn(q2, '2026-12'), 'payout months can be Mar/Jun/Sep/Dec');
+ok(near(bondDueAmount(q2, '2026-06'), [30, 31, 30].reduce((t, d) => t + 100000 * 0.1 / 365 * d * 0.9, 0)), 'Apr+May+Jun');
+const qe = { ...q2, maturityDate: '2026-11-20' };
+ok(bondPaysIn(qe, '2026-11') && near(bondDueAmount(qe, '2026-11'), 100000 * 0.1 / 365 * (31 + 19) * 0.9), 'final month pays the leftover since the last payout (Oct, 1-19 Nov)');
+const per = [{ name: 'Annapurna_Dec23_Apr29', company: 'Annapurna', due: '2026-10-24', expected: 3000 }, { name: 'KeerthanaFinServ_Sep27', company: 'Keertana', due: '2026-10-22', expected: 1835 }, { name: 'Navi_Jul26_Nov32', company: 'Navi', due: '2026-10-28', expected: 2500 }];
+matchBondCredits([{ credit: 1835, desc: 'NEFT whatever' }], per);
+ok(per[1].received === 1835 && per[0].received === 0 && per[2].pending === 2500, 'an exact amount goes to its bond, not the first by date');
+const per2 = [{ name: 'Navi_Jul26', company: 'Navi', due: '2026-10-28', expected: 2500 }, { name: 'X', company: 'Y', due: '2026-10-22', expected: 2000 }];
+matchBondCredits([{ credit: 2300, desc: 'NAVI NBFC interest' }], per2);
+ok(per2[0].received === 2300 && per2[1].received === 0, 'a name in the description wins over due order');
+const per3 = [{ name: 'Late', due: '2026-10-28', expected: 2000 }, { name: 'Early', due: '2026-10-05', expected: 1000 }];
+matchBondCredits([{ credit: 3000, date: '2026-10-06', desc: 'interest' }], per3);
+ok(per3[1].received === 1000 && per3[0].received === 0 && per3[0].pending === 2000, 'money that came on the 6th is not set against a bond due on the 28th');
 const c = { ...b, closed: { date: '2026-04-15' } };
 ok(bondDaysIn(c, '2026-04') === 14 && bondDaysIn(c, '2026-05') === 0, 'closed bond stops earning');
 const paid = { ...b, payoutAmount: 800 };
