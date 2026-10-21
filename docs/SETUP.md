@@ -154,6 +154,13 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.9.34 – Bond due dates, review income, Home investing
+- **Bond due logic.** Quarterly bonds get a "Quarterly interest is paid in" setting (Jan·Apr·Jul·Oct, Feb·May·Aug·Nov or Mar·Jun·Sep·Dec). A payment covers the three months up to the payout month; the last month of a bond pays what is left. Bank "Income Bond" credits are matched to bonds by exact amount, then by name or issuer in the description, then by due date, and a credit never pays a bond that was not yet due. Lending that started last month first counts from this month.
+- **Annual review.** Interest income is read from "Income Bond" and "Income Lending" bank credits only. Income and transfer categories are no longer offered as one-time categories.
+- **Bonds page.** Net per month with "received" under it, holder and platform under the name, next due date in colour, and a short collapsed Bond settings card.
+- **Tax summary.** Closed bonds carry a Closed tag (interest to the day they closed). Tap a bond for a month-by-month check against the bank.
+- **Home, Investing this month.** Investable income added (tap for working), pending chit instalments (new chit duration setting on chits and gold chits), expenses still to come, and the current investable amount (bank without wallets, less chits and expenses) with its allocation. An account can be marked as a wallet.
+
 ## Release 8.9.33 – Popovers, merged bond settings, review table
 
 - Wealth outlook: the breakdowns behind Salary + EPF, Interest, Spending and Growth open as a larger popover on click (close by clicking elsewhere or pressing Escape), with one short line per item.

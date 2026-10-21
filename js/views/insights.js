@@ -54,12 +54,12 @@ function tax(root) {
   folds.push(ownersCard(data, people));
   if (t.bankOther.length) folds.push(fold(`Other income credited to the bank · ${money(t.bankOtherTotal)}`, table([{ label: 'Category', host: true, get: (r) => r.category }, { label: 'Amount', cls: 'r', get: (r) => money(r.amount) }], t.bankOther, {})));
   folds.push(fold(`Interest on every holding, ${t.fy} · ${money(t.interestGross)}`, t.interestBy.length ? h('div', null, ...t.interestBy.map((g) => h('div', null, h('h4', null, g.kind), table([
-    { label: 'Name', host: true, get: (r) => r.name },
+    { label: 'Name', host: true, render: (r) => h('span', null, r.name, r.closedOn ? h('span', { class: 'chip-closed' }, ' Closed' + (r.closedOn.length === 10 ? ' ' + dateStr(r.closedOn) : '')) : null) },
     { label: 'Holder', mob: 'hide', get: (r) => r.holder || '–' },
     { label: 'Interest', cls: 'r', get: (r) => money(r.gross), total: (rs) => money(rs.reduce((a, r) => a + r.gross, 0)) },
     g.tds ? { label: `TDS at ${pct(t.tdsRate, 0)}`, cls: 'r', mob: 'under', mlabel: 'TDS ', get: (r) => money(r.tds), total: (rs) => money(rs.reduce((a, r) => a + r.tds, 0)) } : null,
-  ].filter(Boolean), g.rows, { footer: {} }))),
-  note(`Interest is worked out by days held inside the year, whether or not it has been paid out yet (accrual basis). TDS is an estimate for bonds only, at the rate in Settings; match it with Form 26AS.`)) : h('p', { class: 'empty' }, 'No interest-bearing holdings in this year.')));
+  ].filter(Boolean), g.rows, { footer: {}, onRow: g.kind === 'Bonds' ? (r) => holdingDialog(data, all, t, r) : null }))),
+  note(`Tap a bond to see it month by month against the bank. Closed bonds are included up to the day they were closed. Interest is worked out by days held inside the year, whether or not it has been paid out yet (accrual basis). TDS is an estimate for bonds only, at the rate in Settings; match it with Form 26AS.`)) : h('p', { class: 'empty' }, 'No interest-bearing holdings in this year.')));
   folds.push(fold(`Dividends · ${money(t.dividendTotal)}`, t.dividends.length ? table([
     { label: 'Company', host: true, get: (d) => d.name },
     { label: 'Payments', cls: 'r', mob: 'under', mlabel: 'x', get: (d) => d.count },
@@ -244,8 +244,7 @@ function interestSection(data, all, year) {
   const rows = I.interestVsSpend(data, all, Number(year));
   if (!rows.length) return section('Interest income against spending', h('p', { class: 'empty' }, 'No entries in this year yet.'));
   if (revPick && !rows.some((r) => r.month === revPick)) revPick = null;
-  const incomeCats = [...new Set(rows.flatMap((r) => r.income.map((x) => x.category)))];
-  const counted = incomeCats.filter(I.isInterestCategory), notCounted = incomeCats.filter((c) => !I.isInterestCategory(c));
+  const counted = [...new Set(rows.flatMap((r) => r.counted.map((x) => x.category)))];
   const once = I.oneTimeSet(data);
   const box = h('div');
   const catTable = (title, list, tot) => h('div', null, h('h4', { style: { margin: '6px 0 4px' } }, `${title} · ${money(tot)}`), list.length ? table([{ label: 'Category', host: true, get: (x) => x.category }, { label: 'Amount', cls: 'r', get: (x) => money(x.amount) }], list, {}) : h('p', { class: 'empty' }, 'None'));
@@ -259,7 +258,7 @@ function interestSection(data, all, year) {
     if (revPick) {
       const r = rows.find((x) => x.month === revPick);
       detail = h('div', { class: 'card inner' }, h('h4', { style: { margin: '0 0 4px' } }, monthLabel(r.month, true)),
-        h('div', { class: 'grid2' }, catTable('Income', r.income, r.income.reduce((a, x) => a + x.amount, 0)), h('div', null, catTable('Regular spending', r.expense.filter((x) => x.category.toLowerCase() !== 'loan' && !once.has(x.category.toLowerCase())), r.regular), r.oneTime > 0.5 ? catTable('One-time spending', r.expense.filter((x) => once.has(x.category.toLowerCase())), r.oneTime) : null)));
+        h('div', { class: 'grid2' }, catTable('Interest counted (Income Bond, Income Lending)', r.counted, r.interest), h('div', null, catTable('Regular spending', r.expense.filter((x) => x.category.toLowerCase() !== 'loan' && !once.has(x.category.toLowerCase())), r.regular), r.oneTime > 0.5 ? catTable('One-time spending', r.expense.filter((x) => once.has(x.category.toLowerCase())), r.oneTime) : null)));
     }
     const tot = (k) => rows.reduce((a, r) => a + r[k], 0);
     const dev = (v) => h('span', { class: v >= 0 ? 'pos' : 'neg' }, (v >= 0 ? '+' : '−') + money(Math.abs(v)));
@@ -272,7 +271,7 @@ function interestSection(data, all, year) {
         { label: 'One-time expense', cls: 'r', mob: 'under', mlabel: 'one-time ', get: (r) => money(r.oneTime), total: () => money(tot('oneTime')) },
         { label: 'Short by (income − regular expense)', cls: 'r', render: (r) => (r.deviation >= 0 ? h('span', { class: 'pos' }, 'Spare ' + money(r.deviation)) : h('span', { class: 'neg' }, 'Short by ' + money(-r.deviation))), total: () => { const v = tot('deviation'); return v >= 0 ? h('span', { class: 'pos' }, 'Spare ' + money(v)) : h('span', { class: 'neg' }, 'Short by ' + money(-v)); } },
       ], rows, { footer: { label: 'Year' }, rowClass: (r) => (r.deviation < 0 ? 'row-bad' : '') }),
-      h('p', { class: 'note' }, `Interest income counts the bank credits in ${counted.length ? counted.join(', ') : 'categories with “bond” or “lend” in the name (none found)'}.${notCounted.length ? ` Not counted: ${notCounted.join(', ')}.` : ''} Loan EMI is left out of spending. One-time spending is: ${[...once].length ? [...once].join(', ') : 'nothing chosen'}; everything else is regular.`),
+      h('p', { class: 'note' }, `Interest income counts the bank credits in ${counted.length ? counted.join(', ') : '“Income Bond” and “Income Lending” (none found)'}. All other income is ignored here. Loan EMI is left out of spending. One-time spending is: ${[...once].length ? [...once].join(', ') : 'nothing chosen'}; everything else is regular.`),
       needCard(data, rows),
       canEdit() ? btn('Choose the one-time categories', () => oneTimeDialog(data), 'small') : null);
   };
@@ -280,11 +279,11 @@ function interestSection(data, all, year) {
   return section('Interest income against spending', box);
 }
 function oneTimeDialog(data) {
-  const cats = I.allCategories(data);
+  const cats = I.allCategories(data).filter((c) => c.kind !== 'income' && c.kind !== 'transfer');   // only things you spend or invest can be one-time
   const chosen = I.oneTimeSet(data);
   const boxes = cats.map((c) => ({ c, el: h('input', { type: 'checkbox', checked: chosen.has(c.name.toLowerCase()) }) }));
   const kindWord = { expense: 'expense', income: 'income', investment: 'investment', transfer: 'transfer' };
-  dialog('One-time categories', h('div', null, h('p', { class: 'note' }, 'Every category is listed. Tick the ones you pay once or twice a year, like tax, school fees, a holiday or a function. Everything else counts as regular monthly spending.'),
+  dialog('One-time categories', h('div', null, h('p', { class: 'note' }, 'Expense and investment categories are listed. Tick the ones you pay once or twice a year, like tax, school fees, a holiday or a function. Everything else counts as regular monthly spending.'),
     h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(13em, 1fr))', gap: '4px 12px', maxHeight: '50vh', overflow: 'auto' } }, boxes.map((b) => h('label', { class: 'check-inline' }, b.el, ' ' + b.c.name, h('small', { class: 'muted' }, ' · ' + (kindWord[b.c.kind] || b.c.kind || ''))))),),
     [{ label: 'Save', class: 'primary', onclick: (c) => { mutate((d) => { d.settings = { ...d.settings, oneTimeCats: boxes.filter((b) => b.el.checked).map((b) => b.c.name) }; }); c(); } }, { label: 'Cancel', onclick: (c) => c() }]);
 }
@@ -495,4 +494,21 @@ function goalForm(g0, now, monthly, outlook) {
       c(); saveGoal({ ...read(), monthly: Math.max(0, Number(mIn.value) || 0), outlook: oSel.value || 'steady' });
     } },
   ]);
+}
+
+/** One bond, month by month for the year, to check against the bank statement. */
+function holdingDialog(data, all, t, r) {
+  const rows = I.holdingMonths(data, all, r, t.from, t.end);
+  const tot = (k) => rows.reduce((a, x) => a + x[k], 0);
+  dialog(r.name + ' · ' + t.fy, h('div', null,
+    h('p', { class: 'note' }, `${r.holder || ''}${r.closedOn ? ' · closed' + (r.closedOn.length === 10 ? ' on ' + dateStr(r.closedOn) + ', interest counted up to that day' : '') : ''}. “Should reach the bank” is when the bond pays: ${r.ref && r.ref.credit === 'Quarterly' ? 'every third month' : 'every month'}. “In the bank” is what the statement shows, matched to this bond.`),
+    rows.length ? table([
+      { label: 'Month', host: true, get: (x) => monthLabel(x.month, true) },
+      { label: 'Days', cls: 'r', mob: 'under', mlabel: 'days ', get: (x) => x.days || '–' },
+      { label: 'Interest', cls: 'r', get: (x) => money(x.gross), total: () => money(tot('gross')) },
+      { label: 'After TDS', cls: 'r', mob: 'under', mlabel: 'net ', get: (x) => money(x.net), total: () => money(tot('net')) },
+      { label: 'Should reach the bank', cls: 'r', mob: 'under', mlabel: 'due ', get: (x) => (x.due > 0.5 ? money(x.due) : '–'), total: () => money(tot('due')) },
+      { label: 'In the bank', cls: 'r', render: (x) => (x.received > 0.5 ? h('span', { class: Math.abs(x.received - x.due) < 2 ? 'pos' : 'warn' }, money(x.received)) : '–'), total: () => money(tot('received')) },
+    ], rows, { footer: { label: 'Total' } }) : h('p', { class: 'empty' }, 'No interest in this year.')),
+    [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
 }
