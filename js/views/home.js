@@ -114,7 +114,6 @@ function fixIncome(name, month) {
   ]);
 }
 /** Which bonds still have interest to come this month, with the amount and day each is due. */
-const pendingText = (bonds) => bonds.filter((b) => b.pending > 0.5).map((b) => `${b.name}: ${money(b.pending)} due ${shortDate(b.due)}`).join('\n') || 'Nothing pending';
 function pendingBonds(bonds, month) {
   const list = bonds.slice().sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : 0));
   const pend = list.filter((b) => b.pending > 0.5), got = list.filter((b) => b.received > 0.5);
@@ -133,16 +132,21 @@ function pendingBonds(bonds, month) {
   dialog('Bond interest, ' + monthLabel(month, true), body, [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
 }
 function toReceiveCard(data, all) {
-  const monthEnd = C.addMonths(C.monthStart(all.asOf), 1);
-  const rows = data.receivables.filter((x) => x.active !== false && x.balanceDue > 0).map((x) => C.receivableStatus(x, all.asOf))
-    .filter((r) => !r.received && !r.notStarted && r.due < monthEnd).sort((a, b) => (a.due < b.due ? -1 : 1));
-  const mc = C.monthCashflow(data, all, C.monthKey(all.asOf));
-  const pend = mc.income.filter((x) => x.expected - x.received > 1).map((x) => ({ due: null, name: x.name, expected: x.expected - x.received, income: true, bonds: x.bonds, sub: `expected ${money(x.expected)}, received ${money(x.received)}${x.bonds ? ' · tap to see which bonds' : canEdit() ? ' · tap to fix' : ''}` }));
+  const monthEnd = C.addMonths(C.monthStart(all.asOf), 1), month = C.monthKey(all.asOf);
+  const dues = data.receivables.filter((x) => x.active !== false && x.balanceDue > 0).map((x) => C.receivableStatus(x, all.asOf))
+    .filter((r) => !r.received && !r.notStarted && r.due < monthEnd);
+  const mc = C.monthCashflow(data, all, month);
+  // every bond whose interest has not come yet is its own line with its day, so none can hide behind the others
+  const bondRows = mc.income.filter((x) => x.bonds).flatMap((x) => x.bonds.filter((b) => b.pending > 1)
+    .map((b) => ({ bond: true, name: b.name, holder: b.holder, due: b.due, expected: b.pending, overdue: b.due < all.asOf, dueToday: b.due === all.asOf })));
+  const pend = mc.income.filter((x) => !x.bonds && x.expected - x.received > 1).map((x) => ({ due: null, name: x.name, expected: x.expected - x.received, income: true, sub: `expected ${money(x.expected)}, received ${money(x.received)}${canEdit() ? ' · tap to fix' : ''}` }));
+  const rows = dues.concat(bondRows).sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : 0));
   const total = rows.reduce((a, r) => a + (r.expected || 0), 0) + pend.reduce((a, r) => a + r.expected, 0), over = rows.filter((r) => r.overdue);
   const all2 = rows.concat(pend);
+  const subOf = (r) => r.overdue ? h('span', { class: 'neg' }, 'Overdue since ' + shortDate(r.due)) : r.dueToday ? h('span', { class: 'warn' }, 'Due today') : (r.bond ? `Bond interest${r.holder ? ' · ' + r.holder : ''} · due ` : 'Due ') + shortDate(r.due);
   return section('Money to receive this month', h('div', null,
-    all2.length ? rowList(all2.map((r) => r.income ? { title: r.name, sub: r.sub, onClick: r.bonds ? () => pendingBonds(r.bonds, C.monthKey(all.asOf)) : canEdit() ? () => fixIncome(r.name, C.monthKey(all.asOf)) : null, value: money(r.expected), valueSub: h('span', { class: 'warn', title: r.bonds ? pendingText(r.bonds) : 'pending' }, 'pending') } : ({
-      lead: dateChip(r.due), title: r.name, sub: r.overdue ? h('span', { class: 'neg' }, 'Overdue since ' + shortDate(r.due)) : r.dueToday ? h('span', { class: 'warn' }, 'Due today') : 'Due ' + shortDate(r.due),
+    all2.length ? rowList(all2.map((r) => r.income ? { title: r.name, sub: r.sub, onClick: canEdit() ? () => fixIncome(r.name, month) : null, value: money(r.expected), valueSub: h('span', { class: 'warn', title: 'pending' }, 'pending') } : ({
+      lead: dateChip(r.due), title: r.name, sub: subOf(r),
       value: money(r.expected || 0), tone: r.overdue ? 'neg' : r.dueToday ? 'warn' : '',
     }))) : h('p', { class: 'empty' }, 'Everything due this month has been received.'),
     all2.length ? h('p', { class: 'summary-line' }, `Waiting for ${money(total)}`, over.length ? h('span', { class: 'neg' }, ` · ${over.length} overdue`) : null, rows.some((r) => r.dueToday) ? h('span', { class: 'warn' }, ` · ${rows.filter((r) => r.dueToday).length} due today`) : null) : null,
@@ -366,7 +370,8 @@ function thisMonth(data, all, months) {
         h('p', { class: 'big-line' }, h('b', null, money(rec)), h('span', { class: 'muted' }, ` of ${money(exp)} expected`)),
         bar(rec, exp, 'good'),
         rowList(mc.income.map((r) => ({
-          title: r.name, sub: 'expected ' + money(r.expected), value: money(r.received),
+          title: r.name, sub: 'expected ' + money(r.expected) + (r.bonds ? ' · tap to see each bond' : r.since ? ' · lent ' + dateStr(r.since) : ''), value: money(r.received),
+          onClick: r.bonds ? () => pendingBonds(r.bonds, selMonth) : null,
           valueSub: r.expected - r.received > 0 ? h('span', { class: 'warn' }, money(r.expected - r.received) + ' pending') : '✓ received',
         })))),
       h('div', null,
