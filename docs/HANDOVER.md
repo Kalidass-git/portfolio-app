@@ -1,6 +1,6 @@
 # Handover for a new Claude session
 
-**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.9.35 (cache `family-wealth-v61`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
+**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.9.36 (cache `family-wealth-v62`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
 
 Read this first, then `docs/SETUP.md` (release notes, newest first) and `README.md`.
 
@@ -51,14 +51,14 @@ Branch off `origin/main` (`release-X.Y.Z`), change files, bump `js/version.js` a
 - Bonds tab: Sort by (Rate, Next due, Paid so far, Invested, Holder, Via, Maturity) with Ascending/Descending, in `quickFilter` (`js/views/fixed.js`, `flt.bonds.sort/dir`).
 - `monthCashflow`: Bonds received = credits matched to bonds due that month (`matchBondCredits`), not every "Income Bond" credit. Matching is closest-amount-first, and no credit can settle a bond before its due date minus 3 days. `bondDueAmount`: a monthly bond whose due date falls before its purchase date first pays the next month, with the stub days.
 - `incomeWindow` (calc.js): a `manualMonthlyIncome` line is tied to the Money to receive loan with the same name and amount (else the only one with that amount, else lending by name, else any by name) for its start, end and received date. Several loans can share one name.
-- Home "Money to receive this month" lists each pending bond as its own dated line.
+- Home "Money to receive this month" shows bonds as one combined line (tap for the per-bond list), as the owner asked in 8.9.36.
 - Ask the owner to check on real data: which bonds show as pending in October (the app should list only bonds due after today and any truly unpaid), and that no monthly lending line shows before its first month.
 
 ## Earlier: state after 8.9.34
 - Bonds: per-bond optional `quarterMonth` (0, 1 or 2) sets the payout months of quarterly bonds; the payment covers the three months up to the payout month (`bondPaysIn`, `bondDueAmount`, `bondNextDue` in calc.js). Bank "Income Bond" credits are matched to bonds in `matchBondCredits` (exact amount, then name or issuer in the description, then due date, never before the due date). Manual monthly income such as private lending starts the month after its start date.
 - Annual review: interest is read from "Income Bond" and "Income Lending" bank credits only (`isInterestCategory`). One-time category picker lists expense and investment categories only.
 - Tax summary: closed bonds are flagged "Closed" (interest to the closing day); tap a bond for `holdingMonths`, a month-by-month check against the bank.
-- Home "Investing this month" (`monthPlan` in `js/monthinvest.js`): investable income added, pending chit instalments from last month (optional `savings[].chitMonths`, gold chit `months` for duration), projected expenses for the rest of the month (rent and one-offs left out), current investable amount (bank minus wallets, optional `accounts[].wallet`) and its allocation by plan line weights.
+- Home "Investing this month" (`monthPlan` in `js/monthinvest.js`): investable income added, pending chit instalments from last month (chit length from `tenure`, else start/end dates; old `savings[].chitMonths` and gold `months` are still read as a last resort but no longer asked for), projected expenses for the rest of the month (rent and one-offs left out), current investable amount (bank minus wallets, optional `accounts[].wallet`) and its allocation by plan line weights.
 - Tests that pass on synthetic data: allocgoal, watch, tax, monthinvest, bondmonth. projector, risk, safety, categories and features fail on synthetic data and did before.
 - Verified with Playwright on synthetic data only, never on the real file. Ask the owner to check Annapurna, Navi, BelStar, Pandi and the new Home cards on his real data.
 

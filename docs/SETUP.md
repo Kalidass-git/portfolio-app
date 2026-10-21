@@ -154,6 +154,10 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.9.36 – Bonds as one line, tenure instead of chit duration
+- **Home, Money to receive this month.** Bonds are one combined line again (amount still to come, expected and received). Tap it to see which bonds are pending and which are received. The bond fixes of 8.9.35 stay.
+- **Chit duration removed.** The "Chit duration (months)" box is gone from the chit edit form (Cash → Chits & savings) and from gold chits. A chit's length now comes from its **Tenure** (months, years or days), else from its start and end dates; gold chits use their dates. Home stops counting a chit as pending when its payments reach that length or its end date passes. A duration saved earlier is still read when no tenure or dates are set, and nothing stored was changed.
+
 ## Release 8.9.35 – Bond sorting, Money to receive and month figures
 - **Bonds page.** New "Sort" and "Ascending / Descending" choices above the list: Rate, Next due, Paid so far, Invested, Holder, Via and Maturity. Bonds with nothing to sort on (no next due date) stay at the bottom either way. Works on phone and desktop.
 - **Money to receive this month.** Each bond whose interest has not come yet is now its own line with its day (overdue in red, due today in amber), mixed in date order with the other dues. Before, bonds were one combined line that disappeared when the month's bank credits looked big enough.
