@@ -1,6 +1,8 @@
 # Handover for a new Claude session
 
-**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.9.37 (cache `family-wealth-v63`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
+> **Starting a new session? Do this first.** 1) Read this file, then the top three entries of `docs/SETUP.md`. 2) Clone, branch `release-X.Y.Z` off `origin/main` (check which PRs the owner has merged: `git log origin/main`). 3) Say what you have read, list "Waiting for the owner" below, and ask what to build. 4) The owner works in short numbered requests; do them all in one release, test, bump, open one PR. He checks on his real data, which you never see: say how each rule works so he can check it.
+
+**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.9.38 (cache `family-wealth-v64`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
 
 Read this first, then `docs/SETUP.md` (release notes, newest first) and `README.md`.
 
@@ -38,7 +40,7 @@ A no-build installable web app (PWA, vanilla ES modules) that mirrors the owner'
 - `#/settings` `settings.js`, `backups.js`, `storage.js`, `archive.js`.
 
 ## Data (top-level keys of the JSON)
-`settings, accounts, ledger, categories, savings, bonds, fds, lending, receivables, stocks, mutualFunds, sipPlans, gold, liabilities, targets, proj, incomeSources, manualMonthlyIncome, reportNotes` plus optional `projector`, `risk`, `trades`, `fundTxns`, `corporateActions`, `history`. Arrays of objects carry an `id`. Optional extras so far: `savings[].organiser`, `fds[].issuer`, `lending[].borrower`, `settings.homeSpendExtra`.
+`settings, accounts, ledger, categories, savings, bonds, fds, lending, receivables, stocks, mutualFunds, sipPlans, gold, liabilities, targets, proj, incomeSources, manualMonthlyIncome, reportNotes` plus optional `projector`, `risk`, `trades`, `fundTxns`, `corporateActions`, `history`. Arrays of objects carry an `id`. Optional extras so far: `savings[].organiser`, `fds[].issuer`, `lending[].borrower`, `settings.homeSpendExtra`, `settings.goldChitMonths`, `accounts[].wallet`, `receivables[].closedOn`.
 
 ## Tests
 `node tests/<name>.test.mjs <path-to-data-json>` for calc, categories, archive, merge, safety, buys, projector, risk. `epf` takes no argument. They need a copy of the real data file (not in the zip). Browser checks used Playwright at 390px and 1360px width.
@@ -46,7 +48,25 @@ A no-build installable web app (PWA, vanilla ES modules) that mirrors the owner'
 ## Release process
 Branch off `origin/main` (`release-X.Y.Z`), change files, bump `js/version.js` and the cache name in `sw.js`, add notes at the top of the release list in `docs/SETUP.md`, push, and open a PR to `main` with `gh api` (GraphQL is blocked). The owner merges it. Always base on `origin/main` so stacked PRs do not leave main behind.
 
-## State after 8.9.37
+## State after 8.9.38 (newest)
+
+- **Lending income lines** (`monthCashflow` in calc.js): `incomeWindow` finds the Money to receive lines behind a `manualMonthlyIncome` line (same person by `looseName`, then exact amount, then the sum of that person's lines, then the only line with that amount; lending/FDs as a fallback). `dueInMonth(rec, month)` is the rule: paid in arrears, 0 in the start month and before, pro-rated by days in the next month, full after, 0 after closing or for Yearly lines. `receivableStatus` has `dueAmount` and treats a monthly line as not started until the month after its start month.
+- **Tax interest**: bonds count whole months (`bondSpan`/`cutoff` in `taxSummary`, `holdingMonths`): to the end of last month, plus this month once `bondDueDate <= asOf`. FDs and lending in the tax view are still by day.
+- **Chit cards** (`chitCards`, `chitOrganiser` in monthinvest.js; `chitDueCards` in cash.js): this month due/paid and next month projected (average of the last three payments), grouped by organiser.
+- **Investable balance** (`monthPlan` in monthinvest.js): bank + cash in hand (`isWallet`: wallet flag or a name with wallet/cash) + interest still expected (`mc.totalExpected - totalReceived`) − pending chits − projected expenses. Tile on Home (`tiles`, `place2`, `investableBody`) and card in Investing this month.
+- **Bank transactions**: module state `fCat, fAmtOp, fAmtVal, fSort, fDir` in cash.js. **Shares sort**: `sortKey`/`sortDir` in equity.js. **Closed tab**: `closedGroupDialog` and Delete on closed Money to receive in fixed.js.
+- `h()` in ui.js now sets CSS custom properties (`--g`) through `setProperty`.
+- **Assumptions to confirm with the owner**: (a) the arrears/pro-rata rule for lending above (his words: "started after the start date; fewer days than a month is pro-rated and shown as pending"); (b) cash in hand counts in the investable balance; (c) FDs in the tax view are not changed to whole months; (d) "Net monthly inflow" is gone from Home (the function `tiles` still builds it if the plan cannot be computed).
+
+## Waiting for the owner (never testable by Claude)
+
+Check on the real data after merging: October's pending bonds; that no lending line shows before its first month and the part month looks right (Pandi, Lathish); the chit popups and gold chits; a real split of a bank entry; the Investable balance figure against his own sum; the family report print; the Tax summary bank comparison. Live Apps Script sync, Yahoo and mfapi prices and the Android install are only for him to try.
+
+## Ideas not built yet
+
+Anything the owner raises next. Possible: tax view whole months for FDs; reminders for gold chit length; per-organiser chit limits already exist under Risk.
+
+## Earlier: state after 8.9.37
 
 - `chitPending` (monthinvest.js): every running chit, gold chit and active GRT scheme (`gold.schemes[].active`) is paid (anything paid this month) or pending (last month's amount, else `monthly`). Gold chits run `settings.goldChitMonths` (optional, default 11), set on the Gold chits tab; over when payments reach it or that many months have passed since the first payment. Home popup `mandatoryDialog` has Pending/Received tabs.
 - `monthCashflow` bonds: received = the due date has come (`x.due <= all.asOf`), not the bank. The bank match (`matchBondCredits`) is kept as `credited` per bond for the tax check only. The income line is named "Income Bond".

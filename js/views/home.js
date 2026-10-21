@@ -76,7 +76,25 @@ function tile(label, value, sub, { tone: t = '', href = null, pop = null, right 
   return el;
 }
 
-function tiles(all, data, mc) {
+/** The pieces of the investable balance, one line each: bank, cash in hand, interest still to come, chits still to pay and the projected expenses. */
+function investableBody(m) {
+  const mand = m.mandatory, pr = m.proj;
+  return h('div', null,
+    rowList([
+      { title: 'Bank balance', sub: m.banks.length ? m.banks.map((a) => a.name).join(', ') : 'no bank account', value: money(m.bank) },
+      { title: 'Cash in hand', sub: m.wallets.length ? m.wallets.map((w) => w.name).join(', ') : 'no wallet or cash account marked', value: money(m.cash) },
+      { title: 'Interest income still expected', sub: 'bonds and lending still to come this month', value: h('span', { class: 'pos' }, '+ ' + money(m.interest)) },
+      { title: 'Pending mandatory investments', sub: `${mand.pending.length} chit${mand.pending.length === 1 ? '' : 's'} and gold chit${mand.pending.length === 1 ? '' : 's'} not paid yet`, value: '− ' + money(mand.total) },
+      { title: 'Expenses still to come', sub: h('i', null, `projected: ${pr.left} day${pr.left === 1 ? '' : 's'} left at the pace so far, no rent`), value: h('i', { class: 'neg' }, '− ' + money(pr.total)) },
+      { title: 'Investable balance', value: h('b', { class: m.current >= 0 ? 'inv' : 'neg' }, money(m.current)) },
+    ]),
+    h('p', { class: 'note' }, 'Bank balance + cash in hand + interest still expected − pending mandatory investments − projected expenses. Mark an account as a wallet in its settings (or name it wallet or cash) to count it as cash in hand.'));
+}
+const showInvestable = (m) => dialog('Investable balance', investableBody(m), [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
+
+/** Blue Investable balance tile: on a phone a tap opens the breakdown, on a desktop it drops down. */
+function place2(el, plan) { el.classList.add('blue'); el.addEventListener('click', (e) => { if (!mqDesk() && !e.target.closest('.kpi-pop')) showInvestable(plan); }); return el; }
+function tiles(all, data, mc, plan) {
   const mk = marketGroups(all), gd = all.gold.day;
   const dayAll = mk.total.day + (gd ? gd.total : 0);
   const anyDay = mk.total.hasDay || !!gd;
@@ -84,7 +102,8 @@ function tiles(all, data, mc) {
   const dayPctAll = baseAll ? dayAll / baseAll : 0;
   const spent = mc.totalSpent + mc.lifestyle.amount;
   return h('div', { class: 'kpis span-12' },
-    tile('Net monthly inflow', money(all.netMonthly), h('span', null, `${money(all.cfTotal.perMonth)} earned `, all.loans.monthlyInterest > 0 ? h('span', { class: 'neg' }, `− ${money(all.loans.monthlyInterest)} loan interest`) : '− ₹ 0 loan interest'), { tone: tone(all.netMonthly), href: '#/fixed/loans' }),
+    plan ? place2(tile('Investable balance', money(plan.current), `bank ${money(plan.bank)} + cash ${money(plan.cash)} + interest ${money(plan.interest)} − chits − expenses`, { tone: plan.current >= 0 ? 'inv' : 'neg', pop: investableBody(plan) }), plan)
+      : tile('Net monthly inflow', money(all.netMonthly), h('span', null, `${money(all.cfTotal.perMonth)} earned `, all.loans.monthlyInterest > 0 ? h('span', { class: 'neg' }, `− ${money(all.loans.monthlyInterest)} loan interest`) : '− ₹ 0 loan interest'), { tone: tone(all.netMonthly), href: '#/fixed/loans' }),
     tile('Earning every day', money(all.cfTotal.perDay), h('span', null, `${money(all.cfTotal.perDay - all.loans.monthlyInterest / 30)} after `, h('span', { class: 'neg' }, `${money(all.loans.monthlyInterest / 30)} loan interest`)), { href: '#/fixed', pop: h('div', null, earningBody(all, false), h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income'))) }),
     tile('Markets today', anyDay ? sgn(dayAll) : '–', anyDay ? `${sgp(dayPctAll)} · shares, funds, ETFs, gold` : 'refresh prices to see', { tone: anyDay ? tone(dayAll) : '', href: '#/equity', pop: h('div', null, todayBody(all), h('p', null, h('a', { href: '#/equity' }, 'Open Shares & funds'))) }),
     tile('Spent this month', money(spent), (mc.totalExpected ? `${pct(spent / mc.totalExpected, 0)} of ${money(mc.totalExpected)} budget` : 'no budget income yet') + (mc.notCounted > 0 ? ` · ${compact(mc.notCounted)} not counted` : ''), { tone: mc.totalExpected && spent > mc.totalReceived ? 'neg' : '', href: '#/flow', pop: spentBody(mc, spent), right: true }));
@@ -140,12 +159,12 @@ function toReceiveCard(data, all) {
   const mc = C.monthCashflow(data, all, month);
   // bonds are one combined line (tap it to see each bond); other monthly income is a line of its own
   const pend = mc.income.filter((x) => x.expected - x.received > 1).map((x) => ({ due: null, name: x.name, expected: x.expected - x.received, income: true, bonds: x.bonds, sub: `expected ${money(x.expected)}, received ${money(x.received)}${x.bonds ? ' · tap to see which bonds' : canEdit() ? ' · tap to fix' : ''}` }));
-  const total = rows.reduce((a, r) => a + (r.expected || 0), 0) + pend.reduce((a, r) => a + r.expected, 0), over = rows.filter((r) => r.overdue);
+  const total = rows.reduce((a, r) => a + (r.dueAmount ?? r.expected ?? 0), 0) + pend.reduce((a, r) => a + r.expected, 0), over = rows.filter((r) => r.overdue);
   const all2 = rows.concat(pend);
   return section('Money to receive this month', h('div', null,
     all2.length ? rowList(all2.map((r) => r.income ? { title: r.name, sub: r.sub, onClick: r.bonds ? () => pendingBonds(r.bonds, month) : canEdit() ? () => fixIncome(r.name, month) : null, value: money(r.expected), valueSub: h('span', { class: 'warn', title: r.bonds ? pendingText(r.bonds) : 'pending' }, 'pending') } : ({
       lead: dateChip(r.due), title: r.name, sub: r.overdue ? h('span', { class: 'neg' }, 'Overdue since ' + shortDate(r.due)) : r.dueToday ? h('span', { class: 'warn' }, 'Due today') : 'Due ' + shortDate(r.due),
-      value: money(r.expected || 0), tone: r.overdue ? 'neg' : r.dueToday ? 'warn' : '',
+      value: money(r.dueAmount ?? r.expected ?? 0), tone: r.overdue ? 'neg' : r.dueToday ? 'warn' : '',
     }))) : h('p', { class: 'empty' }, 'Everything due this month has been received.'),
     all2.length ? h('p', { class: 'summary-line' }, `Waiting for ${money(total)}`, over.length ? h('span', { class: 'neg' }, ` · ${over.length} overdue`) : null, rows.some((r) => r.dueToday) ? h('span', { class: 'warn' }, ` · ${rows.filter((r) => r.dueToday).length} due today`) : null) : null,
     h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income'))));
@@ -175,9 +194,9 @@ function mandatoryDialog(mand) {
 }
 
 /** Where this month's money stands: what came in, what is already promised (chits), what will be spent, and what that leaves to invest. */
-function investCard(data, all) {
-  let m;
-  try { m = monthPlan(data, all, P.cfg(data).outlooks); } catch (e) { return null; }
+function investCard(data, all, planIn) {
+  let m = planIn;
+  if (!m) { try { m = monthPlan(data, all, P.cfg(data).outlooks); } catch (e) { return null; } }
   const mand = m.mandatory, pr = m.proj;
   const incomeNote = m.planIn > m.actualIn ? 'expected' : 'received';
   const showInvestable = () => detail('Investable income added, ' + monthLabel(m.month, true), [
@@ -188,19 +207,13 @@ function investCard(data, all) {
   const showMandatory = () => mandatoryDialog(mand);
   const showSpend = () => detail('Expenses still to come this month', pr.rows.map((r) => ({ title: r.name, sub: `${money(r.spent)} spent in ${pr.days} day${pr.days === 1 ? '' : 's'} = ${money(r.perDay)} a day × ${pr.left} days left`, value: money(r.more) })),
     ['Projected from the Spent column in “This month in detail”: regular spending only. Rent, clothes, entertainment, vacation, gifts, EMI and tax are not projected.']);
-  const showCurrent = () => detail('Current investable amount', [
-    ...m.banks.map((a) => ({ title: a.name, sub: a.holder, value: money(a.balance) })),
-    { title: 'Bank balance', sub: m.wallets.length ? 'wallets left out: ' + m.wallets.map((w) => w.name).join(', ') : 'all accounts', value: h('b', null, money(m.bank)) },
-    { title: 'Pending mandatory investments', sub: 'chits and gold chits', value: '− ' + money(mand.total) },
-    { title: 'Expenses still to come', sub: 'projected for the rest of the month', value: '− ' + money(pr.total) },
-    { title: 'Current investable amount', value: h('b', { class: m.current >= 0 ? 'inv' : 'neg' }, money(m.current)) },
-  ], ['Mark an account as a wallet in its settings (or put “wallet” in its name) to leave it out.']);
+  const showCurrent = () => showInvestable(m);
   return section('Investing this month · ' + monthLabel(m.month), h('div', null,
     h('div', { class: 'stats' },
       tapStat('Investable income added this month', money(m.investable), `${money(m.income)} in − ${money(m.spend)} out · tap for working`, 'inv', showInvestable),
       tapStat('Pending mandatory investments (approx.)', money(mand.total), mand.pending.length ? `${mand.pending.length} chit${mand.pending.length === 1 ? '' : 's'} not paid yet this month${mand.done.length ? ', ' + mand.done.length + ' paid' : ''} · chits and gold chits` : (mand.done.length ? `all ${mand.done.length} paid this month · chits and gold chits` : 'no chits running · chits and gold chits'), mand.total > 0.5 ? 'warn' : '', showMandatory),
       tapStat('Expenses still to come (projected)', money(pr.total), `${pr.left} day${pr.left === 1 ? '' : 's'} left · regular spending, no rent`, '', showSpend),
-      tapStat('Current investable amount', money(m.current), `bank ${money(m.bank)} − ${money(mand.total)} chits − ${money(pr.total)} expenses`, m.current >= 0 ? 'pos' : 'neg', showCurrent)),
+      tapStat('Investable balance', money(m.current), `bank ${money(m.bank)} + cash ${money(m.cash)} + interest ${money(m.interest)} − ${money(mand.total)} chits − ${money(pr.total)} expenses`, m.current >= 0 ? 'inv' : 'neg', showCurrent)),
     m.current < 0 ? h('p', { class: 'note warn' }, `The bank is short by ${money(-m.current)} for what is still expected this month.`) : null,
     h('h4', { style: { margin: '12px 0 4px' } }, 'Where the current investable amount can go'),
     m.current > 0.5 ? rowList([
@@ -404,14 +417,15 @@ export function render() {
   if (!selMonth || !months.includes(selMonth)) selMonth = months.includes(cur) ? cur : months[months.length - 1];
   const series = C.netWorthSeries(data, all);
   const rets = C.returns(data, all), ox = C.overallXirr(data, all, rets);
+  let plan = null; try { plan = monthPlan(data, all, P.cfg(data).outlooks); } catch (e) { plan = null; }
   const place = (el, ...cls) => { if (el) el.classList.add(...cls); return el; };
   const root = h('div', { class: 'page dash' });
   const parts = [
-    hero(all, series, ox), tiles(all, data, C.monthCashflow(data, all, C.monthKey(all.asOf))),
+    hero(all, series, ox), tiles(all, data, C.monthCashflow(data, all, C.monthKey(all.asOf)), plan),
     place(attention(data, all), 'span-12'),
     place(toReceiveCard(data, all), 'span-6'), place(comingUp(data, all), 'span-6'),
     place(thisMonth(data, all, months), 'span-12'),
-    place(investCard(data, all), 'span-12'),
+    place(investCard(data, all, plan), 'span-12'),
     place(todayCard(all), 'm-only'), place(earning(all), 'm-only'),
     place(allocation(all), 'span-7'), place(riskAlerts(all), 'span-5'),
     place(returnsCard(data, all, rets, ox), 'span-12')];

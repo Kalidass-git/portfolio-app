@@ -106,6 +106,37 @@ export function chitPending(data, cur) {
   const pending = rows.filter((r) => !r.done), done = rows.filter((r) => r.done);
   return { rows, pending, done, total: sum(pending, (r) => r.pending), paidTotal: sum(done, (r) => r.paid), chits: sum(pending.filter((r) => r.kind === 'chit'), (r) => r.pending), gold: sum(pending.filter((r) => r.kind === 'gold'), (r) => r.pending) };
 }
+/** Who runs a chit: the organiser typed on it, else the name without its amount ("5L_Ravi" and "10L_Ravi" are both Ravi). Same rule as the risk limits. */
+export const chitOrganiser = (x) => String(x.organiser || '').trim() || String(x.name || '').replace(/^\s*\d+(\.\d+)?\s*L?\s*[_-]\s*/i, '').replace(/[\s_-]*\d+(\.\d+)?\s*L$/i, '').trim() || 'Other';
+/**
+ * Chits (not gold) for the cards on Savings → Chits. This month: what is still to pay and what is already paid. Next month: a projection from the months paid so far
+ * (the average of the last three payments, since the amount changes every month), for every chit that is still running then.
+ */
+export function chitCards(data, cur) {
+  const mp = chitPending(data, cur), next = addMonths(cur + '-01', 1).slice(0, 7);
+  const mine = mp.rows.filter((r) => r.kind === 'chit');
+  const orgOf = new Map((data.savings || []).filter((c) => c.type === 'Chit').map((c) => [c.name, chitOrganiser(c)]));
+  const thisMonth = mine.map((r) => ({ name: r.name, org: orgOf.get(r.name) || 'Other', due: r.pending, paid: r.paid, expected: r.paid > 0 ? r.paid : r.pending }));
+  const proj = [];
+  for (const c of (data.savings || []).filter((x) => x.type === 'Chit' && !x.closed)) {
+    const by = new Map();
+    for (const e of c.entries || []) if (e.amount > 0 && e.date) by.set(e.date.slice(0, 7), (by.get(e.date.slice(0, 7)) || 0) + e.amount);
+    const months = [...by.keys()].filter((m) => m <= cur).sort();
+    if (!months.length) continue;
+    const dur = chitMonths(c, 'chit');
+    const paidCount = months.length;
+    const ended = !!c.maturityDate && c.maturityDate.slice(0, 7) < next;
+    // a chit with a tenure is finished once that many months are paid (this month counts only if it is paid); one not yet paid this month still owes it before next month
+    const owesThis = !by.has(cur) && thisMonth.some((r) => r.name === c.name);
+    if (ended || (dur > 0 && paidCount + (owesThis ? 1 : 0) >= dur)) continue;
+    const last = months.slice(-3), amount = Math.round(last.reduce((a, m) => a + by.get(m), 0) / last.length);
+    if (amount > 0) proj.push({ name: c.name, org: chitOrganiser(c), amount, basis: last.length });
+  }
+  const group = (rows, key) => { const m = new Map(); for (const r of rows) { const g = m.get(r.org) || { org: r.org, count: 0, amount: 0, items: [] }; g.count++; g.amount += r[key] || 0; g.items.push(r); m.set(r.org, g); } return [...m.values()].sort((a, b) => b.amount - a.amount); };
+  const sumOf = (rows, k) => rows.reduce((a, r) => a + (r[k] || 0), 0);
+  return { month: cur, next, thisMonth, dueTotal: sumOf(thisMonth, 'due'), paidTotal: sumOf(thisMonth, 'paid'), dueByOrg: group(thisMonth, 'due'), paidByOrg: group(thisMonth, 'paid'),
+    proj, projTotal: sumOf(proj, 'amount'), projByOrg: group(proj, 'amount') };
+}
 /** Regular spending still to come this month: what was spent so far per day, for the days left. Rent is left out, so are one-off and optional lines. */
 export function expenseProjection(mc, asOf) {
   const dim = daysInMonthOf(asOf), day = Number(asOf.slice(8, 10)), left = Math.max(0, dim - day);
@@ -113,8 +144,8 @@ export function expenseProjection(mc, asOf) {
   const rows = mc.spend.filter((g) => groups.includes(g.name)).map((g) => ({ name: g.name, spent: g.amount, perDay: g.amount / day, more: (g.amount / day) * left }));
   return { rows, days: day, left, total: sum(rows, (r) => r.more), spent: sum(rows, (r) => r.spent) };
 }
-/** Banks the person can invest from: wallets are left out. */
-export const isWallet = (a) => a.wallet === true || /wallet/i.test(a.name || '');
+/** Cash in hand: accounts marked as a wallet, or named wallet or cash. Everything else is a bank. */
+export const isWallet = (a) => a.wallet === true || /wallet|\bcash\b/i.test(a.name || '');
 
 /** Everything the redesigned card shows. */
 export function monthPlan(data, all, outlooks) {
@@ -124,8 +155,10 @@ export function monthPlan(data, all, outlooks) {
   const mc = monthCashflow(data, all, cur);
   const proj = expenseProjection(mc, all.asOf);
   const banks = accountBalances(data).filter((a) => !isWallet(a)), wallets = accountBalances(data).filter(isWallet);
-  const bank = sum(banks, (a) => a.balance);
-  const current = bank - mandatory.total - proj.total;
+  const bank = sum(banks, (a) => a.balance), cash = sum(wallets, (a) => a.balance);
+  // interest still to come this month (bonds and lending not received yet); expenses still to come are a projection
+  const interest = Math.max(0, mc.totalExpected - mc.totalReceived);
+  const current = bank + cash + interest - mandatory.total - proj.total;
   // gold comes from actuals: last month's gold buying less what is already bought this month and what the gold chits will take
   const by = investedByMonth(data);
   const goldWanted = Math.max(0, actualOf(by, prev, 'gold') - actualOf(by, cur, 'gold') - mandatory.gold);
@@ -134,5 +167,5 @@ export function monthPlan(data, all, outlooks) {
   const lines = base.rows.filter((r) => !skip.has(r.cls));
   const weight = sum(lines, (r) => Math.max(0, r.monthly));
   const alloc = lines.map((r) => ({ name: r.name, cls: r.cls, share: weight > 0 ? Math.max(0, r.monthly) / weight : 0, amount: weight > 0 ? (free * Math.max(0, r.monthly)) / weight : 0 }));
-  return { ...base, mandatory, mc, proj, bank, banks, wallets, current, goldWanted, free, alloc, hasLines: lines.length > 0 };
+  return { ...base, mandatory, mc, proj, bank, banks, wallets, cash, interest, current, goldWanted, free, alloc, hasLines: lines.length > 0 };
 }

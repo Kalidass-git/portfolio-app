@@ -250,7 +250,7 @@ function closedView(root) {
       { label: t.id === 'fds' ? '' : 'Interest received', mob: 'under', mlabel: 'interest ', cls: 'r', get: (x) => (t.id === 'fds' ? '' : money(x.interest)), total: (rs) => (t.id === 'fds' ? '' : money(rs.reduce((a, x) => a + x.interest, 0))) },
       { label: 'Principal back', mob: 'under', mlabel: 'back ', cls: 'r', get: (x) => money(x.back), total: (rs) => money(rs.reduce((a, x) => a + x.back, 0)) },
       { label: 'Total received', key: true, cls: 'r', render: (x) => h('span', { class: posNeg(x.gain) }, money(x.total)), total: (rs) => money(rs.reduce((a, x) => a + x.total, 0)) },
-    ], t.items, { footer: { label: 'Total', phone: false }, empty: 'None' }))))));
+    ], t.items, { footer: { label: 'Total', phone: false }, empty: 'None', onRow: canEdit() ? (x) => closedGroupDialog(t.id, x) : null }))))));
   for (const [title, key] of kinds) {
     const list = all.closed[key].slice().sort((a, b) => (a.closed.date < b.closed.date ? 1 : -1));
     root.append(section(title + ` (${list.length})`, table([
@@ -265,7 +265,28 @@ function closedView(root) {
   const rcs = all.closed.receivables;
   root.append(section(`Money to receive, closed (${rcs.length})`, table([
     { label: 'From', host: true, get: (r) => r.name }, { label: 'Expected each time', cls: 'r', get: (r) => money(r.expected) }, { label: 'Last received', mob: 'under', mlabel: 'last ', get: (r) => dateStr(r.lastReceived) }, { label: 'Closed on', mob: 'under', mlabel: 'closed ', get: (r) => dateStr(r.closedOn) },
-  ], rcs, { onRow: canEdit() ? (r) => dialog(r.name, h('p', null, 'This is closed. Reopen it to track the payments again.'), [{ label: 'Reopen', class: 'primary', onclick: (c) => { mutate((d) => { const t = d.receivables.find((x) => x.id === r.id); t.active = true; delete t.closedOn; }); c(); } }, { label: 'Close', onclick: (c) => c() }]) : null, empty: 'None closed.' })));
+  ], rcs, { onRow: canEdit() ? (r) => dialog(r.name, h('p', null, 'This is closed. Reopen it to track the payments again, or delete the record.'), [{ label: 'Delete', class: 'danger', onclick: async (c) => { if (await confirmDialog(`Delete this closed record of ${r.name} (${money(r.expected)} each time)? The bank entries stay as they are.`)) { mutate((d) => { d.receivables = d.receivables.filter((x) => x.id !== r.id); }); c(); } } }, { label: 'Reopen', class: 'primary', onclick: (c) => { mutate((d) => { const t = d.receivables.find((x) => x.id === r.id); t.active = true; delete t.closedOn; }); c(); } }, { label: 'Close', onclick: (c) => c() }]) : null, empty: 'None closed.' })));
+}
+/** The closed records behind one row of "What came back": each can be deleted. */
+function closedGroupDialog(typeId, row) {
+  const { all, data } = S;
+  const base = row.name.replace(/\s*\(\d+\)$/, '');
+  const same = (n) => C.sameName(n, base) || String(n || '').trim().toLowerCase() === base.trim().toLowerCase();
+  const items = [];
+  if (typeId === 'lending') {
+    for (const it of all.closed.lending.filter((x) => same(x.name))) items.push({ key: 'lending', id: it.id, title: it.name, sub: `Lent ${money(it.principal)} · closed ${dateStr(it.closed.date)} · ${money(it.closed.amount)} came back` });
+    for (const r of all.closed.receivables.filter((x) => same(x.name))) items.push({ key: 'receivables', id: r.id, title: r.name, sub: `Money to receive · ${money(r.expected)} each time · closed ${dateStr(r.closedOn)}` });
+  } else {
+    for (const it of all.closed[typeId].filter((x) => same(x.name))) items.push({ key: typeId, id: it.id, title: it.name, sub: `Put in ${money(Math.abs(it.principal))} · closed ${dateStr(it.closed.date)} · ${money(it.closed.amount)} came back` });
+  }
+  const body = h('div');
+  const draw = () => {
+    body.replaceChildren(items.length ? h('ul', { class: 'rows', style: { listStyle: 'none', margin: 0, padding: 0 } }, items.map((x) => h('li', { style: { display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--line-2)' } },
+      h('span', null, h('b', null, x.title), h('small', { class: 'muted', style: { display: 'block' } }, x.sub)),
+      h('button', { class: 'danger small', onclick: async () => { if (await confirmDialog(`Delete the closed record of ${x.title}? The bank entry stays as it is.`)) { mutate((d) => { d[x.key] = d[x.key].filter((y) => y.id !== x.id); }); items.splice(items.indexOf(x), 1); draw(); } } }, 'Delete')))) : h('p', { class: 'empty' }, 'Nothing left here.'));
+  };
+  draw();
+  dialog(base, h('div', null, h('p', { class: 'note', style: { marginTop: 0 } }, 'Deleting only removes the closed record. Bank entries are not touched.'), body), [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
 }
 function openClosedItem(key, x) {
   const it = S.data[key].find((y) => y.id === x.id);
