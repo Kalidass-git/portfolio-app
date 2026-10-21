@@ -99,18 +99,32 @@ const TABS = [['bonds', 'Bonds'], ['fds', 'FDs'], ['lending', 'Lendings'], ['loa
 /** Interest that has reached you so far, after TDS unless the bond has a fixed payout amount. */
 const bondReceived = (b) => { const r = C.interestReceived(b, S.all.asOf); return b.payoutAmount > 0 ? r : r * (1 - (S.data.settings.tdsRate ?? 0.1)); };
 const shortD = (d) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-const flt = { bonds: { holder: 'all', via: 'all' }, fds: { holder: 'all', via: 'all' }, lending: { holder: 'all', via: 'all' } };
+const flt = { bonds: { holder: 'all', via: 'all', sort: 'none', dir: 'asc' }, fds: { holder: 'all', via: 'all' }, lending: { holder: 'all', via: 'all' } };
 const rerenderFixed = () => window.dispatchEvent(new Event('rerender'));
 /** Quick filters above a list: account holder and where it was bought. Default is everything. Returns the bar and the rows that pass. */
-function quickFilter(tab, items, holderOf, viaOf, viaLabel) {
+function quickFilter(tab, items, holderOf, viaOf, viaLabel, sorts) {
   const f = flt[tab];
   const uniq = (fn) => [...new Set(items.map(fn).map((x) => String(x || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const holders = uniq(holderOf), vias = uniq(viaOf);
   if (f.holder !== 'all' && !holders.includes(f.holder)) f.holder = 'all';
   if (f.via !== 'all' && !vias.includes(f.via)) f.via = 'all';
   const mk = (label, key, opts) => { const sel = h('select', { class: 'month-select', 'aria-label': label, onchange: (e) => { f[key] = e.target.value; rerenderFixed(); } }); setOptions(sel, [{ value: 'all', label: `${label}: all` }, ...opts.map((o) => ({ value: o, label: o }))], f[key]); return sel; };
-  const rows = items.filter((x) => (f.holder === 'all' || String(holderOf(x) || '').trim() === f.holder) && (f.via === 'all' || String(viaOf(x) || '').trim() === f.via));
-  const bar = holders.length > 1 || vias.length > 1 ? h('div', { class: 'filters' }, holders.length > 1 ? mk('Holder', 'holder', holders) : null, vias.length > 1 ? mk(viaLabel, 'via', vias) : null,
+  let rows = items.filter((x) => (f.holder === 'all' || String(holderOf(x) || '').trim() === f.holder) && (f.via === 'all' || String(viaOf(x) || '').trim() === f.via));
+  // optional sorting: pick what to sort by and which way. Rows with nothing to sort on (no next due date) always go last.
+  let sortBar = null;
+  if (sorts) {
+    const cur = sorts.find((x) => x.value === f.sort);
+    if (cur) {
+      const sign = f.dir === 'desc' ? -1 : 1, empty = (v) => v === '' || v == null;
+      rows = rows.map((x, i) => ({ x, i, v: cur.get(x) })).sort((a, b) => (empty(a.v) - empty(b.v)) || (empty(a.v) ? 0 : sign * (typeof a.v === 'string' ? a.v.localeCompare(b.v) : a.v - b.v)) || a.i - b.i).map((o) => o.x);
+    }
+    const pick = h('select', { class: 'month-select', 'aria-label': 'Sort by', onchange: (e) => { f.sort = e.target.value; rerenderFixed(); } });
+    setOptions(pick, [{ value: 'none', label: 'Sort: as entered' }, ...sorts.map((x) => ({ value: x.value, label: 'Sort: ' + x.label }))], f.sort);
+    const dir = h('select', { class: 'month-select', 'aria-label': 'Sort direction', disabled: f.sort === 'none', onchange: (e) => { f.dir = e.target.value; rerenderFixed(); } });
+    setOptions(dir, [{ value: 'asc', label: 'Ascending' }, { value: 'desc', label: 'Descending' }], f.dir);
+    sortBar = [pick, dir];
+  }
+  const bar = holders.length > 1 || vias.length > 1 || sorts ? h('div', { class: 'filters' }, holders.length > 1 ? mk('Holder', 'holder', holders) : null, vias.length > 1 ? mk(viaLabel, 'via', vias) : null, sortBar,
     rows.length !== items.length ? h('span', { class: 'muted' }, `${rows.length} of ${items.length}`) : null) : null;
   return { bar, rows };
 }
@@ -131,7 +145,16 @@ export function render() {
   if (stats[tab]) root.append(stats[tab]());
   if (tab === 'bonds' && all.bonds.length) root.append(bondInsights(all, data));
 
-  const fb = tab === 'bonds' ? quickFilter('bonds', all.bonds, (b) => b.holder, (b) => b.platform, 'Via') : tab === 'fds' ? quickFilter('fds', all.fds, (x) => x.account, (x) => x.issuer, 'Bank') : tab === 'lending' ? quickFilter('lending', all.lending, (x) => x.account, (x) => x.borrower, 'Borrower') : null;
+  const bondSorts = [
+    { value: 'rate', label: 'Rate', get: (b) => b.rate || 0 },
+    { value: 'due', label: 'Next due', get: (b) => C.bondNextDue(b, all.asOf) },
+    { value: 'paid', label: 'Paid so far', get: (b) => bondReceived(b) },
+    { value: 'invested', label: 'Invested', get: (b) => b.principal || 0 },
+    { value: 'holder', label: 'Holder', get: (b) => String(b.holder || '').trim().toLowerCase() },
+    { value: 'via', label: 'Via', get: (b) => String(b.platform || '').trim().toLowerCase() },
+    { value: 'maturity', label: 'Maturity', get: (b) => b.maturityDate || '' },
+  ];
+  const fb = tab === 'bonds' ? quickFilter('bonds', all.bonds, (b) => b.holder, (b) => b.platform, 'Via', bondSorts) : tab === 'fds' ? quickFilter('fds', all.fds, (x) => x.account, (x) => x.issuer, 'Bank') : tab === 'lending' ? quickFilter('lending', all.lending, (x) => x.account, (x) => x.borrower, 'Borrower') : null;
   if (tab === 'bonds') root.append(section('Bonds', h('div', null, fb.bar,
     table([
       { label: 'Bond', host: true, render: (b) => h('span', null, h('span', null, b.name), h('small', { class: 'muted', style: { display: 'block', fontWeight: 400, opacity: 0.75 } }, [b.holder, b.platform].filter(Boolean).join(' · ') + (b.maturityDate ? ' · matures ' + dateStr(b.maturityDate) : ''))) },

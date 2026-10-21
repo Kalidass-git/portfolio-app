@@ -87,7 +87,13 @@ export function bondPaysIn(b, month) {
 }
 /** What a bond pays in `month` as a cash credit: every month for Monthly, the months since the last payout for Quarterly. */
 export function bondDueAmount(b, month, tdsRate = 0.1) {
-  if (b.credit !== 'Quarterly') return bondNetIn(b, month, tdsRate);
+  if (b.credit !== 'Quarterly') {
+    // A payment cannot fall due before the money went in: a bond bought on the 12th that pays on the 9th first pays next month, and that payment also covers the days since it was bought.
+    const early = (m) => !!b.depositDate && m === b.depositDate.slice(0, 7) && bondDueDate(b, m) < b.depositDate;
+    if (early(month)) return 0;
+    const prev = addMonths(month + '-01', -1).slice(0, 7);
+    return bondNetIn(b, month, tdsRate) + (early(prev) ? bondNetIn(b, prev, tdsRate) : 0);
+  }
   if (!bondPaysIn(b, month)) return 0;
   let t = 0;
   for (let i = 0; i < 3; i++) { const m = addMonths(month + '-01', -i).slice(0, 7); if (i > 0 && isPayMonth(b, m)) break; t += bondNetIn(b, m, tdsRate); }
@@ -558,6 +564,30 @@ export function monthlyTrend(data, months) {
   });
 }
 
+/**
+ * Which money a monthly income line stands for, so its start and end dates are the right ones. Several people can share a name ("Alagu Pandi" has four loans),
+ * so the amount is used too: 1) a Money to receive line with the same name and amount, 2) the only line with that amount, 3) lending or deposits by name (or by payout amount),
+ * 4) any Money to receive line by name. `recs` are the matched Money to receive lines (their last-received dates count), `starts` and `ends` the dates to judge each month by.
+ */
+export function incomeWindow(data, m) {
+  const amt = Number(m.amount) || 0, same = (v) => Math.abs((v || 0) - amt) < 1;
+  const recs0 = data.receivables || [], lend = (data.lending || []).concat(data.fds || []);
+  let recs = recs0.filter((x) => sameName(x.name, m.name) && same(x.expected));
+  if (!recs.length) { const one = recs0.filter((x) => same(x.expected)); if (one.length === 1) recs = one; }
+  let loans = [];
+  if (!recs.length) {
+    loans = lend.filter((x) => sameName(x.name, m.name));
+    if (loans.length > 1) { const one = loans.filter((x) => same(payoutMonthly(x))); if (one.length) loans = one; }
+    if (!loans.length) { const one = lend.filter((x) => same(payoutMonthly(x))); if (one.length === 1) loans = one; }
+  }
+  const byName = !recs.length && !loans.length;
+  if (byName) recs = recs0.filter((x) => sameName(x.name, m.name));
+  const min = (a) => a.filter(Boolean).sort()[0] || '', max = (a) => a.filter(Boolean).sort().pop() || '';
+  const starts = byName || recs.length ? min(recs.map((x) => x.startDate)) : min(loans.map((x) => x.depositDate));
+  const ends = recs.length ? (recs.every((x) => x.active === false) ? max(recs.map((x) => x.closedOn || x.closedDate)) : '') : (loans.length && loans.every((x) => x.closed && x.closed.date) ? max(loans.map((x) => x.closed.date)) : '');
+  return { recs: byName ? [] : recs, starts, ends };
+}
+
 /** Home!A38:J56 monthly cash flow: expected interest vs received, and spending groups. */
 export function monthCashflow(data, all, month) {
   const rows = monthLedger(data, month);
@@ -567,22 +597,23 @@ export function monthCashflow(data, all, month) {
   // every bond that was held in this month, today's and closed ones, so an old month is judged by what you held then
   const held = (all.bonds || []).concat((all.closed && all.closed.bonds) || []);
   const per = held.map((b) => ({ name: b.name, holder: b.holder, company: b.company, due: bondDueDate(b, month), expected: bondDueAmount(b, month, tds) })).filter((x) => x.expected > 0.5);
-  const bondsExpected = sum(per, (x) => x.expected), bondsReceived = credit('income bond');
+  const bondsExpected = sum(per, (x) => x.expected);
   matchBondCredits(rows.filter((e) => (e.category || '').toLowerCase() === 'income bond' && e.credit > 0), per);
+  // Only the credits that settle a bond due this month count as received. Other "Income Bond" credits (late interest of last month, a quarterly bond paid early) must not hide a bond still to come.
+  const bondsReceived = Math.min(sum(per, (x) => Math.min(x.received, x.expected)), credit('income bond'));
   const income = [
-    { name: 'Bonds', expected: bondsExpected, received: bondsReceived, bonds: per },
+    { name: 'Bonds', expected: bondsExpected, received: bondsReceived, bonds: per, otherCredits: Math.max(0, credit('income bond') - sum(per, (x) => x.received)) },
   ];
   const mStart = month + '-01', mEnd = `${month}-${String(daysInMonthOf(mStart)).padStart(2, '0')}`;
   for (const m of data.manualMonthlyIncome || []) {
     // money you started lending after this month, or that was closed before it, was not expected then
-    const rec = (data.receivables || []).find((r) => sameName(r.name, m.name)), len = (data.lending || []).concat(data.fds || []).find((l) => sameName(l.name, m.name));
-    const starts = (rec && rec.startDate) || (len && len.depositDate) || '';
-    const ends = (len && len.closed && len.closed.date) || (rec && rec.active === false && rec.closedDate) || '';
+    const w = incomeWindow(data, m);
     // interest starts the month after the money went out: a deposit made in September first pays in October
-    if ((starts && starts.slice(0, 7) >= month) || (ends && ends < mStart)) continue;
+    if ((w.starts && w.starts.slice(0, 7) >= month) || (w.ends && w.ends < mStart)) continue;
     const fromLedger = sum(rows.filter((e) => (e.desc || '').toLowerCase() === m.match), (e) => e.credit);
     // the same person can be marked received under "Money to receive" (Fixed income, Lendings): that counts too, without adding it twice
-    income.push({ name: m.name, expected: m.amount, received: Math.max(fromLedger, receivedFromDues(data, month, m.name), (m.paidMonths || []).includes(month) ? m.amount : 0) });
+    const fromDues = w.recs.length ? sum(w.recs.filter((r) => r.lastReceived && r.lastReceived.slice(0, 7) === month), (r) => r.expected || 0) : receivedFromDues(data, month, m.name);
+    income.push({ name: m.name, expected: m.amount, received: Math.max(fromLedger, fromDues, (m.paidMonths || []).includes(month) ? m.amount : 0), since: w.starts });
   }
   const totalExpected = sum(income, (x) => x.expected), totalReceived = sum(income, (x) => x.received);
   const groupOf = (label, cats) => ({ name: label, amount: sum(cats, debit) });
@@ -619,20 +650,26 @@ export function matchBondCredits(credits, per) {
   const order = per.slice().sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : a.name.localeCompare(b.name)));
   for (const x of per) x.received = 0;
   const take = (x, c, amt) => { const u = Math.min(c.left, amt); c.left -= u; x.received += u; };
-  for (const x of order) {   // 1) the amount fits
-    const c = pool.find((c) => c.left > 0.5 && Math.abs(c.left - x.expected) <= Math.max(2, x.expected * 0.01));
-    if (c) take(x, c, x.expected);
+  // money cannot pay a bond before its due date (a few days early is allowed), whichever rule found the match
+  const dueBy = (x, c) => !c.date || !x.due || c.date >= iso(toMs(x.due) - 3 * DAY);
+  // 1) the amount fits. Every bond and credit that are within a rupee or two (or 1%) of each other are paired, closest amount first and then closest to the due date,
+  // so two bonds with almost the same interest each get their own credit instead of the first one that happens to fit.
+  const pairs = [];
+  for (const x of per) for (const c of pool) {
+    const d = Math.abs(c.left - x.expected);
+    if (c.left > 0.5 && dueBy(x, c) && d <= Math.max(2, x.expected * 0.01)) pairs.push({ x, c, d, gap: c.date && x.due ? Math.abs(toMs(c.date) - toMs(x.due)) : 0 });
   }
+  pairs.sort((p, q) => p.d - q.d || p.gap - q.gap);
+  for (const p of pairs) if (p.c.left > 0.5 && p.x.received < 0.5) take(p.x, p.c, p.x.expected);
   const words = (n) => nameKey(String(n || '').split('_')[0]).split(' ').filter((w) => w.length >= 4);
   for (const x of order) {   // 2) the description names it
     if (x.received >= x.expected - 0.5) continue;
     const w = words(x.name), w2 = words(x.company);
-    for (const c of pool) if (c.left > 0.5 && (w.concat(w2)).some((t) => c.desc.includes(t))) take(x, c, x.expected - x.received);
+    for (const c of pool) if (c.left > 0.5 && dueBy(x, c) && (w.concat(w2)).some((t) => c.desc.includes(t))) take(x, c, x.expected - x.received);
   }
   // 3) the rest, by due date. A credit cannot pay a bond before its due date (a few days early is allowed), so money that came on the 5th is not set against a bond due on the 28th
   for (const x of order) {
-    const early = iso(toMs(x.due) - 3 * DAY);
-    for (const c of pool) { const u = c.left > 0 && (!c.date || c.date >= early) ? Math.min(c.left, Math.max(0, x.expected - x.received)) : 0; c.left -= u; x.received += u; }
+    for (const c of pool) { const u = c.left > 0 && dueBy(x, c) ? Math.min(c.left, Math.max(0, x.expected - x.received)) : 0; c.left -= u; x.received += u; }
   }
   for (const x of per) x.pending = Math.max(0, x.expected - x.received);
   return per;

@@ -154,6 +154,15 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.9.35 – Bond sorting, Money to receive and month figures
+- **Bonds page.** New "Sort" and "Ascending / Descending" choices above the list: Rate, Next due, Paid so far, Invested, Holder, Via and Maturity. Bonds with nothing to sort on (no next due date) stay at the bottom either way. Works on phone and desktop.
+- **Money to receive this month.** Each bond whose interest has not come yet is now its own line with its day (overdue in red, due today in amber), mixed in date order with the other dues. Before, bonds were one combined line that disappeared when the month's bank credits looked big enough.
+- **Bond received figure fixed.** Received for Bonds now counts only the bank credits that settle a bond due that month. Other "Income Bond" credits (a quarterly bond paid early, late interest of last month) no longer hide bonds still to come; they are shown as "other credits" and not counted. A credit can never settle a bond before its due date (3 days early is allowed), whichever matching rule finds it.
+- **Better matching of credits to bonds.** Equal or nearly equal interest amounts are now paired closest amount first, then closest to the due date, so the pending list names the right bond.
+- **First payment of a new bond.** A payment cannot fall due before the money went in. A bond bought on the 12th that pays on the 9th shows nothing in the purchase month and pays the next month, with the days since it was bought.
+- **Monthly lending lines (This month in detail).** When several loans share one name (for example four loans to one person) each income line now follows the loan with the same amount: its own start month and its own received date. A loan started in September first appears in October, not in September. Each line shows "lent <date>", and the Bonds line can be tapped to see each bond.
+- No stored data changed. New tests in `tests/bondmonth.test.mjs`.
+
 ## Release 8.9.34 – Bond due dates, review income, Home investing
 - **Bond due logic.** Quarterly bonds get a "Quarterly interest is paid in" setting (Jan·Apr·Jul·Oct, Feb·May·Aug·Nov or Mar·Jun·Sep·Dec). A payment covers the three months up to the payout month; the last month of a bond pays what is left. Bank "Income Bond" credits are matched to bonds by exact amount, then by name or issuer in the description, then by due date, and a credit never pays a bond that was not yet due. Lending that started last month first counts from this month.
 - **Annual review.** Interest income is read from "Income Bond" and "Income Lending" bank credits only. Income and transfer categories are no longer offered as one-time categories.
