@@ -20,6 +20,8 @@ ok(r.unplanned.length === 1 && r.unplanned[0].cls === 'gold', 'unplanned');
 const cp = chitPending({ savings: [{ type: 'Chit', name: 'A', entries: [{ date: '2026-09-05', amount: 5000 }], maturityDate: '2026-12-15' }, { type: 'Chit', name: 'Done', entries: [{ date: '2026-09-05', amount: 5000 }], chitMonths: 1 }, { type: 'Chit', name: 'Ended', entries: [{ date: '2026-09-05', amount: 900 }], maturityDate: '2026-09-30' }, { type: 'Chit', name: 'Paid', entries: [{ date: '2026-09-05', amount: 900 }, { date: '2026-10-05', amount: 900 }] }], gold: { chits: [{ name: 'G', months: 11, entries: [{ date: '2026-09-02', amount: 3000 }] }] } }, '2026-10');
 ok(cp.rows.length === 3 && cp.chits === 5000 && cp.gold === 3000 && cp.total === 8000, 'pending chits: running, finished by count, ended by date and paid are handled');
 ok(chitMonths({ tenure: 2, tenureType: 'Years' }, 'chit') === 24 && chitMonths({ months: 11 }, 'gold') === 11, 'chit duration');
+ok(chitMonths({ tenure: 20, tenureType: 'Months', chitMonths: 11 }, 'chit') === 20, 'tenure wins over an old duration');
+ok(chitMonths({ startDate: '2026-01-10', maturityDate: '2026-12-20' }, 'gold') === 12 && chitMonths({ chitMonths: 9 }, 'chit') === 9, 'gold chits use their dates; an old duration is still read when nothing else is set');
 const pj = expenseProjection({ spend: [{ name: 'Groceries & needs', amount: 10000 }, { name: 'Rent', amount: 20000 }, { name: 'Medical', amount: 2000 }] }, '2026-10-10');
 ok(pj.left === 21 && Math.round(pj.total) === 25200 && pj.rows.length === 2, 'projection skips rent: (10000+2000)/10*21');
 console.log(bad ? 'FAILED' : 'all passed'); process.exit(bad ? 1 : 0);

@@ -67,17 +67,20 @@ import { monthCashflow, accountBalances, daysInMonthOf } from './calc.js';
 const monthsBetween = (a, b) => (Number(b.slice(0, 4)) - Number(a.slice(0, 4))) * 12 + Number(b.slice(5, 7)) - Number(a.slice(5, 7));
 /** Total of a chit's payments in a month ('YYYY-MM'). */
 const paidIn = (c, m) => sum((c.entries || []).filter((e) => (e.date || '').slice(0, 7) === m && e.amount > 0), (e) => e.amount);
-/** How many months a chit runs: the duration set on it, else from its tenure, else from start and end dates. 0 when unknown. */
+/**
+ * How many months a chit runs: from its tenure, else from its start and end dates, else a duration entered in an older version (still read, no longer asked for). 0 when unknown.
+ * Gold chits have no tenure, so they use their dates.
+ */
 export function chitMonths(c, kind) {
-  const set = Number(kind === 'gold' ? c.months : c.chitMonths);
-  if (set > 0) return set;
   if (kind !== 'gold' && c.tenure > 0) return Math.round(c.tenure * (c.tenureType === 'Years' ? 12 : c.tenureType === 'Days' ? 1 / 30.4 : 1));
   const a = c.startDate || c.depositDate;
-  return a && c.maturityDate ? Math.max(1, monthsBetween(a.slice(0, 7), c.maturityDate.slice(0, 7)) + 1) : 0;
+  if (a && c.maturityDate) return Math.max(1, monthsBetween(a.slice(0, 7), c.maturityDate.slice(0, 7)) + 1);
+  const old = Number(kind === 'gold' ? c.months : c.chitMonths);
+  return old > 0 ? old : 0;
 }
 /**
  * Chit instalments still to be paid this month, from last month: for every chit and gold chit that is not over, what was paid last month
- * less what has already been paid this month. A chit is over when its payments reach its duration, its end date has passed or it is closed.
+ * less what has already been paid this month. A chit is over when its payments reach its tenure, its end date has passed or it is closed.
  */
 export function chitPending(data, cur) {
   const prev = addMonths(cur + '-01', -1).slice(0, 7), rows = [];

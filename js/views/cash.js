@@ -243,8 +243,7 @@ function savingForm(sv) {
       { key: 'organiser', label: 'Organiser / company (optional)', list: datalistId('org-list', data.savings.map((x) => x.organiser)), hint: 'Who runs the chit, or the insurer or bank. Only used to group things for your risk limits. Leave empty and the app works it out from the name.', showIf: (v) => v.type !== 'EPF' && v.type !== 'PPF' },
       { key: 'rate', label: 'Assumed yearly rate (e.g. 0.0825 = 8.25%)', type: 'number', required: true, hint: 'Only used for the interest-per-day figure. The real return of a chit is the XIRR, worked out from your payments.' },
       { key: 'depositDate', label: 'Start date', type: 'date' }, { key: 'maturityDate', label: 'Maturity date', type: 'date' },
-      { key: 'tenure', label: 'Tenure', type: 'number', half: true }, { key: 'tenureUnit', label: 'Tenure unit', type: 'select', options: ['Months', 'Years', 'Days'], half: true },
-      { key: 'chitMonths', label: 'Chit duration (months)', type: 'number', showIf: (v) => v.type === 'Chit', hint: 'How many monthly payments the chit has. Home stops counting it as a pending payment once this many are in.' },
+      { key: 'tenure', label: 'Tenure', type: 'number', half: true, hint: 'For a chit, Home stops counting it as a pending payment once this many months of payments are in.' }, { key: 'tenureUnit', label: 'Tenure unit', type: 'select', options: ['Months', 'Years', 'Days'], half: true },
       { key: 'payout', label: 'Expected payout at the end (₹, optional)', type: 'number', showIf: (v) => v.type === 'Chit' || v.type === 'RD', hint: 'The amount you expect to receive. Leave it empty to project it from the assumed yearly rate. It gives an estimated XIRR while the chit runs. Close the chit with the real amount to get the actual XIRR.' },
       { key: 'nextPayment', label: 'Monthly payment for the remaining months (₹, optional)', type: 'number', showIf: (v) => v.type === 'Chit' || v.type === 'RD', hint: 'What you expect to pay each month from now to the end. Used for the estimated XIRR and the projected payout. Leave empty to assume the average paid so far.' },
       { key: 'desc', label: 'Notes / who to contact', type: 'textarea' },
@@ -253,7 +252,7 @@ function savingForm(sv) {
       const rec = { ...v }; rec.tenureType = rec.tenureUnit; delete rec.tenureUnit;
       if (rec.type === NEWTYPE) { rec.type = rec.newType; d.savingTypes = [...new Set([...(d.savingTypes || []), rec.type])]; }
       delete rec.newType;
-      const blank = (k) => !(Number(rec[k]) > 0); const clear = ['payout', 'nextPayment', 'chitMonths'].filter(blank); clear.forEach((k) => delete rec[k]);
+      const blank = (k) => !(Number(rec[k]) > 0); const clear = ['payout', 'nextPayment'].filter(blank); clear.forEach((k) => delete rec[k]);
       rec.organiser = String(rec.organiser || '').trim(); if (!rec.organiser) delete rec.organiser;
       if (isNew) d.savings.push({ id: nextId('sv', d.savings), entries: [], compound: 'Monthly', ...rec }); else { const t = d.savings.find((x) => x.id === sv.id); Object.assign(t, rec); clear.forEach((k) => delete t[k]); if (!rec.organiser) delete t.organiser; }
     }),
