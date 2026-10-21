@@ -750,3 +750,6 @@ tr.proj-row td { color: var(--muted); font-style: italic; }
 details.simple-settings { padding: 10px 14px; }
 details.simple-settings > summary { cursor: pointer; font-weight: 600; }
 .chip-closed { font-size: .72em; padding: 1px 7px; border-radius: 99px; background: var(--line, #ddd); color: var(--muted, #666); white-space: nowrap; }
+/* Tax summary: each section reads as a heading with a rule above it */
+details.tax-sec { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line-2); }
+details.tax-sec > summary { color: var(--ink); font-weight: 700; font-size: 1rem; padding: 2px 0 8px; }

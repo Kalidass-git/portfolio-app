@@ -21,7 +21,16 @@ const cp = chitPending({ savings: [{ type: 'Chit', name: 'A', entries: [{ date: 
 ok(cp.rows.length === 3 && cp.chits === 5000 && cp.gold === 3000 && cp.total === 8000, 'pending chits: running, finished by count, ended by date and paid are handled');
 ok(chitMonths({ tenure: 2, tenureType: 'Years' }, 'chit') === 24 && chitMonths({ months: 11 }, 'gold') === 11, 'chit duration');
 ok(chitMonths({ tenure: 20, tenureType: 'Months', chitMonths: 11 }, 'chit') === 20, 'tenure wins over an old duration');
-ok(chitMonths({ startDate: '2026-01-10', maturityDate: '2026-12-20' }, 'gold') === 12 && chitMonths({ chitMonths: 9 }, 'chit') === 9, 'gold chits use their dates; an old duration is still read when nothing else is set');
+ok(chitMonths({}, 'gold') === 11 && chitMonths({}, 'gold', 9) === 9 && chitMonths({ months: 6 }, 'gold') === 6, 'gold chits run 11 months unless the setting or an old per-chit length says otherwise');
+ok(chitMonths({ startDate: '2026-01-10', maturityDate: '2026-12-20' }, 'chit') === 12 && chitMonths({ chitMonths: 9 }, 'chit') === 9, 'chits: dates, and an old duration when nothing else is set');
+// paid this month = done, whatever the amount; a running gold scheme counts; 11 months over = not pending
+const base = { settings: {}, savings: [{ type: 'Chit', name: 'Chit paid more', entries: [{ date: '2026-09-05', amount: 5000 }, { date: '2026-10-07', amount: 6500 }], chitMonths: 20 }, { type: 'Chit', name: 'Chit open', entries: [{ date: '2026-09-05', amount: 2000 }], chitMonths: 20 }],
+  gold: { chits: [{ name: 'Gold running', startDate: '2026-02-01', entries: [{ date: '2026-09-02', amount: 3000 }] }, { name: 'Gold over', startDate: '2025-10-01', entries: [{ date: '2026-09-02', amount: 3000 }] }, { name: 'Gold last month', startDate: '2025-11-01', entries: [{ date: '2026-09-02', amount: 3000 }, { date: '2026-10-02', amount: 3500 }] }],
+    schemes: [{ name: 'GRT scheme', active: true, entries: [{ date: '2026-09-12', amount: 4000 }] }, { name: 'Old scheme', active: false, entries: [{ date: '2026-09-12', amount: 4000 }] }] } };
+const mp = chitPending(base, '2026-10');
+ok(mp.done.map((r) => r.name).sort().join() === 'Chit paid more,Gold last month' && mp.paidTotal === 10000, 'paid this month, any amount, is done: ' + mp.done.map((r) => r.name));
+ok(mp.pending.map((r) => r.name).sort().join() === 'Chit open,GRT scheme,Gold running' && mp.total === 9000 && mp.gold === 7000 && mp.chits === 2000, 'pending: open chit, gold chit and the running GRT scheme; the old scheme and the 12-month-old gold chit are not: ' + mp.pending.map((r) => r.name));
+ok(chitPending({ ...base, settings: { goldChitMonths: 14 } }, '2026-10').pending.some((r) => r.name === 'Gold over'), 'a longer gold chit length brings it back');
 const pj = expenseProjection({ spend: [{ name: 'Groceries & needs', amount: 10000 }, { name: 'Rent', amount: 20000 }, { name: 'Medical', amount: 2000 }] }, '2026-10-10');
 ok(pj.left === 21 && Math.round(pj.total) === 25200 && pj.rows.length === 2, 'projection skips rent: (10000+2000)/10*21');
 console.log(bad ? 'FAILED' : 'all passed'); process.exit(bad ? 1 : 0);

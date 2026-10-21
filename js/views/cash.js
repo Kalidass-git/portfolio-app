@@ -140,6 +140,71 @@ export function transferForm(entry) {
   });
 }
 
+/**
+ * Split one bank entry into several. Date and account stay as they are; each row has its own description, category and amount. The rows must add up to the original amount
+ * (one row can be left empty to take whatever is left). On Split the original entry is replaced by the new ones, in the same place.
+ */
+export function splitForm(entry) {
+  const { data } = S;
+  const kind = entry.credit > 0 ? 'credit' : 'debit', total = kind === 'credit' ? entry.credit : entry.debit;
+  const acct = data.accounts.find((a) => a.id === entry.acct);
+  const known = new Map(data.categories.map((c) => [c.desc.toLowerCase(), c.category]));
+  const listId = datalistId('desc-list', data.categories.map((c) => c.desc));
+  // categories you can split into: not transfers (they need two sides) and not a new category (add it first from Edit)
+  const opts = categoryOptions(data, kind, entry.category).filter((g) => !g.group || !['Between my own accounts', 'Not in the list'].includes(g.group));
+  const rows = [{ desc: entry.desc || '', category: entry.category || '', amount: String(total) }, { desc: '', category: '', amount: '' }];
+  const list = h('div'), left = h('p', { class: 'summary-line', role: 'status' }), err = h('p', { class: 'form-error', role: 'alert' });
+  const amt = (r) => (r.amount === '' || r.amount == null ? null : Number(r.amount));
+  const leftOver = () => Math.round((total - rows.reduce((a, r) => a + (amt(r) || 0), 0)) * 100) / 100;
+  const showLeft = () => {
+    const l = leftOver(), blank = rows.filter((r) => amt(r) == null).length;
+    left.replaceChildren(blank === 1 && l > 0.004 ? h('span', { class: 'muted' }, `The empty amount takes the rest: ${money(l)}`)
+      : Math.abs(l) < 0.005 ? h('span', { class: 'pos' }, '✓ The rows add up to ' + money(total))
+        : h('span', { class: l > 0 ? 'warn' : 'neg' }, (l > 0 ? 'Left to assign: ' : 'Over by: ') + money(Math.abs(l))));
+  };
+  const draw = () => {
+    list.replaceChildren(...rows.map((r, i) => {
+      const desc = h('input', { type: 'text', value: r.desc, list: listId, placeholder: 'Description', 'aria-label': `Row ${i + 1} description`, style: { flex: '2 1 11em', minWidth: '0' }, oninput: (e) => { r.desc = e.target.value; const c = known.get(r.desc.trim().toLowerCase()); if (c && [...cat.options].some((o) => o.value === c)) { cat.value = c; r.category = c; } } });
+      const cat = h('select', { 'aria-label': `Row ${i + 1} category`, style: { flex: '2 1 10em', minWidth: '0' }, onchange: (e) => { r.category = e.target.value; } });
+      setOptions(cat, [{ value: '', label: 'Category…' }, ...opts], r.category);
+      const amount = h('input', { type: 'number', step: 'any', inputmode: 'decimal', value: r.amount, placeholder: 'Amount ₹', 'aria-label': `Row ${i + 1} amount`, style: { flex: '1 1 6em', minWidth: '0' }, oninput: (e) => { r.amount = e.target.value; showLeft(); } });
+      const rm = rows.length > 2 ? h('button', { class: 'icon', type: 'button', 'aria-label': `Remove row ${i + 1}`, title: 'Remove this row', onclick: () => { rows.splice(i, 1); draw(); } }, '✕') : null;
+      return h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--line-2)' } }, desc, cat, amount, rm);
+    }));
+    showLeft();
+  };
+  const save = (close) => {
+    err.textContent = '';
+    const blanks = rows.filter((r) => amt(r) == null);
+    if (blanks.length > 1) { err.textContent = 'Only one row can have an empty amount.'; return; }
+    const l = leftOver();
+    if (blanks.length === 1) { if (!(l > 0.004)) { err.textContent = 'Nothing is left for the empty row. Enter its amount or remove the row.'; return; } blanks[0].amount = String(l); }
+    for (const [i, r] of rows.entries()) {
+      if (!r.desc.trim()) { err.textContent = `Row ${i + 1} needs a description.`; return; }
+      if (!r.category) { err.textContent = `Row ${i + 1} needs a category.`; return; }
+      if (!(amt(r) > 0)) { err.textContent = `Row ${i + 1} needs an amount above zero.`; return; }
+    }
+    if (Math.abs(leftOver()) >= 0.005) { err.textContent = `The rows add up to ${money(total - leftOver())}, not ${money(total)}.`; showLeft(); return; }
+    mutate((d) => {
+      const at = d.ledger.findIndex((e) => e.id === entry.id);
+      if (at < 0) return;
+      const orig = d.ledger[at];
+      let id = Math.max(0, ...d.ledger.map((e) => e.id || 0));
+      const parts = rows.map((r) => ({ ...orig, id: ++id, desc: r.desc.trim(), category: r.category, debit: kind === 'debit' ? amt(r) : 0, credit: kind === 'credit' ? amt(r) : 0 }));
+      d.ledger.splice(at, 1, ...parts);
+      for (const r of rows) if (!d.categories.some((c) => c.desc.toLowerCase() === r.desc.trim().toLowerCase())) d.categories.push({ desc: r.desc.trim(), category: r.category, type: kind === 'credit' ? 'Income' : 'Expense' });
+    });
+    toast(`Split into ${rows.length} entries`);
+    close();
+  };
+  draw();
+  const body = h('div', null,
+    h('p', { class: 'note', style: { marginTop: 0 } }, `${dateStr(entry.date)} · ${acct ? acct.name + ' · ' + acct.holder : ''} · ${kind === 'credit' ? 'Received' : 'Paid out'} `, h('b', null, money(total)), ` · ${entry.desc || ''}`),
+    h('p', { class: 'note' }, 'Date and account stay the same. Give each part its description, category and amount. The parts must add up to the original amount; leave one amount empty to give it what is left.'),
+    list, h('div', { style: { margin: '8px 0' } }, btn('Add row', () => { const l = leftOver(); rows.push({ desc: '', category: '', amount: l > 0.004 && rows.every((r) => amt(r) != null) ? String(l) : '' }); draw(); })), left, err);
+  dialog('Split transaction', body, [{ label: 'Cancel', onclick: (c) => c() }, { label: 'Split', class: 'primary', onclick: save }]);
+}
+
 export function txnForm(entry, preset) {
   if (entry && entry.transferId) return transferForm(entry);
   const { data } = S;
@@ -180,6 +245,7 @@ export function txnForm(entry, preset) {
       toast(isNew ? 'Transaction added' : 'Transaction updated');
     },
     onDelete: isNew ? null : () => mutate((d) => { d.ledger = d.ledger.filter((e) => e.id !== entry.id); }),
+    extraActions: isNew || !canEdit() || !(base.amount > 0) ? [] : [{ label: 'Split', onclick: () => splitForm(entry) }],
   });
 }
 

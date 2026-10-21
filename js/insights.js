@@ -64,15 +64,19 @@ export function taxPeople(data) {
  * (a quarterly bond pays every third month) and what the bank really credited, matched with the same rule as Home.
  */
 export function holdingMonths(data, all, row, from, end) {
-  const b = row.ref, out = [], tds = data.settings.tdsRate ?? 0.1;
+  const b = row.ref, out = [], tds = data.settings.tdsRate ?? 0.1, asOf = all.asOf;
   if (!b || row.kind !== 'Bonds') return out;
   for (let m = from.slice(0, 7); m <= end.slice(0, 7); m = C.addMonths(m + '-01', 1).slice(0, 7)) {
-    const days = C.bondDaysIn(b, m), gross = (b.principal * b.rate * days) / 365;
-    const due = C.bondDueAmount(b, m, tds);
+    // interest counts up to today only: the part of a month that is still ahead has not been earned yet
+    const first = b.depositDate && b.depositDate > m + '-01' ? b.depositDate : m + '-01';
+    const days = Math.min(C.bondDaysIn(b, m), Math.max(0, Math.round((C.toMs(asOf) - C.toMs(first)) / C.DAY) + 1)), gross = (b.principal * b.rate * days) / 365;
+    // the payment is counted only once its due date has come, so it can be set against the bank
+    const due = C.bondDueDate(b, m) <= asOf ? C.bondDueAmount(b, m, tds) : 0;
     const cf = C.monthCashflow(data, all, m).income[0];
     const hit = cf && cf.bonds ? cf.bonds.find((x) => x.name === b.name) : null;
-    if (!days && !due && !(hit && hit.received)) continue;
-    out.push({ month: m, days, gross, tds: gross * tds, net: gross - gross * tds, due, received: hit ? hit.received : 0 });
+    const credited = hit ? hit.credited || 0 : 0;
+    if (!days && !due && !credited) continue;
+    out.push({ month: m, days, gross, tds: gross * tds, net: gross - gross * tds, due, received: credited });
   }
   return out;
 }
@@ -507,9 +511,15 @@ export function taxProjection(data, all, y, who = 'all', plan = {}) {
   const savings = { soFar: savSoFar, year: curIn && cur <= to.slice(0, 7) ? savSoFar + (savSoFar / elapsed) * monthsLeft : savSoFar };
   // did the bank get what the bond holdings say it should? Interest comes in after the month ends, so a window is allowed.
   const prevEnd = new Date(C.toMs(cur + '-01') - DAY).toISOString().slice(0, 10);
-  const netOf = (res) => sum(part(res, 'Bonds'), (r) => r.gross) * (1 - tdsRate);
-  const bondsNow = netOf(now), bondsPrev = prevEnd >= from ? netOf(taxSummary(data, { ...all, asOf: prevEnd }, y, who)) : 0;
-  const received = sum(data.ledger.filter((e) => lc(e.category) === 'income bond' && e.date >= from && e.date <= all.asOf && mine(acctOwner(data, e.acct))), (e) => e.credit);
+  // Only payments whose due date has come are counted: interest earned this month but not yet due cannot be in the bank, so it is left out of the comparison.
+  const stop = to < all.asOf ? to : all.asOf;
+  const dueTo = (day) => sum((data.bonds || []).filter((b) => mine(itemOwner(b))), (b) => {
+    let t = 0;
+    for (let m = from.slice(0, 7); m <= day.slice(0, 7); m = C.addMonths(m + '-01', 1).slice(0, 7)) { const d = C.bondDueDate(b, m); if (d >= from && d <= day) t += C.bondDueAmount(b, m, tdsRate); }
+    return t;
+  });
+  const bondsNow = dueTo(stop), bondsPrev = prevEnd >= from ? dueTo(prevEnd) : 0;
+  const received = sum(data.ledger.filter((e) => lc(e.category) === 'income bond' && e.date >= from && e.date <= stop && mine(acctOwner(data, e.acct))), (e) => e.credit);
   const tol = Math.max(500, 0.02 * bondsNow);
   const diff = received - bondsNow;   // bank minus holdings, both up to today
   const recon = { received, expectedNow: bondsNow, expectedPrev: bondsPrev, tol, diff, status: Math.abs(diff) <= tol ? 'ok' : diff < 0 ? 'short' : 'over' };

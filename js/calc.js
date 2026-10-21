@@ -598,11 +598,13 @@ export function monthCashflow(data, all, month) {
   const held = (all.bonds || []).concat((all.closed && all.closed.bonds) || []);
   const per = held.map((b) => ({ name: b.name, holder: b.holder, company: b.company, due: bondDueDate(b, month), expected: bondDueAmount(b, month, tds) })).filter((x) => x.expected > 0.5);
   const bondsExpected = sum(per, (x) => x.expected);
+  // What the bank shows against each bond is kept as `credited`, for checking a tax year against the bank. It is NOT what decides received: bank entries often come late or several together.
   matchBondCredits(rows.filter((e) => (e.category || '').toLowerCase() === 'income bond' && e.credit > 0), per);
-  // Only the credits that settle a bond due this month count as received. Other "Income Bond" credits (late interest of last month, a quarterly bond paid early) must not hide a bond still to come.
-  const bondsReceived = Math.min(sum(per, (x) => Math.min(x.received, x.expected)), credit('income bond'));
+  // A bond counts as received once its due date has come (today included), and as pending until then.
+  for (const x of per) { x.credited = x.received; x.received = x.due <= all.asOf ? x.expected : 0; x.pending = x.expected - x.received; }
+  const bondsReceived = sum(per, (x) => x.received);
   const income = [
-    { name: 'Bonds', expected: bondsExpected, received: bondsReceived, bonds: per, otherCredits: Math.max(0, credit('income bond') - sum(per, (x) => x.received)) },
+    { name: 'Income Bond', expected: bondsExpected, received: bondsReceived, bonds: per },
   ];
   const mStart = month + '-01', mEnd = `${month}-${String(daysInMonthOf(mStart)).padStart(2, '0')}`;
   for (const m of data.manualMonthlyIncome || []) {
