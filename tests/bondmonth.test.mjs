@@ -1,4 +1,4 @@
-import { matchBondCredits, bondPaysIn, bondDaysIn, bondNetIn, bondDueAmount, bondDueDate, daysInMonthOf, monthCashflow, incomeWindow } from '../js/calc.js';
+import { matchBondCredits, bondPaysIn, bondDaysIn, bondNetIn, bondDueAmount, bondDueDate, daysInMonthOf, monthCashflow, incomeWindow, dueInMonth } from '../js/calc.js';
 let bad = 0; const ok = (c, m) => { if (!c) { bad++; console.log('FAIL', m); } };
 const near = (a, b) => Math.abs(a - b) < 0.01;
 const b = { principal: 100000, rate: 0.1, depositDate: '2026-02-10', maturityDate: '2027-02-10', credit: 'Monthly' };
@@ -69,5 +69,22 @@ const d2 = { settings: { tdsRate: 0.1 }, categories: [], ledger: [], bonds: [], 
 const a2 = { bonds: [], closed: { bonds: [] }, asOf: '2026-10-21' };
 const sep = monthCashflow(d2, a2, '2026-09').income.map((x) => x.expected), oct = monthCashflow(d2, a2, '2026-10').income;
 ok(sep.length === 2 && sep[1] === 8750, 'September expects only the first loan: ' + sep);
-ok(oct.length === 3 && oct[2].expected === 17500 && oct[2].received === 17500 && oct[1].received === 8750, 'October expects both, each received once, not the sum of both');
+ok(oct.length === 3 && oct[2].expected === 7000 && oct[2].received === 7000 && oct[1].received === 8750, 'October: the 17,500 loan was lent on the 19th, so its first payment covers 12 of 30 days (7,000); each line received once: ' + oct.map((x) => x.expected + '/' + x.received));
+// pro-rata first payment and later months in full
+const lend = { name: 'Lathish', expected: 6250, startDate: '2025-12-07', active: true };
+ok(dueInMonth(lend, '2025-12') === 0 && dueInMonth(lend, '2026-01') === Math.round(6250 * 25 / 31) && dueInMonth(lend, '2026-02') === 6250, 'lent on 7 Dec: nothing in Dec, 25/31 in Jan, full from Feb');
+ok(dueInMonth({ expected: 3500, startDate: '2025-11-01', active: true }, '2025-12') === 3500, 'lent on the 1st: the whole month is paid the next month');
+ok(dueInMonth({ expected: 3394, startDate: '2024-04-01', active: false, lastReceived: '2026-09-20' }, '2026-11') === 0, 'a closed line pays nothing after it closed');
+ok(dueInMonth({ expected: 60000, term: 'Yearly', startDate: '2026-08-30' }, '2026-10') === 0, 'yearly lines are not monthly income');
+// a line named "Lending Pandi" still finds the four loans of "Alagu Pandi" and does not appear before they started
+const pandi = [{ name: 'Alagu Pandi', expected: 8750, startDate: '2025-08-01', active: true }, { name: 'Alagu Pandi', expected: 17500, startDate: '2026-09-19', active: true, lastReceived: '2026-10-19' }];
+const pd = { settings: {}, categories: [], ledger: [], bonds: [], receivables: pandi, lending: [], fds: [], manualMonthlyIncome: [{ name: 'Lending Pandi', amount: 17500, match: 'x' }] };
+const pa = { bonds: [], closed: { bonds: [] }, asOf: '2026-10-21' };
+ok(['2026-06', '2026-07', '2026-09'].every((m) => monthCashflow(pd, pa, m).income.filter((x) => !x.bonds).length === 0), 'a differently named line: nothing in June, July or September, before the 17,500 loan started');
+ok(monthCashflow(pd, pa, '2026-10').income[1].expected === 7000, 'October shows the part month, 7,000');
+const agg = { ...pd, manualMonthlyIncome: [{ name: 'Lending Pandi', amount: 26250, match: 'x' }] };
+ok(monthCashflow(agg, pa, '2026-08').income[1].expected === 8750 && monthCashflow(agg, pa, '2026-10').income[1].expected === 8750 + 7000 && monthCashflow(agg, pa, '2026-11').income[1].expected === 26250, 'one line for the whole person adds each loan from its own start');
+const lat = { settings: {}, categories: [], ledger: [{ id: 1, acct: 'a', date: '2026-01-06', desc: 'lathish', category: 'Income Lending', credit: 5000, debit: 0 }], bonds: [], receivables: [lend], lending: [], fds: [], manualMonthlyIncome: [{ name: 'Lending Lathish', amount: 6250, match: 'lathish' }] };
+const jan = monthCashflow(lat, pa, '2026-01').income[1];
+ok(jan.expected === 5040 && jan.received === 5000 && jan.expected - jan.received === 40, 'January expects the pro-rated 5,040 and 5,000 came: ' + jan.expected + '/' + jan.received);
 console.log(bad ? 'FAILED' : 'all passed'); process.exit(bad ? 1 : 0);

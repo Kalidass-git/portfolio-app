@@ -145,7 +145,7 @@ function projectionCard(data, all, people) {
         { label: 'Earned so far', cls: 'r', mob: 'under', mlabel: 'so far ', get: (x) => money(x.soFar), total: (rs) => money(rs.reduce((a, x) => a + x.soFar, 0)) },
         { label: 'TDS (est.)', cls: 'r', mob: 'under', mlabel: 'TDS ', get: (x) => money(x.tdsYear), total: (rs) => money(rs.reduce((a, x) => a + x.tdsYear, 0)) },
       ], p.interest.holdings, { footer: {} }) : h('p', { class: 'empty' }, 'No bonds or FDs running in this year.'),
-      note('Worked out from each holding: principal × rate × days held inside the year, up to maturity or closing. It is the gross interest, so it does not matter whether TDS was cut on what you received. Private lending and chits are left out.')),
+      note('Worked out from each holding: principal × rate × days held inside the year, up to maturity or closing. “Earned so far” counts whole months for bonds, not part months: up to last month, and this month only once its payment is due. It is the gross interest, so it does not matter whether TDS was cut on what you received. Private lending and chits are left out.')),
     note('A quick guide, not tax advice. Salary, bond and FD interest, savings interest, recorded dividends and the other income you type are taxed as ordinary income. Capital gains are not included (they have their own rates and the 87A rebate does not apply to them). It assumes you keep today’s bonds and FDs until maturity without reinvesting. Check with your accountant before filing.')));
 }
 

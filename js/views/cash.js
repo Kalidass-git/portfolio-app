@@ -5,7 +5,8 @@ import * as CAT from '../categories.js';
 import { hbars } from '../charts.js';
 import { closeForm, reopen } from './closing.js';
 import { openBankImport } from './cash-import.js';
-import { confirmDialog, pct, posNeg, stat, datalistId, icon } from '../ui.js';
+import { confirmDialog, pct, posNeg, stat, datalistId, icon, rowList } from '../ui.js';
+import { chitCards } from '../monthinvest.js';
 
 /** Calendar and financial year (April to March) choices for the date filter. */
 const PERIODS = (asOf) => {
@@ -15,6 +16,7 @@ const PERIODS = (asOf) => {
 };
 const inPeriod = (v, date, asOf) => { if (v === 'all') return true; if (v.startsWith('p:')) { const p = PERIODS(asOf).find((x) => x[0] === v); return !!p && date >= p[2] && date <= p[3]; } return C.monthKey(date) === v; };
 let fAcct = 'all', fMonth = null, fText = '', fKind = 'all', limit = 60;
+let fCat = 'all', fAmtOp = 'any', fAmtVal = '', fSort = 'date', fDir = 'desc';
 const TABS = [['accounts', 'Accounts'], ['ledger', 'Transactions']];
 /** Open the transactions list, optionally pre-filtered. Used by links from other screens. */
 export function openLedger({ text = '', month = null, acct = 'all', kind = 'all' } = {}) { fText = text; fMonth = month; fAcct = acct; fKind = kind; limit = 60; location.hash = '#/cash/ledger'; }
@@ -267,8 +269,24 @@ function ledger() {
   const withBal = sorted.map((e) => { const b = (bal.get(e.acct) || 0) + (e.credit || 0) - (e.debit || 0); bal.set(e.acct, b); return { ...e, balance: b }; });
   const q = fText.toLowerCase();
   const inKind = (e) => fKind === 'all' || (fKind === 'income' ? kindOfCat(e.category) === 'income' && e.credit > 0 : kindOfCat(e.category) === fKind && e.debit > 0);
-  let rows = withBal.filter((e) => (fAcct === 'all' || e.acct === fAcct) && inPeriod(fMonth, e.date, S.all.asOf) && inKind(e) && (!q || (e.desc + ' ' + e.category).toLowerCase().includes(q)));
-  rows.reverse();
+  const amtOf = (e) => (e.credit > 0 ? e.credit : e.debit) || 0, lim = Number(fAmtVal);
+  const amtOk = (e) => fAmtOp === 'any' || fAmtVal === '' || Number.isNaN(lim) || (fAmtOp === 'gt' ? amtOf(e) > lim : amtOf(e) < lim);
+  let rows = withBal.filter((e) => (fAcct === 'all' || e.acct === fAcct) && inPeriod(fMonth, e.date, S.all.asOf) && inKind(e) && (fCat === 'all' || e.category === fCat) && amtOk(e) && (!q || (e.desc + ' ' + e.category).toLowerCase().includes(q)));
+  rows.reverse();   // newest first
+  if (fSort !== 'date' || fDir !== 'desc') {
+    const key = (e) => (fSort === 'amount' ? amtOf(e) : fSort === 'category' ? String(e.category || '').toLowerCase() : fSort === 'desc' ? String(e.desc || '').toLowerCase() : e.date);
+    const sign = fDir === 'asc' ? 1 : -1;
+    rows = rows.map((e, i) => ({ e, i, k: key(e) })).sort((a, b) => (typeof a.k === 'string' ? sign * a.k.localeCompare(b.k) : sign * (a.k - b.k)) || a.i - b.i).map((o) => o.e);
+  }
+  const cats = [...new Set(data.ledger.map((e) => e.category).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const reset = () => { limit = 60; rerender(); };
+  const bar2 = h('div', { class: 'filters' },
+    h('select', { 'aria-label': 'Category', onchange: (e) => { fCat = e.target.value; reset(); } }, h('option', { value: 'all' }, 'Category: all'), cats.map((c) => h('option', { value: c, selected: c === fCat }, c))),
+    h('select', { 'aria-label': 'Amount filter', onchange: (e) => { fAmtOp = e.target.value; reset(); } }, [['any', 'Amount: any'], ['gt', 'Amount greater than'], ['lt', 'Amount less than']].map(([v, l]) => h('option', { value: v, selected: v === fAmtOp }, l))),
+    fAmtOp !== 'any' ? h('input', { type: 'number', min: '0', step: 'any', inputmode: 'decimal', placeholder: '₹ amount', value: fAmtVal, 'aria-label': 'Amount', style: { maxWidth: '9em' }, onchange: (e) => { fAmtVal = e.target.value; reset(); } }) : null,
+    h('select', { 'aria-label': 'Sort by', onchange: (e) => { fSort = e.target.value; fDir = fSort === 'category' || fSort === 'desc' ? 'asc' : 'desc'; reset(); } }, [['date', 'Sort: Date'], ['amount', 'Sort: Amount'], ['category', 'Sort: Category'], ['desc', 'Sort: Description']].map(([v, l]) => h('option', { value: v, selected: v === fSort }, l))),
+    h('select', { 'aria-label': 'Sort direction', onchange: (e) => { fDir = e.target.value; reset(); } }, [['desc', 'Descending'], ['asc', 'Ascending']].map(([v, l]) => h('option', { value: v, selected: v === fDir }, l))),
+    fCat !== 'all' || fAmtOp !== 'any' || fSort !== 'date' || fDir !== 'desc' ? btn('Clear', () => { fCat = 'all'; fAmtOp = 'any'; fAmtVal = ''; fSort = 'date'; fDir = 'desc'; reset(); }) : null);
   const total = rows.length, credit = rows.reduce((a, e) => a + (e.credit || 0), 0), debit = rows.reduce((a, e) => a + (e.debit || 0), 0);
   const acctName = new Map(data.accounts.map((a) => [a.id, `${a.name} · ${a.holder}`]));
   const KINDS = [['all', 'All'], ['expense', 'Expenses'], ['investment', 'Investments'], ['income', 'Income']];
@@ -284,7 +302,7 @@ function ledger() {
   const t0 = tbl.querySelector('table'); if (t0) t0.classList.add('compact');
   const label = fKind === 'income' ? 'received' : fKind === 'all' ? 'paid out' : 'paid out';
   wrap.append(section('Transactions',
-    h('div', null, h('div', { class: 'filters' }, seg), bar,
+    h('div', null, h('div', { class: 'filters' }, seg), bar, bar2,
       h('p', { class: 'summary-line' }, `${num(total)} entries`, fKind === 'all' || fKind === 'income' ? [' · received ', h('b', { class: 'pos' }, money(credit))] : null, fKind !== 'income' ? [' · ' + (fKind === 'all' ? 'paid out ' : fKind === 'investment' ? 'invested ' : 'spent '), h('b', { class: fKind === 'investment' ? 'inv' : fKind === 'expense' ? 'neg' : '' }, money(debit))] : null),
       tbl,
       total > limit ? btn(`Show more (${total - limit} left)`, () => { limit += 100; rerender(); }, 'wide') : null),
@@ -347,6 +365,29 @@ function entryForm(sv, idx) {
     onDelete: isNew ? null : () => mutate((d) => { d.savings.find((x) => x.id === sv.id).entries.splice(idx, 1); }),
   });
 }
+/** This month's and next month's chit payments as two cards. Tap a card for the total per organiser / company. */
+function chitDueCards(data) {
+  const cur = C.monthKey(S.all.asOf), cc = chitCards(data, cur);
+  if (!cc.thisMonth.length && !cc.proj.length) return null;
+  const who = (g, sub) => ({ title: g.org, sub: `${g.count} chit${g.count === 1 ? '' : 's'}${sub ? ' · ' + sub(g) : ''}`, value: money(g.amount) });
+  const thisPop = () => {
+    let tab = 'due';
+    const body = h('div'), seg = () => h('nav', { class: 'seg', 'aria-label': 'Due or paid' }, [['due', `Still to pay (${money(cc.dueTotal)})`], ['paid', `Paid (${money(cc.paidTotal)})`]].map(([k, l]) => h('a', { href: 'javascript:void 0', class: tab === k ? 'on' : '', 'aria-selected': String(tab === k), onclick: (e) => { e.preventDefault(); tab = k; draw(); } }, l)));
+    const draw = () => {
+      const groups = (tab === 'due' ? cc.dueByOrg : cc.paidByOrg).filter((g) => g.amount > 0.5);
+      body.replaceChildren(seg(), groups.length ? rowList(groups.map((g) => who(g, (x) => x.items.filter((i) => (tab === 'due' ? i.due : i.paid) > 0.5).map((i) => i.name).join(', ')))) : h('p', { class: 'empty' }, tab === 'due' ? 'Every chit is paid for this month.' : 'No chit has been paid yet this month.'),
+        h('p', { class: 'note' }, 'Grouped by Organiser / company (set on each chit). A chit counts as paid once anything is paid into it this month. “Still to pay” is what it took last month.'));
+    };
+    draw(); dialog('Chits, ' + monthLabel(cur, true), body, [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
+  };
+  const nextPop = () => dialog('Chits next month, ' + monthLabel(cc.next, true), h('div', null,
+    cc.projByOrg.length ? rowList(cc.projByOrg.map((g) => ({ ...who(g, (x) => x.items.map((i) => i.name).join(', ')), value: h('i', null, money(g.amount) + '*') }))) : h('p', { class: 'empty' }, 'No chit is running next month.'),
+    h('p', { class: 'note' }, '* Projected, not fixed: each chit is taken as the average of its last three payments, because the amount changes every month. Chits that finish before then are left out. Grouped by Organiser / company.')), [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
+  const card = (label, val, sub, cls, onClick) => h('div', { class: 'stat tappable', role: 'button', tabindex: '0', onclick: onClick, onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } }, h('span', { class: 'stat-label' }, label), h('strong', { class: 'stat-value ' + (cls || '') }, val), h('span', { class: 'stat-sub' }, sub));
+  return h('div', { class: 'stats', style: { marginBottom: '12px' } },
+    card('Chits due this month', money(cc.dueTotal), cc.dueTotal < 0.5 ? `all paid · ${money(cc.paidTotal)} paid this month · tap for details` : `${money(cc.paidTotal)} paid so far · tap for details`, cc.dueTotal > 0.5 ? 'warn' : 'pos', thisPop),
+    card('Chits due next month *', h('i', null, money(cc.projTotal) + '*'), `* projected from the last 3 payments · ${cc.proj.length} chit${cc.proj.length === 1 ? '' : 's'} · tap for details`, '', nextPop));
+}
 export function savingsTab(only) {
   const { all } = S;
   const wrap = h('div');
@@ -356,6 +397,7 @@ export function savingsTab(only) {
     if (only && only !== title) continue;
     const list = all.savings.filter((s) => [].concat(types).includes(s.type));
     if (title === 'Other savings' && !list.length) continue;
+    if (title === 'Chits') { const cards = chitDueCards(S.data); if (cards) wrap.append(cards); }
     const withX = title === 'Chits' || title === 'Insurance' || title === 'Recurring deposits' || title === 'Other savings';
     wrap.append(section(title,
       table([

@@ -564,28 +564,53 @@ export function monthlyTrend(data, months) {
   });
 }
 
+const nameWords = (n) => nameKey(n).split(' ').filter((w) => w.length >= 4 && w !== 'lending');
+/** Same person: equal or contained names, or a shared word ("Lending Pandi" and "Alagu Pandi" both have "pandi"). */
+const looseName = (a, b) => sameName(a, b) || nameWords(a).some((w) => nameWords(b).includes(w));
 /**
- * Which money a monthly income line stands for, so its start and end dates are the right ones. Several people can share a name ("Alagu Pandi" has four loans),
- * so the amount is used too: 1) a Money to receive line with the same name and amount, 2) the only line with that amount, 3) lending or deposits by name (or by payout amount),
- * 4) any Money to receive line by name. `recs` are the matched Money to receive lines (their last-received dates count), `starts` and `ends` the dates to judge each month by.
+ * What a monthly Money to receive line pays in `month`. Interest is paid in arrears: money lent in a month first pays the month after, and only for the days it was out
+ * (lent on the 7th of a 31-day month: 25 of 31 days of the full amount). The month it went out pays nothing, every later month pays in full. Before the start and after
+ * a closing date it is 0. Yearly lines are not monthly income and are 0 here.
+ */
+export function dueInMonth(r, month) {
+  if (!r || r.term === 'Yearly') return 0;
+  const amount = Number(r.expected) || 0;
+  const end = r.active === false ? (r.closedOn || r.closedDate || r.lastReceived || '') : '';
+  if (end && end < month + '-01') return 0;
+  const s = r.startDate;
+  if (!s) return amount;
+  const sm = s.slice(0, 7);
+  if (month <= sm) return 0;
+  if (month === addMonths(sm + '-01', 1).slice(0, 7)) {
+    const dim = daysInMonthOf(sm + '-01'), day = Math.min(dim, Math.max(1, Number(s.slice(8, 10)) || 1));
+    return Math.round((amount * (dim - day + 1)) / dim);
+  }
+  return amount;
+}
+/**
+ * Which Money to receive lines a monthly income line stands for. Several loans can share a person ("Alagu Pandi" has four), and the line may be named differently ("Lending Pandi"),
+ * so: 1) lines of that person with exactly that amount, 2) all of that person's lines when their amounts add up to the line (one line for the person), 3) the one line of that person,
+ * 4) the only line with that amount. When nothing matches, lending and deposits are used for the start and end dates instead. Returns `recs` and, as a fallback, `starts`/`ends`.
  */
 export function incomeWindow(data, m) {
   const amt = Number(m.amount) || 0, same = (v) => Math.abs((v || 0) - amt) < 1;
-  const recs0 = data.receivables || [], lend = (data.lending || []).concat(data.fds || []);
-  let recs = recs0.filter((x) => sameName(x.name, m.name) && same(x.expected));
+  const recs0 = (data.receivables || []).filter((x) => x.term !== 'Yearly');
+  const mine = recs0.filter((x) => looseName(x.name, m.name));
+  let recs = mine.filter((x) => same(x.expected));
+  if (!recs.length && mine.length > 1) { const act = mine.filter((x) => x.active !== false); for (const set of [act, mine]) if (set.length && same(sum(set, (x) => x.expected))) { recs = set; break; } }
+  if (!recs.length && mine.length === 1) recs = mine;
   if (!recs.length) { const one = recs0.filter((x) => same(x.expected)); if (one.length === 1) recs = one; }
+  const lend = (data.lending || []).concat(data.fds || []);
   let loans = [];
   if (!recs.length) {
-    loans = lend.filter((x) => sameName(x.name, m.name));
+    loans = lend.filter((x) => looseName(x.name, m.name));
     if (loans.length > 1) { const one = loans.filter((x) => same(payoutMonthly(x))); if (one.length) loans = one; }
     if (!loans.length) { const one = lend.filter((x) => same(payoutMonthly(x))); if (one.length === 1) loans = one; }
   }
-  const byName = !recs.length && !loans.length;
-  if (byName) recs = recs0.filter((x) => sameName(x.name, m.name));
   const min = (a) => a.filter(Boolean).sort()[0] || '', max = (a) => a.filter(Boolean).sort().pop() || '';
-  const starts = byName || recs.length ? min(recs.map((x) => x.startDate)) : min(loans.map((x) => x.depositDate));
-  const ends = recs.length ? (recs.every((x) => x.active === false) ? max(recs.map((x) => x.closedOn || x.closedDate)) : '') : (loans.length && loans.every((x) => x.closed && x.closed.date) ? max(loans.map((x) => x.closed.date)) : '');
-  return { recs: byName ? [] : recs, starts, ends };
+  const starts = recs.length ? min(recs.map((x) => x.startDate)) : min(loans.map((x) => x.depositDate));
+  const ends = recs.length ? (recs.every((x) => x.active === false) ? max(recs.map((x) => x.closedOn || x.closedDate || x.lastReceived)) : '') : (loans.length && loans.every((x) => x.closed && x.closed.date) ? max(loans.map((x) => x.closed.date)) : '');
+  return { recs, starts, ends };
 }
 
 /** Home!A38:J56 monthly cash flow: expected interest vs received, and spending groups. */
@@ -608,14 +633,20 @@ export function monthCashflow(data, all, month) {
   ];
   const mStart = month + '-01', mEnd = `${month}-${String(daysInMonthOf(mStart)).padStart(2, '0')}`;
   for (const m of data.manualMonthlyIncome || []) {
-    // money you started lending after this month, or that was closed before it, was not expected then
     const w = incomeWindow(data, m);
-    // interest starts the month after the money went out: a deposit made in September first pays in October
-    if ((w.starts && w.starts.slice(0, 7) >= month) || (w.ends && w.ends < mStart)) continue;
+    let expected = Number(m.amount) || 0, fromDues;
+    if (w.recs.length) {
+      // lines that are in Money to receive follow their own start date, with the first month pro-rated; the amount of a part month is shown as pending until it comes
+      expected = sum(w.recs, (r) => dueInMonth(r, month));
+      fromDues = sum(w.recs.filter((r) => r.lastReceived && r.lastReceived.slice(0, 7) === month), (r) => dueInMonth(r, month) || r.expected || 0);
+    } else {
+      // no Money to receive line: judge by the lending or deposit it belongs to; interest first pays the month after it was lent
+      if ((w.starts && w.starts.slice(0, 7) >= month) || (w.ends && w.ends < mStart)) continue;
+      fromDues = receivedFromDues(data, month, m.name);
+    }
+    if (!(expected > 0.5)) continue;
     const fromLedger = sum(rows.filter((e) => (e.desc || '').toLowerCase() === m.match), (e) => e.credit);
-    // the same person can be marked received under "Money to receive" (Fixed income, Lendings): that counts too, without adding it twice
-    const fromDues = w.recs.length ? sum(w.recs.filter((r) => r.lastReceived && r.lastReceived.slice(0, 7) === month), (r) => r.expected || 0) : receivedFromDues(data, month, m.name);
-    income.push({ name: m.name, expected: m.amount, received: Math.max(fromLedger, fromDues, (m.paidMonths || []).includes(month) ? m.amount : 0), since: w.starts });
+    income.push({ name: m.name, expected, received: Math.max(fromLedger, fromDues, (m.paidMonths || []).includes(month) ? expected : 0), since: w.starts, part: !!w.recs.length && expected < (Number(m.amount) || 0) - 0.5 });
   }
   const totalExpected = sum(income, (x) => x.expected), totalReceived = sum(income, (x) => x.received);
   const groupOf = (label, cats) => ({ name: label, amount: sum(cats, debit) });
@@ -725,14 +756,16 @@ export function closedSummary(data, all) {
 export function receivableStatus(r, asOf) {
   const ms = monthStart(asOf);
   const due = r.term === 'Yearly' && r.dueDate ? r.dueDate : iso(toMs(ms) + (Math.max(1, r.dueDay || 1) - 1) * DAY);
-  const notStarted = !!r.startDate && r.startDate > due && r.startDate > asOf;
+  // monthly interest is paid in arrears: money lent this month first pays next month (see dueInMonth)
+  const notStarted = (!!r.startDate && r.startDate > due && r.startDate > asOf) || (r.term !== 'Yearly' && !!r.startDate && r.startDate.slice(0, 7) >= due.slice(0, 7));
   const received = !!r.lastReceived && r.lastReceived >= due;
   let paid = 0;
   if (r.startDate && r.lastReceived) {
     const a = r.startDate.split('-').map(Number), b = r.lastReceived.split('-').map(Number);
     paid = (b[0] - a[0]) * 12 + (b[1] - a[1]) - (b[2] < a[2] ? 1 : 0);
   }
-  return { ...r, due, received, notStarted, overdue: !received && !notStarted && due < asOf, dueToday: !received && !notStarted && due === asOf, installmentsPaid: Math.max(0, paid), total: Math.max(0, paid) * (r.expected || 0) };
+  const dueAmount = r.term === 'Yearly' ? (r.expected || 0) : (dueInMonth(r, due.slice(0, 7)) || r.expected || 0);
+  return { ...r, due, dueAmount, received, notStarted, overdue: !received && !notStarted && due < asOf, dueToday: !received && !notStarted && due === asOf, installmentsPaid: Math.max(0, paid), total: Math.max(0, paid) * (r.expected || 0) };
 }
 
 // ---------- projections (Proj + Targets sheets) ----------
@@ -1062,7 +1095,7 @@ export function upcoming(data, all, days = 60) {
   if (bn.on && bn.days > 0) for (const d of bondsDueSoon(all, from, bn.days)) if (d.days >= 1) add(d.date, d.b.name + ' interest due', bondDueAmount(d.b, d.date.slice(0, 7), data.settings.tdsRate ?? 0.1), 'Bond interest');
   for (const r of data.receivables.filter((x) => x.active !== false && x.balanceDue > 0).map((x) => receivableStatus(x, from))) {
     if (r.received || r.notStarted) continue;
-    if (r.due <= to) add(r.due, r.name + (r.overdue ? ' (overdue)' : r.dueToday ? ' (due today)' : ' to pay you'), r.expected, 'Money to receive');
+    if (r.due <= to) add(r.due, r.name + (r.overdue ? ' (overdue)' : r.dueToday ? ' (due today)' : ' to pay you'), r.dueAmount ?? r.expected, 'Money to receive');
   }
   for (const d of loanDues(data, from)) if (!d.paid && d.date <= to) add(d.date, d.name + (d.status === 'overdue' ? ' EMI (overdue)' : d.status === 'today' ? ' EMI (due today)' : ' EMI due'), d.emi, 'Loan EMI');
   return out.sort((a, b) => (a.date < b.date ? -1 : 1));

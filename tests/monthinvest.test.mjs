@@ -1,4 +1,4 @@
-import { splitMonth, chitPending, expenseProjection, chitMonths } from '../js/monthinvest.js';
+import { splitMonth, chitPending, expenseProjection, chitMonths, chitCards, chitOrganiser } from '../js/monthinvest.js';
 let bad = 0; const ok = (c, m) => { if (!c) { bad++; console.log('FAIL', m); } };
 const lines = [{ id: 'a', name: 'Shares', cls: 'shares', monthly: 30000 }, { id: 'b', name: 'Bonds', cls: 'bonds', monthly: 10000 }];
 // income 100k, spending so far 40k but 60k expected: 40k left, split 75/25
@@ -31,6 +31,19 @@ const mp = chitPending(base, '2026-10');
 ok(mp.done.map((r) => r.name).sort().join() === 'Chit paid more,Gold last month' && mp.paidTotal === 10000, 'paid this month, any amount, is done: ' + mp.done.map((r) => r.name));
 ok(mp.pending.map((r) => r.name).sort().join() === 'Chit open,GRT scheme,Gold running' && mp.total === 9000 && mp.gold === 7000 && mp.chits === 2000, 'pending: open chit, gold chit and the running GRT scheme; the old scheme and the 12-month-old gold chit are not: ' + mp.pending.map((r) => r.name));
 ok(chitPending({ ...base, settings: { goldChitMonths: 14 } }, '2026-10').pending.some((r) => r.name === 'Gold over'), 'a longer gold chit length brings it back');
+// chit cards: due this month, paid this month, and next month projected from the last three payments, grouped by organiser
+const cd = { settings: {}, savings: [
+  { type: 'Chit', name: '5L_Ravi', organiser: '', tenure: 20, tenureType: 'Months', entries: [{ date: '2026-07-05', amount: 4000 }, { date: '2026-08-05', amount: 4500 }, { date: '2026-09-05', amount: 5000 }, { date: '2026-10-07', amount: 5200 }] },
+  { type: 'Chit', name: '10L_Ravi', tenure: 20, tenureType: 'Months', entries: [{ date: '2026-08-05', amount: 9000 }, { date: '2026-09-05', amount: 9500 }] },
+  { type: 'Chit', name: 'Sri chit', organiser: 'Sri Fin', maturityDate: '2026-10-30', entries: [{ date: '2026-09-05', amount: 1000 }] },
+  { type: 'Chit', name: 'Last one', organiser: 'Sri Fin', tenure: 3, tenureType: 'Months', entries: [{ date: '2026-08-05', amount: 700 }, { date: '2026-09-05', amount: 700 }, { date: '2026-10-05', amount: 700 }] }], gold: { chits: [] } };
+const cc = chitCards(cd, '2026-10');
+ok(chitOrganiser(cd.savings[0]) === 'Ravi' && chitOrganiser(cd.savings[1]) === 'Ravi' && chitOrganiser(cd.savings[2]) === 'Sri Fin', 'organiser from the name or the field');
+ok(cc.dueTotal === 9500 + 1000 && cc.paidTotal === 5200 + 700, 'due: the chits not paid yet (10L_Ravi and Sri chit); paid: the two that were: ' + cc.dueTotal + '/' + cc.paidTotal);
+ok(cc.dueByOrg.map((g) => g.org + ':' + g.amount).join() === 'Ravi:9500,Sri Fin:1000' && cc.paidByOrg[0].org === 'Ravi' && cc.paidByOrg[0].amount === 5200, 'grouped by organiser');
+// next month: 5L_Ravi = avg(4500,5000,5200) = 4900; 10L_Ravi = avg(9000,9500) = 9250 (owes October, then runs on); Sri chit ends in October; Last one has paid its 3 months
+ok(cc.next === '2026-11' && cc.proj.map((r) => r.name + ':' + r.amount).sort().join() === '10L_Ravi:9250,5L_Ravi:4900' && cc.projTotal === 14150, 'projection, finished and ending chits left out: ' + cc.proj.map((r) => r.name + ':' + r.amount));
+ok(cc.projByOrg.length === 1 && cc.projByOrg[0].org === 'Ravi' && cc.projByOrg[0].amount === 14150, 'projection grouped by organiser');
 const pj = expenseProjection({ spend: [{ name: 'Groceries & needs', amount: 10000 }, { name: 'Rent', amount: 20000 }, { name: 'Medical', amount: 2000 }] }, '2026-10-10');
 ok(pj.left === 21 && Math.round(pj.total) === 25200 && pj.rows.length === 2, 'projection skips rent: (10000+2000)/10*21');
 console.log(bad ? 'FAILED' : 'all passed'); process.exit(bad ? 1 : 0);
