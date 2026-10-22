@@ -122,6 +122,28 @@ function investedStat(invested, pl, ret, xi) {
 }
 const GROUP_LABEL = { shares: 'Shares', etfs: 'ETFs', funds: 'Mutual funds' };
 
+/**
+ * Summary cards above a holdings list. Phone: two cards, Invested first (with what it is worth now and the XIRR), then Gain / loss for overall and for today, each with its percentage.
+ * Desktop: three cards as before (value, gain, today). Both sets use .eq-sum so every figure has the same size; CSS shows one set per screen size.
+ */
+function summaryCards(label, g, xi) {
+  const dayOk = g.dayCount > 0;
+  const glRow = (cap, n, p, ok = true, none = '') => h('div', { class: 'gl-row' }, h('span', { class: 'gl-cap' }, cap),
+    ok ? h('div', { class: 'gl-line ' + posNeg(n) }, h('strong', { class: 'stat-value' }, gainText(n)), h('small', null, signedPct(p, 2)))
+      : h('div', { class: 'gl-line' }, h('strong', { class: 'stat-value' }, '–'), none ? h('small', { class: 'muted' }, none) : null));
+  const phone = h('div', { class: 'stats eq-sum eq-sum-m' },
+    h('div', { class: 'stat' }, h('span', { class: 'stat-label' }, 'Invested'), h('strong', { class: 'stat-value' }, money(g.invested)),
+      h('span', { class: 'stat-sub' }, 'Now ', h('b', null, money(g.current))),
+      h('span', { class: 'stat-sub' }, `${g.items.length} holdings`, xi == null ? null : h('span', null, ' · XIRR ', h('b', { class: posNeg(xi) }, pct(xi, 1))))),
+    h('div', { class: 'stat gl-card' }, h('span', { class: 'stat-label' }, 'Gain / loss'),
+      glRow('Overall', g.pl, g.ret), glRow('Today', g.day, g.dayPct, dayOk, 'refresh prices')));
+  const desk = h('div', { class: 'stats eq-sum eq-sum-d' },
+    stat(label, money(g.current), `${g.items.length} holdings`),
+    investedStat(g.invested, g.pl, g.ret, xi),
+    stat('Today', dayOk ? h('span', { class: posNeg(g.day) }, signedMoney(g.day)) : '–', dayOk ? signedPct(g.dayPct) : 'refresh prices'));
+  return h('div', { class: 'eq-sum-wrap' }, phone, desk);
+}
+
 function today(root) {
   const { all, data } = S;
   const g = groups();
@@ -224,25 +246,22 @@ function holdingsTab(root, f = 'all') {
   const g = f === 'shares' ? gr.shares : f === 'etfs' ? gr.etfs : merged;
   const label = f === 'shares' ? 'Shares' : f === 'etfs' ? 'ETFs' : 'Shares & ETFs';
   const seg = h('nav', { class: 'seg', 'aria-label': 'Show' }, [['all', 'Both'], ['shares', 'Shares'], ['etfs', 'ETFs']].map(([k, l]) => h('a', { href: '#/equity/holdings?v=stocks&f=' + k, class: k === f ? 'on' : '', 'aria-selected': String(k === f) }, l + ' (' + (k === 'all' ? merged.items.length : gr[k].items.length) + ')')));
-  root.append(h('div', { class: 'stats' },
-    stat(label, money(g.current), `${g.items.length} holdings`),
-    investedStat(g.invested, g.pl, g.ret, groupXirr(g.items)),
-    stat('Today', g.dayCount ? h('span', { class: posNeg(g.day) }, signedMoney(g.day)) : '–', g.dayCount ? signedPct(g.dayPct) : 'refresh prices')));
+  // the Both / Shares / ETFs switch sits right under the Shares & ETFs tab, above the summary cards
+  root.append(h('div', { class: 'filters eq-seg' }, seg));
+  root.append(summaryCards(label, g, groupXirr(g.items)));
   const items = sortItems(g.items);
   root.append(section(label, h('div', null,
-    h('div', { class: 'filters' }, seg), tableTools(),
+    tableTools(),
     compactTable(table(holdCols('stock', g.current), items, { mobile: holdMobile('stock'), empty: 'Nothing here yet.', onRow: (x) => { if (tradeMode()) location.hash = '#/equity/holding?sym=' + encodeURIComponent(x.symbol); else if (canEdit()) stockForm(data.stocks.find((y) => y.id === x.id)); } })),
     totalRow(g, label),
     h('p', { class: 'note' }, tradeMode() ? 'Tap a holding to buy more, sell, see its purchase lots and XIRR, or add a split, bonus or dividend. Gain is value now minus what you put in. XIRR appears for holdings with dated buys that are over a month old.' : 'Import your Groww history (Import tab) to unlock buy and sell tracking and XIRR. Tap a holding to edit it.')),
-    canEdit() ? [btn(tradeMode() ? 'Record a buy' : f === 'etfs' ? 'Add ETF' : 'Add share', () => (tradeMode() ? tradeForm(null, { type: 'BUY' }) : stockForm(null, f === 'etfs' ? 'etf' : 'equity')), 'primary')] : null));
+    // not on phones: buys are recorded from a holding or on the computer
+    canEdit() ? [btn(tradeMode() ? 'Record a buy' : f === 'etfs' ? 'Add ETF' : 'Add share', () => (tradeMode() ? tradeForm(null, { type: 'BUY' }) : stockForm(null, f === 'etfs' ? 'etf' : 'equity')), 'primary desk-ctl')] : null));
 }
 
 function fundsTab(root) {
   const { data, all } = S, mf = all.mf;
-  root.append(h('div', { class: 'stats' },
-    stat('Mutual funds', money(mf.current), `${mf.items.length} funds`),
-    investedStat(mf.invested, mf.pl, mf.ret, mf.xirr),
-    stat('Today', mf.dayCount ? h('span', { class: posNeg(mf.day) }, signedMoney(mf.day)) : '–', mf.dayCount ? signedPct(mf.dayPct) : 'refresh prices')));
+  root.append(summaryCards('Mutual funds', mf, mf.xirr));
   root.append(section('Mutual funds', h('div', null,
     tableTools(),
     compactTable(table(holdCols('fund', mf.current), sortItems(mf.items), { mobile: holdMobile('fund'), onRow: (m) => { location.hash = '#/equity/fund?id=' + encodeURIComponent(m.id); } })),
@@ -272,7 +291,7 @@ function searchBox() {
   };
   const input = h('input', { type: 'search', placeholder: 'Find by name or symbol…', 'aria-label': 'Find a holding', value: searchQ, oninput: (e) => { searchQ = e.target.value; draw(); }, onkeydown: (e) => { if (e.key === 'Enter') { const r = findAll(searchQ)[0]; if (r) { searchQ = ''; r.go(); rerender(); } } } });
   draw();
-  return h('div', { class: 'eq-search' }, input, list);
+  return h('div', { class: 'eq-search desk-ctl' }, input, list);
 }
 
 let planMonth = null, planSpan = 6;
@@ -319,7 +338,8 @@ export function render() {
   const upd = S.data.settings.pricesUpdatedAt, ageMs = upd ? Date.now() - new Date(upd).getTime() : null;
   const stale = ageMs == null || ageMs > 864e5;
   root.append(h('div', { class: 'pagebar' }, segTabs(visible, tab, 'Shares and funds views'),
-    h('div', { class: 'price-bar inline' },
+    // on phones the refresh button and its time only show on Overview
+    h('div', { class: 'price-bar inline' + (tab === 'overview' ? '' : ' desk-ctl') },
       h('span', { class: 'stamp' + (stale ? ' warn' : ''), title: (upd ? 'Prices ' + new Date(upd).toLocaleString('en-IN') : '') + (W.metricsAt() ? ' · P/E, 52-week data ' + new Date(W.metricsAt()).toLocaleString('en-IN') : '') }, stale ? '⚠ ' : '', ageMs == null ? 'Prices not fetched yet' : 'Prices updated ' + agoText(ageMs)),
       h('button', { class: 'refresh-btn small', type: 'button', title: 'Fetch latest prices, NAVs, P/E and 52-week data', onclick: (e) => refresh(e.currentTarget) }, h('span', { class: 'ic' }, icon('refresh')), h('span', { class: 'lb' }, 'Refresh')))));
 

@@ -87,4 +87,7 @@ ok(monthCashflow(agg, pa, '2026-08').income[1].expected === 8750 && monthCashflo
 const lat = { settings: {}, categories: [], ledger: [{ id: 1, acct: 'a', date: '2026-01-06', desc: 'lathish', category: 'Income Lending', credit: 5000, debit: 0 }], bonds: [], receivables: [lend], lending: [], fds: [], manualMonthlyIncome: [{ name: 'Lending Lathish', amount: 6250, match: 'lathish' }] };
 const jan = monthCashflow(lat, pa, '2026-01').income[1];
 ok(jan.expected === 5040 && jan.received === 5000 && jan.expected - jan.received === 40, 'January expects the pro-rated 5,040 and 5,000 came: ' + jan.expected + '/' + jan.received);
+// Budget (expected) must never be below what actually came in: the total has to add up from its lines.
+const ex = monthCashflow({ ...lat, ledger: [{ id: 1, acct: 'a', date: '2026-01-06', desc: 'lathish', category: 'Income Lending', credit: 6250, debit: 0 }] }, pa, '2026-01');
+ok(ex.income.every((x) => x.expected >= x.received) && ex.totalExpected >= ex.totalReceived && Math.abs(ex.totalExpected - ex.income.reduce((a, x) => a + x.expected, 0)) < 0.01, 'expected is never below received, and the total adds up');
 console.log(bad ? 'FAILED' : 'all passed'); process.exit(bad ? 1 : 0);
