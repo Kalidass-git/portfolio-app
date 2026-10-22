@@ -20,7 +20,7 @@ import { monthlyBuys, lastMonths, byName, planDone } from '../buys.js';
 import { barChart } from '../charts.js';
 
 let sortKey = 'current', sortDir = 'desc', busy = false;
-const TABS = [['overview', 'Overview'], ['holdings', 'Holdings'], ['watch', 'Watch'], ['manage', 'Manage']];
+const TABS = [['overview', 'Overview'], ['holdings', 'Holdings'], ['watch', 'Watch'], ['manage', 'Manage'], ['history', 'History']];
 const rerender = () => window.dispatchEvent(new Event('rerender'));
 
 function stockForm(s, kind) {
@@ -185,14 +185,16 @@ const groupBase = (x) => { const g = groups(); return isFund(x) ? g.funds.curren
 const expo = (x) => { const b = groupBase(x); return b > 0 ? x.current / b : 0; };
 /** Compact cells: two lines each, colour-coded, so a row fits a phone without sideways scrolling. */
 function holdCols(kind, tot) {
-  const fund = kind === 'fund';
+  // 'mixed' decides per row, so shares, ETFs and funds can sit in one list
+  const isF = (x) => kind === 'fund' || (kind === 'mixed' && isFund(x));
+  const mixed = kind === 'mixed';
   const gainLine = (x) => h('span', null, h('span', { class: posNeg(x.pl) }, (x.ret > 0 ? '+' : x.ret < 0 ? '−' : '') + pct(Math.abs(x.ret), 1)), x.xirr != null ? h('span', { class: 'xi' }, ' · XIRR ', h('span', { class: posNeg(x.xirr) }, pct(x.xirr, 1))) : null);
   return [
-    { label: fund ? 'Fund' : 'Holding', render: (x) => h('div', null, h('div', { class: 'nm' }, x.name, x.assetClass === 'goldetf' ? h('small', { class: 'tag' }, 'Gold') : (!fund && isEtf(x) ? h('small', { class: 'tag' }, 'ETF') : null)),
+    { label: kind === 'fund' ? 'Fund' : 'Holding', render: (x) => { const fund = isF(x); return h('div', null, h('div', { class: 'nm' }, x.name, x.assetClass === 'goldetf' ? h('small', { class: 'tag' }, 'Gold') : (!fund && isEtf(x) ? h('small', { class: 'tag' }, 'ETF') : null)),
       sub2(fund ? `${dec(x.units, 3)} units · avg ${dec(x.units ? x.invested / x.units : 0, 2)}` : `${num(x.qty)} sh · avg ${dec(x.avgPrice)}`, fund ? (x.folio ? ' · ' + x.folio : '') : h('span', { class: 'desk-i' }, ' · ' + x.symbol),
-        h('span', { class: 'with-meter phone-only-i', title: 'Share of all your ' + groupName(x) }, meter(Math.min(8, expo(x) * 40), 0), pct(expo(x), 1))), fund && canEdit() && !x.schemeCode ? h('button', { class: 'small', style: { marginTop: '4px' }, onclick: (e) => { e.stopPropagation(); linkFund(x); } }, 'Link live NAV') : null) },
-    { label: fund ? 'NAV · today' : 'Price · today', cls: 'r pc-price', mob: 'under', mu: (x) => (x.day == null ? null : h('span', { class: posNeg(x.day) }, 'today ' + signed(x.day) + ' (' + pct(Math.abs(x.dayPct || 0), 2) + ')')), render: (x) => h('div', null, h('div', null, h('span', { class: 'phone-only-i muted' }, fund ? 'NAV ' : 'Price '), dec(fund ? x.liveNav : x.livePrice, fund ? 4 : 2)),
-      x.day == null ? sub2('–') : sub2(h('span', { class: posNeg(x.day) }, signed(x.day) + ' (' + pct(Math.abs(x.dayPct || 0), 2) + ')'), h('span', { class: 'phone-only-i' }, ' today'))) },
+        h('span', { class: 'with-meter phone-only-i', title: 'Share of all your ' + groupName(x) }, meter(Math.min(8, expo(x) * 40), 0), pct(expo(x), 1))), fund && canEdit() && !x.schemeCode ? h('button', { class: 'small', style: { marginTop: '4px' }, onclick: (e) => { e.stopPropagation(); linkFund(x); } }, 'Link live NAV') : null); } },
+    { label: kind === 'fund' ? 'NAV · today' : mixed ? 'Price / NAV · today' : 'Price · today', cls: 'r pc-price', mob: 'under', mu: (x) => (x.day == null ? null : h('span', { class: posNeg(x.day) }, 'today ' + signed(x.day) + ' (' + pct(Math.abs(x.dayPct || 0), 2) + ')')), render: (x) => { const fund = isF(x); return h('div', null, h('div', null, h('span', { class: 'phone-only-i muted' }, fund ? 'NAV ' : 'Price '), dec(fund ? x.liveNav : x.livePrice, fund ? 4 : 2)),
+      x.day == null ? sub2('–') : sub2(h('span', { class: posNeg(x.day) }, signed(x.day) + ' (' + pct(Math.abs(x.dayPct || 0), 2) + ')'), h('span', { class: 'phone-only-i' }, ' today'))); } },
     { label: 'Value (invested)', cls: 'r', render: (x) => h('div', null, h('div', { class: 'b' }, money(x.current)), sub2(h('span', { class: 'desk-i' }, '(' + money(x.invested) + ')'), h('span', { class: 'phone-only-i' }, 'invested ' + money(x.invested)))) },
     { label: 'Gain · return', cls: 'r', render: (x) => h('div', null, h('div', { class: 'b ' + posNeg(x.pl) }, arrow(x.pl) + money(Math.abs(x.pl))), sub2(gainLine(x))) },
     { label: 'Exposure', cls: 'r', show: 'desk', render: (x) => h('span', { class: 'with-meter', title: 'Share of all your ' + groupName(x) }, meter(Math.min(8, expo(x) * 40), 0), pct(expo(x), 1)) },
@@ -200,18 +202,18 @@ function holdCols(kind, tot) {
 }
 /** Phone rows for shares, ETFs and funds. First column stays put; today's move sits in the middle (only when a day price exists); the last column cycles. */
 function holdMobile(kind) {
-  const fund = kind === 'fund';
+  const mixed = kind === 'mixed', isF = (x) => kind === 'fund' || (mixed && isFund(x));
   const retTxt = (x) => h('span', null, h('span', { class: posNeg(x.pl) }, (x.ret > 0 ? '+' : x.ret < 0 ? '−' : '') + pct(Math.abs(x.ret), 1)), x.xirr != null ? h('span', null, ' · XIRR ', h('span', { class: posNeg(x.xirr) }, pct(x.xirr, 1))) : null);
   return {
-    key: fund ? 'funds' : 'shares', head: fund ? 'Fund' : 'Holding', midHead: 'Today',
-    first: (x) => ({ title: x.name, tag: x.assetClass === 'goldetf' ? 'Gold' : (!fund && isEtf(x) ? 'ETF' : null), sub: fund ? `${dec(x.units, 3)} units` : `${num(x.qty)} ${x.qty === 1 ? 'share' : 'shares'}`,
-      extra: fund && canEdit() && !x.schemeCode ? h('button', { class: 'small', style: { marginTop: '4px' }, onclick: (e) => { e.stopPropagation(); linkFund(x); } }, 'Link live NAV') : null }),
+    key: kind === 'fund' ? 'funds' : mixed ? 'all' : 'shares', head: kind === 'fund' ? 'Fund' : 'Holding', midHead: 'Today',
+    first: (x) => { const fund = isF(x); return ({ title: x.name, tag: x.assetClass === 'goldetf' ? 'Gold' : (!fund && isEtf(x) ? 'ETF' : fund && mixed ? 'Fund' : null), sub: fund ? `${dec(x.units, 3)} units` : `${num(x.qty)} ${x.qty === 1 ? 'share' : 'shares'}`,
+      extra: fund && canEdit() && !x.schemeCode ? h('button', { class: 'small', style: { marginTop: '4px' }, onclick: (e) => { e.stopPropagation(); linkFund(x); } }, 'Link live NAV') : null }); },
     mid: (x) => (x.day == null ? null : h('div', null, h('div', { class: posNeg(x.day) }, arrow(x.day) + money(Math.abs(x.day))), h('div', { class: posNeg(x.day) }, pct(Math.abs(x.dayPct || 0), 2)))),
     views: [
       { label: 'Value · Invested', main: (x) => money(x.current), sub: (x) => '(' + money(x.invested) + ')' },
       { label: 'Gain · Return', main: (x) => h('span', { class: posNeg(x.pl) }, arrow(x.pl) + money(Math.abs(x.pl))), sub: retTxt },
-      { label: (fund ? 'NAV' : 'Price') + ' · Average', main: (x) => dec(fund ? x.liveNav : x.livePrice, fund ? 4 : 2), sub: (x) => 'avg ' + dec(fund ? (x.units ? x.invested / x.units : 0) : x.avgPrice, 2) },
-      { label: 'Share of ' + (fund ? 'funds' : 'group') + ' · XIRR', main: (x) => pct(expo(x), 1), sub: (x) => (x.xirr == null ? null : h('span', { class: posNeg(x.xirr) }, 'XIRR ' + pct(x.xirr, 1))) },
+      { label: (kind === 'fund' ? 'NAV' : mixed ? 'Price / NAV' : 'Price') + ' · Average', main: (x) => dec(isF(x) ? x.liveNav : x.livePrice, isF(x) ? 4 : 2), sub: (x) => 'avg ' + dec(isF(x) ? (x.units ? x.invested / x.units : 0) : x.avgPrice, 2) },
+      { label: 'Share of ' + (kind === 'fund' ? 'funds' : 'group') + ' · XIRR', main: (x) => pct(expo(x), 1), sub: (x) => (x.xirr == null ? null : h('span', { class: posNeg(x.xirr) }, 'XIRR ' + pct(x.xirr, 1))) },
     ],
   };
 }
@@ -221,7 +223,7 @@ const sortVal = (x) => (sortKey === 'invested' ? x.invested : sortKey === 'qty' 
 /** Ascending or descending, as chosen. Names start A to Z and numbers highest first until the choice is changed. */
 const sortItems = (items) => items.slice().sort((a, b) => { const x = sortVal(a), y = sortVal(b), c = typeof x === 'string' ? x.localeCompare(y) : x - y; return sortDir === 'desc' ? -c : c; });
 /** Phone: Sort opens a bottom sheet over the same sortKey / sortDir the desktop selects use. Fields the desktop list does not offer (invested, quantity) only exist here. */
-const mobileSort = () => sortFilterBar({ sort: { value: sortKey, dir: sortDir, apply: (v, d) => { sortKey = v; sortDir = d; rerender(); }, options: [
+const mobileSort = () => sortFilterBar({ filterFirst: true, filters: typeFilters(), sort: { value: sortKey, dir: sortDir, apply: (v, d) => { sortKey = v; sortDir = d; rerender(); }, options: [
   { value: 'current', label: 'Current value', kind: 'num' }, { value: 'invested', label: 'Invested amount', kind: 'num' }, { value: 'pl', label: 'Gain in ₹', kind: 'num' }, { value: 'ret', label: 'Return %', kind: 'num' },
   { value: 'xirr', label: 'XIRR', kind: 'num' }, { value: 'day', label: 'Day change %', kind: 'num' }, { value: 'exposure', label: 'Share of its group', kind: 'num' }, { value: 'qty', label: 'Shares / units held', kind: 'num' }, { value: 'name', label: 'Name', kind: 'text' }] } });
 const sortBox = () => h('span', { class: 'inline-label desk-ctl', style: { display: 'inline-flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' } },
@@ -230,39 +232,37 @@ const sortBox = () => h('span', { class: 'inline-label desk-ctl', style: { displ
   h('select', { 'aria-label': 'Sort direction', onchange: (e) => { sortDir = e.target.value; rerender(); } },
     [['desc', 'Descending'], ['asc', 'Ascending']].map(([v, l]) => h('option', { value: v, selected: v === sortDir }, l))));
 /** Sort on the left, find box on the right, just above the table. */
-const tableTools = () => h('div', { class: 'tbl-tools' }, mobileSort(), sortBox(), searchBox());
+/** What the Holdings list shows. One list, one filter: all types, shares, ETFs, shares and ETFs together, or mutual funds. */
+let typeSel = 'all';
+const TYPES = [['all', 'All types'], ['shares', 'Shares'], ['etfs', 'ETFs'], ['stocks', 'Shares & ETFs'], ['funds', 'Mutual funds']];
+const setType = (v) => { typeSel = TYPES.some((t) => t[0] === v) ? v : 'all'; if (location.hash.includes('?')) location.hash = '#/equity/holdings'; else rerender(); };
+const typeBox = () => h('label', { class: 'inline-label desk-ctl' }, 'Show ', h('select', { 'aria-label': 'Type of holding', onchange: (e) => setType(e.target.value) },
+  TYPES.map(([v, l]) => h('option', { value: v, selected: v === typeSel }, l))));
+const typeFilters = () => ({ fields: [{ key: 'type', label: 'Show', type: 'select', options: TYPES.map(([value, label]) => ({ value, label })), default: 'all' }], values: { type: typeSel }, apply: (v) => setType(v.type) });
+/** Type filter on the left, then sort, then the find box (computer only) above the list. */
+const tableTools = () => h('div', { class: 'tbl-tools' }, mobileSort(), typeBox(), sortBox(), searchBox());
 const totalRow = (g, label) => h('div', { class: 'totalbar' }, h('b', null, label + ' total'), h('span', null, money(g.current), h('small', null, ' (' + money(g.invested) + ')')), h('span', { class: posNeg(g.pl) }, arrow(g.pl) + money(Math.abs(g.pl)), h('small', null, ' ' + pct(Math.abs(g.ret), 1))), g.dayCount ? h('span', { class: posNeg(g.day) }, 'today ' + signed(g.day)) : null);
 
-/** Shares and ETFs together; switch to see only one. */
-function holdingsTab(root, f = 'all') {
-  const { data } = S;
-  const gr = groups();
-  const merged = totalsOf(gr.shares.items.concat(gr.etfs.items));
-  const g = f === 'shares' ? gr.shares : f === 'etfs' ? gr.etfs : merged;
-  const label = f === 'shares' ? 'Shares' : f === 'etfs' ? 'ETFs' : 'Shares & ETFs';
-  const seg = h('nav', { class: 'seg', 'aria-label': 'Show' }, [['all', 'Both'], ['shares', 'Shares'], ['etfs', 'ETFs']].map(([k, l]) => h('a', { href: '#/equity/holdings?v=stocks&f=' + k, class: k === f ? 'on' : '', 'aria-selected': String(k === f) }, l + ' (' + (k === 'all' ? merged.items.length : gr[k].items.length) + ')')));
-  // the Both / Shares / ETFs switch sits right under the Shares & ETFs tab, above the summary cards
-  root.append(h('div', { class: 'filters eq-seg' }, seg));
-  root.append(summaryCards(label, g, groupXirr(g.items)));
-  const items = sortItems(g.items);
+/** The one Holdings list. The type filter picks what it holds: everything, shares, ETFs, shares and ETFs, or mutual funds. */
+function holdingsTab(root) {
+  const { data, all } = S;
+  const gr = groups(), mf = all.mf;
+  const stocks = totalsOf(gr.shares.items.concat(gr.etfs.items));
+  const g = typeSel === 'shares' ? gr.shares : typeSel === 'etfs' ? gr.etfs : typeSel === 'stocks' ? stocks : typeSel === 'funds' ? mf : totalsOf(stocks.items.concat(mf.items));
+  const label = Object.fromEntries(TYPES)[typeSel] === 'All types' ? 'All holdings' : Object.fromEntries(TYPES)[typeSel];
+  const xi = typeSel === 'funds' ? mf.xirr : typeSel === 'all' ? null : groupXirr(g.items);
+  const kind = typeSel === 'funds' ? 'fund' : typeSel === 'all' ? 'mixed' : 'stock';
+  root.append(summaryCards(label, g, xi));
+  const goRow = (x) => { if (isFund(x)) location.hash = '#/equity/fund?id=' + encodeURIComponent(x.id); else if (tradeMode()) location.hash = '#/equity/holding?sym=' + encodeURIComponent(x.symbol); else if (canEdit()) stockForm(data.stocks.find((y) => y.id === x.id)); };
+  const funds = typeSel === 'funds';
   root.append(section(label, h('div', null,
     tableTools(),
-    compactTable(table(holdCols('stock', g.current), items, { mobile: holdMobile('stock'), empty: 'Nothing here yet.', onRow: (x) => { if (tradeMode()) location.hash = '#/equity/holding?sym=' + encodeURIComponent(x.symbol); else if (canEdit()) stockForm(data.stocks.find((y) => y.id === x.id)); } })),
+    compactTable(table(holdCols(kind, g.current), sortItems(g.items), { mobile: holdMobile(kind), empty: 'Nothing here yet.', onRow: goRow })),
     totalRow(g, label),
-    h('p', { class: 'note' }, tradeMode() ? 'Tap a holding to buy more, sell, see its purchase lots and XIRR, or add a split, bonus or dividend. Gain is value now minus what you put in. XIRR appears for holdings with dated buys that are over a month old.' : 'Import your Groww history (Import tab) to unlock buy and sell tracking and XIRR. Tap a holding to edit it.')),
+    h('p', { class: 'note' }, funds ? 'Tap a fund to see its buy history, record another buy or sell, and edit it. XIRR appears for funds with dated transactions (imported from Groww or recorded here).'
+      : (tradeMode() ? 'Tap a holding to buy more, sell, see its purchase lots and XIRR, or add a split, bonus or dividend. Gain is value now minus what you put in. XIRR appears for holdings with dated buys that are over a month old.' : 'Import your Groww history (Import tab) to unlock buy and sell tracking and XIRR. Tap a holding to edit it.') + (typeSel === 'all' ? ' Funds are listed with the shares and ETFs; the summary XIRR is left out for the mixed list, so pick one type to see it.' : ''))),
     // not on phones: buys are recorded from a holding or on the computer
-    canEdit() ? [btn(tradeMode() ? 'Record a buy' : f === 'etfs' ? 'Add ETF' : 'Add share', () => (tradeMode() ? tradeForm(null, { type: 'BUY' }) : stockForm(null, f === 'etfs' ? 'etf' : 'equity')), 'primary desk-ctl')] : null));
-}
-
-function fundsTab(root) {
-  const { data, all } = S, mf = all.mf;
-  root.append(summaryCards('Mutual funds', mf, mf.xirr));
-  root.append(section('Mutual funds', h('div', null,
-    tableTools(),
-    compactTable(table(holdCols('fund', mf.current), sortItems(mf.items), { mobile: holdMobile('fund'), onRow: (m) => { location.hash = '#/equity/fund?id=' + encodeURIComponent(m.id); } })),
-    totalRow(mf, 'Funds'),
-    h('p', { class: 'note' }, 'Tap a fund to see its buy history, record another buy or sell, and edit it. XIRR appears for funds with dated transactions (imported from Groww or recorded here).')),
-    canEdit() ? [btn('Add fund', () => fundForm(), 'primary')] : null));
+    canEdit() ? [btn(funds ? 'Add fund' : tradeMode() ? 'Record a buy' : typeSel === 'etfs' ? 'Add ETF' : 'Add share', () => (funds ? fundForm() : tradeMode() ? tradeForm(null, { type: 'BUY' }) : stockForm(null, typeSel === 'etfs' ? 'etf' : 'equity')), 'primary desk-ctl')] : null));
 }
 
 // ---------- search across everything you hold or sold ----------
@@ -274,7 +274,7 @@ function findAll(q) {
   for (const x of all.stocks.items) if (hit(x.name, x.symbol)) out.push({ kind: isEtf(x) ? 'ETF' : 'Share', title: x.name, sub: x.symbol, value: money(x.current), tone: posNeg(x.pl), go: () => { if (tradeMode()) location.hash = '#/equity/holding?sym=' + encodeURIComponent(x.symbol); else location.hash = '#/equity/holdings' + (isEtf(x) ? '?f=etfs' : '?f=shares'); } });
   for (const x of all.mf.items) if (hit(x.name, x.folio)) out.push({ kind: 'Fund', title: x.name, sub: x.folio ? 'Folio ' + x.folio : '', value: money(x.current), tone: posNeg(x.pl), go: () => { location.hash = '#/equity/holdings?v=funds'; } });
   const eq = all.stocks.eq;
-  if (eq) for (const x of eq.sold) if (hit(x.name, x.symbol, x.nowSymbol)) out.push({ kind: 'Sold', title: x.name, sub: x.symbol, value: '', tone: '', go: () => { location.hash = '#/equity/holdings?v=sold'; } });
+  if (eq) for (const x of eq.sold) if (hit(x.name, x.symbol, x.nowSymbol)) out.push({ kind: 'Sold', title: x.name, sub: x.symbol, value: '', tone: '', go: () => { location.hash = '#/equity/history?v=sold'; } });
   return out.slice(0, 12);
 }
 function searchBox() {
@@ -324,7 +324,7 @@ export function render() {
   if (route().sub === 'holding') { holdingView.render(root); return root; }
   if (route().sub === 'fund') { fundView.render(root); return root; }
   const rsub = route().sub;
-  const LEGACY = { today: '#/equity/overview', alerts: '#/equity/watch?v=alerts', funds: '#/equity/holdings?v=funds', insights: '#/equity/watch?v=insights', sold: '#/equity/holdings?v=sold', dividends: '#/equity/holdings?v=dividends', sip: '#/equity/manage?v=planner', import: '#/equity/manage?v=import', stocks: '#/equity/holdings?v=stocks&f=shares', etfs: '#/equity/holdings?v=stocks&f=etfs' };
+  const LEGACY = { today: '#/equity/overview', alerts: '#/equity/watch?v=alerts', funds: '#/equity/holdings?v=funds', insights: '#/equity/watch?v=insights', sold: '#/equity/history?v=sold', dividends: '#/equity/history?v=dividends', sip: '#/equity/manage?v=planner', import: '#/equity/manage?v=import', stocks: '#/equity/holdings?v=stocks&f=shares', etfs: '#/equity/holdings?v=stocks&f=etfs' };
   if (LEGACY[rsub]) { location.replace(LEGACY[rsub]); return root; }
   const visible = TABS.filter((t) => t[0] !== 'manage' || canEdit());
   const tab = visible.some((t) => t[0] === rsub) ? rsub : 'overview';
@@ -348,15 +348,15 @@ export function render() {
       ...['shares', 'etfs', 'funds'].map((k) => stat(GROUP_LABEL[k], money(g[k].current), h('span', null, 'invested ', money(g[k].invested), ' · ', gainText(g[k].pl), ' (', pct(g[k].ret), ')', xiText(k === 'funds' ? all.mf.xirr : groupXirr(g[k].items))))))));
     root.append(watchView.screensSection());
   } else if (tab === 'holdings') {
-    const v0 = ['shares', 'etfs', 'stocks', 'funds', 'sold', 'dividends'].includes(view) ? view : 'stocks';
-    const v = v0 === 'shares' || v0 === 'etfs' ? 'stocks' : v0;
-    const f = v0 === 'shares' || v0 === 'etfs' ? v0 : ['shares', 'etfs'].includes(q.get('f')) ? q.get('f') : 'all';
-    sub([['stocks', 'Shares & ETFs'], ['funds', 'Funds'], ['sold', 'History']], v === 'dividends' ? 'sold' : v);
-    if (v === 'sold' || v === 'dividends') root.append(viewBar('holdings', [['sold', 'Sold shares'], ['dividends', 'Dividends']], v, 'small'));
-    if (v === 'funds') fundsTab(root);
-    else if (v === 'sold') sold(root);
-    else if (v === 'dividends') dividends.render(root);
-    else holdingsTab(root, f);
+    // old links: v=funds, v=stocks&f=etfs, f=shares ... pick the type; old sold / dividends links go to History
+    if (view === 'sold' || view === 'dividends') { location.replace('#/equity/history?v=' + view); return root; }
+    const f = q.get('f'), want = view === 'funds' ? 'funds' : ['shares', 'etfs'].includes(f) ? f : ['shares', 'etfs'].includes(view) ? view : view === 'stocks' ? 'stocks' : null;
+    if (want) typeSel = want;
+    holdingsTab(root);
+  } else if (tab === 'history') {
+    const v = view === 'dividends' ? 'dividends' : 'sold';
+    sub([['sold', 'Sold shares'], ['dividends', 'Dividends']], v);
+    if (v === 'dividends') dividends.render(root); else sold(root);
   } else if (tab === 'watch') {
     const v = view === 'insights' ? 'insights' : 'alerts';
     sub([['alerts', 'Alerts & watchlist'], ['insights', 'Insights']], v);

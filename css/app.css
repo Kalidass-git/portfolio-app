@@ -864,3 +864,5 @@ dialog.msheet::backdrop { background: rgba(10, 18, 14, .55); }
 @media (max-width: 700px) { nav.seg { max-width: 100%; overflow-x: auto; } .yt-scroll { overflow-x: auto; } .yt-inner { min-width: 520px; } }
 
 .gold-sub b { color: var(--ink); font-weight: 650; }
+/* five tabs on Shares & funds (Overview, Holdings, Watch, Manage, History) must all fit on a phone */
+@media (max-width: 639px) { nav.seg[aria-label="Shares and funds views"] { gap: 0; } nav.seg[aria-label="Shares and funds views"] a { padding: 7px 6px; font-size: .82rem; } }

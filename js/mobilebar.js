@@ -107,16 +107,16 @@ export const activeCount = (filters) => filters.fields.filter((f) => f.count !==
  *   filters as for openFilter (with the current values)
  *   search  an extra node (a search box) shown under the buttons
  */
-export function sortFilterBar({ sort, filters, search }) {
+export function sortFilterBar({ sort, filters, search, filterFirst = false }) {
   const cur = sort && sort.options.find((o) => o.value === sort.value);
   const n = filters ? activeCount(filters) : 0;
   const chips = filters ? activeChips(filters) : [];
+  const sortBtn = sort ? h('button', { type: 'button', class: 'sf-btn sf-sort', 'aria-haspopup': 'dialog', 'aria-label': 'Sort: ' + (cur ? cur.label + (cur.kind === 'none' ? '' : ', ' + dirLabel(cur.kind, sort.dir)) : 'none') + '. Tap to change.', onclick: () => openSort(sort) },
+        h('span', { class: 'sf-ic', 'aria-hidden': 'true' }, '⇅'), h('span', { class: 'sf-tx' }, h('small', null, 'Sort'), cur ? cur.label + (cur.kind === 'none' ? '' : ' · ' + dirLabel(cur.kind, sort.dir)) : '–')) : null;
+  const filterBtn = filters ? h('button', { type: 'button', class: 'sf-btn sf-filter' + (n ? ' on' : ''), 'aria-haspopup': 'dialog', 'aria-label': 'Filter' + (n ? `, ${n} active` : ''), onclick: () => openFilter(filters) },
+        h('span', { class: 'sf-ic', 'aria-hidden': 'true' }, '⚲'), h('span', { class: 'sf-tx' }, h('small', null, 'Filter'), n ? `${n} active` : 'All')) : null;
   return h('div', { class: 'sfbar' },
-    h('div', { class: 'sf-row' },
-      sort ? h('button', { type: 'button', class: 'sf-btn sf-sort', 'aria-haspopup': 'dialog', 'aria-label': 'Sort: ' + (cur ? cur.label + (cur.kind === 'none' ? '' : ', ' + dirLabel(cur.kind, sort.dir)) : 'none') + '. Tap to change.', onclick: () => openSort(sort) },
-        h('span', { class: 'sf-ic', 'aria-hidden': 'true' }, '⇅'), h('span', { class: 'sf-tx' }, h('small', null, 'Sort'), cur ? cur.label + (cur.kind === 'none' ? '' : ' · ' + dirLabel(cur.kind, sort.dir)) : '–')) : null,
-      filters ? h('button', { type: 'button', class: 'sf-btn sf-filter' + (n ? ' on' : ''), 'aria-haspopup': 'dialog', 'aria-label': 'Filter' + (n ? `, ${n} active` : ''), onclick: () => openFilter(filters) },
-        h('span', { class: 'sf-ic', 'aria-hidden': 'true' }, '⚲'), h('span', { class: 'sf-tx' }, h('small', null, 'Filter'), n ? `${n} active` : 'All')) : null),
+    h('div', { class: 'sf-row' }, ...(filterFirst ? [filterBtn, sortBtn] : [sortBtn, filterBtn]).filter(Boolean)),
     chips.length ? h('div', { class: 'sf-chips' }, chips.map((c) => h('button', { type: 'button', class: 'sf-chip', 'aria-label': 'Remove filter ' + c.text, onclick: c.clear }, c.text, h('span', { 'aria-hidden': 'true' }, ' ✕')))) : null,
     search || null);
 }

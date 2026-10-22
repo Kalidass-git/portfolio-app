@@ -154,6 +154,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.9.42 – One Holdings list with a type filter, History tab
+- **Shares & funds, Holdings.** The Shares & ETFs / Funds / History row and the Both / Shares / ETFs switch are gone. There is one list and a type filter on the left of the sort row: All types, Shares, ETFs, Shares & ETFs, Mutual funds. On a phone it is the Filter button (to the left of Sort); on a computer it is a Show box next to Sort. The summary cards follow the chosen type. The mixed list shows funds with a "Fund" tag. The XIRR in the summary is left out for All types (pick one type to see it).
+- **History** is now a tab of its own, next to Manage (Sold shares and Dividends inside it). The five tabs fit on a phone.
+- Old links still work: `?v=funds`, `?v=stocks&f=etfs`, `?f=shares` pick the type; old Sold and Dividends links open History.
+- No stored data changed.
+
 ## Release 8.9.41 – Projected amounts, Holdings cards, gold grams, expense drill-down
 - **Home, projected amounts.** Projected expenses are shown in italics and in red wherever they appear: the Expenses still to come card, its working popup, and the expenses part of the Investable balance line (the Investable balance breakdown already did this).
 - **Shares & funds cards.** The first card now leads with the current value as the big figure, with Invested under it, then the holdings count and XIRR. Gain / loss follows (overall and today on a phone; desktop keeps three cards: value, gain, today).
