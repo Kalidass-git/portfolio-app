@@ -39,6 +39,15 @@ export function view(root) {
     stat('You owe', money(ln.total), ln.items.length + ' loans'),
     h('div', { class: 'stat out' }, h('span', { class: 'stat-label' }, 'Interest you pay each month'), h('strong', { class: 'stat-value neg' }, money(ln.monthlyInterest)), h('span', { class: 'stat-sub' }, money(ln.yearlyInterest) + ' a year · average ' + pct(ln.avgRate, 2))),
     stat('EMIs each month', money(ln.emi), ln.emi ? 'includes interest' : 'none entered')));
+  const emiCell = (l) => { const d = dues.get(l.id); return d ? h('span', { class: d.status === 'overdue' ? 'neg' : d.status === 'today' || d.status === 'soon' ? 'warn' : d.paid ? 'pos' : '' }, d.paid ? 'Paid · next ' + dateStr(d.date) : d.status === 'overdue' ? 'Overdue since ' + dateStr(d.date) : d.status === 'today' ? 'Due today' : dateStr(d.date)) : l.emi > 0 ? h('span', { class: 'muted' }, 'add due day') : '–'; };
+  const loanMobile = { key: 'loans', head: 'Loan', midHead: 'Used for',
+    first: (l) => ({ title: l.name, sub: l.kind || '' }),
+    mid: (l) => l.useFor || null,
+    views: [
+      { label: 'Outstanding · Rate', main: (l) => money(l.amount), sub: (l) => (l.rate * 100).toFixed(2) + '%', total: () => ({ main: money(ln.total), sub: 'avg ' + pct(ln.avgRate, 2) }) },
+      { label: 'Interest / month · EMI', main: (l) => h('span', { class: 'neg' }, money(l.monthlyInterest)), sub: (l) => 'EMI ' + (l.emi ? money(l.emi) : '–'), total: () => ({ main: h('span', { class: 'neg' }, money(ln.monthlyInterest)), sub: 'EMI ' + money(ln.emi) }) },
+      { label: 'Next EMI due', main: emiCell, sub: null },
+    ] };
   root.append(section('Your loans', h('div', null, table([
     { label: 'Loan', host: true, get: (l) => l.name }, { label: 'Type', mob: 'under', get: (l) => l.kind || '' },
     { label: 'Outstanding', cls: 'r', get: (l) => money(l.amount), total: () => money(ln.total) },
@@ -47,7 +56,7 @@ export function view(root) {
     { label: 'EMI', mob: 'under', mlabel: 'EMI ', cls: 'r', get: (l) => (l.emi ? money(l.emi) : '–'), total: () => money(ln.emi) },
     { label: 'Next EMI due', cls: 'r', render: (l) => { const d = dues.get(l.id); return d ? h('span', { class: d.status === 'overdue' ? 'neg' : d.status === 'today' || d.status === 'soon' ? 'warn' : d.paid ? 'pos' : '' }, d.paid ? 'Paid · next ' + dateStr(d.date) : d.status === 'overdue' ? 'Overdue since ' + dateStr(d.date) : d.status === 'today' ? 'Due today' : dateStr(d.date)) : l.emi > 0 ? h('span', { class: 'muted' }, 'add due day') : '–'; } },
     { label: 'Used for', mob: 'under', mlabel: 'for ', get: (l) => l.useFor || '' },
-  ], ln.items, { footer: { label: 'Total', phone: false }, onRow: canEdit() ? (l) => loanForm(S.data.liabilities.find((x) => x.id === l.id)) : null }),
+  ], ln.items, { mobile: loanMobile, footer: { label: 'Total', phone: false }, onRow: canEdit() ? (l) => loanForm(S.data.liabilities.find((x) => x.id === l.id)) : null }),
     h('p', { class: 'note' }, 'Monthly interest is outstanding × rate ÷ 12. When you pay principal, update the outstanding amount so interest stays right.')),
     canEdit() ? [btn('Add loan', () => loanForm(), 'primary')] : null));
   const lent = ln.items.filter((l) => /lent/i.test(l.useFor || ''));

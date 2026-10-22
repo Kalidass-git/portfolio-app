@@ -2,7 +2,7 @@
 
 > **Starting a new session? Do this first.** 1) Read this file, then the top three entries of `docs/SETUP.md`. 2) Clone, branch `release-X.Y.Z` off `origin/main` (check which PRs the owner has merged: `git log origin/main`). 3) Say what you have read, list "Waiting for the owner" below, and ask what to build. 4) The owner works in short numbered requests; do them all in one release, test, bump, open one PR. He checks on his real data, which you never see: say how each rule works so he can check it.
 
-**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.9.38 (cache `family-wealth-v64`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
+**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.9.39 (cache `family-wealth-v65`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
 
 Read this first, then `docs/SETUP.md` (release notes, newest first) and `README.md`.
 
@@ -48,7 +48,16 @@ A no-build installable web app (PWA, vanilla ES modules) that mirrors the owner'
 ## Release process
 Branch off `origin/main` (`release-X.Y.Z`), change files, bump `js/version.js` and the cache name in `sw.js`, add notes at the top of the release list in `docs/SETUP.md`, push, and open a PR to `main` with `gh api` (GraphQL is blocked). The owner merges it. Always base on `origin/main` so stacked PRs do not leave main behind.
 
-## State after 8.9.38 (newest)
+## State after 8.9.39 (newest)
+
+- **Phone rows**: `table(cols, rows, { mobile })` also renders `mobileRows` (ui.js), shown only at max-width 700px (the table is hidden there; from 701px the phone block is hidden, so desktop and tablet are byte-for-byte the same). Config: `{ key, head, midHead, first(r)->{title,sub,tag,extra}, mid(r), views:[{label,main,sub,total?}] }`. The heading pill cycles the views for all rows, choice kept in localStorage `pt.mv.<key>`; sorting is separate. Add it to a table by writing a config next to its `table()` call (see `holdMobile` in equity.js, bonds and `depMobile` in fixed.js, `loanMobile` in loans.js, accounts/transactions/savings in cash.js, running chits in gold.js).
+- **Sort/filter sheets**: `js/mobilebar.js` (`sortFilterBar`, `openSort`, `openFilter`). A screen passes `{ sort: { options:[{value,label,kind}], value, dir, apply }, filters: { fields:[{key,label,type,options,default,showIf,chip,count}], values, apply }, search }`; `apply` changes the screen's own existing state and re-renders. `kind` (num, text, date, due, none) picks the direction labels. Desktop controls get class `desk-ctl` (hidden at max-width 700px). Used in equity.js (`mobileSort`), fixed.js (`quickFilter`) and cash.js (ledger). To add to another list, give it the same config.
+- Not converted (still the earlier `.tbl.fit` cards): reports, plan, projector, insights, imports, dividends, watch, categories, gold instalments, small dialog tables.
+- No sparklines: there is no stored price history per holding. If one is added later, return a `spark()` from `mid`.
+- Checked with Playwright on synthetic data at 320, 375, 430 (no horizontal overflow) and desktop 1360 and 768 (pixel-identical to 8.9.38). Owner to check on real data on his phone.
+
+## Earlier: state after 8.9.38
+
 
 - **Lending income lines** (`monthCashflow` in calc.js): `incomeWindow` finds the Money to receive lines behind a `manualMonthlyIncome` line (same person by `looseName`, then exact amount, then the sum of that person's lines, then the only line with that amount; lending/FDs as a fallback). `dueInMonth(rec, month)` is the rule: paid in arrears, 0 in the start month and before, pro-rated by days in the next month, full after, 0 after closing or for Yearly lines. `receivableStatus` has `dueAmount` and treats a monthly line as not started until the month after its start month.
 - **Tax interest**: bonds count whole months (`bondSpan`/`cutoff` in `taxSummary`, `holdingMonths`): to the end of last month, plus this month once `bondDueDate <= asOf`. FDs and lending in the tax view are still by day.
