@@ -7,6 +7,8 @@ import { closeForm, reopen } from './closing.js';
 import { openBankImport } from './cash-import.js';
 import { confirmDialog, pct, posNeg, stat, datalistId, icon, rowList } from '../ui.js';
 import { chitCards } from '../monthinvest.js';
+import { sortFilterBar } from '../mobilebar.js';
+import { monthGroups } from '../ui.js';
 
 /** Calendar and financial year (April to March) choices for the date filter. */
 const PERIODS = (asOf) => {
@@ -261,7 +263,7 @@ function ledger() {
   const kindOfCat = CAT.kindOf(data);
   const wrap = h('div');
   const months = [...new Set(data.ledger.map((e) => C.monthKey(e.date)))].sort().reverse();
-  const bar = h('div', { class: 'filters' },
+  const bar = h('div', { class: 'filters desk-ctl' },
     h('select', { 'aria-label': 'Account', onchange: (e) => { fAcct = e.target.value; limit = 60; rerender(); } },
       h('option', { value: 'all' }, 'All accounts'), data.accounts.map((a) => h('option', { value: a.id, selected: a.id === fAcct }, `${a.name} · ${a.holder}`))),
     h('select', { 'aria-label': 'Month', onchange: (e) => { fMonth = e.target.value; limit = 60; rerender(); } },
@@ -284,13 +286,28 @@ function ledger() {
   }
   const cats = [...new Set(data.ledger.map((e) => e.category).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const reset = () => { limit = 60; rerender(); };
-  const bar2 = h('div', { class: 'filters' },
+  const bar2 = h('div', { class: 'filters desk-ctl' },
     h('select', { 'aria-label': 'Category', onchange: (e) => { fCat = e.target.value; reset(); } }, h('option', { value: 'all' }, 'Category: all'), cats.map((c) => h('option', { value: c, selected: c === fCat }, c))),
     h('select', { 'aria-label': 'Amount filter', onchange: (e) => { fAmtOp = e.target.value; reset(); } }, [['any', 'Amount: any'], ['gt', 'Amount greater than'], ['lt', 'Amount less than']].map(([v, l]) => h('option', { value: v, selected: v === fAmtOp }, l))),
     fAmtOp !== 'any' ? h('input', { type: 'number', min: '0', step: 'any', inputmode: 'decimal', placeholder: '₹ amount', value: fAmtVal, 'aria-label': 'Amount', style: { maxWidth: '9em' }, onchange: (e) => { fAmtVal = e.target.value; reset(); } }) : null,
     h('select', { 'aria-label': 'Sort by', onchange: (e) => { fSort = e.target.value; fDir = fSort === 'category' || fSort === 'desc' ? 'asc' : 'desc'; reset(); } }, [['date', 'Sort: Date'], ['amount', 'Sort: Amount'], ['category', 'Sort: Category'], ['desc', 'Sort: Description']].map(([v, l]) => h('option', { value: v, selected: v === fSort }, l))),
     h('select', { 'aria-label': 'Sort direction', onchange: (e) => { fDir = e.target.value; reset(); } }, [['desc', 'Descending'], ['asc', 'Ascending']].map(([v, l]) => h('option', { value: v, selected: v === fDir }, l))),
     fCat !== 'all' || fAmtOp !== 'any' || fSort !== 'date' || fDir !== 'desc' ? btn('Clear', () => { fCat = 'all'; fAmtOp = 'any'; fAmtVal = ''; fSort = 'date'; fDir = 'desc'; reset(); }) : null);
+  // phone: Sort and Filter sheets over the same fSort / fDir / fAcct / fMonth / fCat / fAmtOp / fAmtVal the desktop selects use
+  const thisMonth = C.monthKey(S.all.asOf);
+  const mfilters = { values: { acct: fAcct, month: fMonth, cat: fCat, op: fAmtOp, val: fAmtVal },
+    apply: (v) => { fAcct = v.acct; fMonth = v.month; fCat = v.cat; fAmtOp = v.op; fAmtVal = v.op === 'any' ? '' : String(v.val ?? ''); reset(); },
+    fields: [
+      { key: 'acct', label: 'Account', type: 'select', default: 'all', options: [{ value: 'all', label: 'All accounts' }, ...data.accounts.map((a) => ({ value: a.id, label: `${a.name} · ${a.holder}` }))] },
+      { key: 'month', label: 'Period', type: 'select', default: thisMonth, chip: (v) => (v.month === 'all' ? 'All months' : 'Period: ' + (v.month.startsWith('p:') ? (PERIODS(S.all.asOf).find((x) => x[0] === v.month) || [0, v.month])[1] : monthLabel(v.month))),
+        options: [{ value: 'all', label: 'All months' }, { group: 'Periods', options: PERIODS(S.all.asOf).map(([v, l]) => ({ value: v, label: l })) }, ...monthGroups(months, fMonth).flatMap((g) => (g.label ? [{ group: g.label, options: g.months.map((m) => ({ value: m, label: monthLabel(m) })) }] : g.months.map((m) => ({ value: m, label: monthLabel(m) }))))] },
+      { key: 'cat', label: 'Category', type: 'select', default: 'all', options: [{ value: 'all', label: 'All categories' }, ...cats.map((c) => ({ value: c, label: c }))] },
+      { key: 'op', label: 'Amount', type: 'select', default: 'any', options: [{ value: 'any', label: 'Any amount' }, { value: 'gt', label: 'Greater than' }, { value: 'lt', label: 'Less than' }], chip: (v) => (v.op === 'any' ? null : 'Amount ' + (v.op === 'gt' ? '>' : '<') + ' ₹' + (v.val || '…')) },
+      { key: 'val', label: 'Amount (₹)', type: 'number', default: '', count: false, placeholder: 'e.g. 5000', showIf: (v) => v.op !== 'any' },
+    ] };
+  const msearch = h('input', { type: 'text', inputmode: 'search', enterkeyhint: 'search', placeholder: 'Search description or category', value: fText, 'aria-label': 'Search transactions', oninput: (e) => { fText = e.target.value; clearTimeout(window.__ft); window.__ft = setTimeout(() => { limit = 60; rerender(); const i = document.querySelector('.sfbar input'); i && (i.focus(), i.setSelectionRange(fText.length, fText.length)); }, 250); } });
+  const mbar = sortFilterBar({ filters: mfilters, search: msearch,
+    sort: { value: fSort, dir: fDir, apply: (v, d) => { fSort = v; fDir = d; reset(); }, options: [{ value: 'date', label: 'Date', kind: 'date' }, { value: 'amount', label: 'Amount', kind: 'num' }, { value: 'category', label: 'Category', kind: 'text' }, { value: 'desc', label: 'Description', kind: 'text' }] } });
   const total = rows.length, credit = rows.reduce((a, e) => a + (e.credit || 0), 0), debit = rows.reduce((a, e) => a + (e.debit || 0), 0);
   const acctName = new Map(data.accounts.map((a) => [a.id, `${a.name} · ${a.holder}`]));
   const KINDS = [['all', 'All'], ['expense', 'Expenses'], ['investment', 'Investments'], ['income', 'Income']];
@@ -312,7 +329,7 @@ function ledger() {
   const t0 = tbl.querySelector('table'); if (t0) t0.classList.add('compact');
   const label = fKind === 'income' ? 'received' : fKind === 'all' ? 'paid out' : 'paid out';
   wrap.append(section('Transactions',
-    h('div', null, h('div', { class: 'filters' }, seg), bar, bar2,
+    h('div', null, h('div', { class: 'filters' }, seg), mbar, bar, bar2,
       h('p', { class: 'summary-line' }, `${num(total)} entries`, fKind === 'all' || fKind === 'income' ? [' · received ', h('b', { class: 'pos' }, money(credit))] : null, fKind !== 'income' ? [' · ' + (fKind === 'all' ? 'paid out ' : fKind === 'investment' ? 'invested ' : 'spent '), h('b', { class: fKind === 'investment' ? 'inv' : fKind === 'expense' ? 'neg' : '' }, money(debit))] : null),
       tbl,
       total > limit ? btn(`Show more (${total - limit} left)`, () => { limit += 100; rerender(); }, 'wide') : null),

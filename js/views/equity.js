@@ -15,6 +15,7 @@ import { xirrFor, symKey } from '../trades.js';
 import { stockEditForm } from './equity-holding.js';
 import { tradeForm, tradeMode } from './eqshared.js';
 import { route } from '../ui.js';
+import { sortFilterBar } from '../mobilebar.js';
 import { monthlyBuys, lastMonths, byName, planDone } from '../buys.js';
 import { barChart } from '../charts.js';
 
@@ -199,16 +200,20 @@ function holdMobile(kind) {
 }
 const compactTable = (wrap) => { const t = wrap.querySelector('table'); if (t) t.classList.add('compact'); return wrap; };
 const SORTS = [['current', 'Value'], ['exposure', 'Exposure (share within its group)'], ['day', 'Today'], ['ret', 'Return %'], ['pl', 'Gain in ₹'], ['xirr', 'XIRR'], ['name', 'Name']];
-const sortVal = (x) => (sortKey === 'name' ? String(x.name || '').toLowerCase() : sortKey === 'exposure' ? expo(x) : sortKey === 'ret' ? x.ret : sortKey === 'pl' ? x.pl : sortKey === 'xirr' ? (x.xirr ?? -9) : sortKey === 'day' ? (x.dayPct ?? -9) : x.current);
+const sortVal = (x) => (sortKey === 'invested' ? x.invested : sortKey === 'qty' ? (isFund(x) ? x.units : x.qty) : sortKey === 'name' ? String(x.name || '').toLowerCase() : sortKey === 'exposure' ? expo(x) : sortKey === 'ret' ? x.ret : sortKey === 'pl' ? x.pl : sortKey === 'xirr' ? (x.xirr ?? -9) : sortKey === 'day' ? (x.dayPct ?? -9) : x.current);
 /** Ascending or descending, as chosen. Names start A to Z and numbers highest first until the choice is changed. */
 const sortItems = (items) => items.slice().sort((a, b) => { const x = sortVal(a), y = sortVal(b), c = typeof x === 'string' ? x.localeCompare(y) : x - y; return sortDir === 'desc' ? -c : c; });
-const sortBox = () => h('span', { class: 'inline-label', style: { display: 'inline-flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' } },
+/** Phone: Sort opens a bottom sheet over the same sortKey / sortDir the desktop selects use. Fields the desktop list does not offer (invested, quantity) only exist here. */
+const mobileSort = () => sortFilterBar({ sort: { value: sortKey, dir: sortDir, apply: (v, d) => { sortKey = v; sortDir = d; rerender(); }, options: [
+  { value: 'current', label: 'Current value', kind: 'num' }, { value: 'invested', label: 'Invested amount', kind: 'num' }, { value: 'pl', label: 'Gain in ₹', kind: 'num' }, { value: 'ret', label: 'Return %', kind: 'num' },
+  { value: 'xirr', label: 'XIRR', kind: 'num' }, { value: 'day', label: 'Day change %', kind: 'num' }, { value: 'exposure', label: 'Share of its group', kind: 'num' }, { value: 'qty', label: 'Shares / units held', kind: 'num' }, { value: 'name', label: 'Name', kind: 'text' }] } });
+const sortBox = () => h('span', { class: 'inline-label desk-ctl', style: { display: 'inline-flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' } },
   h('label', { class: 'inline-label' }, 'Sort by ', h('select', { 'aria-label': 'Sort by', onchange: (e) => { sortKey = e.target.value; sortDir = sortKey === 'name' ? 'asc' : 'desc'; rerender(); } },
     SORTS.map(([v, l]) => h('option', { value: v, selected: v === sortKey }, l)))),
   h('select', { 'aria-label': 'Sort direction', onchange: (e) => { sortDir = e.target.value; rerender(); } },
     [['desc', 'Descending'], ['asc', 'Ascending']].map(([v, l]) => h('option', { value: v, selected: v === sortDir }, l))));
 /** Sort on the left, find box on the right, just above the table. */
-const tableTools = () => h('div', { class: 'tbl-tools' }, sortBox(), searchBox());
+const tableTools = () => h('div', { class: 'tbl-tools' }, mobileSort(), sortBox(), searchBox());
 const totalRow = (g, label) => h('div', { class: 'totalbar' }, h('b', null, label + ' total'), h('span', null, money(g.current), h('small', null, ' (' + money(g.invested) + ')')), h('span', { class: posNeg(g.pl) }, arrow(g.pl) + money(Math.abs(g.pl)), h('small', null, ' ' + pct(Math.abs(g.ret), 1))), g.dayCount ? h('span', { class: posNeg(g.day) }, 'today ' + signed(g.day)) : null);
 
 /** Shares and ETFs together; switch to see only one. */

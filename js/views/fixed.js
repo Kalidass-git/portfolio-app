@@ -3,6 +3,7 @@ import * as C from '../calc.js';
 import { donut, legend, hbars } from '../charts.js';
 import { h, money, setOptions, dateStr, pct, section, table, btn, formDialog, canEdit, toast, stat, segTabs, subTab, dialog, confirmDialog, posNeg, datalistId, compact } from '../ui.js';
 import { closeForm, reopen } from './closing.js';
+import { sortFilterBar } from '../mobilebar.js';
 
 const FREQ = ['Monthly', 'Quarterly', 'Yearly', 'Daily'];
 const rerender = () => window.dispatchEvent(new Event('rerender'));
@@ -124,8 +125,15 @@ function quickFilter(tab, items, holderOf, viaOf, viaLabel, sorts) {
     setOptions(dir, [{ value: 'asc', label: 'Ascending' }, { value: 'desc', label: 'Descending' }], f.dir);
     sortBar = [pick, dir];
   }
-  const bar = holders.length > 1 || vias.length > 1 || sorts ? h('div', { class: 'filters' }, holders.length > 1 ? mk('Holder', 'holder', holders) : null, vias.length > 1 ? mk(viaLabel, 'via', vias) : null, sortBar,
+  // phone: one Sort button and one Filter button that open bottom sheets over the same f.sort / f.dir / f.holder / f.via
+  const fields = [holders.length > 1 ? { key: 'holder', label: 'Holder', type: 'select', default: 'all', options: [{ value: 'all', label: 'All' }, ...holders.map((o) => ({ value: o, label: o }))] } : null,
+    vias.length > 1 ? { key: 'via', label: viaLabel, type: 'select', default: 'all', options: [{ value: 'all', label: 'All' }, ...vias.map((o) => ({ value: o, label: o }))] } : null].filter(Boolean);
+  const mbar = fields.length || sorts ? sortFilterBar({
+    sort: sorts ? { value: f.sort, dir: f.dir, apply: (v, d) => { f.sort = v; f.dir = d; rerenderFixed(); }, options: [{ value: 'none', label: 'As entered', kind: 'none' }, ...sorts.map((x) => ({ value: x.value, label: x.label, kind: x.kind || 'num' }))] } : null,
+    filters: fields.length ? { fields, values: { holder: f.holder, via: f.via }, apply: (v) => { f.holder = v.holder ?? 'all'; f.via = v.via ?? 'all'; rerenderFixed(); } } : null }) : null;
+  const dbar = holders.length > 1 || vias.length > 1 || sorts ? h('div', { class: 'filters desk-ctl' }, holders.length > 1 ? mk('Holder', 'holder', holders) : null, vias.length > 1 ? mk(viaLabel, 'via', vias) : null, sortBar,
     rows.length !== items.length ? h('span', { class: 'muted' }, `${rows.length} of ${items.length}`) : null) : null;
+  const bar = mbar || dbar ? h('div', null, mbar, rows.length !== items.length ? h('p', { class: 'muted phone-only', style: { margin: '0 0 8px' } }, `${rows.length} of ${items.length} shown`) : null, dbar) : null;
   return { bar, rows };
 }
 
@@ -146,13 +154,13 @@ export function render() {
   if (tab === 'bonds' && all.bonds.length) root.append(bondInsights(all, data));
 
   const bondSorts = [
-    { value: 'rate', label: 'Rate', get: (b) => b.rate || 0 },
-    { value: 'due', label: 'Next due', get: (b) => C.bondNextDue(b, all.asOf) },
-    { value: 'paid', label: 'Paid so far', get: (b) => bondReceived(b) },
-    { value: 'invested', label: 'Invested', get: (b) => b.principal || 0 },
-    { value: 'holder', label: 'Holder', get: (b) => String(b.holder || '').trim().toLowerCase() },
-    { value: 'via', label: 'Via', get: (b) => String(b.platform || '').trim().toLowerCase() },
-    { value: 'maturity', label: 'Maturity', get: (b) => b.maturityDate || '' },
+    { value: 'rate', kind: 'num', label: 'Rate', get: (b) => b.rate || 0 },
+    { value: 'due', kind: 'due', label: 'Next due', get: (b) => C.bondNextDue(b, all.asOf) },
+    { value: 'paid', kind: 'num', label: 'Paid so far', get: (b) => bondReceived(b) },
+    { value: 'invested', kind: 'num', label: 'Invested', get: (b) => b.principal || 0 },
+    { value: 'holder', kind: 'text', label: 'Holder', get: (b) => String(b.holder || '').trim().toLowerCase() },
+    { value: 'via', kind: 'text', label: 'Via', get: (b) => String(b.platform || '').trim().toLowerCase() },
+    { value: 'maturity', kind: 'due', label: 'Maturity', get: (b) => b.maturityDate || '' },
   ];
   const fb = tab === 'bonds' ? quickFilter('bonds', all.bonds, (b) => b.holder, (b) => b.platform, 'Via', bondSorts) : tab === 'fds' ? quickFilter('fds', all.fds, (x) => x.account, (x) => x.issuer, 'Bank') : tab === 'lending' ? quickFilter('lending', all.lending, (x) => x.account, (x) => x.borrower, 'Borrower') : null;
   if (tab === 'bonds') root.append(section('Bonds', h('div', null, fb.bar,
