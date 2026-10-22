@@ -78,7 +78,7 @@ function snapshotDetail(s) {
   ];
   const cls = P.CLASSES.filter((c) => (s.classes && s.classes[c.key] > 0) || (pr && pr.classes[c.key] > 0)).map((c) => [c.label, pr ? pr.classes[c.key] || 0 : null, (s.classes && s.classes[c.key]) || 0]);
   const t = (list) => table([{ label: 'Item', host: true, get: (x) => x[0] }, { label: 'Plan', cls: 'r', get: (x) => (x[1] == null ? '–' : money(x[1])) }, { label: 'Actual', cls: 'r', get: (x) => (x[2] == null ? '–' : money(x[2])) },
-    { label: 'Difference', cls: 'r', render: (x) => (x[1] == null || x[2] == null ? '–' : h('span', { class: tone(x[2] - x[1]) }, signed(x[2] - x[1]))) }], list, {});
+    { label: 'Difference', cls: 'r', render: (x) => (x[1] == null || x[2] == null ? '–' : h('span', { class: tone(x[2] - x[1]) }, signed(x[2] - x[1]))) }], list, { m: { key: 'year-snap', head: 'Item', views: [['Actual', 'Plan'], ['Difference']] } });
   dialog(`${monthLabel(s.month, true)} snapshot`, h('div', null,
     h('p', { class: 'note' }, `Saved ${s.date}. ${s.plan ? `Plan ${s.plan.year}, target ${money(s.plan.target)}. ` : 'No plan existed for this year when it was saved. '}${s.note ? 'Note: ' + s.note : ''}`),
     t(rows), h('h4', { style: { margin: '10px 0 4px' } }, 'Where the money sat'), t(cls),
@@ -213,7 +213,8 @@ export function render(root) {
       { label: 'Income plan | actual', mob: 'hide', cls: 'r', get: (r) => `${r.income != null ? compact(r.income) : '–'} | ${r.act ? compact(r.act.income) : '–'}` },
       { label: 'Spending plan | actual', mob: 'hide', cls: 'r', get: (r) => `${r.out != null ? compact(r.out) : '–'} | ${r.act ? compact(r.act.expenses + r.act.emi + r.act.tax) : '–'}` },
       { label: 'Status', mob: 'under', render: (r) => { const s = stat1(r); return h('span', { class: s === 'ahead' || s === 'on track' ? 'pos' : s === 'behind' ? 'neg' : s === 'slightly behind' ? 'warn' : 'muted' }, s); } },
-    ], rows, { rowClass: (r) => (r.month === nowM ? 'cur-row' : ''), onRow: canEdit() ? (r) => snapshotForm(plan, r.month) : null }),
+    ], rows, { rowClass: (r) => (r.month === nowM ? 'cur-row' : ''), m: { key: 'year-months', head: 'Month end', mid: 'Status', views: [['Actual: net worth', 'Plan: net worth'], ['Ahead / behind'], ['Income plan | actual', 'Spending plan | actual']],
+      sort: [{ value: 'month', label: 'Month', kind: 'date', get: (r) => r.month }, { value: 'diff', label: 'Ahead / behind', kind: 'num', get: (r) => (r.snap && r.nw != null ? r.snap.net - r.nw : null) }, { value: 'nw', label: 'Actual net worth', kind: 'num', get: (r) => (r.snap ? r.snap.net : null) }], sortDefault: { value: 'month', dir: 'asc' } }, onRow: canEdit() ? (r) => snapshotForm(plan, r.month) : null }),
     h('p', { class: 'note' }, 'The highlighted row is the current month. Plan net worth is the planned position at each month end; months before the plan started have no plan figure. Tap a month to type in its month-end position by hand. Spending includes loan EMI and one-time items; income includes interest that reached your bank.'))));
 
   // ---------- where it went (shown last) ----------
@@ -242,7 +243,7 @@ export function render(root) {
         { label: 'Planned change', mob: 'under', mlabel: 'plan ', cls: 'r', get: (x) => signed(x.plan) },
         { label: 'Actual change', mob: 'under', mlabel: 'actual ', cls: 'r', get: (x) => signed(x.actual) },
         { label: 'Difference', cls: 'r', render: (x) => h('span', { class: tone(x.diff) }, signed(x.diff)) },
-      ], list.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff)), { footer: { label: 'Net worth' } }),
+      ], list.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff)), { footer: { label: 'Net worth' }, m: { key: 'year-where', head: 'Asset class', views: [['Difference', 'Actual change'], ['Planned change']] } }),
       h('p', { class: 'note' }, 'Change since the plan started, per asset class. Cash absorbs the difference between what you saved and what you invested, so read it together with the rest.'))));
   }
 
@@ -295,7 +296,7 @@ export function render(root) {
       { label: 'Share of new money', mob: 'under', mlabel: 'share ', cls: 'r', get: (l) => shareOf(l.monthly), total: () => shareOf(invTotal) },
       { label: 'Return', mob: 'under', mlabel: 'return ', cls: 'r', get: (l) => (P.isMarket(l.cls) ? (l.outlook ? (outlooks().find((o) => o.id === l.outlook) || {}).name : 'class outlook') : pc(l.rate != null ? l.rate : (a.rates || {})[l.cls] || 0)) },
       { label: 'Period', mob: 'hide', get: (l) => (l.from || l.to ? `${l.from ? monthLabel(l.from) : 'next month'} to ${l.to ? monthLabel(l.to) : 'Dec'}` : 'whole plan') },
-    ], inv, { footer: { label: 'Total' }, onRow: canEdit() ? (l) => investForm(plan, inv.find((x) => x.id === l.id)) : null, empty: 'No new investments planned. Add where your savings will go.' }),
+    ], inv, { footer: { label: 'Total' }, m: { key: 'year-invest', head: 'Investment', sub: ['Goes into'], views: [['Planned each month', 'Share of new money'], ['Return', 'Period']] }, onRow: canEdit() ? (l) => investForm(plan, inv.find((x) => x.id === l.id)) : null, empty: 'No new investments planned. Add where your savings will go.' }),
     h('p', { class: 'note' }, 'The planned amounts are a guide. In the projection each month, whatever is left after spending, EMI and one-time bills is invested in these shares, so a month with tax or fees invests less and a quiet month more. Fixed-income money earns the rate shown (bonds and lending pay it out monthly; deposits, EPF and chits compound). Market-linked money follows its outlook.')),
     canEdit() ? [btn('Add investment', () => investForm(plan), '', { keep: true })] : null));
 
@@ -305,7 +306,7 @@ export function render(root) {
     table([
       { label: 'What', host: true, get: (o) => o.name }, { label: 'When', mob: 'under', get: (o) => (o.month.length === 2 ? `every ${monthLabel(plan.year + '-' + o.month).split(' ')[0]}` : monthLabel(o.month)) },
       { label: 'Amount', cls: 'r', render: (o) => h('span', { class: o.kind === 'income' ? 'pos' : 'neg' }, (o.kind === 'income' ? '+' : '−') + money(o.amount)) },
-    ], oneOffs, { onRow: canEdit() ? (o) => oneOffForm(plan, a.oneOffs.find((x) => x.id === o.id)) : null, empty: 'Nothing added. Add tax, school fees, insurance, a trip or a bonus so the plan sees them coming.' })),
+    ], oneOffs, { m: { key: 'year-oneoff', head: 'What', sub: ['When'], views: [['Amount']] }, onRow: canEdit() ? (o) => oneOffForm(plan, a.oneOffs.find((x) => x.id === o.id)) : null, empty: 'Nothing added. Add tax, school fees, insurance, a trip or a bonus so the plan sees them coming.' })),
     canEdit() ? [btn('Add item', () => oneOffForm(plan), '', { keep: true })] : null));
 
   // ---------- year-end review ----------

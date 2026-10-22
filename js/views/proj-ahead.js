@@ -102,7 +102,7 @@ function yearlyCard(s) {
     table([
       { label: 'What', host: true, get: (o) => o.name }, { label: 'Paid in', mob: 'under', get: (o) => MONTH_NAMES[Number(o.month) - 1] || o.month },
       { label: 'Amount today', cls: 'r', render: (o) => h('span', { class: o.kind === 'income' ? 'inc' : 'exp' }, (o.kind === 'income' ? '+' : '−') + money(o.amount)), total: () => h('span', { class: 'exp' }, '−' + money(total)) },
-    ], list, { footer: { label: 'Spending in a year' }, onRow: canEdit() ? (o) => yearlyItemForm(s, s.yearly.find((x) => x.id === o.id)) : null, empty: 'None yet. Add tax, school fees, vacations and so on, so the years ahead see them coming.' }),
+    ], list, { footer: { label: 'Spending in a year' }, m: { key: 'ahead-yearly', head: 'What', sub: ['Paid in'], views: [['Amount today']] }, onRow: canEdit() ? (o) => yearlyItemForm(s, s.yearly.find((x) => x.id === o.id)) : null, empty: 'None yet. Add tax, school fees, vacations and so on, so the years ahead see them coming.' }),
     h('p', { class: 'note' }, `Bills you pay once a year, outside the monthly spending. Each repeats every year in its month and grows by ${pct(s.a.growth.oneTime, 1)} a year. They come out of that month’s money, so a month with tax leaves little to invest. Items entered in the This year plan as “every year” are picked up here until you save your own list.`),
     canEdit() ? h('div', { class: 'row-actions' }, btn('Add a yearly bill', () => yearlyItemForm(s), 'primary', { keep: true }), btn('Find them in my bank entries', () => suggestDialog(s), '', { keep: true })) : null);
   return section('Yearly one-time bills', det);
@@ -169,7 +169,8 @@ export function render(root) {
         { label: 'Grows by', cls: 'r', mob: 'under', mlabel: '', render: (x) => h('span', { class: x.change >= 0 ? 'pos' : 'neg' }, (x.change >= 0 ? '+' : '−') + money(Math.abs(x.change))) },
         { label: 'Times', cls: 'r', mob: 'hide', get: (x) => (x.mult == null ? '–' : x.mult.toFixed(2) + '×') },
         { label: 'Yearly growth', cls: 'r', mob: 'under', mlabel: 'per year ', get: (x) => (x.cagr == null ? '–' : pct(x.cagr, 1)) },
-      ], growth.slice().sort((a, b) => (b.cagr ?? -9) - (a.cagr ?? -9)), {}),
+      ], growth.slice().sort((a, b) => (b.cagr ?? -9) - (a.cagr ?? -9)), { m: { key: 'ahead-growth', head: 'Category', views: [['Today', `In ${yrs(s.horizon)}`], ['Grows by', 'Yearly growth'], ['Times']],
+        sort: [{ value: 'cagr', label: 'Yearly growth', kind: 'num', get: (x) => x.cagr }, { value: 'now', label: 'Value today', kind: 'num', get: (x) => x.now }, { value: 'far', label: `Value in ${yrs(s.horizon)}`, kind: 'num', get: (x) => x.far }, { value: 'name', label: 'Category', kind: 'text', get: (x) => String(x.name || '').toLowerCase() }], sortDefault: { value: 'cagr', dir: 'desc' } } }),
       h('p', { class: 'note' }, 'Assets only (loans are left out). Growth includes the new money you add to each category as well as returns, so a category can grow fast simply because you keep feeding it. Yearly growth is the compound rate from today to the end of the period.'));
   }
   root.append(section('Net worth over the years', h('div', null, tabs, netBody)));
@@ -223,7 +224,7 @@ export function render(root) {
       { label: 'Credit / day', key: true, cls: 'r', render: (x) => h('span', { class: 'pos' }, money(perDay(x.r))) },
       { label: 'Paid out that year', mob: 'under', mlabel: 'paid out ', cls: 'r', get: (x) => money(x.paid) },
       { label: 'Added to balances that year', mob: 'under', mlabel: 'added ', cls: 'r', get: (x) => money(x.added) },
-    ], iy, { empty: 'Nothing to show.' }),
+    ], iy, { m: { key: 'ahead-interest', head: 'Year ending', views: [['Interest / month', 'Credit / day'], ['Debt investments'], ['Paid out that year', 'Added to balances that year']] }, empty: 'Nothing to show.' }),
     h('p', { class: 'note' }, 'Debt investments are bonds, private lending, FDs, EPF and PPF, chits, insurance and recurring deposits at that year end, growing with new money and their own rates. Paid out is cash from bonds and lending after tax; added to balances is interest that compounds inside deposits, EPF and chits. Credit a day counts both.'))));
 
   root.append(interestWhy(rows.slice(0, Math.min(rows.length, 36)), { tds: s.a.tds ?? 0.1 }));
@@ -239,7 +240,7 @@ export function render(root) {
       { label: 'Market-linked', mob: 'hide', cls: 'r', get: (x) => money(x.r.market) },
       { label: 'Monthly spending', mob: 'hide', cls: 'r', get: (x) => money(x.r.expenses + x.r.emi) },
       { label: 'Interest covers spending', mob: 'under', mlabel: 'covers ', cls: 'r', get: (x) => { const sp = x.r.expenses + x.r.emi; return sp ? Math.round((x.r.interest / sp) * 100) + '%' : '–'; } },
-    ], tbl, { empty: 'Nothing to show.' }),
+    ], tbl, { m: { key: 'ahead-years', head: 'Year ending', views: [['Net worth', 'Saved that year'], ['Interest / month', 'Interest covers spending'], ['Market-linked', 'Monthly spending']] }, empty: 'Nothing to show.' }),
     h('p', { class: 'note' }, 'Interest income is what bonds and lending pay out each month after tax. When it covers your monthly spending, your investments pay your living costs without selling anything. Saved that year = income − spending, before moving money into investments.')),
     ));
   root.append(h('p', { class: 'note' }, s.plan ? `New investments and interest rates come from your ${s.plan.year} plan on the This year tab. Everything else is set on this page.` : 'No plan yet: investments and rates come from your recent history. Create a plan on the This year tab to set them.'));

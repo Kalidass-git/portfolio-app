@@ -41,7 +41,7 @@ export function render(root, plan) {
         { label: 'Actual', cls: 'r', get: (r) => money(r.actual), total: () => money(ta) },
         { label: 'Difference', cls: 'r', render: (r) => diffCell(r.planned, r.actual), total: () => signed(ta - tp) },
         { label: 'Taken from', mob: 'hide', get: (r) => r.src.join(', ') },
-      ], rows, { footer: { label: 'Total' }, empty: 'Nothing planned or invested this month.' }));
+      ], rows, { footer: { label: 'Total' }, m: { key: 'actual-month', head: 'Goes into', sub: ['Taken from'], views: [['Actual', 'Planned'], ['Difference']] }, empty: 'Nothing planned or invested this month.' }));
   } else {
     const ms = A.yearMonths(Number(selYear));
     const planYear = selYear === year;
@@ -58,7 +58,7 @@ export function render(root, plan) {
         { label: planYear ? 'Against plan so far' : 'Difference', cls: 'r', render: (r) => (r.plannedSoFar == null ? h('span', null, '–') : diffCell(r.plannedSoFar, r.actual)), total: () => (planYear ? signed(ta - tps) : '–') },
         { label: 'Full-year plan', mob: 'under', mlabel: 'full year ', cls: 'r', get: (r) => (r.planned == null ? '–' : money(r.planned)), total: () => (planYear ? money(tp) : '–') },
         { label: 'Taken from', mob: 'hide', get: (r) => r.src.join(', ') },
-      ], rows, { footer: { label: 'Total' }, empty: 'Nothing planned or invested this year.' }),
+      ], rows, { footer: { label: 'Total' }, m: { key: 'actual-year', head: 'Goes into', sub: ['Taken from'], views: [['Actual', planYear ? 'Planned so far' : 'Planned'], [planYear ? 'Against plan so far' : 'Difference', 'Full-year plan']] }, empty: 'Nothing planned or invested this year.' }),
       groups.some((g) => g.values.some((v) => v > 0)) ? h('div', null, barChart({ groups, names: ['Planned', 'Actual'], fmt: money, colors: [7, 0] }), h('ul', { class: 'legend inline' }, [['Planned', 7], ['Actual', 0]].map(([l, c]) => h('li', null, h('i', { style: { background: color(c) } }), h('span', { class: 'lg-name' }, l))))) : null);
   }
   root.append(section('Planned and actual new money', h('div', null,

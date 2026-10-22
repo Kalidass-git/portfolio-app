@@ -100,7 +100,8 @@ export function render(root) {
       { label: 'Limit', cls: 'r', get: (b) => limitText({ ...b, of: undefined }) },
       { label: 'Room left', mob: 'under', mlabel: 'room ', cls: 'r', get: (b) => (b.room == null ? '–' : money(b.room)) },
       { label: '', render: statusTag },
-    ], ev.buckets),
+    ], ev.buckets, { m: { key: 'risk-groups', head: 'Risk group', mid: '', midHead: 'Status', views: [['Now', 'Amount'], ['Limit', 'Room left']],
+      sort: [{ value: 'none', label: 'As listed', kind: 'none' }, { value: 'pct', label: 'Share of investments', kind: 'num', get: (b) => b.pct }, { value: 'value', label: 'Amount', kind: 'num', get: (b) => b.value }, { value: 'room', label: 'Room left', kind: 'num', get: (b) => b.room }], sortDefault: { value: 'none', dir: 'asc' } } }),
     canEdit() ? btn('Edit risk groups', () => groupForm(cfg), '', { keep: true }) : null)));
 
   // ---------- kinds of holding ----------
@@ -124,14 +125,14 @@ export function render(root) {
       { label: 'Rule', host: true, get: (s) => s.label },
       { label: 'Most allowed', cls: 'r', get: (s) => { const r = cfg.rules[s.key]; return [r.max != null ? pcs(r.max) + ' ' + R.ofText(r.of) : null, r.maxAmt != null ? money(r.maxAmt) : null].filter(Boolean).join(' · ') || 'No limit'; } },
       { label: 'Largest now', mob: 'under', mlabel: 'largest ', get: (s) => { const g = st.items.filter((x) => x.scope === s.key), G = g.reduce((a, x) => a + x.value, 0), t = g.slice().sort((a, b) => b.value - a.value)[0]; if (!t) return '–'; const rl = cfg.rules[s.key]; return `${t.name} ${pcs(t.value / R.baseValue(rl.of, st, G))}`; } },
-    ], R.SCOPES, { onRow: canEdit() ? (s) => ruleForm(cfg, s) : null }),
+    ], R.SCOPES, { m: { key: 'risk-rules', head: 'Rule', views: [['Most allowed', 'Largest now']] }, onRow: canEdit() ? (s) => ruleForm(cfg, s) : null }),
     h('p', { class: 'note' }, 'Bonds are counted per issuer (all Navi bonds together) and private lending per person. A limit of a few percent of a group is stricter than the same percent of everything.'))));
 
   root.append(section('Limits for named holdings', h('div', null,
     table([
       { label: 'Holding', host: true, get: (o) => o.name }, { label: 'Kind', mob: 'under', get: (o) => (R.SCOPES.find((s) => s.key === o.scope) || {}).label.replace('Each ', '') },
       { label: 'Most allowed', cls: 'r', get: (o) => [o.max != null ? pcs(o.max) + (o.of ? ' ' + R.ofText(o.of) : '') : null, o.maxAmt != null ? money(o.maxAmt) : null].filter(Boolean).join(' · ') || '–' },
-    ], cfg.overrides, { onRow: canEdit() ? (o) => overrideForm(cfg, cfg.overrides.find((x) => x.id === o.id)) : null, empty: 'None yet. Add one for a share, fund, bond issuer or person you want to cap separately.' }),
+    ], cfg.overrides, { m: { key: 'risk-named', head: 'Holding', sub: ['Kind'], views: [['Most allowed']] }, onRow: canEdit() ? (o) => overrideForm(cfg, cfg.overrides.find((x) => x.id === o.id)) : null, empty: 'None yet. Add one for a share, fund, bond issuer or person you want to cap separately.' }),
     canEdit() ? btn('Add a limit', () => overrideForm(cfg, null), 'primary', { keep: true }) : null)));
 
   // ---------- single holdings against limits ----------
@@ -143,5 +144,6 @@ export function render(root) {
       { label: 'Share', mob: 'under', mlabel: 'share ', cls: 'r', get: (x) => shareText(x) },
       { label: 'Limit', mob: 'under', mlabel: 'limit ', cls: 'r', get: (x) => limitText(x) },
       { label: 'Room left', mob: 'hide', cls: 'r', get: (x) => money(x.room) }, { label: '', render: statusTag },
-    ], rows), h('p', { class: 'note' }, 'Showing the 15 holdings nearest their limit.'))));
+    ], rows, { m: { key: 'risk-closest', head: 'Holding', sub: ['Kind'], mid: '', midHead: 'Status', views: [['Amount', 'Share'], ['Limit', 'Room left']],
+      sort: [{ value: 'used', label: 'Closest to limit', kind: 'num', get: (x) => x.used }, { value: 'value', label: 'Amount', kind: 'num', get: (x) => x.value }, { value: 'room', label: 'Room left', kind: 'num', get: (x) => x.room }, { value: 'name', label: 'Holding name', kind: 'text', get: (x) => String(x.name || '').toLowerCase() }], sortDefault: { value: 'used', dir: 'desc' } } }), h('p', { class: 'note' }, 'Showing the 15 holdings nearest their limit.'))));
 }
