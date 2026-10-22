@@ -866,3 +866,10 @@ dialog.msheet::backdrop { background: rgba(10, 18, 14, .55); }
 .gold-sub b { color: var(--ink); font-weight: 650; }
 /* five tabs on Shares & funds (Overview, Holdings, Watch, Manage, History) must all fit on a phone */
 @media (max-width: 639px) { nav.seg[aria-label="Shares and funds views"] { gap: 0; } nav.seg[aria-label="Shares and funds views"] a { padding: 7px 6px; font-size: .82rem; } }
+/* Gold page: the gold rate card, with a refresh icon in the corner */
+.stat.gold-rate { position: relative; cursor: pointer; padding-right: 50px; }
+.stat.gold-rate:hover { background: var(--surface-2); }
+.stat.gold-rate .gr-refresh { position: absolute; top: 8px; right: 8px; width: 36px; height: 36px; min-height: 36px; padding: 0; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--brand); }
+.stat.gold-rate .gr-refresh svg { width: 18px; height: 18px; }
+.stat.gold-rate .gr-refresh.busy svg { animation: gr-spin .9s linear infinite; }
+@keyframes gr-spin { to { transform: rotate(360deg); } }

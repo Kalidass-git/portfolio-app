@@ -1,7 +1,8 @@
-import { premiumFrom } from '../goldlive.js';
+import { refreshGold } from '../prices.js';
+import { openInfo } from '../mobilebar.js';
 import { S, mutate, nextId } from '../store.js';
 import * as C from '../calc.js';
-import { h, money, dec, dateStr, gainText, section, table, btn, formDialog, canEdit, toast, stat, num, segTabs, subTab, pct, posNeg, dialog, confirmDialog, mobileFrom } from '../ui.js';
+import { h, money, dec, dateStr, gainText, section, table, btn, formDialog, canEdit, toast, stat, num, segTabs, subTab, pct, posNeg, dialog, confirmDialog, mobileFrom, icon } from '../ui.js';
 import { reopen } from './closing.js';
 import { goldChitMonths, GOLD_CHIT_MONTHS } from '../monthinvest.js';
 
@@ -13,48 +14,49 @@ export function rateHistory(data) {
   if (h0 && h0.length) return h0;
   return data.settings.goldRate ? [{ date: data.settings.goldRateDate || C.todayISO(), rate: data.settings.goldRate }] : [];
 }
-export function setRate(rate, date = C.todayISO(), manual = true) {
-  mutate((d) => {
-    const hist = rateHistory(d).map((x) => ({ ...x }));
-    const hit = hist.find((x) => x.date === date);
-    if (hit) hit.rate = rate; else hist.push({ date, rate });
-    hist.sort((a, b) => (a.date < b.date ? -1 : 1));
-    d.gold.rateHistory = hist.slice(-400);
-    const latest = hist[hist.length - 1];
-    d.settings.goldRate = latest.rate; d.settings.goldRateDate = latest.date;
-    if (manual !== false && d.settings.goldLive) { const p = premiumFrom(latest.rate, d.settings.goldLive); if (p) d.settings.goldPremium = p; }
-  });
-}
 const daysOld = (date) => Math.max(0, Math.round((C.toMs(S.all.asOf) - C.toMs(date)) / C.DAY));
 export const ageText = (date) => { const n = daysOld(date); return n === 0 ? 'today' : n === 1 ? 'yesterday' : n + ' days ago'; };
 
-function rateCard() {
+/** Rate history, newest first, with the change from the day before. */
+function rateHistoryTable(hist) {
+  return table([
+    { label: 'Date', get: (r) => dateStr(r.date) }, { label: 'Per gram', cls: 'r', get: (r) => money(r.rate) },
+    { label: 'Change', cls: 'r', render: (r) => (r.chg == null ? '' : h('span', { class: posNeg(r.chg) }, (r.chg > 0 ? '+' : r.chg < 0 ? '−' : '') + money(Math.abs(r.chg)))) },
+  ], hist.map((r, i) => ({ ...r, chg: i ? r.rate - hist[i - 1].rate : null })).reverse().slice(0, 30));
+}
+let goldBusy = false;
+/** Read the live price now. The rate cannot be typed in: it only ever comes from the live feed. */
+async function readGoldRate(btnEl, after) {
+  if (goldBusy) return;
+  goldBusy = true; if (btnEl) { btnEl.disabled = true; btnEl.classList.add('busy'); }
+  try { const r = await refreshGold(); toast('Gold rate is now ' + money(r) + ' per gram.'); if (after) after(); }
+  catch (e) { toast(e.message, 'bad', 6000); }
+  finally { goldBusy = false; if (btnEl) { btnEl.disabled = false; btnEl.classList.remove('busy'); } rerender(); }
+}
+/** Gold rate card: tap for the history and the latest reading; the icon reads the live price straight away. */
+function rateStat() {
   const { data, all } = S;
-  const hist = rateHistory(data);
-  const last = hist[hist.length - 1], prev = hist[hist.length - 2];
-  const old = daysOld(last.date);
-  const input = h('input', { type: 'number', step: 'any', inputmode: 'decimal', value: String(all.gold.rate), 'aria-label': 'Gold rate per gram', style: { width: '9em', fontSize: '1.1rem', fontWeight: 650 } });
-  const save = () => {
-    const v = Number(input.value);
-    if (!(v > 0)) return toast('Enter the price of 1 gram of gold.', 'bad');
-    setRate(v); toast('Gold rate updated. All gold values now use ₹' + dec(v, 0) + ' per gram.');
+  const hist = rateHistory(data), last = hist[hist.length - 1], prev = hist[hist.length - 2];
+  const live = data.settings.goldLive, old = last ? daysOld(last.date) : 99;
+  const change = prev && last ? last.rate - prev.rate : 0;
+  const open = () => {
+    let close = () => {};
+    const refreshBtn = canEdit() ? h('button', { type: 'button', class: 'primary', onclick: (e) => readGoldRate(e.currentTarget, () => close()) }, h('span', { class: 'ic' }, icon('refresh')), ' Refresh now') : null;
+    const body = h('div', null,
+      h('p', { style: { margin: 0 } }, h('span', { class: 'hero-num', style: { fontSize: 'clamp(1.8rem, 8vw, 2.4rem)' } }, money(all.gold.rate)), ' per gram'),
+      h('p', { class: old > 3 ? 'warn' : 'muted', style: { margin: '4px 0' } }, last ? `Read ${ageText(last.date)} (${dateStr(last.date)})` + (prev ? ` · ${change >= 0 ? 'up' : 'down'} ${money(Math.abs(change))} (${pct(Math.abs(change) / prev.rate, 1)}) since ${dateStr(prev.date)}` : '') : 'Not read yet'),
+      refreshBtn ? h('p', { style: { margin: '10px 0' } }, refreshBtn) : null,
+      hist.length > 1 ? h('div', null, h('h4', { style: { margin: '12px 0 4px' } }, `Rate history (${hist.length})`), rateHistoryTable(hist)) : null,
+      h('p', { class: 'note' }, 'The rate is not typed in. It is the live world gold price in rupees per gram, adjusted by the usual local difference (duty, GST and the carat you track), and it is read again each time you refresh prices' + (canEdit() ? ' or press Refresh now.' : '. Only the owner refreshes it.') + (live ? ` Last live reading: ${dateStr(live.at ? new Date(live.at).toLocaleDateString('en-CA') : C.todayISO())}.` : '')));
+    if (window.matchMedia('(max-width: 700px)').matches) { const dlg = openInfo('Gold rate', body); close = () => { try { dlg.close(); } catch { /* gone */ } }; }
+    else { const d = dialog('Gold rate', body, [{ label: 'Done', class: 'primary', onclick: (c) => c() }]); close = d.close; }
   };
-  input.addEventListener('keydown', (e) => e.key === 'Enter' && save());
-  const change = prev ? last.rate - prev.rate : 0;
-  const worth = all.gold.value;
-  return section('Gold rate',
-    h('div', { class: 'kv', style: { width: '100%' } },
-      h('p', { style: { margin: 0 } }, h('span', { class: 'hero-num', style: { fontSize: 'clamp(1.8rem, 8vw, 2.6rem)' } }, money(last.rate)), ' per gram'),
-      h('p', { class: old > 7 ? 'warn' : 'muted', style: { margin: 0 } }, `Set ${ageText(last.date)} (${dateStr(last.date)})` + (old > 7 ? '. This rate is getting old, so your gold value may be off.' : '')
-        + (prev ? ` · ${change >= 0 ? 'up' : 'down'} ${money(Math.abs(change))} (${pct(Math.abs(change) / prev.rate, 1)}) since ${dateStr(prev.date)}` : '')),
-      canEdit() ? h('div', { class: 'row', style: { alignItems: 'center' } }, h('span', null, '₹'), input, btn('Update rate', save, 'primary')) : null,
-      h('p', { class: 'note', style: { margin: 0 } }, data.settings.goldLive ? `Live world gold read ${ageText((data.settings.goldLive.at || '').slice(0, 10) || C.todayISO())}. ${data.settings.goldAuto === false ? 'Automatic rate is off.' : 'The rate above follows it each time you refresh prices.'}` : 'Press Refresh prices on Shares & funds to read the live gold price.'),
-      canEdit() ? btn(data.settings.goldAuto === false ? 'Turn automatic rate on' : 'Turn automatic rate off', () => mutate((d) => { d.settings.goldAuto = d.settings.goldAuto === false; })) : null,
-      canEdit() ? h('p', { class: 'note', style: { margin: 0 } }, 'Type today’s price of 1 gram and press Update. Everything (Home, reports, gold value) uses it straight away. Use the same type of gold (22K or 24K) each time. ', h('a', { href: 'https://www.goodreturns.in/gold-rates/', target: '_blank', rel: 'noopener noreferrer' }, 'See today’s rates'), '.') : h('p', { class: 'note', style: { margin: 0 } }, 'Only the owner can change the rate.'),
-      hist.length > 1 ? h('details', null, h('summary', null, `Rate history (${hist.length})`), table([
-        { label: 'Date', get: (r) => dateStr(r.date) }, { label: 'Per gram', cls: 'r', get: (r) => money(r.rate) },
-        { label: 'Change', cls: 'r', render: (r) => (r.chg == null ? '' : h('span', { class: posNeg(r.chg) }, (r.chg > 0 ? '+' : r.chg < 0 ? '−' : '') + money(Math.abs(r.chg)))) },
-      ], hist.map((r, i) => ({ ...r, chg: i ? r.rate - hist[i - 1].rate : null })).reverse().slice(0, 12))) : null));
+  const el = h('div', { class: 'stat tappable gold-rate', role: 'button', tabindex: '0', onclick: open, onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } } },
+    h('span', { class: 'stat-label' }, 'Gold rate'),
+    h('strong', { class: 'stat-value' }, money(all.gold.rate), h('small', { class: 'muted' }, ' / g')),
+    h('span', { class: 'stat-sub' + (old > 3 ? ' warn' : '') }, last ? (prev ? h('span', { class: posNeg(change) }, (change > 0 ? '+' : change < 0 ? '−' : '') + money(Math.abs(change)) + ' · ') : null) : null, last ? 'read ' + ageText(last.date) : 'not read yet', ' · tap for history'));
+  if (canEdit()) el.append(h('button', { type: 'button', class: 'gr-refresh', title: 'Read the live gold price now', 'aria-label': 'Refresh gold rate', onclick: (e) => { e.stopPropagation(); readGoldRate(e.currentTarget); } }, icon('refresh')));
+  return el;
 }
 function purchaseForm(p) {
   const isNew = !p;
@@ -309,9 +311,8 @@ export function render() {
       return stat('Total gold incl. jewellery', money(tv), `${dec(tg, 2)} g · ${dec(tg / 8, 1)} sovereigns (8 g) · jewellery ${dec(jg, 2)} g`); })(),
     (() => { const d = g.day, sg = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + money(Math.abs(n)), sp = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + pct(Math.abs(n), 2);
       return d ? stat('Gold today', h('span', { class: posNeg(d.total) }, sg(d.total)), h('span', { class: posNeg(d.total) }, `${sp(d.pct)} · ${sg(d.perGram)} a gram`))
-        : stat('Gold today', '–', 'turns on with the automatic rate or after a price refresh'); })(),
-    h('a', { class: 'stat', href: '#/gold/chits', style: { textDecoration: 'none', color: 'inherit' } }, h('span', { class: 'stat-label' }, 'Invested in gold chits'), h('strong', { class: 'stat-value' }, money(g.chits.invested + (g.scheme.invested || 0))), h('span', { class: 'stat-sub' }, `${g.chits.active.length + (g.scheme.name ? 1 : 0)} running · tap to see`))));
-  root.append(rateCard());
+        : stat('Gold today', '–', 'turns on after the gold rate is refreshed'); })(),
+    rateStat()));
 
   root.append(section('Gold purchases',
     table([

@@ -1,6 +1,6 @@
 // Live gold: world gold price (COMEX, USD per ounce) and USD/INR, both from Yahoo through the Drive backend.
 // India's price per gram = world price per gram x a steady premium (import duty, GST, local margin, 22K vs 24K).
-// The premium is learned from the rate the owner types in, so the automatic rate stays on the same basis.
+// The premium was learned from rates the owner typed in before 8.9.43 (settings.goldPremium); the rate itself can no longer be typed.
 export const OZ = 31.1035;
 export const parity = (usdOz, inr) => (usdOz > 0 && inr > 0 ? (usdOz / OZ) * inr : 0);
 

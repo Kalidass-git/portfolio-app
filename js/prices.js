@@ -2,6 +2,7 @@
 //  - Mutual funds: NAV from mfapi.in (free, no key, allows browser requests).
 //  - Stocks and ETFs: asked from the backend (Apps Script), which reads Yahoo Finance on the server side.
 import { premiumFrom, applyLive } from './goldlive.js';
+import { todayISO } from './calc.js';
 import { S, mutate, saveQuotes } from './store.js';
 import { call } from './remote.js';
 
@@ -47,15 +48,15 @@ export async function guessScheme(name) {
   return list.map((s) => ({ ...s, score: score(s) })).sort((a, b) => b.score - a.score).slice(0, 5);
 }
 
-/** Store the live gold reading; learn the premium on first use; move the rate unless the owner turned that off. */
+/** Store the live gold reading and move the rate with it, every time. (The rate can no longer be typed in; the "automatic rate off" switch is gone.) */
 function applyGold(d, live, out) {
   d.settings.goldLive = live;
   const prem = d.settings.goldPremium || premiumFrom(d.settings.goldRate, live);
   if (!prem) return;
   d.settings.goldPremium = prem;
   const a = applyLive(live, prem);
-  if (!a || d.settings.goldAuto === false) return;
-  const today = new Date().toISOString().slice(0, 10);
+  if (!a) return;
+  const today = todayISO(); // the local date, so the card does not say "yesterday" just after midnight in India
   const hist = (d.gold.rateHistory && d.gold.rateHistory.length ? d.gold.rateHistory : d.settings.goldRate ? [{ date: d.settings.goldRateDate || today, rate: d.settings.goldRate }] : []).map((x) => ({ ...x }));
   const hit = hist.find((x) => x.date === today);
   if (hit) hit.rate = a.rate; else hist.push({ date: today, rate: a.rate, auto: true });
@@ -63,6 +64,19 @@ function applyGold(d, live, out) {
   d.gold.rateHistory = hist.slice(-400);
   d.settings.goldRate = a.rate; d.settings.goldRateDate = today;
   out.gold = a.rate;
+}
+
+/** Gold only: read the world gold price and USD/INR and move the rate. Owner only, because the rate is saved for everyone. Returns the new rate per gram. */
+export async function refreshGold() {
+  if (S.role !== 'owner') throw new Error('Only the owner can refresh the gold rate.');
+  if (!S.remote) throw new Error('The gold rate needs the Google Drive backend (Settings).');
+  const res = await call(S.cfg.backendUrl, S.cfg.key, 'quotes', { symbols: [{ symbol: '__GOLD_USD', yahoo: 'GC=F' }, { symbol: '__USD_INR', yahoo: 'INR=X' }] });
+  const g = res.quotes && res.quotes.__GOLD_USD, fx = res.quotes && res.quotes.__USD_INR;
+  if (!g || !fx) throw new Error('The live gold price is not available right now.');
+  const out = { errors: [] };
+  mutate((d) => applyGold(d, { usdOz: g.price, prevUsdOz: g.prevClose || g.price, inr: fx.price, prevInr: fx.prevClose || fx.price, at: new Date().toISOString() }, out));
+  if (!out.gold) throw new Error('Could not work out the rate yet: there is no earlier gold rate to match the live price to.');
+  return out.gold;
 }
 
 export async function refreshAll(onProgress = () => {}) {

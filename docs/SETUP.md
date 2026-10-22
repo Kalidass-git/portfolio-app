@@ -154,6 +154,13 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.9.43 – Gold rate always comes from the live price
+- **No more typing the gold rate.** The Gold rate section (the box, Update rate button and the automatic rate on/off switch) is removed. The rate is always the live world gold price in rupees per gram, adjusted by the local difference learned earlier (settings.goldPremium, unchanged), and it is read every time you refresh prices.
+- **Gold rate card** replaces "Invested in gold chits" on the Gold page. It shows the rate, the change since the last reading and how old it is. The refresh icon reads the live price straight away (gold only). Tap the card for a bottom sheet (popup on a computer) with the latest reading, a Refresh now button and the rate history.
+- Only the owner can refresh the rate, because it is saved for everyone. Family see the owner's latest rate.
+- The rate is dated with your local date (it was the UTC date, so it could read "yesterday" just after midnight).
+- No stored fields removed. `goldAuto` is no longer used.
+
 ## Release 8.9.42 – One Holdings list with a type filter, History tab
 - **Shares & funds, Holdings.** The Shares & ETFs / Funds / History row and the Both / Shares / ETFs switch are gone. There is one list and a type filter on the left of the sort row: All types, Shares, ETFs, Shares & ETFs, Mutual funds. On a phone it is the Filter button (to the left of Sort); on a computer it is a Show box next to Sort. The summary cards follow the chosen type. The mixed list shows funds with a "Fund" tag. The XIRR in the summary is left out for All types (pick one type to see it).
 - **History** is now a tab of its own, next to Manage (Sold shares and Dividends inside it). The five tabs fit on a phone.
