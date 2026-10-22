@@ -663,8 +663,11 @@ dialog.sheet.wide { width: min(1180px, 96vw); }
 @media (max-width: 700px) {
   .eq-sum-d { display: none; }
   .eq-sum-m { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .eq-sum-m .stat-value { font-size: 1.15rem; }
+  .eq-sum-m .stat-value { font-size: 1.15rem; } .eq-sum-m .val-big { font-size: 1.5rem; }
 }
+.eq-sum .val-big { font-size: clamp(1.5rem, 7vw, 1.9rem); font-weight: 700; letter-spacing: -.01em; }
+.eq-sum .val-inv { font-size: .95rem; color: var(--muted); } .eq-sum .val-inv b { color: var(--ink); font-weight: 650; }
+.eq-sum .stat.gain-card .stat-value { font-size: clamp(1.15rem, 5.4vw, 1.4rem); }
 .eq-seg { margin: 8px 0 10px; }
 /* Sell is red so it is not mistaken for Buy more */
 button.sell, .btn.sell { background: var(--neg); border-color: var(--neg); color: #fff; font-weight: 600; } button.sell:hover { background: var(--neg); filter: brightness(1.08); }
@@ -859,3 +862,5 @@ dialog.msheet::backdrop { background: rgba(10, 18, 14, .55); }
 .ms-foot button { min-height: 50px; border-radius: 12px; font: inherit; font-size: 1.05rem; font-weight: 700; cursor: pointer; }
 .ms-foot .primary { flex: 1; } .ms-reset { padding: 0 18px; border: 1px solid var(--line); background: transparent; color: var(--ink); }
 @media (max-width: 700px) { nav.seg { max-width: 100%; overflow-x: auto; } .yt-scroll { overflow-x: auto; } .yt-inner { min-width: 520px; } }
+
+.gold-sub b { color: var(--ink); font-weight: 650; }

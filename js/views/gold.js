@@ -304,7 +304,7 @@ export function render() {
   if (tab === 'gold') {
   root.append(h('div', { class: 'stats' },
     (() => { const row = C.returns(data, all).find((r) => r.name === 'Gold'); const gain = g.value - g.invested;
-      return stat('Gold value', money(g.value), h('span', null, h('span', { class: gain >= 0 ? 'pos' : 'neg' }, (gain >= 0 ? '+' : '−') + money(Math.abs(gain))), ` gain · XIRR ${row && row.xirr != null ? pct(row.xirr, 1) : '–'} · paid ${money(g.invested)}`)); })(),
+      return stat('Gold value', money(g.value), h('span', { class: 'gold-sub' }, h('b', null, `${dec(g.grams, 2)} g · ${dec(g.grams / 8, 2)} sovereigns`), h('br'), h('span', { class: gain >= 0 ? 'pos' : 'neg' }, (gain >= 0 ? '+' : '−') + money(Math.abs(gain))), ` gain · XIRR ${row && row.xirr != null ? pct(row.xirr, 1) : '–'} · paid ${money(g.invested)}`)); })(),
     (() => { const jg = g.jewellery.grams, tg = g.grams + jg, tv = g.value + g.jewellery.value;
       return stat('Total gold incl. jewellery', money(tv), `${dec(tg, 2)} g · ${dec(tg / 8, 1)} sovereigns (8 g) · jewellery ${dec(jg, 2)} g`); })(),
     (() => { const d = g.day, sg = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + money(Math.abs(n)), sp = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + pct(Math.abs(n), 2);

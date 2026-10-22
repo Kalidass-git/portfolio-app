@@ -115,11 +115,6 @@ function groupXirr(items) {
   return v == null || !isFinite(v) ? null : v;
 }
 const xiText = (v) => (v == null ? null : h('span', null, ' · XIRR ', h('span', { class: posNeg(v) }, pct(v, 1))));
-/** Invested card: the gain and the XIRR are the big figures; the amount invested is the small line. */
-function investedStat(invested, pl, ret, xi) {
-  return stat('Gain / loss', h('span', { class: posNeg(pl) }, gainText(pl), ' ', h('small', null, '(', pct(ret), ')')),
-    h('span', { class: 'gx' }, xi == null ? 'XIRR –' : h('span', null, 'XIRR ', h('b', { class: posNeg(xi) }, pct(xi, 1))), h('span', { class: 'gx-inv' }, ' · invested ', money(invested))), 'gain-card');
-}
 const GROUP_LABEL = { shares: 'Shares', etfs: 'ETFs', funds: 'Mutual funds' };
 
 /**
@@ -131,17 +126,17 @@ function summaryCards(label, g, xi) {
   const glRow = (cap, n, p, ok = true, none = '') => h('div', { class: 'gl-row' }, h('span', { class: 'gl-cap' }, cap),
     ok ? h('div', { class: 'gl-line ' + posNeg(n) }, h('strong', { class: 'stat-value' }, gainText(n)), h('small', null, signedPct(p, 2)))
       : h('div', { class: 'gl-line' }, h('strong', { class: 'stat-value' }, '–'), none ? h('small', { class: 'muted' }, none) : null));
-  const phone = h('div', { class: 'stats eq-sum eq-sum-m' },
-    h('div', { class: 'stat' }, h('span', { class: 'stat-label' }, 'Invested'), h('strong', { class: 'stat-value' }, money(g.invested)),
-      h('span', { class: 'stat-sub' }, 'Now ', h('b', null, money(g.current))),
-      h('span', { class: 'stat-sub' }, `${g.items.length} holdings`, xi == null ? null : h('span', null, ' · XIRR ', h('b', { class: posNeg(xi) }, pct(xi, 1))))),
-    h('div', { class: 'stat gl-card' }, h('span', { class: 'stat-label' }, 'Gain / loss'),
-      glRow('Overall', g.pl, g.ret), glRow('Today', g.day, g.dayPct, dayOk, 'refresh prices')));
-  const desk = h('div', { class: 'stats eq-sum eq-sum-d' },
-    stat(label, money(g.current), `${g.items.length} holdings`),
-    investedStat(g.invested, g.pl, g.ret, xi),
-    stat('Today', dayOk ? h('span', { class: posNeg(g.day) }, signedMoney(g.day)) : '–', dayOk ? signedPct(g.dayPct) : 'refresh prices'));
-  return h('div', { class: 'eq-sum-wrap' }, phone, desk);
+  // first card: what it is worth now is the big figure, what was put in sits under it
+  const valueCard = h('div', { class: 'stat val-card' }, h('span', { class: 'stat-label' }, 'Current value'),
+    h('strong', { class: 'stat-value val-big' }, money(g.current)),
+    h('span', { class: 'val-inv' }, 'Invested ', h('b', null, money(g.invested))),
+    h('span', { class: 'stat-sub' }, `${g.items.length} holdings`, xi == null ? null : h('span', null, ' · XIRR ', h('b', { class: posNeg(xi) }, pct(xi, 1)))));
+  const glCard = h('div', { class: 'stat gl-card' }, h('span', { class: 'stat-label' }, 'Gain / loss'), glRow('Overall', g.pl, g.ret), glRow('Today', g.day, g.dayPct, dayOk, 'refresh prices'));
+  return h('div', { class: 'eq-sum-wrap' }, h('div', { class: 'stats eq-sum eq-sum-m' }, valueCard, glCard),
+    // desktop keeps three cards: value (with invested), overall gain, today
+    h('div', { class: 'stats eq-sum eq-sum-d' }, valueCard.cloneNode(true),
+      stat('Gain / loss', h('span', { class: posNeg(g.pl) }, gainText(g.pl)), h('span', { class: posNeg(g.pl) }, signedPct(g.ret, 2)), 'gain-card'),
+      stat('Today', dayOk ? h('span', { class: posNeg(g.day) }, signedMoney(g.day)) : '–', dayOk ? signedPct(g.dayPct) : 'refresh prices')));
 }
 
 function today(root) {

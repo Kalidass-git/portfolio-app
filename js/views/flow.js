@@ -52,7 +52,8 @@ function controls(months, data) {
     t ? h('button', { class: 'chip-btn', onclick: () => { filter = { mode: 'all', cats: [] }; rerender(); } }, 'Clear filter') : null);
 }
 
-const detailLink = (cat, dir) => `#/flow/detail?cat=${encodeURIComponent(cat)}&dir=${dir}`;
+/** m: a month ('2026-09') to open the page on; without it the page keeps whatever period is chosen. */
+const detailLink = (cat, dir, m) => `#/flow/detail?cat=${encodeURIComponent(cat)}&dir=${dir}${m ? '&m=' + m : ''}`;
 
 export function render() {
   const r = route();
@@ -205,7 +206,7 @@ function monthsSection(data, allMonths) {
     if (mPick) {
       const [k, label, dir] = KEYS[mPick.ki], s = sums[list.indexOf(mPick.month)], rows = s[k], total = rows.reduce((a, x) => a + x.amount, 0);
       detail = h('div', { class: 'card inner', style: { marginTop: '10px' } }, h('h4', { style: { margin: '0 0 6px' } }, `${label}, ${monthLabel(mPick.month, true)} · ${money(total)}`),
-        rows.length ? hbars(rows.map((x) => ({ label: x.category, value: x.amount })), { fmt: money, colorIndex: [2, 1, 0][mPick.ki], onClick: (x) => { location.hash = detailLink(x.label, dir); } }) : h('p', { class: 'empty' }, 'Nothing in this month.'));
+        rows.length ? hbars(rows.map((x) => ({ label: x.category, value: x.amount })), { fmt: money, colorIndex: [2, 1, 0][mPick.ki], onClick: (x) => { location.hash = detailLink(x.label, dir, mPick.month); } }) : h('p', { class: 'empty' }, 'Nothing in this month.'));
     } else detail = h('p', { class: 'note' }, 'Tap a column to see what it is made of, for example the income received in one month.');
     box.replaceChildren(chips, chart, detail);
   };
@@ -218,6 +219,8 @@ function detail(q) {
   const { data, all } = S;
   const kindOf = CAT.kindOf(data);
   const cat = q.get('cat') || '*', dir = q.get('dir') === 'credit' ? 'credit' : 'debit';
+  // a link from a month (Month by month, Home) opens on that month, not on the period that was chosen last
+  if (/^\d{4}-\d\d$/.test(q.get('m') || '')) { period = q.get('m'); if (cat !== '*' && !C.passesFilter(filter, cat)) filter = { mode: 'all', cats: [] }; }
   const viewQ = q.get('view');
   const view = ['cat', 'desc', 'all'].includes(viewQ) && (viewQ !== 'cat' || cat === '*') ? viewQ : (cat === '*' ? 'cat' : 'desc');
   const descFilter = q.get('desc') || '';

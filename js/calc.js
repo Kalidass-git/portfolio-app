@@ -651,7 +651,7 @@ export function monthCashflow(data, all, month) {
     income.push({ name: m.name, expected: Math.max(expected, received), received, since: w.starts, part: !!w.recs.length && expected < (Number(m.amount) || 0) - 0.5 });
   }
   const totalExpected = sum(income, (x) => x.expected), totalReceived = sum(income, (x) => x.received);
-  const groupOf = (label, cats) => ({ name: label, amount: sum(cats, debit) });
+  const groupOf = (label, cats) => ({ name: label, amount: sum(cats, debit), cats });
   const spend = [
     groupOf('Groceries & needs', ['family budget']), groupOf('Outside food', ['food']), groupOf('Medical', ['medical']),
     groupOf('Travel', ['travel']), groupOf('Rent', ['rent']), groupOf('Utilities', ['utilities']),
@@ -669,7 +669,7 @@ export function monthCashflow(data, all, month) {
     r.amount += e.debit; r.count++; oth.set(key, r);
   }
   const others = [...oth.values()].sort((a, b) => b.amount - a.amount);
-  for (const o of others) if (o.counted) spend.push({ name: o.name, amount: o.amount });
+  for (const o of others) if (o.counted) spend.push({ name: o.name, amount: o.amount, cats: [o.key] });
   const notCounted = sum(others.filter((o) => !o.counted), (o) => o.amount);
   const totalSpent = sum(spend, (x) => x.amount); // sheet's G55 excludes the lifestyle line, we show it separately
   return { month, income, totalExpected, totalReceived, yetToReceive: totalExpected - totalReceived, spend, lifestyle, totalSpent, remaining: totalExpected - totalSpent, others, notCounted };
