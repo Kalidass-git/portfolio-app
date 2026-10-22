@@ -9,6 +9,7 @@ import { rateHistory, ageText } from './gold.js';
 import { GROUPS } from './groupmix.js';
 import { allocationBody } from './allocview.js';
 import { monthPlan, pendingToReceive } from '../monthinvest.js';
+import { openInfo } from '../mobilebar.js';
 import * as P from '../projector.js';
 
 let selMonth = null;
@@ -62,12 +63,13 @@ if (!window.__tileClose) {
   document.addEventListener('click', (e) => { document.querySelectorAll('.kpi.open').forEach((k) => { if (!k.contains(e.target)) k.classList.remove('open'); }); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeTiles(); });
 }
-/** A summary tile. On a computer it opens a drop-down with the detail; on a phone it goes to the page. */
-function tile(label, value, sub, { tone: t = '', href = null, pop = null, right = false } = {}) {
+/** A summary tile. On a computer it opens a drop-down with the detail; on a phone it opens a bottom sheet (when it has one) or goes to the page. */
+function tile(label, value, sub, { tone: t = '', href = null, pop = null, right = false, sheet = null } = {}) {
   const el = kpi(label, value, sub, { tone: t });
   el.classList.add('tap'); el.tabIndex = 0; el.setAttribute('role', pop ? 'button' : 'link');
   const go = () => {
     if (pop && mqDesk()) { const open = !el.classList.contains('open'); closeTiles(); el.classList.toggle('open', open); el.setAttribute('aria-expanded', String(open)); }
+    else if (sheet) sheet();
     else if (href) location.hash = href;
   };
   el.addEventListener('click', (e) => { if (!e.target.closest('.kpi-pop')) go(); });
@@ -104,8 +106,8 @@ function tiles(all, data, mc, plan) {
   return h('div', { class: 'kpis span-12' },
     plan ? place2(tile('Investable balance', money(plan.current), `bank ${money(plan.bank)} + cash ${money(plan.cash)} + interest ${money(plan.interest)} − chits − expenses`, { tone: plan.current >= 0 ? 'inv' : 'neg', pop: investableBody(plan) }), plan)
       : tile('Net monthly inflow', money(all.netMonthly), h('span', null, `${money(all.cfTotal.perMonth)} earned `, all.loans.monthlyInterest > 0 ? h('span', { class: 'neg' }, `− ${money(all.loans.monthlyInterest)} loan interest`) : '− ₹ 0 loan interest'), { tone: tone(all.netMonthly), href: '#/fixed/loans' }),
-    tile('Earning every day', money(all.cfTotal.perDay), h('span', null, `${money(all.cfTotal.perDay - all.loans.monthlyInterest / 30)} after `, h('span', { class: 'neg' }, `${money(all.loans.monthlyInterest / 30)} loan interest`)), { href: '#/fixed', pop: h('div', null, earningBody(all, false), h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income'))) }),
-    tile('Markets today', anyDay ? sgn(dayAll) : '–', anyDay ? `${sgp(dayPctAll)} · shares, funds, ETFs, gold` : 'refresh prices to see', { tone: anyDay ? tone(dayAll) : '', href: '#/equity', pop: h('div', null, todayBody(all), h('p', null, h('a', { href: '#/equity' }, 'Open Shares & funds'))) }),
+    tile('Earning every day', money(all.cfTotal.perDay), h('span', null, `${money(all.cfTotal.perDay - all.loans.monthlyInterest / 30)} after `, h('span', { class: 'neg' }, `${money(all.loans.monthlyInterest / 30)} loan interest`)), { href: '#/fixed', pop: h('div', null, earningBody(all, false), h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income'))), sheet: () => openInfo('Earning every day', h('div', null, earningBody(all, true), h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income')))) }),
+    tile('Markets today', anyDay ? sgn(dayAll) : '–', anyDay ? `${sgp(dayPctAll)} · shares, funds, ETFs, gold` : 'refresh prices to see', { tone: anyDay ? tone(dayAll) : '', href: '#/equity', pop: h('div', null, todayBody(all), h('p', null, h('a', { href: '#/equity' }, 'Open Shares & funds'))), sheet: () => openInfo('Markets today', h('div', null, todayBody(all), h('p', null, h('a', { href: '#/equity' }, 'Open Shares & funds')))) }),
     tile('Spent this month', money(spent), (mc.totalExpected ? `${pct(spent / mc.totalExpected, 0)} of ${money(mc.totalExpected)} budget` : 'no budget income yet') + (mc.notCounted > 0 ? ` · ${compact(mc.notCounted)} not counted` : ''), { tone: mc.totalExpected && spent > mc.totalReceived ? 'neg' : '', href: '#/flow', pop: spentBody(mc, spent), right: true }));
 }
 
@@ -236,8 +238,6 @@ function todayBody(all) {
     total != null ? h('p', { class: 'summary-line' }, 'All together ', h('b', { class: tone(total) }, sgn(total)), (() => { const b = (mk.total.dayPct ? mk.total.day / mk.total.dayPct : 0) + (gd ? all.gold.value - gd.total : 0); return b ? h('span', { class: tone(total) }, ' (' + sgp(total / b) + ')') : null; })()) : null,
     gd ? null : h('p', { class: 'note' }, 'Gold today appears after a price refresh.'));
 }
-/** Phone only: on a computer this lives in the "Markets today" tile. */
-const todayCard = (all) => section('Today', todayBody(all));
 
 const DISMISS = 'fw.dismissed';
 const dismissed = () => { try { const o = JSON.parse(localStorage.getItem(DISMISS) || '{}'), t = C.todayISO(); return Object.fromEntries(Object.entries(o).filter(([, d]) => d === t)); } catch (e) { return {}; } };
@@ -322,8 +322,6 @@ function earningBody(all, fold) {
     fold ? h('details', { class: 'more' }, h('summary', null, `Show the ${rows.length} sources`), list) : list,
     h('p', { class: 'note' }, 'Covers EPF, PPF, chits, RD and LIC, bonds, fixed deposits and private lending. Shares, funds and gold pay no fixed interest, so they are not counted.'));
 }
-/** Phone only: on a computer this lives in the "Earning every day" tile. Sources are folded away to keep it short. */
-const earning = (all) => section('Earning every day', earningBody(all, true));
 
 function returnsCard(data, all, rets, cov) {
   const groupOf = (r) => (r.name === 'Gold' ? 'gold' : /^(Stocks|Mutual)/.test(r.name) ? 'equity' : /^(Bonds|FDs|Private lending|EPF|Chits|Insurance)/.test(r.name) ? 'debt' : 'other');
@@ -425,7 +423,6 @@ export function render() {
     place(toReceiveCard(data, all), 'span-6'), place(comingUp(data, all), 'span-6'),
     place(thisMonth(data, all, months), 'span-12'),
     place(investCard(data, all, plan), 'span-12'),
-    place(todayCard(all), 'm-only'), place(earning(all), 'm-only'),
     place(allocation(all), 'span-7'), place(riskAlerts(all), 'span-5'),
     place(returnsCard(data, all, rets, ox), 'span-12')];
   root.append(...parts.filter(Boolean));

@@ -646,7 +646,9 @@ export function monthCashflow(data, all, month) {
     }
     if (!(expected > 0.5)) continue;
     const fromLedger = sum(rows.filter((e) => (e.desc || '').toLowerCase() === m.match), (e) => e.credit);
-    income.push({ name: m.name, expected, received: Math.max(fromLedger, fromDues, (m.paidMonths || []).includes(month) ? expected : 0), since: w.starts, part: !!w.recs.length && expected < (Number(m.amount) || 0) - 0.5 });
+    const received = Math.max(fromLedger, fromDues, (m.paidMonths || []).includes(month) ? expected : 0);
+    // What actually came in is always part of the budget: a pro-rated or estimated amount must never be lower than what was paid, or "received" ends up above "expected".
+    income.push({ name: m.name, expected: Math.max(expected, received), received, since: w.starts, part: !!w.recs.length && expected < (Number(m.amount) || 0) - 0.5 });
   }
   const totalExpected = sum(income, (x) => x.expected), totalReceived = sum(income, (x) => x.received);
   const groupOf = (label, cats) => ({ name: label, amount: sum(cats, debit) });

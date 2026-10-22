@@ -37,6 +37,13 @@ function sheet({ title, body, onApply, onReset, applyLabel = 'Apply' }) {
   return dlg;
 }
 
+/** A read-only bottom sheet for a card of information (Done closes it). A link inside it closes the sheet as the page changes. */
+export function openInfo(title, body) {
+  const dlg = sheet({ title, body, applyLabel: 'Done', onApply: () => {} });
+  dlg.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('a[href]')) dlg.close(); });
+  return dlg;
+}
+
 /**
  * Sort sheet. sort = { options: [{ value, label, kind: 'num'|'text'|'date'|'due'|'none' }], value, dir, apply(value, dir) }
  * A radio per field; the chosen field shows its two direction buttons, named for the kind of data.

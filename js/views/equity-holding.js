@@ -36,7 +36,7 @@ export function render(root) {
   const divs = eq ? eq.dividends.filter((x) => x.symbol === sym) : [];
   const divTotal = divs.reduce((a, x) => a + x.amount, 0);
   root.append(h('div', { class: 'card' }, h('h2', { style: { margin: 0 } }, s.name), h('p', { class: 'note', style: { margin: '4px 0 0' } }, `${s.symbol} · ${s.assetClass === 'equity' ? 'Share' : s.assetClass === 'goldetf' ? 'Gold ETF' : 'ETF'} · ${c.sector} · ${c.cap}`),
-    canEdit() ? h('div', { class: 'btn-row', style: { marginTop: 10 } }, btn('Buy more', () => tradeForm(null, { type: 'BUY', symbol: sym, name: s.name }), 'primary'), btn('Sell', () => sellForm(s)), btn('Split / bonus / dividend', () => actionForm(null, { symbol: sym })), btn('Sector & size', () => classifyForm(s)), btn('Edit details', () => stockEditForm(data.stocks.find((x) => x.id === s.id)))) : null));
+    canEdit() ? h('div', { class: 'btn-row', style: { marginTop: 10 } }, btn('Buy more', () => tradeForm(null, { type: 'BUY', symbol: sym, name: s.name }), 'primary'), btn('Sell', () => sellForm(s), 'sell'), btn('Split / bonus / dividend', () => actionForm(null, { symbol: sym })), btn('Sector & size', () => classifyForm(s)), btn('Edit details', () => stockEditForm(data.stocks.find((x) => x.id === s.id)))) : null));
   root.append(h('div', { class: 'stats' },
     stat('Value now', money(s.current), `${num(s.qty)} × ${dec(s.livePrice)}`),
     stat('Invested', money(s.invested), `average ${dec(s.avgPrice)} a share`),

@@ -154,6 +154,15 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.9.40 – Budget total, sort sheet radios, Holdings page and Home sheets
+- **This month in detail.** Budget (expected) can no longer be lower than what came in. A part-month or estimated line (such as a lending line that started this month) could show less expected than was received, so the total read lower than the received figure beside it. Each line now expects at least what was received, so the total adds up from its lines.
+- **Sort and filter sheet.** The radio buttons are true circles again (the general input size rules were stretching them into ovals).
+- **Shares & funds, Holdings (phone).** Two summary cards: Invested first (with value now, holdings and XIRR), then Gain / loss with Overall and Today, each with its percentage. All figures use one size. Desktop keeps three cards. The Both / Shares / ETFs switch now sits right under the Shares & ETFs tab, above the cards. The Find box and the Record a buy / Add button are hidden on phones.
+- **Share detail.** Sell is red.
+- **Refresh and last refreshed (phone).** Shown on Overview only, not on Holdings, Watch or Manage.
+- **Home (phone).** Tapping Markets today or Earning every day opens its card as a bottom sheet instead of going to another page. The two cards that sat lower on the page are removed. Desktop is unchanged.
+- No stored data changed.
+
 ## Release 8.9.39 – New phone rows and sort/filter sheets for the main lists
 - **One phone layout for lists.** On a phone (700 px and narrower) the main lists are now compact rows: a fixed first column (name on top, one useful line under it), an optional middle column, and a last column that **changes when you tap its heading** (the pill with the ⇄ sign). All rows change together, the order and sorting do not move, and the view you chose is remembered on that device. After the last view it goes back to the first. Tapping a row still opens it; tapping the heading never does.
 - **Shares, ETFs and funds.** First column: name and shares or units. Middle: today's move (only when a day price exists). Views: Value · Invested, Gain · Return (with XIRR), Price (or NAV) · Average, Share of group · XIRR. Funds that are not linked still show "Link live NAV".
