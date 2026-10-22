@@ -91,7 +91,9 @@ export function render() {
         { label: 'Entries', mob: 'under', mlabel: 'entries ', cls: 'r', get: (c) => num(c.u.count) },
         { label: 'Last 12 months', cls: 'r', get: (c) => (c.u.recent ? money(c.u.recent) : '–') },
         ...(showBudget ? [{ label: 'Budget / month', cls: 'r', get: (c) => (c.budget ? money(c.budget) : '–'), total: () => (budgetTotal ? money(budgetTotal) : '') }, { label: 'Budget / year', cls: 'r', get: (c) => (c.yearlyBudget ? money(c.yearlyBudget) : '–'), total: () => (yearTotal ? money(yearTotal) : '') }] : []),
-      ], rows, { footer: showBudget && (budgetTotal || yearTotal) ? { label: 'Total budget' } : null, onRow: editable ? (c) => categoryForm(list.find((x) => x.name === c.name)) : null, empty: 'No categories of this kind yet.' }),
+      ], rows, { footer: showBudget && (budgetTotal || yearTotal) ? { label: 'Total budget' } : null, m: { key: 'cat-' + k.key, head: 'Category', title: (c) => c.name + (CAT.isProtected(c.name) ? ' 🔒' : ''), sub: (c) => `${num(c.u.count)} ${c.u.count === 1 ? 'entry' : 'entries'}`,
+        views: showBudget ? [['Last 12 months', 'Entries'], ['Budget / month', 'Budget / year']] : [['Last 12 months', 'Entries']],
+        sort: [{ value: 'none', label: 'Most used first', kind: 'none' }, { value: 'recent', label: 'Spent in last 12 months', kind: 'num', get: (c) => c.u.recent }, { value: 'count', label: 'Number of entries', kind: 'num', get: (c) => c.u.count }, ...(showBudget ? [{ value: 'budget', label: 'Monthly budget', kind: 'num', get: (c) => c.budget || 0 }, { value: 'ybudget', label: 'Yearly budget', kind: 'num', get: (c) => c.yearlyBudget || 0 }] : []), { value: 'name', label: 'Category name', kind: 'text', get: (c) => String(c.name || '').toLowerCase() }], sortDefault: { value: 'none', dir: 'asc' } }, onRow: editable ? (c) => categoryForm(list.find((x) => x.name === c.name)) : null, empty: 'No categories of this kind yet.' }),
       editable ? [btn('Add category', () => categoryForm(null, k.key), 'primary')] : null));
   }
 
@@ -105,7 +107,7 @@ export function render() {
       h('div', { class: 'filters' }, box),
       table([
         { label: 'Description', get: (r) => r.desc }, { label: 'Category', get: (r) => r.category },
-      ], rules.slice(0, ruleLimit), { onRow: editable ? (r) => ruleForm(r) : null, empty: 'No rules match.' }),
+      ], rules.slice(0, ruleLimit), { m: { key: 'cat-rules', head: 'Description', title: (r) => r.desc, views: [['Category']] }, onRow: editable ? (r) => ruleForm(r) : null, empty: 'No rules match.' }),
       rules.length > ruleLimit ? btn(`Show more (${rules.length - ruleLimit} left)`, () => { ruleLimit += 50; rerender(); }, 'wide') : null),
     editable ? [btn('Add rule', () => ruleForm())] : null));
 

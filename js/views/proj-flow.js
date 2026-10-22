@@ -115,7 +115,7 @@ function monthDetail(g) {
     line('Net worth at the month end', money(r.nw), null, 'b'),
   ].filter(Boolean);
   return h('div', { class: 'card inner', style: { marginTop: '10px' } }, h('h4', { style: { margin: '0 0 6px' } }, g.title),
-    table([{ label: 'Item', host: true, render: (x) => h('span', null, x.tone ? h('b', null, x.label) : x.label, x.sub ? h('small', { class: 'muted', style: { display: 'block' } }, x.sub) : null) }, { label: 'Amount', cls: 'r', render: (x) => (x.tone ? h('b', null, x.val) : x.val) }], lines, {}),
+    table([{ label: 'Item', host: true, render: (x) => h('span', null, x.tone ? h('b', null, x.label) : x.label, x.sub ? h('small', { class: 'muted', style: { display: 'block' } }, x.sub) : null) }, { label: 'Amount', cls: 'r', render: (x) => (x.tone ? h('b', null, x.val) : x.val) }], lines, { m: { key: 'flow-lines', head: 'Item', views: [['Amount']] } }),
     h('p', { class: 'reco' }, `Net worth moves by income − spending + EPF + growth${t.loanPaid > 0.5 ? ' + loan paid down' : ''}. New investing moves money from cash into assets and does not change it.`));
 }
 
@@ -134,7 +134,9 @@ function monthsTable(rows) {
     any((r) => r.loanPaid) ? { label: 'Loan paid', cls: 'r', mob: 'hide', render: (r) => inc(r.loanPaid), total: () => inc(t.loanPaid) } : null,
     { label: 'Net worth', cls: 'r', mob: 'under', mlabel: 'net worth ', get: (r) => money(r.nw), total: () => money(t.nw) },
   ].filter(Boolean);
-  return h('div', null, table(cols, rows, { footer: { label: rows.length > 1 ? 'Total' : '' } }),
+  const labels = cols.map((c) => c.label), has = (l) => labels.includes(l);
+  const views = [['Net worth', 'Salary + EPF'], ['Spending', 'Invested'], ...(has('Interest') ? [['Interest', 'Growth']] : []), ...(has('Other income') ? [['Other income']] : []), ...(has('Loan paid') ? [['Loan paid']] : [])];
+  return h('div', null, table(cols, rows, { footer: { label: rows.length > 1 ? 'Total' : '' }, m: { key: 'flow-months', head: 'Month', views } }),
     h('p', { class: 'reco' }, `Net worth ${money(start)} at the start + income ${money(t.income)} − spending ${money(t.out)} + EPF ${money(t.pf)} + growth ${money(t.growth)}${t.loanPaid > 0.5 ? ` + loan paid down ${money(t.loanPaid)}` : ''} = ${money(t.nw)}. Invested ${money(t.invested)} is not in that sum: it only moves cash into assets.`));
 }
 
@@ -157,7 +159,7 @@ export function yearsTable(rows, { title = 'Year by year, and month by month' } 
       h('span', { style: R }, tipped(yr, interestTip, cls('inc', money(t.interest)))), h('span', { class: 'inv', style: R }, money(t.invested)), h('span', { style: R }, money(t.nw)));
     return h('details', { class: 'cal-month', open: yi === 0 }, sumRow, monthsTable(yr));
   });
-  return section(title, h('div', null, head, ...blocks,
+  return section(title, h('div', null, h('div', { class: 'yt-scroll' }, h('div', { class: 'yt-inner' }, head, ...blocks)),
     h('p', { class: 'note' }, 'Open a year to see its months. Spending is everyday expenses plus loan EMI, with one-time items under it (hover for the split). Interest is what bonds and lending pay out after TDS. Invested is what was left after spending and went into your plan. Net worth is the month end, and for a year its December.')));
 }
 
@@ -187,7 +189,7 @@ export function interestWhy(rows, { tds = 0.1, title = 'Interest: what changes i
         { label: 'Interest a month', cls: 'r', mob: 'under', mlabel: 'interest ', render: (x) => inc(x.r.interest) },
         { label: 'Change', cls: 'r', mob: 'under', mlabel: 'change ', render: (x) => (x.w.delta == null || Math.abs(x.w.delta) < 0.5 ? '–' : h('span', { class: x.w.delta > 0 ? 'inc' : 'exp' }, (x.w.delta > 0 ? '+' : '−') + money(Math.abs(x.w.delta)))) },
         { label: 'Why', mob: 'hide', render: (x) => h('span', null, x.w.lines.map((l) => h('small', { class: 'muted', style: { display: 'block' } }, l))) },
-      ], list, {}));
+      ], list, { m: { key: 'flow-interest', head: 'Month', views: [['Interest a month', 'Change']] } }));
   });
   return section(title, h('div', null, ...blocks, h('p', { class: 'note' }, 'Interest is worked out on what is held at the start of the month. New money only starts earning the month after it goes in, and the figure is after TDS. Deposits, EPF and chits do not pay out: their interest is added to the balance and shows as Growth.')));
 }

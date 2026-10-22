@@ -71,7 +71,8 @@ export function render(root) {
       { label: 'Paid from', mob: 'hide', get: (e) => (e.kind === 'invest' ? (e.funding === 'cash' ? 'bank balances' : 'new money') : e.kind === 'sell' ? 'goes to bank' : 'bank balances') },
       { label: 'Most you could put in', cls: 'r', mob: 'under', mlabel: 'room ', render: (e) => { if (e.kind !== 'invest') return h('span', null, '–'); const others = R.applyEntries(now, wi.entries.filter((x) => x.id !== e.id).map(toRisk)); const hr = R.headroom(cfg, others, { cls: e.cls, name: e.name, funding: e.funding }); return hr.room == null ? h('span', { class: 'muted' }, 'no limit') : h('span', { class: e.amount > hr.room + 1 ? 'neg' : 'pos', title: hr.why }, money(hr.room)); } },
       { label: 'Exposure of that holding', mob: 'under', mlabel: 'exposure ', render: (e) => { const a = R.exposureOf(cfg, after, e.name, e.cls); if (!a) return h('span', { class: 'muted' }, '–'); const b0 = R.exposureOf(cfg, now, e.name, e.cls); const over = (a.max != null && a.pct > a.max + 1e-9) || (a.maxAmt != null && a.value > a.maxAmt + 1); return h('span', { class: over ? 'neg' : '' }, `${pcs(b0 ? b0.pct : 0)} → ${pcs(a.pct)}`, h('small', { class: 'sub' }, a.max != null ? ` limit ${pcs(a.max, 0)} ${R.ofText(a.of)}` : a.maxAmt != null ? ` limit ${compact(a.maxAmt)}` : ' no limit')); } },
-    ], wi.entries, { onRow: (e) => entryForm(wi.entries.find((x) => x.id === e.id)) }) : h('p', { class: 'empty' }, 'Nothing yet. Add an investment you are thinking about, such as ₹25,00,000 in private lending, or ₹1,00,000 more in a share, and see where it leaves you against your limits.'),
+    ], wi.entries, { m: { key: 'whatif', head: 'What-if', title: (e) => (e.kind === 'spend' ? 'Spend' : (e.kind === 'sell' ? 'Sell · ' : 'Invest · ') + (e.name || P.classOf(e.cls).label)), sub: (e) => (e.name && e.kind !== 'spend' ? P.classOf(e.cls).label : ''),
+      views: [['Amount', 'Monthly'], ['Most you could put in', 'Exposure of that holding'], ['Paid from']] }, onRow: (e) => entryForm(wi.entries.find((x) => x.id === e.id)) }) : h('p', { class: 'empty' }, 'Nothing yet. Add an investment you are thinking about, such as ₹25,00,000 in private lending, or ₹1,00,000 more in a share, and see where it leaves you against your limits.'),
     h('div', { class: 'btn-row' }, btn('Add a what-if', () => entryForm(null), 'primary', { keep: true }), wi.entries.length ? btn('Clear all', () => { wi.entries = []; save(); rerender(); }, '', { keep: true }) : null),
     h('p', { class: 'note' }, 'Nothing here changes your records. It is a scratch pad: it is cleared when you close the app.'))));
 
@@ -106,7 +107,7 @@ export function render(root) {
     { label: 'Holding', host: true, get: (x) => x.name }, { label: 'Amount', cls: 'r', get: (x) => money(x.value) },
     { label: 'Share', mob: 'under', mlabel: 'share ', cls: 'r', get: (x) => shareText(x) },
     { label: 'Limit', mob: 'under', mlabel: 'limit ', cls: 'r', get: (x) => limitText(x) }, { label: 'Room left', mob: 'hide', cls: 'r', get: (x) => money(x.room) }, { label: '', render: statusTag },
-  ], touched)));
+  ], touched, { m: { key: 'whatif-after', head: 'Holding', mid: '', midHead: 'Status', views: [['Amount', 'Share'], ['Limit', 'Room left']] } })));
 
   // ---------- over time ----------
   const years = wi.years, months = years * 12;
@@ -140,7 +141,7 @@ export function render(root) {
       { label: 'With this', cls: 'r', get: (m) => money(at(withR, m).nw) },
       { label: 'Difference', cls: 'r', render: (m) => { const d = at(withR, m).nw - at(base, m).nw; return h('span', { class: tone(d) }, signed(d)); } },
       { label: 'Interest / month', mob: 'hide', cls: 'r', get: (m) => money(at(withR, m).interest) },
-    ], hz),
+    ], hz, { m: { key: 'whatif-time', head: 'After', views: [['With this', 'Without'], ['Difference', 'Interest / month']] } }),
     h('p', { class: 'note' }, 'Both columns use the same salary, spending and outlook; only your what-ifs differ. Paying from bank balances moves money, so the difference is just what it earns. New money from outside also adds to the total.'))));
 
   // risk mix over time
@@ -152,7 +153,7 @@ export function render(root) {
       { label: 'When', host: true, get: (x) => (x.m === 0 ? 'Right after' : x.m < 12 ? `${x.m} months` : `${x.m / 12} year${x.m > 12 ? 's' : ''}`) },
       ...cols.map((bk) => ({ label: bk.name + (bk.max != null ? ` (max ${pcs(bk.max, 0)})` : ''), cls: 'r', render: (x) => { const y = x.ev.buckets.find((z) => z.key === bk.id); return h('span', { class: y.over ? 'neg' : '' }, pcs(y.pct)); } })),
       { label: 'Over', mob: 'under', mlabel: '', get: (x) => (x.ev.breaches.length ? x.ev.breaches.map((y) => y.name).join(', ') : '–') },
-    ], evs),
+    ], evs, { m: { key: 'whatif-mix', head: 'When', views: [...cols.map((bk) => bk.name + (bk.max != null ? ` (max ${pcs(bk.max, 0)})` : '')).reduce((a, l, i) => { if (i % 2) a[a.length - 1].push(l); else a.push([l]); return a; }, []), ['Over']] } }),
     firstBreach(cfg, withR, evAfter, b),
     h('p', { class: 'note' }, 'Shares and funds that grow faster than the rest take a bigger share over time, so a mix that is fine today can cross a limit later. Single-holding limits are checked for today only.'))));
 }

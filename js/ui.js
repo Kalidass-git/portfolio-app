@@ -1,5 +1,6 @@
 // Small DOM and formatting helpers shared by every screen.
 import { S } from './store.js';
+import { sortFilterBar } from './mobilebar.js';
 
 export function h(tag, attrs, ...kids) {
   const el = document.createElement(tag);
@@ -225,7 +226,8 @@ export const empty = (msg) => h('p', { class: 'empty' }, msg);
  *   mu(row)       what to show in the small line when it should differ from the cell
  *   host: true    the column that carries the small line (default: the first)
  */
-export function table(cols, rows, { onRow, footer, rowClass, empty: emptyMsg = 'Nothing here yet.', mobile = null } = {}) {
+export function table(cols, rows, { onRow, footer, rowClass, empty: emptyMsg = 'Nothing here yet.', mobile: mobileIn = null, m: mfrom = null } = {}) {
+  const mobile = mfrom ? mobileFrom(cols, mfrom) : mobileIn; // `m` builds the phone rows from these very columns (see mobileFrom)
   if (!rows.length) return empty(emptyMsg);
   const small = (c) => (c.mob === 'under' || c.mob === 'hide' ? ' hide-sm' : '') + (c.show === 'desk' ? ' desk-only' : '');
   let hostI = cols.findIndex((c) => c.host); if (hostI < 0) hostI = 0;
@@ -247,7 +249,7 @@ export function table(cols, rows, { onRow, footer, rowClass, empty: emptyMsg = '
 }
 
 // ----- phone rows: fixed first column, optional middle, final column that cycles through groups of figures -----
-const viewMem = new Map();
+const viewMem = new Map(), viewState = new Map();
 const readView = (key) => { if (viewMem.has(key)) return viewMem.get(key); let i = 0; try { i = Number(localStorage.getItem('pt.mv.' + key)) || 0; } catch { /* private window */ } viewMem.set(key, i); return i; };
 const saveView = (key, i) => { viewMem.set(key, i); try { localStorage.setItem('pt.mv.' + key, String(i)); } catch { /* ignore */ } };
 const dash = (v) => (v == null || v === '' ? '–' : v);
@@ -265,26 +267,78 @@ const dash = (v) => (v == null || v === '' ? '–' : v);
 export function mobileRows(rows, m, { onRow, rowClass } = {}) {
   const n = m.views.length;
   let idx = readView(m.key) % n;
-  const mids = m.mid ? rows.map((r) => m.mid(r)) : [];
-  const hasMid = mids.some((x) => x != null && x !== '');
-  const ends = [];
-  const endNodes = (r) => { const v = m.views[idx]; const sub = v.sub ? v.sub(r) : null; return [h('div', { class: 'mr-main' }, dash(v.main(r))), sub != null && sub !== '' ? h('div', { class: 'mr-sub' }, sub) : null]; };
-  const foot = m.views[0].total ? h('div', { class: 'mrow mr-total' + (hasMid ? ' has-mid' : '') }, h('div', { class: 'mr-first' }, h('div', { class: 'mr-title' }, m.footLabel || 'Total')), hasMid ? h('div', { class: 'mr-mid' }) : null, h('div', { class: 'mr-end' })) : null;
-  const drawFoot = () => { if (!foot) return; const t = m.views[idx].total ? m.views[idx].total(rows) : null; foot.querySelector('.mr-end').replaceChildren(...[h('div', { class: 'mr-main' }, dash(t && t.main)), t && t.sub ? h('div', { class: 'mr-sub' }, t.sub) : null].filter(Boolean)); };
-  const label = h('span', { class: 'mr-vlabel' }, m.views[idx].label);
-  const cycle = () => { idx = (idx + 1) % n; saveView(m.key, idx); label.textContent = m.views[idx].label; ends.forEach(([el, r]) => el.replaceChildren(...endNodes(r).filter(Boolean))); drawFoot(); };
-  const head = h('div', { class: 'mrow mr-head' + (hasMid ? ' has-mid' : '') }, h('div', { class: 'mr-first' }, m.head || ''), hasMid ? h('div', { class: 'mr-mid' }, m.midHead || '') : null,
-    n > 1 ? h('button', { type: 'button', class: 'mr-end mr-cycle', 'aria-label': 'Tap to change the figures shown', onclick: (e) => { e.stopPropagation(); cycle(); } }, label, h('span', { class: 'mr-ic', 'aria-hidden': 'true' }, '⇄')) : h('div', { class: 'mr-end' }, label));
-  const body = rows.map((r, i) => {
-    const f = m.first(r) || {}, end = h('div', { class: 'mr-end' }, ...endNodes(r).filter(Boolean));
-    ends.push([end, r]);
-    const go = onRow ? () => onRow(r) : null;
-    return h('div', { class: 'mrow' + (hasMid ? ' has-mid' : '') + (go ? ' click' : '') + (rowClass ? ' ' + (rowClass(r) || '') : ''), tabindex: go ? 0 : null, role: go ? 'button' : null, onclick: go, onkeydown: go ? (e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); go(); } } : null },
-      h('div', { class: 'mr-first' }, h('div', { class: 'mr-title' }, f.title, f.tag ? h('small', { class: 'tag' }, f.tag) : null), f.sub != null && f.sub !== '' ? h('div', { class: 'mr-subline' }, f.sub) : null, f.extra || null),
-      hasMid ? h('div', { class: 'mr-mid' }, mids[i] || null) : null, end);
+  const root = h('div', { class: 'mrows', 'aria-label': m.head || 'List' });
+  // optional phone-only sort and filter that work on these rows alone (screens that already sort or filter keep doing that themselves and leave these out)
+  const sOpts = m.sort ? m.sort.options : null;
+  const fFields = m.filters || null;
+  const st = (viewState.get(m.key) || (viewState.set(m.key, { sort: m.sort ? { ...m.sort.default } : null, f: Object.fromEntries((fFields || []).map((f) => [f.key, f.default ?? 'all'])) }), viewState.get(m.key)));
+  const draw = () => {
+    let shown = rows;
+    if (fFields) for (const f of fFields) { const ok = (typeof f.options === 'function' ? f.options(rows) : f.options).map((o) => String(typeof o === 'object' ? o.value : o)); if (st.f[f.key] !== (f.default ?? 'all') && !ok.includes(String(st.f[f.key]))) st.f[f.key] = f.default ?? 'all'; }
+    if (fFields) shown = shown.filter((r) => fFields.every((f) => st.f[f.key] === (f.default ?? 'all') || String(f.get(r)) === String(st.f[f.key])));
+    const cur = st.sort && sOpts && sOpts.find((o) => o.value === st.sort.value);
+    if (cur && cur.get) {
+      const sign = st.sort.dir === 'asc' ? 1 : -1, empty = (v) => v == null || v === '' || (typeof v === 'number' && isNaN(v));
+      shown = shown.map((r, i) => ({ r, i, v: cur.get(r) })).sort((a, b) => (empty(a.v) - empty(b.v)) || (empty(a.v) ? 0 : sign * (typeof a.v === 'string' ? a.v.localeCompare(b.v) : a.v - b.v)) || a.i - b.i).map((o) => o.r);
+    }
+    const mids = m.mid ? shown.map((r) => m.mid(r)) : [];
+    const hasMid = mids.some((x) => x != null && x !== '');
+    const ends = [];
+    const endNodes = (r) => { const v = m.views[idx]; const sub = v.sub ? v.sub(r) : null; return [h('div', { class: 'mr-main' }, dash(v.main(r))), sub != null && sub !== '' ? h('div', { class: 'mr-sub' }, sub) : null].filter(Boolean); };
+    const foot = m.views[0].total ? h('div', { class: 'mrow mr-total' + (hasMid ? ' has-mid' : '') }, h('div', { class: 'mr-first' }, h('div', { class: 'mr-title' }, m.footLabel || 'Total')), hasMid ? h('div', { class: 'mr-mid' }) : null, h('div', { class: 'mr-end' })) : null;
+    const drawFoot = () => { if (!foot) return; const t = m.views[idx].total ? m.views[idx].total(shown) : null; foot.querySelector('.mr-end').replaceChildren(...[h('div', { class: 'mr-main' }, dash(t && t.main)), t && t.sub ? h('div', { class: 'mr-sub' }, t.sub) : null].filter(Boolean)); };
+    const label = h('span', { class: 'mr-vlabel' }, m.views[idx].label);
+    const cycle = () => { idx = (idx + 1) % n; saveView(m.key, idx); label.textContent = m.views[idx].label; ends.forEach(([el, r]) => el.replaceChildren(...endNodes(r))); drawFoot(); };
+    const head = h('div', { class: 'mrow mr-head' + (hasMid ? ' has-mid' : '') }, h('div', { class: 'mr-first' }, m.head || ''), hasMid ? h('div', { class: 'mr-mid' }, m.midHead || '') : null,
+      n > 1 ? h('button', { type: 'button', class: 'mr-end mr-cycle', 'aria-label': 'Tap to change the figures shown', onclick: (e) => { e.stopPropagation(); cycle(); } }, label, h('span', { class: 'mr-ic', 'aria-hidden': 'true' }, '⇄')) : h('div', { class: 'mr-end' }, label));
+    const body = shown.map((r, i) => {
+      const f = m.first(r) || {}, end = h('div', { class: 'mr-end' }, ...endNodes(r));
+      ends.push([end, r]);
+      const go = onRow ? () => onRow(r) : null;
+      return h('div', { class: 'mrow' + (hasMid ? ' has-mid' : '') + (go ? ' click' : '') + (rowClass ? ' ' + (rowClass(r) || '') : ''), tabindex: go ? 0 : null, role: go ? 'button' : null, onclick: go, onkeydown: go ? (e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); go(); } } : null },
+        h('div', { class: 'mr-first' }, h('div', { class: 'mr-title' }, f.title, f.tag ? h('small', { class: 'tag' }, f.tag) : null), f.sub != null && f.sub !== '' ? h('div', { class: 'mr-subline' }, f.sub) : null, f.extra || null),
+        hasMid ? h('div', { class: 'mr-mid' }, mids[i] || null) : null, end);
+    });
+    drawFoot();
+    let bar = null;
+    if (sOpts || fFields) {
+      const filters = fFields ? { values: st.f, fields: fFields.map((f) => ({ key: f.key, label: f.label, type: 'select', default: f.default ?? 'all', options: [{ value: f.default ?? 'all', label: f.allLabel || 'All' }, ...(typeof f.options === 'function' ? f.options(rows) : f.options).map((o) => (typeof o === 'object' ? o : { value: o, label: o }))] })), apply: (v) => { st.f = v; draw(); } } : null;
+      const sort = sOpts ? { options: sOpts.map(({ value, label, kind }) => ({ value, label, kind })), value: st.sort.value, dir: st.sort.dir, apply: (value, dir) => { st.sort = { value, dir }; draw(); } } : null;
+      bar = sortFilterBar({ sort, filters });
+    }
+    const none = !shown.length && rows.length ? h('p', { class: 'empty' }, 'Nothing matches these filters.') : null;
+    root.replaceChildren(...[bar, head, ...body, none, foot].filter(Boolean));
+  };
+  draw();
+  return root;
+}
+
+/**
+ * Build a phone-row config from a table's own columns, so the phone rows show the very same cells and totals.
+ *   o = { key, head, title?: (r) => node, sub?: ['Column label', …] | (r) => node, mid?: 'Column label', midHead?,
+ *         views: [['Column A', 'Column B'], ['Column C']],   // label is "A · B"; B is the small line under A
+ *         sort?: [{ value, label, kind, get }], sortDefault?: { value, dir }, filters? }
+ * A column is found by its label. Totals come from the columns' own `total` (a table with a footer shows them for the chosen view).
+ */
+export function mobileFrom(cols, o) {
+  const by = (l) => cols.find((c) => c.label === l);
+  const cell = (c, r) => (c.render ? c.render(r) : c.get(r));
+  const host = cols.find((c) => c.host) || cols[0];
+  const subs = Array.isArray(o.sub) ? o.sub.map(by).filter(Boolean) : null;
+  const hasTotal = o.views.some((v) => v.some((l) => by(l) && by(l).total));
+  const views = o.views.map((v) => {
+    const a = by(v[0]), b = v[1] ? by(v[1]) : null;
+    if (!a) throw new Error('mobileFrom: no column ' + v[0]);
+    return { label: v.join(' · '), main: (r) => cell(a, r), sub: b ? (r) => cell(b, r) : null, total: hasTotal ? (rs) => ({ main: a.total ? a.total(rs) : null, sub: b && b.total ? b.total(rs) : null }) : undefined };
   });
-  drawFoot();
-  return h('div', { class: 'mrows', 'aria-label': m.head || 'List' }, head, ...body, foot);
+  const midCol = o.mid != null ? by(o.mid) : null;
+  const dashy = (v) => v == null || v === '' || v === '–';
+  return {
+    key: o.key, head: o.head || host.label, midHead: o.midHead ?? o.mid, views,
+    first: (r) => ({ title: o.title ? o.title(r) : cell(host, r), sub: typeof o.sub === 'function' ? o.sub(r) : subs ? subs.map((c) => cell(c, r)).filter((v) => !dashy(v)).map((v, i) => [i ? ' · ' : '', v]) : null }),
+    mid: midCol ? (r) => { const v = cell(midCol, r); return dashy(v) ? null : v; } : undefined,
+    sort: o.sort ? { options: o.sort, default: o.sortDefault || { value: o.sort[0].value, dir: 'asc' } } : undefined, filters: o.filters,
+  };
 }
 
 /**

@@ -732,12 +732,12 @@ tr.proj-row td { color: var(--muted); font-style: italic; }
 /* Wealth outlook: income green, spending red, investing blue */
 .inc { color: var(--pos); } .exp { color: var(--neg); } .inv { color: var(--s1); }
 .yt-head .inc, .yt-head .exp, .yt-head .inv { font-weight: 600; }
-.assume { display: grid; gap: 14px; }
+.assume { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
 .assume-group { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
 .assume-group h4 { margin: 0 0 8px; font-size: .95rem; }
-.assume-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(11.5em, 1fr)); gap: 10px 14px; }
+.assume-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(11.5em, 100%), 1fr)); gap: 10px 14px; }
 .assume-fields label { display: flex; flex-direction: column; gap: 2px; font-size: .9rem; }
-.assume-fields input, .assume-fields select { max-width: 100%; }
+.assume-fields input, .assume-fields select { max-width: 100%; min-width: 0; }
 .assume-fields small { color: var(--muted); }
 .reco { margin: 8px 0 0; font-size: .85rem; color: var(--muted); }
 /* popover */
@@ -768,8 +768,8 @@ details.tax-sec > summary { color: var(--ink); font-weight: 700; font-size: 1rem
   .tbl-wrap.has-m { overflow: visible; margin: 0; padding: 0; }
   .tbl-wrap.has-m > .tbl { display: none; }
   .mrows { display: block; font-size: .9rem; }
-  .mrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 10px; padding: 10px 2px; border-bottom: 1px solid var(--line-2); min-height: 52px; }
-  .mrow.has-mid { grid-template-columns: minmax(0, 1fr) minmax(0, 28%) auto; }
+  .mrow { display: grid; grid-template-columns: minmax(0, 1fr) fit-content(55%); align-items: center; gap: 2px 10px; padding: 10px 2px; border-bottom: 1px solid var(--line-2); min-height: 52px; }
+  .mrow.has-mid { grid-template-columns: minmax(0, 1fr) minmax(0, 28%) fit-content(50%); }
   .mrow.click { cursor: pointer; } .mrow.click:active, .mrow.click:focus-visible { background: var(--brand-soft); outline: none; }
   .mrow.row-bad { background: color-mix(in srgb, var(--neg) 9%, var(--surface)); box-shadow: inset 4px 0 0 var(--neg); padding-left: 8px; }
   .mrow.row-warn { background: color-mix(in srgb, var(--warn) 11%, var(--surface)); box-shadow: inset 4px 0 0 var(--warn); padding-left: 8px; }
@@ -777,7 +777,7 @@ details.tax-sec > summary { color: var(--ink); font-weight: 700; font-size: 1rem
   .mr-title { font-weight: 650; line-height: 1.25; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; } .mr-title .tag { margin-left: 6px; }
   .mr-subline { margin-top: 2px; font-size: .78rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .mr-end { text-align: right; min-width: 84px; font-variant-numeric: tabular-nums; }
-  .mr-main { font-weight: 650; white-space: nowrap; } .mr-sub { margin-top: 2px; font-size: .78rem; color: var(--muted); white-space: nowrap; }
+  .mr-main { font-weight: 650; white-space: nowrap; } .mr-sub { margin-top: 2px; font-size: .78rem; color: var(--muted); overflow-wrap: anywhere; }
   .mrows .pos { color: var(--pos); } .mrows .neg { color: var(--neg); } .mrows .warn { color: var(--warn); } .mrows .inv { color: var(--brand); }
   .mr-head { min-height: 0; padding: 4px 2px; border-bottom: 1px solid var(--line); font-size: .7rem; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); }
   .mr-head .mr-first, .mr-head .mr-mid { font-size: .7rem; }
@@ -786,7 +786,7 @@ details.tax-sec > summary { color: var(--ink); font-weight: 700; font-size: 1rem
   .mr-cycle:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
   .mr-total { border-top: 2px solid var(--ink); border-bottom: 0; font-weight: 650; }
 }
-@media (max-width: 359px) { .mrow.has-mid { grid-template-columns: minmax(0, 1fr) auto; } .mr-mid { display: none; } .mr-end { min-width: 72px; } }
+@media (max-width: 359px) { .mrow.has-mid { grid-template-columns: minmax(0, 1fr) fit-content(55%); } .mr-mid { display: none; } .mr-end { min-width: 72px; } }
 @media (max-width: 700px) {
   /* sort box on the equity lists: both selects stay inside the screen */
   .tbl-tools > .inline-label { flex: 1 1 100%; flex-wrap: nowrap !important; min-width: 0; }
@@ -837,3 +837,4 @@ dialog.msheet::backdrop { background: rgba(10, 18, 14, .55); }
 .ms-foot { display: flex; gap: 10px; padding: 12px 18px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line-2); }
 .ms-foot button { min-height: 50px; border-radius: 12px; font: inherit; font-size: 1.05rem; font-weight: 700; cursor: pointer; }
 .ms-foot .primary { flex: 1; } .ms-reset { padding: 0 18px; border: 1px solid var(--line); background: transparent; color: var(--ink); }
+@media (max-width: 700px) { nav.seg { max-width: 100%; overflow-x: auto; } .yt-scroll { overflow-x: auto; } .yt-inner { min-width: 520px; } }

@@ -131,7 +131,8 @@ function overview() {
         { label: 'Yearly budget', mob: 'under', mlabel: 'budget ', cls: 'r', get: (l) => money(l.budget) },
         { label: 'Used', mob: 'under', mlabel: 'used ', cls: 'r', render: (l) => h('span', { class: 'with-meter' }, meter(Math.min(1, l.used), l.used > 1 ? 7 : l.used >= 0.8 ? 3 : 2), h('span', { class: l.used > 1 ? 'neg' : l.used >= 0.8 ? 'warn' : '' }, pct(l.used, 0))) },
         { label: 'Left', cls: 'r', render: (l) => h('span', { class: l.left < 0 ? 'neg' : 'pos' }, money(l.left)) },
-      ], yl),
+      ], yl, { m: { key: 'flow-yearly', head: 'Category', views: [['Spent so far', 'Yearly budget'], ['Left', 'Used']],
+        sort: [{ value: 'none', label: 'As listed', kind: 'none' }, { value: 'used', label: 'Budget used %', kind: 'num', get: (l) => l.used }, { value: 'spent', label: 'Spent so far', kind: 'num', get: (l) => l.spent }, { value: 'left', label: 'Left', kind: 'num', get: (l) => l.left }, { value: 'name', label: 'Category', kind: 'text', get: (l) => String(l.name || '').toLowerCase() }], sortDefault: { value: 'none', dir: 'asc' } } }),
       h('p', { class: 'note' }, 'Spending from 1 January to today, whatever period is chosen above.')),
       [h('a', { class: 'btn small', href: '#/flow/categories' }, 'Edit budgets')]));
   }
@@ -148,7 +149,8 @@ function overview() {
           { label: 'Budget', mob: 'under', mlabel: 'budget ', cls: 'r', get: (l) => money(l.budget), total: () => money(tb) },
           { label: 'Used', mob: 'under', mlabel: 'used ', cls: 'r', render: (l) => h('span', { class: 'with-meter' }, meter(Math.min(1, l.used), l.used > 1 ? 7 : l.used > .85 ? 3 : 2), h('span', { class: l.used > 1 ? 'neg' : '' }, pct(l.used, 0))), total: () => pct(tb ? ts / tb : 0, 0) },
           { label: 'Left', cls: 'r', render: (l) => h('span', { class: l.left < 0 ? 'neg' : 'pos' }, money(l.left)), total: () => h('span', { class: tb - ts < 0 ? 'neg' : '' }, money(tb - ts)) },
-        ], lines, { footer: { label: 'Total' } }),
+        ], lines, { footer: { label: 'Total' }, m: { key: 'flow-budget', head: 'Category', views: [['Spent', 'Budget'], ['Left', 'Used']],
+          sort: [{ value: 'none', label: 'As listed', kind: 'none' }, { value: 'used', label: 'Budget used %', kind: 'num', get: (l) => l.used }, { value: 'spent', label: 'Spent', kind: 'num', get: (l) => l.spent }, { value: 'left', label: 'Left', kind: 'num', get: (l) => l.left }, { value: 'name', label: 'Category', kind: 'text', get: (l) => String(l.name || '').toLowerCase() }], sortDefault: { value: 'none', dir: 'asc' } } }),
         h('p', { class: 'note' }, 'Budgets are set per category each month. Categories without a budget are not listed.')),
         [h('a', { class: 'btn small', href: '#/flow/categories' }, 'Edit budgets')]));
     } else if (canEdit() && !filtered) {
@@ -257,7 +259,8 @@ function detail(q) {
       { label: 'Average', mob: 'under', mlabel: 'avg ', cls: 'r', get: (r) => money(r.avg) },
       { label: 'Share', mob: 'under', mlabel: 'share ', cls: 'r', get: (r) => pct(r.share, 0) },
       { label: 'Last', mob: 'under', mlabel: 'last ', get: (r) => dateStr(r.last) },
-    ], list, { footer: { label: 'Total' }, onRow: (r) => { location.hash = `${base}&view=all&desc=${encodeURIComponent(r.desc)}`; }, empty: 'No entries for this period and filter.' }),
+    ], list, { footer: { label: 'Total' }, m: { key: 'flow-desc', head: 'Description', sub: (r) => `${r.count} ${r.count === 1 ? 'entry' : 'entries'}`, views: [['Total', 'Share'], ['Average', 'Entries'], ['Last']],
+        sort: [{ value: 'none', label: 'As listed', kind: 'none' }, { value: 'total', label: 'Total amount', kind: 'num', get: (r) => r.amount }, { value: 'count', label: 'Number of entries', kind: 'num', get: (r) => r.count }, { value: 'avg', label: 'Average', kind: 'num', get: (r) => r.avg }, { value: 'last', label: 'Last entry', kind: 'date', get: (r) => r.last || '' }, { value: 'desc', label: 'Description', kind: 'text', get: (r) => String(r.desc || '').toLowerCase() }], sortDefault: { value: 'none', dir: 'asc' } }, onRow: (r) => { location.hash = `${base}&view=all&desc=${encodeURIComponent(r.desc)}`; }, empty: 'No entries for this period and filter.' }),
       h('p', { class: 'note' }, 'Tap a description to see its entries.')));
   } else {
     const acct = new Map(data.accounts.map((a) => [a.id, `${a.name} · ${a.holder}`]));
@@ -267,7 +270,9 @@ function detail(q) {
       ...(cat === '*' ? [{ label: 'Category', mob: 'under', get: (e) => e.category }] : []),
       { label: 'Account', mob: 'under', get: (e) => acct.get(e.acct) },
       { label: 'Amount', cls: 'r', render: (e) => h('span', { class: dir === 'credit' ? 'pos' : kindOf(e.category) === 'investment' ? 'inv' : 'neg' }, money(e[dir])), total: () => money(total) },
-    ], sorted, { footer: { label: 'Total' }, onRow: canEdit() ? (e) => txnForm(data.ledger.find((x) => x.id === e.id)) : null, empty: 'No entries for this period and filter.' })));
+    ], sorted, { footer: { label: 'Total' }, m: { key: 'flow-entries', head: 'Description', sub: (e) => [dateStr(e.date), cat === '*' ? e.category : null].filter(Boolean).join(' · '), views: [['Amount', 'Account']],
+        sort: [{ value: 'date', label: 'Date', kind: 'date', get: (e) => e.date || '' }, { value: 'amount', label: 'Amount', kind: 'num', get: (e) => e[dir] || 0 }, { value: 'desc', label: 'Description', kind: 'text', get: (e) => String(e.desc || '').toLowerCase() }], sortDefault: { value: 'date', dir: 'desc' },
+        filters: [...(cat === '*' ? [{ key: 'cat', label: 'Category', get: (e) => e.category, options: (rs) => [...new Set(rs.map((e) => e.category).filter(Boolean))].sort((a, b) => a.localeCompare(b)) }] : []), { key: 'acct', label: 'Account', get: (e) => acct.get(e.acct), options: (rs) => [...new Set(rs.map((e) => acct.get(e.acct)).filter(Boolean))].sort((a, b) => a.localeCompare(b)) }] }, onRow: canEdit() ? (e) => txnForm(data.ledger.find((x) => x.id === e.id)) : null, empty: 'No entries for this period and filter.' })));
   }
   return root;
 }

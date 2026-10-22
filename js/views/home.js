@@ -8,7 +8,7 @@ import * as R from '../risk.js';
 import { rateHistory, ageText } from './gold.js';
 import { GROUPS } from './groupmix.js';
 import { allocationBody } from './allocview.js';
-import { monthPlan } from '../monthinvest.js';
+import { monthPlan, pendingToReceive } from '../monthinvest.js';
 import * as P from '../projector.js';
 
 let selMonth = null;
@@ -153,10 +153,9 @@ function pendingBonds(bonds, month) {
 /** Which bonds still have interest to come this month, with the amount and day each is due (shown on hover). */
 const pendingText = (bonds) => bonds.filter((b) => b.pending > 0.5).map((b) => `${b.name}: ${money(b.pending)} due ${shortDate(b.due)}`).join('\n') || 'Nothing pending';
 function toReceiveCard(data, all) {
-  const monthEnd = C.addMonths(C.monthStart(all.asOf), 1), month = C.monthKey(all.asOf);
-  const rows = data.receivables.filter((x) => x.active !== false && x.balanceDue > 0).map((x) => C.receivableStatus(x, all.asOf))
-    .filter((r) => !r.received && !r.notStarted && r.due < monthEnd).sort((a, b) => (a.due < b.due ? -1 : 1));
+  const month = C.monthKey(all.asOf);
   const mc = C.monthCashflow(data, all, month);
+  const { rows } = pendingToReceive(data, all, mc); // the same rule feeds the Investable balance
   // bonds are one combined line (tap it to see each bond); other monthly income is a line of its own
   const pend = mc.income.filter((x) => x.expected - x.received > 1).map((x) => ({ due: null, name: x.name, expected: x.expected - x.received, income: true, bonds: x.bonds, sub: `expected ${money(x.expected)}, received ${money(x.received)}${x.bonds ? ' · tap to see which bonds' : canEdit() ? ' · tap to fix' : ''}` }));
   const total = rows.reduce((a, r) => a + (r.dueAmount ?? r.expected ?? 0), 0) + pend.reduce((a, r) => a + r.expected, 0), over = rows.filter((r) => r.overdue);

@@ -109,7 +109,9 @@ export function render() {
     havePlan ? { label: 'Against plan', mob: 'under', mlabel: 'vs plan ', cls: 'r', render: (r) => (r.plan == null ? h('span', { class: 'muted' }, '–') : h('span', { class: tone(r.value - r.plan) }, signed(r.value - r.plan))) } : null,
     { label: 'Change', mob: 'under', mlabel: 'change ', cls: 'r', render: (r) => (r.change == null ? h('span', { class: 'muted' }, '–') : h('span', { class: tone(r.change) }, signed(r.change))) },
     { label: 'Source', mob: 'under', render: (r) => h('span', { class: r.src === 'Projected' ? 'muted' : '' }, r.src) },
-  ].filter(Boolean), rows, { rowClass: (r) => (r.current ? 'cur-row' : r.src === 'Projected' ? 'proj-row' : '') }),
+  ].filter(Boolean), rows, { rowClass: (r) => (r.current ? 'cur-row' : r.src === 'Projected' ? 'proj-row' : ''), m: { key: 'networth', head: 'Month', sub: ['Source'],
+    views: havePlan ? [['Net worth', 'Change'], ['Planned', 'Against plan']] : [['Net worth', 'Change']],
+    sort: [{ value: 'month', label: 'Month', kind: 'date', get: (r) => r.month }, { value: 'value', label: 'Net worth', kind: 'num', get: (r) => r.value }, { value: 'change', label: 'Change from the month before', kind: 'num', get: (r) => r.change }], sortDefault: { value: 'month', dir: 'asc' } } }),
   h('p', { class: 'note' }, '“Plan sheet” months were typed in the Plan sheet before snapshots began; “Snapshot” months are saved on the Wealth outlook. Change is against the month before. “Against plan” is net worth minus the planned net worth for that month.'))));
   return root;
 }

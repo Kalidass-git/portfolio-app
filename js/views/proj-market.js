@@ -59,7 +59,7 @@ export function render(root) {
       { label: 'Net worth', cls: 'r', get: (x) => money(x.end ? x.end.nw : b.net) },
       { label: 'Against target', cls: 'r', render: (x) => { const g = (x.end ? x.end.nw : b.net) - plan.target; return h('span', { class: tone(g) }, signed(g)); } },
       { label: 'Target', mob: 'hide', render: (x) => ((x.end ? x.end.nw : b.net) >= plan.target ? h('span', { class: 'tag good' }, 'reached') : h('span', { class: 'tag' }, 'missed')) },
-    ], sc, { onRow: canEdit() ? (x) => setAllOutlook(plan.id, x.outlook.id) : null }),
+    ], sc, { m: { key: 'mkt-outlooks', head: 'Outlook', mid: 'Target', views: [['Net worth', 'Against target'], ['Market-linked']] }, onRow: canEdit() ? (x) => setAllOutlook(plan.id, x.outlook.id) : null }),
     h('p', { class: 'note' }, 'Same salary, spending and investments in every row; only the return on market-linked money changes. Tap a row to choose that outlook.'))));
 
   // ---------- chart ----------
@@ -78,14 +78,14 @@ export function render(root) {
       { label: 'Fresh money', mob: 'under', mlabel: 'fresh ', cls: 'r', get: (x) => money(x.fresh), total: (r) => money(r.reduce((a, x) => a + x.fresh, 0)) },
       { label: 'Chosen outlook', cls: 'r', get: (x) => money(x.cur), total: (r) => money(r.reduce((a, x) => a + x.cur, 0)) },
       ...oc.map((o, i) => ({ label: `${o.name} ${pc(o.rate, 0)}`, mob: 'hide', cls: 'r', get: (x) => money(x.by[i]), total: (r) => money(r.reduce((a, x) => a + x.by[i], 0)) })),
-    ], clsRows, { footer: { label: 'Total' }, empty: 'No market-linked holdings.' }),
+    ], clsRows, { footer: { label: 'Total' }, m: { key: 'mkt-class', head: 'Class', views: [['Today', 'Fresh money'], ['Chosen outlook'], ...oc.map((o) => `${o.name} ${pc(o.rate, 0)}`).reduce((a, l, i) => { if (i % 2) a[a.length - 1].push(l); else a.push([l]); return a; }, [])] }, empty: 'No market-linked holdings.' }),
     h('p', { class: 'note' }, 'Value at the end of the year in each case, counting what you hold now and the fresh money planned. “All columns” on a phone shows every outlook.'))));
 
   // ---------- track record ----------
   const rets = C.returns(data, all);
   const rec = [['Stocks & ETFs', 'Shares and ETFs'], ['Mutual funds', 'Mutual funds'], ['Gold', 'Gold']].map(([n, l]) => { const r = rets.find((x) => x.name === n); return r && r.xirr != null ? { label: l, xirr: r.xirr } : null; }).filter(Boolean);
   if (rec.length) root.append(section('Your own track record', h('div', null,
-    table([{ label: 'Asset', host: true, get: (x) => x.label }, { label: 'Yearly return so far (XIRR)', cls: 'r', render: (x) => h('span', { class: tone(x.xirr) }, pc(x.xirr, 1)) }, { label: 'Closest outlook', mob: 'under', get: (x) => oc.slice().sort((a, b) => Math.abs(a.rate - x.xirr) - Math.abs(b.rate - x.xirr))[0].name }], rec),
+    table([{ label: 'Asset', host: true, get: (x) => x.label }, { label: 'Yearly return so far (XIRR)', cls: 'r', render: (x) => h('span', { class: tone(x.xirr) }, pc(x.xirr, 1)) }, { label: 'Closest outlook', mob: 'under', get: (x) => oc.slice().sort((a, b) => Math.abs(a.rate - x.xirr) - Math.abs(b.rate - x.xirr))[0].name }], rec, { m: { key: 'mkt-track', head: 'Asset', sub: ['Closest outlook'], views: [['Yearly return so far (XIRR)']] } }),
     h('p', { class: 'note' }, 'What your holdings actually returned since you bought them. Use it as a reality check when choosing an outlook: a few years of strong returns rarely repeat.'))));
   if (canEdit()) root.append(h('div', { class: 'btn-row' }, btn('Edit outlook scale', scaleForm, '', { keep: true })));
 }

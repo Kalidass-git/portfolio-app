@@ -49,22 +49,23 @@ function tax(root) {
       { label: 'Interest', cls: 'r', get: (r) => money(r.interest) }, { label: 'Salary', cls: 'r', mob: 'under', mlabel: 'salary ', get: (r) => money(r.salary) },
       { label: 'Dividends', cls: 'r', mob: 'under', mlabel: 'dividends ', get: (r) => money(r.dividends) },
       { label: 'Short-term', cls: 'r', mob: 'hide', get: (r) => money(r.stcg) }, { label: 'Long-term', cls: 'r', mob: 'hide', get: (r) => money(r.ltcg) },
-    ], bp, {}), note('Pick a person above to see their full summary. Each person’s income is kept apart, so it can go into their own return.'))));
+    ], bp, { m: { key: 'tax-person', head: 'Person', views: [['Interest', 'Salary'], ['Dividends', 'Short-term'], ['Long-term']] } }), note('Pick a person above to see their full summary. Each person’s income is kept apart, so it can go into their own return.'))));
   }
   folds.push(ownersCard(data, people));
-  if (t.bankOther.length) folds.push(fold(`Other income credited to the bank · ${money(t.bankOtherTotal)}`, table([{ label: 'Category', host: true, get: (r) => r.category }, { label: 'Amount', cls: 'r', get: (r) => money(r.amount) }], t.bankOther, {})));
+  if (t.bankOther.length) folds.push(fold(`Other income credited to the bank · ${money(t.bankOtherTotal)}`, table([{ label: 'Category', host: true, get: (r) => r.category }, { label: 'Amount', cls: 'r', get: (r) => money(r.amount) }], t.bankOther, { m: { key: 'tax-bankother', head: 'Category', views: [['Amount']] } })));
   folds.push(fold(`Interest on every holding, ${t.fy} · ${money(t.interestGross)}`, t.interestBy.length ? h('div', null, ...t.interestBy.map((g) => h('div', null, h('h4', null, g.kind), table([
     { label: 'Name', host: true, render: (r) => h('span', null, r.name, r.closedOn ? h('span', { class: 'chip-closed' }, ' Closed' + (r.closedOn.length === 10 ? ' ' + dateStr(r.closedOn) : '')) : null) },
     { label: 'Holder', mob: 'hide', get: (r) => r.holder || '–' },
     { label: 'Interest', cls: 'r', get: (r) => money(r.gross), total: (rs) => money(rs.reduce((a, r) => a + r.gross, 0)) },
     g.tds ? { label: `TDS at ${pct(t.tdsRate, 0)}`, cls: 'r', mob: 'under', mlabel: 'TDS ', get: (r) => money(r.tds), total: (rs) => money(rs.reduce((a, r) => a + r.tds, 0)) } : null,
-  ].filter(Boolean), g.rows, { footer: {}, onRow: g.kind === 'Bonds' ? (r) => holdingDialog(data, all, t, r) : null }))),
+  ].filter(Boolean), g.rows, { footer: {}, m: { key: 'tax-interest-' + g.kind, head: 'Name', sub: ['Holder'], views: g.tds ? [['Interest', `TDS at ${pct(t.tdsRate, 0)}`]] : [['Interest']],
+    sort: [{ value: 'none', label: 'As listed', kind: 'none' }, { value: 'gross', label: 'Interest', kind: 'num', get: (r) => r.gross }, { value: 'name', label: 'Name', kind: 'text', get: (r) => String(r.name || '').toLowerCase() }], sortDefault: { value: 'none', dir: 'asc' } }, onRow: g.kind === 'Bonds' ? (r) => holdingDialog(data, all, t, r) : null }))),
   note(`Tap a bond to see it month by month against the bank. Closed bonds are included up to the day they were closed. Interest is worked out by days held inside the year, whether or not it has been paid out yet (accrual basis). TDS is an estimate for bonds only, at the rate in Settings; match it with Form 26AS.`)) : h('p', { class: 'empty' }, 'No interest-bearing holdings in this year.')));
   folds.push(fold(`Dividends · ${money(t.dividendTotal)}`, t.dividends.length ? table([
     { label: 'Company', host: true, get: (d) => d.name },
     { label: 'Payments', cls: 'r', mob: 'under', mlabel: 'x', get: (d) => d.count },
     { label: 'Amount', cls: 'r', get: (d) => money(d.amount) },
-  ], t.dividends, {}) : h('p', { class: 'empty' }, 'No dividends recorded in this year.')));
+  ], t.dividends, { m: { key: 'tax-div', head: 'Company', sub: (d) => `${d.count} ${d.count === 1 ? 'payment' : 'payments'}`, views: [['Amount']] } }) : h('p', { class: 'empty' }, 'No dividends recorded in this year.')));
   folds.push(fold(`Capital gains, shares and mutual funds · short ${signed(t.stcg)}, long ${signed(t.ltcg)}`, t.gains.length ? table([
     { label: 'Name', host: true, get: (g) => g.name },
     { label: 'Type', mob: 'hide', get: (g) => g.kind },
@@ -73,7 +74,9 @@ function tax(root) {
     { label: 'Sale value', cls: 'r', mob: 'hide', get: (g) => money(g.proceeds) },
     { label: 'Gain', cls: 'r', render: (g) => h('span', { class: tone(g.gain) }, signed(g.gain)) },
     { label: 'Term', mob: 'under', get: (g) => (g.term === 'LT' ? 'Long term' : 'Short term') },
-  ], t.gains, {}) : h('p', { class: 'empty' }, 'No shares or funds sold in this year.')));
+  ], t.gains, { m: { key: 'tax-gains', head: 'Name', sub: (g) => `sold ${dateStr(g.date)} · ${g.term === 'LT' ? 'long term' : 'short term'}`, views: [['Gain', 'Sale value'], ['Bought', 'Type']],
+    sort: [{ value: 'date', label: 'Date sold', kind: 'date', get: (g) => g.date }, { value: 'gain', label: 'Gain', kind: 'num', get: (g) => g.gain }, { value: 'proceeds', label: 'Sale value', kind: 'num', get: (g) => g.proceeds }, { value: 'name', label: 'Name', kind: 'text', get: (g) => String(g.name || '').toLowerCase() }], sortDefault: { value: 'date', dir: 'desc' },
+    filters: [{ key: 'term', label: 'Term', get: (g) => (g.term === 'LT' ? 'Long term' : 'Short term'), options: ['Long term', 'Short term'] }, { key: 'kind', label: 'Type', get: (g) => g.kind, options: (rs) => [...new Set(rs.map((g) => g.kind).filter(Boolean))] }] } }) : h('p', { class: 'empty' }, 'No shares or funds sold in this year.')));
   root.append(h('div', { class: 'tax-folds' }, ...folds));
   root.append(note('A guide for filing, not tax advice. Gains use oldest units first. Debt funds, gold ETFs, bonus and split adjustments and the grandfathering rules are taxed differently, so check these with your accountant. Rental income, interest on savings accounts and other bank interest appear under Other income credited only if you categorised them.'));
 }
@@ -130,8 +133,8 @@ function projectionCard(data, all, people) {
       hd.over > 0.5
         ? `You are already ${money(hd.over)} above the tax-free limit, so more bond interest would be taxed.`
         : `At ${pct(hd.rate, 1)} you could hold about ${money(hd.bondsFullYear)} more in bonds and still pay no tax, on a full year of interest.${hd.daysLeft > 0 ? ` Bought today, this year only gets ${hd.daysLeft} days of it, so up to ${money(hd.bondsThisYear)} fits in ${p.fy}.` : ''}`),
-    h('details', { class: 'more tax-sec', open: true }, h('summary', null, 'How the income adds up'), table(cols, income, {})),
-    h('details', { class: 'more tax-sec', open: true }, h('summary', null, 'Tax, TDS and what is left'), table(cols, taxLines, {})),
+    h('details', { class: 'more tax-sec', open: true }, h('summary', null, 'How the income adds up'), table(cols, income, { m: { key: 'tax-income', head: 'Item', views: [['Amount']] } })),
+    h('details', { class: 'more tax-sec', open: true }, h('summary', null, 'Tax, TDS and what is left'), table(cols, taxLines, { m: { key: 'tax-lines', head: 'Item', views: [['Amount']] } })),
     h('details', { class: 'more tax-sec' }, h('summary', null, 'Adjust the assumptions'),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(14em, 1fr))', gap: '12px 16px', margin: '8px 0' } },
         field('Other income for the year (₹)', 'other', plan.other, 'rent, expected dividends, anything else. Blank means 0.'),
@@ -144,7 +147,8 @@ function projectionCard(data, all, people) {
         { label: 'Year interest', key: true, cls: 'r', get: (x) => money(x.yearInterest), total: (rs) => money(rs.reduce((a, x) => a + x.yearInterest, 0)) },
         { label: 'Earned so far', cls: 'r', mob: 'under', mlabel: 'so far ', get: (x) => money(x.soFar), total: (rs) => money(rs.reduce((a, x) => a + x.soFar, 0)) },
         { label: 'TDS (est.)', cls: 'r', mob: 'under', mlabel: 'TDS ', get: (x) => money(x.tdsYear), total: (rs) => money(rs.reduce((a, x) => a + x.tdsYear, 0)) },
-      ], p.interest.holdings, { footer: {} }) : h('p', { class: 'empty' }, 'No bonds or FDs running in this year.'),
+      ], p.interest.holdings, { footer: {}, m: { key: 'tax-proj-hold', head: 'Holding', views: [['Year interest', 'Earned so far'], ['TDS (est.)']],
+        sort: [{ value: 'none', label: 'As listed', kind: 'none' }, { value: 'year', label: 'Year interest', kind: 'num', get: (x) => x.yearInterest }, { value: 'sofar', label: 'Earned so far', kind: 'num', get: (x) => x.soFar }, { value: 'name', label: 'Holding', kind: 'text', get: (x) => String(x.name || '').toLowerCase() }], sortDefault: { value: 'none', dir: 'asc' } } }) : h('p', { class: 'empty' }, 'No bonds or FDs running in this year.'),
       note('Worked out from each holding: principal × rate × days held inside the year, up to maturity or closing. “Earned so far” counts whole months for bonds, not part months: up to last month, and this month only once its payment is due. It is the gross interest, so it does not matter whether TDS was cut on what you received. Private lending and chits are left out.')),
     note('A quick guide, not tax advice. Salary, bond and FD interest, savings interest, recorded dividends and the other income you type are taxed as ordinary income. Capital gains are not included (they have their own rates and the 87A rebate does not apply to them). It assumes you keep today’s bonds and FDs until maturity without reinvesting. Check with your accountant before filing.')));
 }
@@ -191,7 +195,7 @@ function calendar(root) {
         r.mat.length ? table([
           { label: 'Date', get: (x) => (x.late ? 'Overdue' : dateStr(x.date)) }, { label: 'What', host: true, get: (x) => x.title },
           { label: 'Kind', mob: 'hide', get: (x) => x.kind }, { label: 'Amount', cls: 'r', get: (x) => money(x.amount) },
-        ], r.mat, { footer: { label: 'Total' } }) : h('p', { class: 'empty' }, 'Nothing matures this month.'));
+        ], r.mat, { footer: { label: 'Total' }, m: { key: 'cal-mat', head: 'What', sub: ['Date', 'Kind'], views: [['Amount']] } }) : h('p', { class: 'empty' }, 'Nothing matures this month.'));
     } else detail = h('p', { class: 'note' }, 'Tap a column to see what matures in that month.');
     box.replaceChildren(chart, detail);
   };
@@ -222,7 +226,7 @@ function review(root) {
       r.taxFy.dividendTotal ? h('li', null, 'Dividends received: ', money(r.taxFy.dividendTotal), ` (${r.taxFy.fy})`) : null,
       r.taxFy.gains.length ? h('li', null, 'Gains booked: ', h('span', { class: tone(r.taxFy.stcg + r.taxFy.ltcg) }, signed(r.taxFy.stcg + r.taxFy.ltcg)), ` (${r.taxFy.fy})`) : null,
       h('li', null, 'Interest and other income: ', money(r.interest)))),
-    section('Where the money went', r.topExpenses.length ? table([{ label: 'Category', host: true, get: (x) => x.category }, { label: 'Spent', cls: 'r', get: (x) => money(x.amount) }, { label: 'Share', cls: 'r', mob: 'under', mlabel: '', get: (x) => pct(x.amount / s.totalExpense, 0) }], r.topExpenses, {}) : h('p', { class: 'empty' }, 'No spending.'))));
+    section('Where the money went', r.topExpenses.length ? table([{ label: 'Category', host: true, get: (x) => x.category }, { label: 'Spent', cls: 'r', get: (x) => money(x.amount) }, { label: 'Share', cls: 'r', mob: 'under', mlabel: '', get: (x) => pct(x.amount / s.totalExpense, 0) }], r.topExpenses, { m: { key: 'rev-top', head: 'Category', views: [['Spent', 'Share']] } }) : h('p', { class: 'empty' }, 'No spending.'))));
   root.append(interestSection(data, all, st.year));
   const planned = plannedByMonth(data, all);
   const havePlan = r.months.some((m) => planned.has(m.month) && m.nw != null);
@@ -234,7 +238,8 @@ function review(root) {
     { label: 'Left', cls: 'r', mob: 'under', mlabel: 'left ', render: (m) => h('span', { class: tone(m.left) }, signed(m.left)) },
     { label: 'Net worth', cls: 'r', mob: 'hide', get: (m) => (m.nw != null ? money(m.nw) : '–') },
     havePlan ? { label: 'Against plan', cls: 'r', mob: 'hide', render: (m) => (m.nw != null && planned.has(m.month) ? h('span', { class: tone(m.nw - planned.get(m.month)) }, signed(m.nw - planned.get(m.month))) : '–') } : null,
-  ].filter(Boolean), r.months, {})));
+  ].filter(Boolean), r.months, { m: { key: 'rev-months', head: 'Month', views: havePlan ? [['Income', 'Spent'], ['Left', 'Invested'], ['Net worth', 'Against plan']] : [['Income', 'Spent'], ['Left', 'Invested'], ['Net worth']],
+    sort: [{ value: 'month', label: 'Month', kind: 'date', get: (m) => m.month }, { value: 'income', label: 'Income', kind: 'num', get: (m) => m.income }, { value: 'expense', label: 'Spent', kind: 'num', get: (m) => m.expense }, { value: 'left', label: 'Left', kind: 'num', get: (m) => m.left }], sortDefault: { value: 'month', dir: 'asc' } } })));
   root.append(note('Spent includes loan EMIs and tax. Invested is money moved to investments, so Left is what stayed in the bank. Net worth comes from your month-end snapshots.'));
 }
 
@@ -247,7 +252,7 @@ function interestSection(data, all, year) {
   const counted = [...new Set(rows.flatMap((r) => r.counted.map((x) => x.category)))];
   const once = I.oneTimeSet(data);
   const box = h('div');
-  const catTable = (title, list, tot) => h('div', null, h('h4', { style: { margin: '6px 0 4px' } }, `${title} · ${money(tot)}`), list.length ? table([{ label: 'Category', host: true, get: (x) => x.category }, { label: 'Amount', cls: 'r', get: (x) => money(x.amount) }], list, {}) : h('p', { class: 'empty' }, 'None'));
+  const catTable = (title, list, tot) => h('div', null, h('h4', { style: { margin: '6px 0 4px' } }, `${title} · ${money(tot)}`), list.length ? table([{ label: 'Category', host: true, get: (x) => x.category }, { label: 'Amount', cls: 'r', get: (x) => money(x.amount) }], list, { m: { key: 'rev-cat', head: 'Category', views: [['Amount']] } }) : h('p', { class: 'empty' }, 'None'));
   const draw = () => {
     const chart = stackedBars({ names: ['Monthly interest income', 'Monthly regular expense'], colors: [2, 7], fmt: money, height: 240,
       groups: rows.map((r) => ({ label: monthLabel(r.month).slice(0, 3), title: monthLabel(r.month, true), bars: [[{ name: 'Interest', value: r.interest }], [{ name: 'Regular spending', value: r.regular }]] })),
@@ -270,7 +275,8 @@ function interestSection(data, all, year) {
         { label: 'Regular expense', cls: 'r', mob: 'under', mlabel: 'regular ', render: (r) => h('span', { class: 'neg' }, money(r.regular)), total: () => h('span', { class: 'neg' }, money(tot('regular'))) },
         { label: 'One-time expense', cls: 'r', mob: 'under', mlabel: 'one-time ', get: (r) => money(r.oneTime), total: () => money(tot('oneTime')) },
         { label: 'Short by (income − regular expense)', cls: 'r', render: (r) => (r.deviation >= 0 ? h('span', { class: 'pos' }, 'Spare ' + money(r.deviation)) : h('span', { class: 'neg' }, 'Short by ' + money(-r.deviation))), total: () => { const v = tot('deviation'); return v >= 0 ? h('span', { class: 'pos' }, 'Spare ' + money(v)) : h('span', { class: 'neg' }, 'Short by ' + money(-v)); } },
-      ], rows, { footer: { label: 'Year' }, rowClass: (r) => (r.deviation < 0 ? 'row-bad' : '') }),
+      ], rows, { footer: { label: 'Year' }, rowClass: (r) => (r.deviation < 0 ? 'row-bad' : ''), m: { key: 'rev-interest', head: 'Month', views: [['Short by (income − regular expense)', 'Monthly income (bond and lending interest)'], ['Regular expense', 'One-time expense']],
+        sort: [{ value: 'month', label: 'Month', kind: 'date', get: (r) => r.month }, { value: 'dev', label: 'Spare or short', kind: 'num', get: (r) => r.deviation }, { value: 'interest', label: 'Interest income', kind: 'num', get: (r) => r.interest }, { value: 'regular', label: 'Regular expense', kind: 'num', get: (r) => r.regular }], sortDefault: { value: 'month', dir: 'asc' } } }),
       h('p', { class: 'note' }, `Interest income counts the bank credits in ${counted.length ? counted.join(', ') : '“Income Bond” and “Income Lending” (none found)'}. All other income is ignored here. Loan EMI is left out of spending. One-time spending is: ${[...once].length ? [...once].join(', ') : 'nothing chosen'}; everything else is regular.`),
       needCard(data, rows),
       canEdit() ? btn('Choose the one-time categories', () => oneTimeDialog(data), 'small') : null);
@@ -298,7 +304,7 @@ function needCard(data, rows) {
   const rates = [0.10, 0.12, 0.15];
   return h('div', { class: 'card inner', style: { margin: '12px 0' } }, h('h4', { style: { margin: '0 0 6px' } }, gap > 0 ? 'How much more to invest so interest covers regular spending' : 'Interest covers your regular spending'),
     h('p', { class: 'note', style: { marginTop: 0 } }, `Average of the last ${n} month${n === 1 ? '' : 's'}: interest ${money(interest)} a month, regular spending ${money(regular)} (no EMI, no one-time). `, gap > 0 ? h('b', { class: 'neg' }, `Short by ${money(gap)} a month.`) : h('b', { class: 'pos' }, `${money(-gap)} a month to spare.`)),
-    gap > 0 ? table([{ label: 'If the new money earns', host: true, get: (r) => pct(r, 0) + ' a year' }, { label: 'Invest about', cls: 'r', render: (r) => h('b', null, money(need(r))) }, { label: 'Which pays', mob: 'under', mlabel: 'pays ', cls: 'r', get: () => money(gap) + ' a month' }], rates, {}) : null,
+    gap > 0 ? table([{ label: 'If the new money earns', host: true, get: (r) => pct(r, 0) + ' a year' }, { label: 'Invest about', cls: 'r', render: (r) => h('b', null, money(need(r))) }, { label: 'Which pays', mob: 'under', mlabel: 'pays ', cls: 'r', get: () => money(gap) + ' a month' }], rates, { m: { key: 'rev-need', head: 'If the new money earns', views: [['Invest about', 'Which pays']] } }) : null,
     gap > 0 ? h('p', { class: 'note' }, `Worked out as shortfall × 12 ÷ (rate × (1 − ${Math.round(tds * 100)}% TDS)), so the interest you keep after tax equals the shortfall.`) : null);
 }
 
@@ -322,10 +328,12 @@ function anomalies(root) {
     { label: 'Usual', cls: 'r', mob: 'under', mlabel: 'usual ', get: (x) => money(x.avg) },
     { label: 'Times usual', cls: 'r', mob: 'under', mlabel: '', get: (x) => x.ratio.toFixed(1) + '×' },
     { label: 'Biggest entries', mob: 'hide', get: (x) => ents(x.entries) },
-  ], a.spikes, {}) : h('p', { class: 'empty' }, 'No category is unusually high.')));
-  if (a.fresh.length) root.append(section('New this month', table([{ label: 'Category', host: true, get: (x) => x.category }, { label: 'Amount', cls: 'r', get: (x) => money(x.amount) }, { label: 'Entries', mob: 'hide', get: (x) => ents(x.entries) }], a.fresh, {})));
-  if (a.big.length) root.append(section('Large single payments', table([{ label: 'Date', get: (e) => dateStr(e.date) }, { label: 'Description', host: true, get: (e) => e.desc }, { label: 'Category', mob: 'under', get: (e) => e.category }, { label: 'Amount', cls: 'r', get: (e) => money(e.debit) }, { label: 'Usual entry', cls: 'r', mob: 'hide', get: (e) => money(e.median) }], a.big, {})));
-  if (a.missing.length) root.append(section('Usual spending that did not happen', h('div', null, table([{ label: 'Category', host: true, get: (x) => x.category }, { label: 'Usual per month', cls: 'r', get: (x) => money(x.avg) }], a.missing, {}), note('A regular bill missing can mean it was paid from another account or not yet entered.'))));
+  ], a.spikes, { m: { key: 'anom-spikes', head: 'Category', views: [['This month', 'Usual'], ['Times usual', 'Biggest entries']],
+    sort: [{ value: 'ratio', label: 'Times usual', kind: 'num', get: (x) => x.ratio }, { value: 'amount', label: 'This month', kind: 'num', get: (x) => x.amount }, { value: 'name', label: 'Category', kind: 'text', get: (x) => String(x.category || '').toLowerCase() }], sortDefault: { value: 'ratio', dir: 'desc' } } }) : h('p', { class: 'empty' }, 'No category is unusually high.')));
+  if (a.fresh.length) root.append(section('New this month', table([{ label: 'Category', host: true, get: (x) => x.category }, { label: 'Amount', cls: 'r', get: (x) => money(x.amount) }, { label: 'Entries', mob: 'hide', get: (x) => ents(x.entries) }], a.fresh, { m: { key: 'anom-new', head: 'Category', sub: ['Entries'], views: [['Amount']] } })));
+  if (a.big.length) root.append(section('Large single payments', table([{ label: 'Date', get: (e) => dateStr(e.date) }, { label: 'Description', host: true, get: (e) => e.desc }, { label: 'Category', mob: 'under', get: (e) => e.category }, { label: 'Amount', cls: 'r', get: (e) => money(e.debit) }, { label: 'Usual entry', cls: 'r', mob: 'hide', get: (e) => money(e.median) }], a.big, { m: { key: 'anom-big', head: 'Description', sub: ['Date', 'Category'], views: [['Amount', 'Usual entry']],
+    sort: [{ value: 'date', label: 'Date', kind: 'date', get: (e) => e.date }, { value: 'amount', label: 'Amount', kind: 'num', get: (e) => e.debit }, { value: 'desc', label: 'Description', kind: 'text', get: (e) => String(e.desc || '').toLowerCase() }], sortDefault: { value: 'date', dir: 'desc' } } })));
+  if (a.missing.length) root.append(section('Usual spending that did not happen', h('div', null, table([{ label: 'Category', host: true, get: (x) => x.category }, { label: 'Usual per month', cls: 'r', get: (x) => money(x.avg) }], a.missing, { m: { key: 'anom-missing', head: 'Category', views: [['Usual per month']] } }), note('A regular bill missing can mean it was paid from another account or not yet entered.'))));
   root.append(note(`Compared with the average of the ${a.basis} months before. Loan EMIs and tax are left out.`));
 }
 
@@ -509,6 +517,6 @@ function holdingDialog(data, all, t, r) {
       { label: 'After TDS', cls: 'r', mob: 'under', mlabel: 'net ', get: (x) => money(x.net), total: () => money(tot('net')) },
       { label: 'Should reach the bank', cls: 'r', mob: 'under', mlabel: 'due ', get: (x) => (x.due > 0.5 ? money(x.due) : '–'), total: () => money(tot('due')) },
       { label: 'In the bank', cls: 'r', render: (x) => (x.received > 0.5 ? h('span', { class: Math.abs(x.received - x.due) < 2 ? 'pos' : 'warn' }, money(x.received)) : '–'), total: () => money(tot('received')) },
-    ], rows, { footer: { label: 'Total' } }) : h('p', { class: 'empty' }, 'No interest in this year.')),
+    ], rows, { footer: { label: 'Total' }, m: { key: 'tax-holdmonths', head: 'Month', views: [['Interest', 'After TDS'], ['Should reach the bank', 'In the bank']] } }) : h('p', { class: 'empty' }, 'No interest in this year.')),
     [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
 }
