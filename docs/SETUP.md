@@ -154,6 +154,19 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.9.39 – New phone rows for every list
+- **One phone layout for lists.** On a phone (700 px and narrower) the main lists are now compact rows: a fixed first column (name on top, one useful line under it), an optional middle column, and a last column that **changes when you tap its heading** (the pill with the ⇄ sign). All rows change together, the order and sorting do not move, and the view you chose is remembered on that device. After the last view it goes back to the first. Tapping a row still opens it; tapping the heading never does.
+- **Shares, ETFs and funds.** First column: name and shares or units. Middle: today's move (only when a day price exists). Views: Value · Invested, Gain · Return (with XIRR), Price (or NAV) · Average, Share of group · XIRR. Funds that are not linked still show "Link live NAV".
+- **Bonds.** Name, holder · via. Views: Invested · Net per month, Rate · Next due, Received · Maturity. Totals follow the view.
+- **FDs and Private lending.** Name, holder. Middle: bank or borrower. Views: Amount · Rate, Interest so far · Per day, Matures.
+- **Money to receive.** Name, how often. Middle: this month's status. Views: Expected · With them, Received so far · Last. "Mark received" is kept.
+- **Loans.** Name, type. Middle: used for. Views: Outstanding · Rate, Interest per month · EMI, Next EMI due.
+- **Cash.** Accounts: name, holder, last entry, balance (pencil to edit). Transactions: description with date and category, views Amount · Balance and Amount · Account.
+- **Savings and gold chits.** Savings lists: Invested · Rate, XIRR · Per day, with matures in the middle. Running gold chits: Paid · Gold, Payments · Ends. Closed lists (bonds, FDs, lending, chits and savings): Invested · Came back, XIRR · Started.
+- **Controls.** Filter dropdowns sit two to a row, the shares sort selects stay inside the screen.
+- No trend lines are drawn because the app keeps no price history per holding; nothing is made up. Desktop and tablet (701 px and wider) are unchanged: the old table is still there and the phone rows are hidden. Other tables (reports, plan, imports, small drill-downs) keep the earlier phone cards.
+- No stored data changed. New code: `mobileRows` in `js/ui.js`, option `mobile` on `table()`.
+
 ## Release 8.9.38 – Lending by start date, delete in Closed, sorting and filters, chit cards, Investable balance
 - **Lending in "This month in detail" and "Money to receive".** Interest is paid in arrears: money lent in a month pays nothing that month and first pays the next month, only for the days it was out (lent on the 7th of December: 25/31 of the amount, in January; every later month in full). That first part month is shown as the expected amount and stays pending until it comes. Nothing shows before a loan's start date or after it was closed. A line named differently from the Money to receive entry ("Lending Pandi" and "Alagu Pandi") is now found by the shared name, and one line for a person with several loans adds each loan from its own start date. The Money to receive card and Coming up use the part-month amount too.
 - **Closed tab.** Every closed record can be deleted: bonds, deposits, lending and closed Money to receive (Delete beside Reopen), and each row of "What came back, by type" opens the records behind it with a Delete for each. Only the closed record goes; bank entries stay.

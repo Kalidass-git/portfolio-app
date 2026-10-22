@@ -79,7 +79,11 @@ function accounts() {
       { label: 'Account', host: true, render: (b) => h('span', { class: 'name-edit' }, h('span', { class: 'ne-name' }, `${b.name} · ${b.holder}`), canEdit() ? h('button', { class: 'pencil', title: 'Edit account', 'aria-label': 'Edit ' + b.name, onclick: (e) => { e.stopPropagation(); accountForm(data.accounts.find((x) => x.id === b.id)); } }, icon('edit')) : null) },
       { label: 'Balance', cls: 'r', get: (b) => money(b.balance), total: () => money(all.cashTotal) },
       { label: 'Last entry', mob: 'under', mlabel: 'last ', get: (b) => dateStr(b.lastDate) },
-    ], all.banks, { footer: { label: 'Total cash' }, onRow: (b) => openLedger({ acct: b.id }) }),
+    ], all.banks, { footer: { label: 'Total cash' }, mobile: {
+      key: 'banks', head: 'Account', midHead: 'Last entry',
+      first: (b) => ({ title: b.name, sub: b.holder, extra: null }),
+      mid: (b) => (b.lastDate ? dateStr(b.lastDate) : null),
+      views: [{ label: 'Balance', main: (b) => h('span', { class: 'name-edit' }, money(b.balance), canEdit() ? h('button', { class: 'pencil', title: 'Edit account', 'aria-label': 'Edit ' + b.name, onclick: (e) => { e.stopPropagation(); accountForm(data.accounts.find((x) => x.id === b.id)); } }, icon('edit')) : null), sub: null, total: () => ({ main: money(all.cashTotal) }) }] }, onRow: (b) => openLedger({ acct: b.id }) }),
     canEdit() ? [btn('Add account', () => accountForm())] : null));
   wrap.append(h('p', { class: 'note' }, 'Tap an account to see its transactions. Balances come from the transactions, so to correct a balance add or edit a transaction.'));
   return wrap;
@@ -298,7 +302,13 @@ function ledger() {
     { label: 'Amount', cls: 'r only-lg', render: (e) => h('span', { class: 'b ' + tone(e) }, e.credit ? '+ ' + money(e.credit) : '− ' + money(e.debit)) },
     { label: 'Balance', cls: 'r only-lg', get: (e) => money(e.balance) },
     { label: 'Amount · balance', cls: 'r only-sm', render: (e) => h('div', null, h('div', { class: 'b ' + tone(e) }, (e.credit ? '+ ' + money(e.credit) : '− ' + money(e.debit))), h('div', { class: 'sub2' }, 'bal ' + money(e.balance))) },
-  ], rows.slice(0, limit), { onRow: canEdit() ? (e) => txnForm(data.ledger.find((x) => x.id === e.id)) : null, empty: 'No transactions match these filters.' });
+  ], rows.slice(0, limit), { mobile: {
+    key: 'txns', head: 'Description',
+    first: (e) => ({ title: e.desc, sub: h('span', null, dateStr(e.date), ' · ', h('span', { class: kindOfCat(e.category) === 'investment' ? 'inv' : kindOfCat(e.category) === 'expense' ? 'neg' : kindOfCat(e.category) === 'income' ? 'pos' : '' }, e.category || 'No category')) }),
+    views: [
+      { label: 'Amount · Balance', main: (e) => h('span', { class: tone(e) }, e.credit ? '+ ' + money(e.credit) : '− ' + money(e.debit)), sub: (e) => 'bal ' + money(e.balance) },
+      { label: 'Amount · Account', main: (e) => h('span', { class: tone(e) }, e.credit ? '+ ' + money(e.credit) : '− ' + money(e.debit)), sub: (e) => acctName.get(e.acct) || '' },
+    ] }, onRow: canEdit() ? (e) => txnForm(data.ledger.find((x) => x.id === e.id)) : null, empty: 'No transactions match these filters.' });
   const t0 = tbl.querySelector('table'); if (t0) t0.classList.add('compact');
   const label = fKind === 'income' ? 'received' : fKind === 'all' ? 'paid out' : 'paid out';
   wrap.append(section('Transactions',
@@ -408,7 +418,14 @@ export function savingsTab(only) {
         ...(withX ? [{ label: 'XIRR', mob: 'under', mlabel: 'XIRR ', cls: 'r', render: xirrCell }] : []),
         { label: 'Interest / day', cls: 'r', get: (s) => money(s.daily), total: (rs) => money(rs.reduce((a, s) => a + s.daily, 0)) },
         { label: 'Matures', mob: 'under', mlabel: 'matures ', get: (s) => dateStr(s.maturityDate) },
-      ], list, { footer: { label: 'Total' }, onRow: openSaving, empty: 'No accounts of this kind.' }),
+      ], list, { footer: { label: 'Total' }, mobile: {
+        key: 'sav-' + title, head: 'Name', midHead: 'Matures',
+        first: (s) => ({ title: s.name, sub: s.holder }),
+        mid: (s) => (s.maturityDate ? dateStr(s.maturityDate) : null),
+        views: [
+          { label: 'Invested · Rate', main: (s) => money(s.principal), sub: (s) => 'rate ' + (s.rate * 100).toFixed(2) + '%', total: (rs) => ({ main: money(rs.reduce((a, s) => a + s.principal, 0)) }) },
+          { label: withX ? 'XIRR · Per day' : 'Per day', main: (s) => (withX ? xirrCell(s) : money(s.daily)), sub: (s) => (withX ? money(s.daily) + ' a day' : null), total: (rs) => ({ main: money(rs.reduce((a, s) => a + s.daily, 0)) + ' a day' }) },
+        ] }, onRow: openSaving, empty: 'No accounts of this kind.' }),
       canEdit() ? [btn('Add savings account', () => savingForm())] : null));
     if (title === 'Chits') wrap.append(h('p', { class: 'note' }, 'For a running chit the XIRR (marked ≈) is an estimate: it uses the “Expected payout” if you entered one, otherwise the assumed yearly rate. When the chit ends, press “Close it”, enter the date you received the money and the amount you actually got after commission, and the real XIRR appears here and under Closed.'));
   }
@@ -439,7 +456,13 @@ export function closedTab() {
     { label: 'Gain', mob: 'under', mlabel: 'gain ', cls: 'r', render: (s) => h('span', { class: posNeg(s.closed.amount - s.principal) }, money(s.closed.amount - s.principal)), total: () => money(got - paid) },
     { label: 'XIRR', mob: 'under', mlabel: 'XIRR ', cls: 'r', render: xirrCell },
     { label: 'Money went to', mob: 'hide', get: (s) => (s.closed.acct ? acct.get(s.closed.acct) || '' : 'not added') },
-  ], list, { footer: { label: 'Total' }, onRow: (s) => openClosed(s), empty: 'Nothing closed yet. Open a chit on the Savings & chits tab and press “Close it” when it ends.' })));
+  ], list, { footer: { label: 'Total' }, mobile: {
+    key: 'sav-closed', head: 'Name',
+    first: (s) => ({ title: s.name, sub: [s.type, s.holder, 'closed ' + dateStr(s.closed.date)].filter(Boolean).join(' · ') }),
+    views: [
+      { label: 'Paid in · Received', main: (s) => money(s.principal), sub: (s) => money(s.closed.amount), total: () => ({ main: money(paid), sub: money(got) }) },
+      { label: 'Gain · XIRR', main: (s) => h('span', { class: posNeg(s.closed.amount - s.principal) }, money(s.closed.amount - s.principal)), sub: (s) => xirrCell(s), total: () => ({ main: money(got - paid) }) },
+    ] }, onRow: (s) => openClosed(s), empty: 'Nothing closed yet. Open a chit on the Savings & chits tab and press “Close it” when it ends.' })));
   return wrap;
 }
 function openClosed(row) {

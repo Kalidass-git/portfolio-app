@@ -236,7 +236,14 @@ function chitsTab(root) {
     { label: 'Paid so far', cls: 'r', get: (c) => money(c.paid), total: () => money(runPaid) },
     { label: 'Gold so far', cls: 'r', get: (c) => (c.grams ? dec(c.grams, 2) + ' g' : '–') },
     { label: 'Ends', mob: 'under', mlabel: 'ends ', get: (c) => (c.ends ? dateStr(c.ends) : '') },
-  ], running, { footer: { label: 'Total' }, onRow: (c) => (c.chit ? openChit(c.chit) : document.getElementById('scheme-' + c.scheme.id)?.scrollIntoView({ behavior: 'smooth' })), empty: 'No running gold chits.' }),
+  ], running, { footer: { label: 'Total' }, mobile: {
+    key: 'goldchits', head: 'Chit', midHead: 'Ends',
+    first: (c) => ({ title: c.name, sub: [c.shop, c.startDate ? 'started ' + dateStr(c.startDate) : ''].filter(Boolean).join(' · ') }),
+    mid: (c) => (c.ends ? dateStr(c.ends) : null),
+    views: [
+      { label: 'Paid · Gold', main: (c) => money(c.paid), sub: (c) => (c.grams ? dec(c.grams, 2) + ' g' : null), total: () => ({ main: money(runPaid) }) },
+      { label: 'Payments · Ends', main: (c) => String(c.months) + (c.months === 1 ? ' payment' : ' payments'), sub: (c) => (c.ends ? 'ends ' + dateStr(c.ends) : null) },
+    ] }, onRow: (c) => (c.chit ? openChit(c.chit) : document.getElementById('scheme-' + c.scheme.id)?.scrollIntoView({ behavior: 'smooth' })), empty: 'No running gold chits.' }),
     h('p', { class: 'note' }, 'Money paid into a running chit counts as gold at cost. When the chit ends, press “Close it”, enter the grams you received, and the gold is added to your purchases. Monthly gold savings that already record grams (like GRT Savings Account - 5) show their gold so far and are valued at today’s rate.')),
     canEdit() ? [btn('Add gold chit', () => chitForm())] : null));
   for (const x of runSch) {

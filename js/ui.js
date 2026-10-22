@@ -225,7 +225,7 @@ export const empty = (msg) => h('p', { class: 'empty' }, msg);
  *   mu(row)       what to show in the small line when it should differ from the cell
  *   host: true    the column that carries the small line (default: the first)
  */
-export function table(cols, rows, { onRow, footer, rowClass, empty: emptyMsg = 'Nothing here yet.' } = {}) {
+export function table(cols, rows, { onRow, footer, rowClass, empty: emptyMsg = 'Nothing here yet.', mobile = null } = {}) {
   if (!rows.length) return empty(emptyMsg);
   const small = (c) => (c.mob === 'under' || c.mob === 'hide' ? ' hide-sm' : '') + (c.show === 'desk' ? ' desk-only' : '');
   let hostI = cols.findIndex((c) => c.host); if (hostI < 0) hostI = 0;
@@ -241,8 +241,50 @@ export function table(cols, rows, { onRow, footer, rowClass, empty: emptyMsg = '
     h('tbody', null, rows.map((r) => h('tr', { class: (onRow ? 'click ' : '') + (rowClass ? rowClass(r) || '' : ''), tabindex: onRow ? 0 : null, onclick: onRow ? () => onRow(r) : null, onkeydown: onRow ? (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onRow(r)) : null },
       cols.map((c, i) => h('td', { class: (c.cls || '') + (c.key ? ' key' : '') + small(c) + (i === hostI ? ' host' : ''), 'data-label': c.label }, cell(c, r), i === hostI ? underLine(r) : null))))),
     footer ? h('tfoot', { class: footer.phone === false ? 'no-m' : '' }, h('tr', null, cols.map((c, i) => h('td', { class: (c.cls || '') + (c.key ? ' key' : '') + small(c) + (i === hostI ? ' host' : '') + (i !== hostI && !c.total ? ' blank' : ''), 'data-label': c.label }, i === hostI ? footer.label || 'Total' : c.total ? c.total(rows) : '')))) : null);
-  const wrap = h('div', { class: 'tbl-wrap' }, t);
+  const wrap = h('div', { class: 'tbl-wrap' + (mobile ? ' has-m' : '') }, t);
+  if (mobile) wrap.append(mobileRows(rows, mobile, { onRow, rowClass })); // phones only: css hides it from 701px up and hides the table below that
   return wrap; // on a phone each row becomes a card that shows every field (see app.css)
+}
+
+// ----- phone rows: fixed first column, optional middle, final column that cycles through groups of figures -----
+const viewMem = new Map();
+const readView = (key) => { if (viewMem.has(key)) return viewMem.get(key); let i = 0; try { i = Number(localStorage.getItem('pt.mv.' + key)) || 0; } catch { /* private window */ } viewMem.set(key, i); return i; };
+const saveView = (key, i) => { viewMem.set(key, i); try { localStorage.setItem('pt.mv.' + key, String(i)); } catch { /* ignore */ } };
+const dash = (v) => (v == null || v === '' ? '–' : v);
+/**
+ * Compact phone rows for a table. Desktop keeps the normal table (this block is hidden there by css).
+ * m = {
+ *   key: 'shares',                       remembers the chosen view on this device
+ *   head: 'Holding',                     heading over the first column
+ *   first: (r) => ({ title, sub, tag }), fixed, two lines; never changes when the view changes
+ *   mid: (r) => node | null,             optional fixed contextual info (a trend only when real history exists); omitted when no row has any
+ *   views: [{ label, main: (r) => node, sub: (r) => node, total?: (rows) => ({ main, sub }) }],  tap the heading to go to the next view, after the last comes the first
+ * }
+ * Rows keep their order (sorting is separate), their click action and their row class.
+ */
+export function mobileRows(rows, m, { onRow, rowClass } = {}) {
+  const n = m.views.length;
+  let idx = readView(m.key) % n;
+  const mids = m.mid ? rows.map((r) => m.mid(r)) : [];
+  const hasMid = mids.some((x) => x != null && x !== '');
+  const ends = [];
+  const endNodes = (r) => { const v = m.views[idx]; const sub = v.sub ? v.sub(r) : null; return [h('div', { class: 'mr-main' }, dash(v.main(r))), sub != null && sub !== '' ? h('div', { class: 'mr-sub' }, sub) : null]; };
+  const foot = m.views[0].total ? h('div', { class: 'mrow mr-total' + (hasMid ? ' has-mid' : '') }, h('div', { class: 'mr-first' }, h('div', { class: 'mr-title' }, m.footLabel || 'Total')), hasMid ? h('div', { class: 'mr-mid' }) : null, h('div', { class: 'mr-end' })) : null;
+  const drawFoot = () => { if (!foot) return; const t = m.views[idx].total ? m.views[idx].total(rows) : null; foot.querySelector('.mr-end').replaceChildren(...[h('div', { class: 'mr-main' }, dash(t && t.main)), t && t.sub ? h('div', { class: 'mr-sub' }, t.sub) : null].filter(Boolean)); };
+  const label = h('span', { class: 'mr-vlabel' }, m.views[idx].label);
+  const cycle = () => { idx = (idx + 1) % n; saveView(m.key, idx); label.textContent = m.views[idx].label; ends.forEach(([el, r]) => el.replaceChildren(...endNodes(r).filter(Boolean))); drawFoot(); };
+  const head = h('div', { class: 'mrow mr-head' + (hasMid ? ' has-mid' : '') }, h('div', { class: 'mr-first' }, m.head || ''), hasMid ? h('div', { class: 'mr-mid' }, m.midHead || '') : null,
+    n > 1 ? h('button', { type: 'button', class: 'mr-end mr-cycle', 'aria-label': 'Tap to change the figures shown', onclick: (e) => { e.stopPropagation(); cycle(); } }, label, h('span', { class: 'mr-ic', 'aria-hidden': 'true' }, '⇄')) : h('div', { class: 'mr-end' }, label));
+  const body = rows.map((r, i) => {
+    const f = m.first(r) || {}, end = h('div', { class: 'mr-end' }, ...endNodes(r).filter(Boolean));
+    ends.push([end, r]);
+    const go = onRow ? () => onRow(r) : null;
+    return h('div', { class: 'mrow' + (hasMid ? ' has-mid' : '') + (go ? ' click' : '') + (rowClass ? ' ' + (rowClass(r) || '') : ''), tabindex: go ? 0 : null, role: go ? 'button' : null, onclick: go, onkeydown: go ? (e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); go(); } } : null },
+      h('div', { class: 'mr-first' }, h('div', { class: 'mr-title' }, f.title, f.tag ? h('small', { class: 'tag' }, f.tag) : null), f.sub != null && f.sub !== '' ? h('div', { class: 'mr-subline' }, f.sub) : null, f.extra || null),
+      hasMid ? h('div', { class: 'mr-mid' }, mids[i] || null) : null, end);
+  });
+  drawFoot();
+  return h('div', { class: 'mrows', 'aria-label': m.head || 'List' }, head, ...body, foot);
 }
 
 /**

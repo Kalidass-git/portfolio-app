@@ -180,6 +180,23 @@ function holdCols(kind, tot) {
     { label: 'Exposure', cls: 'r', show: 'desk', render: (x) => h('span', { class: 'with-meter', title: 'Share of all your ' + groupName(x) }, meter(Math.min(8, expo(x) * 40), 0), pct(expo(x), 1)) },
   ];
 }
+/** Phone rows for shares, ETFs and funds. First column stays put; today's move sits in the middle (only when a day price exists); the last column cycles. */
+function holdMobile(kind) {
+  const fund = kind === 'fund';
+  const retTxt = (x) => h('span', null, h('span', { class: posNeg(x.pl) }, (x.ret > 0 ? '+' : x.ret < 0 ? '−' : '') + pct(Math.abs(x.ret), 1)), x.xirr != null ? h('span', null, ' · XIRR ', h('span', { class: posNeg(x.xirr) }, pct(x.xirr, 1))) : null);
+  return {
+    key: fund ? 'funds' : 'shares', head: fund ? 'Fund' : 'Holding', midHead: 'Today',
+    first: (x) => ({ title: x.name, tag: x.assetClass === 'goldetf' ? 'Gold' : (!fund && isEtf(x) ? 'ETF' : null), sub: fund ? `${dec(x.units, 3)} units` : `${num(x.qty)} ${x.qty === 1 ? 'share' : 'shares'}`,
+      extra: fund && canEdit() && !x.schemeCode ? h('button', { class: 'small', style: { marginTop: '4px' }, onclick: (e) => { e.stopPropagation(); linkFund(x); } }, 'Link live NAV') : null }),
+    mid: (x) => (x.day == null ? null : h('div', null, h('div', { class: posNeg(x.day) }, arrow(x.day) + money(Math.abs(x.day))), h('div', { class: posNeg(x.day) }, pct(Math.abs(x.dayPct || 0), 2)))),
+    views: [
+      { label: 'Value · Invested', main: (x) => money(x.current), sub: (x) => '(' + money(x.invested) + ')' },
+      { label: 'Gain · Return', main: (x) => h('span', { class: posNeg(x.pl) }, arrow(x.pl) + money(Math.abs(x.pl))), sub: retTxt },
+      { label: (fund ? 'NAV' : 'Price') + ' · Average', main: (x) => dec(fund ? x.liveNav : x.livePrice, fund ? 4 : 2), sub: (x) => 'avg ' + dec(fund ? (x.units ? x.invested / x.units : 0) : x.avgPrice, 2) },
+      { label: 'Share of ' + (fund ? 'funds' : 'group') + ' · XIRR', main: (x) => pct(expo(x), 1), sub: (x) => (x.xirr == null ? null : h('span', { class: posNeg(x.xirr) }, 'XIRR ' + pct(x.xirr, 1))) },
+    ],
+  };
+}
 const compactTable = (wrap) => { const t = wrap.querySelector('table'); if (t) t.classList.add('compact'); return wrap; };
 const SORTS = [['current', 'Value'], ['exposure', 'Exposure (share within its group)'], ['day', 'Today'], ['ret', 'Return %'], ['pl', 'Gain in ₹'], ['xirr', 'XIRR'], ['name', 'Name']];
 const sortVal = (x) => (sortKey === 'name' ? String(x.name || '').toLowerCase() : sortKey === 'exposure' ? expo(x) : sortKey === 'ret' ? x.ret : sortKey === 'pl' ? x.pl : sortKey === 'xirr' ? (x.xirr ?? -9) : sortKey === 'day' ? (x.dayPct ?? -9) : x.current);
@@ -209,7 +226,7 @@ function holdingsTab(root, f = 'all') {
   const items = sortItems(g.items);
   root.append(section(label, h('div', null,
     h('div', { class: 'filters' }, seg), tableTools(),
-    compactTable(table(holdCols('stock', g.current), items, { empty: 'Nothing here yet.', onRow: (x) => { if (tradeMode()) location.hash = '#/equity/holding?sym=' + encodeURIComponent(x.symbol); else if (canEdit()) stockForm(data.stocks.find((y) => y.id === x.id)); } })),
+    compactTable(table(holdCols('stock', g.current), items, { mobile: holdMobile('stock'), empty: 'Nothing here yet.', onRow: (x) => { if (tradeMode()) location.hash = '#/equity/holding?sym=' + encodeURIComponent(x.symbol); else if (canEdit()) stockForm(data.stocks.find((y) => y.id === x.id)); } })),
     totalRow(g, label),
     h('p', { class: 'note' }, tradeMode() ? 'Tap a holding to buy more, sell, see its purchase lots and XIRR, or add a split, bonus or dividend. Gain is value now minus what you put in. XIRR appears for holdings with dated buys that are over a month old.' : 'Import your Groww history (Import tab) to unlock buy and sell tracking and XIRR. Tap a holding to edit it.')),
     canEdit() ? [btn(tradeMode() ? 'Record a buy' : f === 'etfs' ? 'Add ETF' : 'Add share', () => (tradeMode() ? tradeForm(null, { type: 'BUY' }) : stockForm(null, f === 'etfs' ? 'etf' : 'equity')), 'primary')] : null));
@@ -223,7 +240,7 @@ function fundsTab(root) {
     stat('Today', mf.dayCount ? h('span', { class: posNeg(mf.day) }, signedMoney(mf.day)) : '–', mf.dayCount ? signedPct(mf.dayPct) : 'refresh prices')));
   root.append(section('Mutual funds', h('div', null,
     tableTools(),
-    compactTable(table(holdCols('fund', mf.current), sortItems(mf.items), { onRow: (m) => { location.hash = '#/equity/fund?id=' + encodeURIComponent(m.id); } })),
+    compactTable(table(holdCols('fund', mf.current), sortItems(mf.items), { mobile: holdMobile('fund'), onRow: (m) => { location.hash = '#/equity/fund?id=' + encodeURIComponent(m.id); } })),
     totalRow(mf, 'Funds'),
     h('p', { class: 'note' }, 'Tap a fund to see its buy history, record another buy or sell, and edit it. XIRR appears for funds with dated transactions (imported from Groww or recorded here).')),
     canEdit() ? [btn('Add fund', () => fundForm(), 'primary')] : null));

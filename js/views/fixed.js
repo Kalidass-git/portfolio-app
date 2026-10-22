@@ -162,7 +162,14 @@ export function render() {
       { label: 'Rate (paid)', key: true, cls: 'r', render: (b) => h('span', null, pct(b.rate, 2), h('span', { class: 'plain' }, ' (' + String(b.credit || 'Monthly').toLowerCase() + ')')) },
       { label: 'Next due', key: true, cls: 'r', render: (b) => { const d = C.bondNextDue(b, S.all.asOf); return d ? h('span', { class: 'due-next' }, shortD(d)) : h('span', { class: 'muted' }, '–'); } },
       { label: 'Net per month', key: true, cls: 'r', render: (b) => h('span', null, h('b', null, money(b.monthNet)), h('small', { style: { display: 'block' } }, green('received ' + money(bondReceived(b))))), total: (rs) => h('span', null, h('b', null, money(rs.reduce((a, b) => a + b.monthNet, 0))), h('small', { style: { display: 'block' } }, green('received ' + money(rs.reduce((a, b) => a + bondReceived(b), 0))))) },
-    ], fb.rows, { footer: { label: 'Total' }, onRow: canEdit() ? (b) => bondForm(data.bonds.find((x) => x.id === b.id)) : null })),
+    ], fb.rows, { footer: { label: 'Total' }, mobile: {
+      key: 'bonds', head: 'Bond',
+      first: (b) => ({ title: b.name, sub: [b.holder, b.platform].filter(Boolean).join(' · ') }),
+      views: [
+        { label: 'Invested · Net / month', main: (b) => money(b.principal), sub: (b) => 'net ' + money(b.monthNet), total: (rs) => ({ main: money(rs.reduce((a, b) => a + b.principal, 0)), sub: 'net ' + money(rs.reduce((a, b) => a + b.monthNet, 0)) }) },
+        { label: 'Rate · Next due', main: (b) => pct(b.rate, 2), sub: (b) => { const d = C.bondNextDue(b, S.all.asOf); return String(b.credit || 'Monthly').toLowerCase() + (d ? ' · due ' + shortD(d) : ''); } },
+        { label: 'Received · Matures', main: (b) => green(money(bondReceived(b))), sub: (b) => (b.maturityDate ? 'matures ' + dateStr(b.maturityDate) : null), total: (rs) => ({ main: green(money(rs.reduce((a, b) => a + bondReceived(b), 0))) }) },
+      ] }, onRow: canEdit() ? (b) => bondForm(data.bonds.find((x) => x.id === b.id)) : null })),
     canEdit() ? [btn('Add bond', () => bondForm(), 'primary')] : null));
 
   const depCols = [
@@ -173,10 +180,20 @@ export function render() {
     { label: 'Per day', cls: 'r', get: (x) => money(x.daily) },
     { label: 'Matures', mob: 'under', mlabel: 'matures ', get: (x) => dateStr(x.maturityDate) },
   ];
-  if (tab === 'fds') root.append(section('Fixed deposits', h('div', null, fb.bar, table(depCols, fb.rows, { footer: { label: 'Total', phone: false }, onRow: canEdit() ? (x) => depositForm('fd', data.fds.find((y) => y.id === x.id)) : null })),
+  const depMobile = (key, midHead, midOf) => ({
+    key, head: 'Name', midHead,
+    first: (x) => ({ title: x.name, sub: x.account }),
+    mid: (x) => midOf(x) || null,
+    views: [
+      { label: 'Amount · Rate', main: (x) => money(x.principal), sub: (x) => pct(x.rate, 2) },
+      { label: 'Interest · Per day', main: (x) => (x.principal > 0 ? green(money(interestSoFar(x, all.asOf))) : '–'), sub: (x) => (x.principal > 0 ? money(x.daily) + ' a day' + (x.interestType === 'Payout' ? ' · paid out' : '') : null) },
+      { label: 'Matures', main: (x) => dateStr(x.maturityDate), sub: null },
+    ],
+  });
+  if (tab === 'fds') root.append(section('Fixed deposits', h('div', null, fb.bar, table(depCols, fb.rows, { mobile: depMobile('fds', 'Bank', (x) => x.issuer), footer: { label: 'Total', phone: false }, onRow: canEdit() ? (x) => depositForm('fd', data.fds.find((y) => y.id === x.id)) : null })),
     canEdit() ? [btn('Add FD', () => depositForm('fd'))] : null));
   if (tab === 'lending') root.append(section('Private lending',
-    h('div', null, fb.bar, table(depCols, fb.rows, { footer: { label: 'Total', phone: false }, onRow: canEdit() ? (x) => depositForm('lending', data.lending.find((y) => y.id === x.id)) : null })),
+    h('div', null, fb.bar, table(depCols, fb.rows, { mobile: depMobile('lending', 'Borrower', (x) => x.borrower), footer: { label: 'Total', phone: false }, onRow: canEdit() ? (x) => depositForm('lending', data.lending.find((y) => y.id === x.id)) : null })),
     canEdit() ? [btn('Add loan', () => depositForm('lending'))] : null));
 
   if (tab !== 'lending') return root;
@@ -201,7 +218,15 @@ export function render() {
       { label: 'Last received', mob: 'under', mlabel: 'last ', get: (r) => dateStr(r.lastReceived) },
       { label: 'This month', render: (r) => (r.active === false ? h('span', { class: 'tag' }, 'Closed') : h('span', { class: r.received ? 'tag good' : r.overdue ? 'tag bad' : r.dueToday ? 'tag warn' : 'tag' }, r.received ? 'Received' : r.overdue ? 'Overdue' : r.dueToday ? 'Due today' : r.notStarted ? 'Starts ' + dateStr(r.startDate) : 'Due ' + dateStr(r.due))) },
       { label: '', render: (r) => (canEdit() && r.active !== false && !r.received ? h('button', { class: 'small', onclick: (e) => { e.stopPropagation(); mutate((d) => { d.receivables.find((x) => x.id === r.id).lastReceived = C.todayISO(); }); toast('Marked as received'); } }, 'Mark received') : '') },
-    ], rc, { rowClass: (r) => (r.overdue ? 'row-bad' : !r.received && !r.notStarted && C.monthKey(r.due) <= C.monthKey(all.asOf) ? 'row-warn' : ''), onRow: canEdit() ? (r) => receivableForm(data.receivables.find((x) => x.id === r.id)) : null })),
+    ], rc, { mobile: {
+      key: 'recv', head: 'From', midHead: 'This month',
+      first: (r) => ({ title: r.name, sub: r.term,
+        extra: canEdit() && r.active !== false && !r.received ? h('button', { class: 'small', style: { marginTop: '4px' }, onclick: (e) => { e.stopPropagation(); mutate((d) => { d.receivables.find((x) => x.id === r.id).lastReceived = C.todayISO(); }); toast('Marked as received'); } }, 'Mark received') : null }),
+      mid: (r) => (r.active === false ? h('span', { class: 'tag' }, 'Closed') : h('span', { class: r.received ? 'tag good' : r.overdue ? 'tag bad' : r.dueToday ? 'tag warn' : 'tag' }, r.received ? 'Received' : r.overdue ? 'Overdue' : r.dueToday ? 'Due today' : r.notStarted ? 'Starts ' + dateStr(r.startDate) : 'Due ' + dateStr(r.due))),
+      views: [
+        { label: 'Expected · With them', main: (r) => money(r.expected), sub: (r) => 'with them ' + money(r.balanceDue) },
+        { label: 'Received · Last', main: (r) => green(money(r.total || 0)), sub: (r) => (r.lastReceived ? 'last ' + dateStr(r.lastReceived) : null) },
+      ] }, rowClass: (r) => (r.overdue ? 'row-bad' : !r.received && !r.notStarted && C.monthKey(r.due) <= C.monthKey(all.asOf) ? 'row-warn' : ''), onRow: canEdit() ? (r) => receivableForm(data.receivables.find((x) => x.id === r.id)) : null })),
     canEdit() ? [btn('Add', () => receivableForm())] : null));
   root.append(h('div', { class: 'phone-only' }, section('Received so far, by person', personList())));
   return root;
@@ -250,7 +275,8 @@ function closedView(root) {
       { label: t.id === 'fds' ? '' : 'Interest received', mob: 'under', mlabel: 'interest ', cls: 'r', get: (x) => (t.id === 'fds' ? '' : money(x.interest)), total: (rs) => (t.id === 'fds' ? '' : money(rs.reduce((a, x) => a + x.interest, 0))) },
       { label: 'Principal back', mob: 'under', mlabel: 'back ', cls: 'r', get: (x) => money(x.back), total: (rs) => money(rs.reduce((a, x) => a + x.back, 0)) },
       { label: 'Total received', key: true, cls: 'r', render: (x) => h('span', { class: posNeg(x.gain) }, money(x.total)), total: (rs) => money(rs.reduce((a, x) => a + x.total, 0)) },
-    ], t.items, { footer: { label: 'Total', phone: false }, empty: 'None', onRow: canEdit() ? (x) => closedGroupDialog(t.id, x) : null }))))));
+    ], t.items, { mobile: { key: 'closedgrp', head: 'Name', first: (x) => ({ title: x.name + (x.count > 1 ? ` (${x.count})` : ''), sub: t.id === 'fds' ? null : 'interest ' + money(x.interest) }),
+      views: [{ label: 'Put in · Total received', main: (x) => money(x.invested), sub: (x) => h('span', { class: posNeg(x.gain) }, money(x.total)) }, { label: 'Principal back · Interest', main: (x) => money(x.back), sub: (x) => (t.id === 'fds' ? null : money(x.interest)) }] }, footer: { label: 'Total', phone: false }, empty: 'None', onRow: canEdit() ? (x) => closedGroupDialog(t.id, x) : null }))))));
   for (const [title, key] of kinds) {
     const list = all.closed[key].slice().sort((a, b) => (a.closed.date < b.closed.date ? 1 : -1));
     root.append(section(title + ` (${list.length})`, table([
@@ -260,7 +286,8 @@ function closedView(root) {
       { label: 'Came back', cls: 'r', get: (x) => money(x.closed.amount), total: (rs) => money(rs.reduce((a, x) => a + x.closed.amount, 0)) },
       { label: 'XIRR', mob: 'under', mlabel: 'XIRR ', cls: 'r', render: (x) => (x.xirr == null ? '–' : h('span', { class: posNeg(x.xirr) }, pct(x.xirr, 1))) },
       { label: 'Money went to', mob: 'hide', get: (x) => (x.closed.acct ? acct.get(x.closed.acct) || '' : 'not added') },
-    ], list, { footer: { label: 'Total', phone: false }, onRow: (x) => openClosedItem(key, x), empty: 'Nothing closed yet. Open one and press “Close it”.' })));
+    ], list, { mobile: { key: 'closed', head: 'Name', first: (x) => ({ title: x.name, sub: [x.holder || x.account, 'closed ' + dateStr(x.closed.date)].filter(Boolean).join(' · ') }),
+      views: [{ label: 'Invested · Came back', main: (x) => money(x.principal), sub: (x) => h('span', { class: posNeg(x.closed.amount - x.principal) }, money(x.closed.amount)) }, { label: 'XIRR · Started', main: (x) => (x.xirr == null ? '–' : h('span', { class: posNeg(x.xirr) }, pct(x.xirr, 1))), sub: (x) => 'started ' + dateStr(x.depositDate) }] }, footer: { label: 'Total', phone: false }, onRow: (x) => openClosedItem(key, x), empty: 'Nothing closed yet. Open one and press “Close it”.' })));
   }
   const rcs = all.closed.receivables;
   root.append(section(`Money to receive, closed (${rcs.length})`, table([
