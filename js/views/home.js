@@ -206,15 +206,15 @@ function investCard(data, all, planIn) {
     { title: 'Investable income added', sub: 'what is left to invest from this month’s money', value: h('b', { class: 'inv' }, money(m.investable)) },
   ], ['EPF is not counted: it goes straight to the EPF account and never reaches the bank.', 'This is the month’s income, not the bank balance. The bank balance is used for “Current investable amount” below.']);
   const showMandatory = () => mandatoryDialog(mand);
-  const showSpend = () => detail('Expenses still to come this month', pr.rows.map((r) => ({ title: r.name, sub: `${money(r.spent)} spent in ${pr.days} day${pr.days === 1 ? '' : 's'} = ${money(r.perDay)} a day × ${pr.left} days left`, value: money(r.more) })),
+  const showSpend = () => detail('Expenses still to come this month', pr.rows.map((r) => ({ title: r.name, sub: `${money(r.spent)} spent in ${pr.days} day${pr.days === 1 ? '' : 's'} = ${money(r.perDay)} a day × ${pr.left} days left`, value: h('i', { class: 'neg' }, '− ' + money(r.more)) })),
     ['Projected from the Spent column in “This month in detail”: regular spending only. Rent, clothes, entertainment, vacation, gifts, EMI and tax are not projected.']);
   const showCurrent = () => showInvestable(m);
   return section('Investing this month · ' + monthLabel(m.month), h('div', null,
     h('div', { class: 'stats' },
       tapStat('Investable income added this month', money(m.investable), `${money(m.income)} in − ${money(m.spend)} out · tap for working`, 'inv', showInvestable),
       tapStat('Pending mandatory investments (approx.)', money(mand.total), mand.pending.length ? `${mand.pending.length} chit${mand.pending.length === 1 ? '' : 's'} not paid yet this month${mand.done.length ? ', ' + mand.done.length + ' paid' : ''} · chits and gold chits` : (mand.done.length ? `all ${mand.done.length} paid this month · chits and gold chits` : 'no chits running · chits and gold chits'), mand.total > 0.5 ? 'warn' : '', showMandatory),
-      tapStat('Expenses still to come (projected)', money(pr.total), `${pr.left} day${pr.left === 1 ? '' : 's'} left · regular spending, no rent`, '', showSpend),
-      tapStat('Investable balance', money(m.current), `bank ${money(m.bank)} + cash ${money(m.cash)} + interest ${money(m.interest)} − ${money(mand.total)} chits − ${money(pr.total)} expenses`, m.current >= 0 ? 'inv' : 'neg', showCurrent)),
+      tapStat('Expenses still to come (projected)', h('i', { class: 'neg' }, '− ' + money(pr.total)), h('i', null, `${pr.left} day${pr.left === 1 ? '' : 's'} left · regular spending, no rent`), '', showSpend),
+      tapStat('Investable balance', money(m.current), h('span', null, `bank ${money(m.bank)} + cash ${money(m.cash)} + interest ${money(m.interest)} − ${money(mand.total)} chits `, h('i', { class: 'neg' }, `− ${money(pr.total)} expenses (projected)`)), m.current >= 0 ? 'inv' : 'neg', showCurrent)),
     m.current < 0 ? h('p', { class: 'note warn' }, `The bank is short by ${money(-m.current)} for what is still expected this month.`) : null,
     h('h4', { style: { margin: '12px 0 4px' } }, 'Where the current investable amount can go'),
     m.current > 0.5 ? rowList([
@@ -360,6 +360,24 @@ function comingUp(data, all) {
     soon.filter((u) => u.kind === 'Money to receive' && u.days < 0).length ? null : (data.receivables.length ? h('p', { class: 'note' }, 'No money to receive is overdue.') : null)));
 }
 
+/**
+ * What one expense line of a month is made of, added up by description. A popup on a computer, a bottom sheet on a phone.
+ * `cats` are the ledger categories behind the line (the Groceries line is one category, the clothes line is four).
+ */
+function expenseDrill(month, label, cats) {
+  const want = new Set((cats || []).map((c) => String(c).toLowerCase()));
+  const rows = C.monthLedger(S.data, month).filter((e) => e.debit > 0 && want.has((e.category || '').toLowerCase()));
+  const list = C.byDescription(rows, 'debit'), total = list.reduce((a, r) => a + r.amount, 0);
+  const one = (cats || []).length === 1 ? cats[0] : '*';
+  const body = h('div', null,
+    h('p', { class: 'summary-line' }, `${monthLabel(month, true)} · `, h('b', { class: 'neg' }, money(total)), ` · ${rows.length} ${rows.length === 1 ? 'entry' : 'entries'}`),
+    list.length ? rowList(list.map((r) => ({ title: r.desc, sub: `${r.count} ${r.count === 1 ? 'entry' : 'entries'} · last ${shortDate(r.last)}`, value: h('span', { class: 'neg' }, money(r.amount)), valueSub: pct(r.share, 0) }))) : h('p', { class: 'empty' }, 'No entries in this month.'),
+    h('p', { class: 'note' }, 'Added up by description. Money paid out only; transfers are left out.'),
+    h('p', null, h('a', { href: `#/flow/detail?cat=${encodeURIComponent(one)}&dir=debit&m=${month}&view=${one === '*' ? 'cat' : 'desc'}` }, one === '*' ? 'See all expenses of this month' : 'See every entry')));
+  if (window.matchMedia('(max-width: 700px)').matches) openInfo(label, body);
+  else { const d = dialog(label, body, [{ label: 'Done', class: 'primary', onclick: (c) => c() }]); d.el.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('a[href]')) d.close(); }); }
+}
+
 function thisMonth(data, all, months) {
   const mc = C.monthCashflow(data, all, selMonth);
   const isCur = selMonth === C.monthKey(all.asOf);
@@ -402,7 +420,8 @@ function thisMonth(data, all, months) {
       h('div', null,
         h('p', { class: 'mini-title' }, 'Expenses'),
         h('p', { class: 'big-line' }, h('b', null, money(spent)), h('span', { class: 'muted' }, ' spent')),
-        spend.length ? hbars(spend.map((s) => ({ label: s.name, value: s.amount })), { fmt: money, colorIndex: 1 }) : h('p', { class: 'empty' }, 'No expenses recorded in this month.'),
+        spend.length ? hbars(spend.map((s) => ({ label: s.name, value: s.amount, cats: s.cats })), { fmt: money, colorIndex: 1, onClick: (x) => expenseDrill(selMonth, x.label, x.cats) }) : h('p', { class: 'empty' }, 'No expenses recorded in this month.'),
+        spend.length ? h('p', { class: 'note' }, 'Tap a category or its amount to see what it is made of.') : null,
         h('p', null, h('a', { href: '#/flow' }, 'See where it went'))))),
     [monthPicker(months, selMonth, (m) => { selMonth = m; rerender(); })]);
 }
