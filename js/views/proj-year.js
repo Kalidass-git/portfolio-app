@@ -6,7 +6,7 @@ import { monthActual } from '../yearplan.js';
 import { h, money, compact, pct, dateStr, monthLabel, section, stat, table, btn, formDialog, canEdit, toast, confirmDialog, dialog } from '../ui.js';
 import { lineChart, hbars } from '../charts.js';
 import * as actual from './proj-actual.js';
-import { flowSection, yearsTable, interestWhy } from './proj-flow.js';
+import { flowSection, yearsTable } from './proj-flow.js';
 import { rerender, outlooks, ensure, signed, pc, tone, outlookToggle, outlookSelects, planForm, oneOffForm, investForm, setAllOutlook, monthRange } from './proj-shared.js';
 
 let selYear = null;
@@ -158,8 +158,9 @@ export function render(root) {
   // ---------- outlook toggle ----------
   const sel = h('div', null,
     outlookToggle(plan.a.outlook, (id) => setAllOutlook(plan.id, id), { disabled: !canEdit() }),
-    h('details', { class: 'more' }, h('summary', null, 'Set each market class separately'), outlookSelects(plan.a.outlook, (k, id) => canEdit() && mutate((d) => { const pl = ensure(d).years[plan.id]; pl.a.outlook[k] = id; d.projector.ahead = { ...(d.projector.ahead || {}), outlook: { ...pl.a.outlook } }; }))),
-    h('p', { class: 'note' }, 'The outlook is the yearly return assumed for shares, ETFs, funds and gold (and fresh money put into them). Fixed income uses its own interest rates. Change it to see how the year end moves.'));
+    h('details', { class: 'more' }, h('summary', null, 'Set each market class separately, and what the outlook means'),
+      outlookSelects(plan.a.outlook, (k, id) => canEdit() && mutate((d) => { const pl = ensure(d).years[plan.id]; pl.a.outlook[k] = id; d.projector.ahead = { ...(d.projector.ahead || {}), outlook: { ...pl.a.outlook } }; })),
+      h('p', { class: 'note' }, 'The outlook is the yearly return assumed for shares, ETFs, funds and gold (and fresh money put into them). Fixed income uses its own interest rates. Change it to see how the year end moves.')));
   root.append(section('Market outlook for this plan', sel));
 
   // ---------- chart ----------
@@ -178,19 +179,10 @@ export function render(root) {
     series: [{ name: 'Target path', values: target, dashed: true, color: 2 }, { name: 'Plan', values: planS, color: 1 }, { name: 'Actual (snapshots)', values: act, color: 0 }, ...(m.startFrom ? [{ name: 'Forecast from today', values: fcS, dashed: true, color: 3 }] : [])],
   })));
 
-  // ---------- month-end check-in ----------
+  // ---------- month-end check-in, with every month of the year under it ----------
+  // One card: today against the plan, the snapshot button, then each month end (months before the plan started show their snapshot only).
   const nowM = C.monthKey(all.asOf), nowRow = m.path.find((r) => r.month === nowM), mine = m.snapBy.get(nowM);
   const planNow = nowRow ? nowRow.nw : null;
-  root.append(section(`Month-end check-in · ${monthLabel(nowM, true)}`, h('div', null,
-    h('div', { class: 'stats' },
-      stat('Net worth today', money(all.netAsset), `as on ${dateStr(all.asOf)}`),
-      planNow != null ? stat(`Plan for end of ${monthLabel(nowM)}`, money(planNow), h('span', { class: tone(all.netAsset - planNow) }, `${signed(all.netAsset - planNow)} ${all.netAsset >= planNow ? 'ahead' : 'behind'} so far`)) : stat('This month', 'Starting point', 'the plan begins next month'),
-      mine ? stat('Snapshot saved', money(mine.net), mine.note || dateStr(mine.date)) : stat('Snapshot', 'Not saved yet', 'save it on the last day of the month')),
-    h('p', { class: 'note' }, 'On the last day of each month, refresh prices, then save a snapshot. It keeps your net worth and the value of every asset class, so the review below can show where you gained or lost against the plan.')),
-    canEdit() ? [btn(mine ? 'Update snapshot' : 'Save snapshot', () => saveSnapshot(nowM), 'primary', { keep: true })] : null));
-
-  // ---------- month by month ----------
-  // Every month of the year: months before the plan started show their snapshot only; the plan columns are blank for them.
   const planBy = new Map(m.path.map((r) => [r.month, r]));
   const rows = C_months(plan.year).map((mo) => {
     const pr = planBy.get(mo);
@@ -201,7 +193,12 @@ export function render(root) {
   });
   const stat1 = (r) => { if (!r.snap) return r.month > nowM ? 'later' : '–'; if (r.nw == null) return 'recorded'; const g = r.snap.net - r.nw, pcg = g / r.nw; return pcg > 0.01 ? 'ahead' : pcg >= -0.01 ? 'on track' : pcg >= -0.03 ? 'slightly behind' : 'behind'; };
   const fromSheet = P.planSheetSnapshots(data, all.asOf).filter((x) => x.month.slice(0, 4) === String(plan.year));
-  root.append(section('Month by month', h('div', null,
+  root.append(section(`Month-end check-in · ${monthLabel(nowM, true)}`, h('div', null,
+    h('div', { class: 'stats' },
+      stat('Net worth today', money(all.netAsset), `as on ${dateStr(all.asOf)}`),
+      planNow != null ? stat(`Plan for end of ${monthLabel(nowM)}`, money(planNow), h('span', { class: tone(all.netAsset - planNow) }, `${signed(all.netAsset - planNow)} ${all.netAsset >= planNow ? 'ahead' : 'behind'} so far`)) : stat('This month', 'Starting point', 'the plan begins next month'),
+      mine ? stat('Snapshot saved', money(mine.net), mine.note || dateStr(mine.date)) : stat('Snapshot', 'Not saved yet', 'save it on the last day of the month')),
+    h('h4', { style: { margin: '14px 0 4px' } }, `Every month end of ${plan.year}`),
     fromSheet.length && canEdit() ? h('div', { class: 'alert warn' }, h('b', null, `${fromSheet.length} month-end${fromSheet.length === 1 ? '' : 's'} from your Plan sheet ${fromSheet.length === 1 ? 'is' : 'are'} not in this table yet`),
       h('p', null, `${fromSheet.map((x) => monthLabel(x.month).slice(0, 3)).join(', ')}: these were typed into Plan → Month by month. Bring them in as snapshots so they show here. Months that already have a snapshot are not changed.`),
       btn('Bring them in', () => mutate((d) => { const add = P.planSheetSnapshots(d, S.all.asOf); const p = ensure(d); p.snapshots.push(...add); p.snapshots.sort((a, b) => (a.month < b.month ? -1 : 1)); toast(`${add.length} month-end${add.length === 1 ? '' : 's'} brought in`); }), 'small', { keep: true })) : null,
@@ -215,7 +212,10 @@ export function render(root) {
       { label: 'Status', mob: 'under', render: (r) => { const s = stat1(r); return h('span', { class: s === 'ahead' || s === 'on track' ? 'pos' : s === 'behind' ? 'neg' : s === 'slightly behind' ? 'warn' : 'muted' }, s); } },
     ], rows, { rowClass: (r) => (r.month === nowM ? 'cur-row' : ''), m: { key: 'year-months', head: 'Month end', mid: 'Status', views: [['Actual: net worth', 'Plan: net worth'], ['Ahead / behind'], ['Income plan | actual', 'Spending plan | actual']],
       sort: [{ value: 'month', label: 'Month', kind: 'date', get: (r) => r.month }, { value: 'diff', label: 'Ahead / behind', kind: 'num', get: (r) => (r.snap && r.nw != null ? r.snap.net - r.nw : null) }, { value: 'nw', label: 'Actual net worth', kind: 'num', get: (r) => (r.snap ? r.snap.net : null) }], sortDefault: { value: 'month', dir: 'asc' } }, onRow: canEdit() ? (r) => snapshotForm(plan, r.month) : null }),
-    h('p', { class: 'note' }, 'The highlighted row is the current month. Plan net worth is the planned position at each month end; months before the plan started have no plan figure. Tap a month to type in its month-end position by hand. Spending includes loan EMI and one-time items; income includes interest that reached your bank.'))));
+    h('details', { class: 'more' }, h('summary', null, 'How to read this'),
+      h('p', { class: 'note' }, 'On the last day of each month, refresh prices, then save a snapshot. It keeps your net worth and the value of every asset class, so the review below can show where you gained or lost against the plan.'),
+      h('p', { class: 'note' }, 'The highlighted row is the current month. Plan net worth is the planned position at each month end; months before the plan started have no plan figure. Tap a month to type in its month-end position by hand. Spending includes loan EMI and one-time items; income includes interest that reached your bank.'))),
+    canEdit() ? [btn(mine ? 'Update snapshot' : 'Save snapshot', () => saveSnapshot(nowM), 'primary', { keep: true })] : null));
 
   // ---------- where it went (shown last) ----------
   let whereWent = null;
@@ -247,42 +247,43 @@ export function render(root) {
       h('p', { class: 'note' }, 'Change since the plan started, per asset class. Cash absorbs the difference between what you saved and what you invested, so read it together with the rest.'))));
   }
 
-  // ---------- assumptions ----------
+  // ---------- the plan's inputs: assumptions with expected interest, new money, one-time items ----------
   const a = plan.a;
   const oneOffs = (a.oneOffs || []).slice().sort((x, y) => (x.month < y.month ? -1 : 1));
   const inv = a.invest || [];
   const invTotal = inv.reduce((s, l) => s + (l.monthly || 0), 0);
-  root.append(section('What the plan assumes', h('div', null,
-    h('div', { class: 'stats' },
-      stat('Salary with EPF', money((a.salary || 0) + (a.pfAdd || 0)), `${money(a.salary)} to bank + ${money(a.pfAdd)} to EPF`), stat('Everyday expenses', money(a.expenses), 'each month'),
-      stat('Loan EMI', money(a.emi), 'each month'),
-      stat('New investments', money(invTotal), 'each month, in total')),
-    h('p', { class: 'note' }, `Interest from bonds and lending (about ${money(m.path[0] ? m.path[0].interest : 0)} a month after tax at the start) is added automatically from your holdings. New money is not a fixed amount: each month invests what is left after spending, EMI and one-time bills. Cash only dips in a month that costs more than comes in, such as tax.`),
-    m.path.length && Math.min(...m.path.map((r) => r.cash)) < 0 ? h('p', { class: 'form-error' }, `Cash dips to its lowest point ${money(Math.min(...m.path.map((r) => r.cash)))} in ${monthLabel(m.path.reduce((b, r) => (r.cash < b.cash ? r : b)).month)}; the months after rebuild it before investing again. Check the one-time bills if that looks too low.`) : null),
-    canEdit() ? [btn('Edit target and assumptions', () => planForm(plan), '', { keep: true })] : null));
-
   // money available to invest each month: what comes in, less everyday spending, EMI and the yearly one-time bills spread over twelve months
   const r0m = m.path[0];
   const inc = r0m ? r0m.salary + r0m.other + r0m.interest : 0, spend = r0m ? r0m.expenses + r0m.emi : 0;
   const yearOnce = (a.oneOffs || []).filter((o) => o.kind !== 'income' && (o.month.length === 2 || o.month.startsWith(String(plan.year)))).reduce((x, o) => x + (o.amount || 0), 0);
   const oneMonthly = yearOnce / 12;
   const availBefore = inc - spend, avail = availBefore - oneMonthly;
-  const left = avail - invTotal;
   const shareOf = (v) => (invTotal > 0 ? pct(v / invTotal, 0) : '–');
   // interest income expected for the rest of the plan year
-  if (m.path.length) {
-    const paidYr = m.path.reduce((a, r) => a + r.interest, 0), addedYr = m.path.reduce((a, r) => a + (r.accrual || 0), 0), p0 = m.path[0], pL = m.path[m.path.length - 1];
-    root.append(section('Interest income expected', h('div', null,
-      h('div', { class: 'stats' },
-        stat('Paid out each month', h('span', { class: 'pos' }, money(p0.interest)), `bonds and lending after tax · ${money(pL.interest)} by ${monthLabel(pL.month)}`),
-        stat(`Paid out by December`, h('span', { class: 'pos' }, money(paidYr)), `${m.path.length} months left`),
-        stat('Added to deposits, EPF, chits', h('span', { class: 'pos' }, money(addedYr)), 'compounds inside the balance'),
-        stat('Credit every day', h('span', { class: 'pos' }, money((p0.interest + (p0.accrual || 0)) * 12 / 365)), 'paid out and compounding together')),
-      h('p', { class: 'note' }, 'It grows as the plan adds to bonds, lending and deposits. See Years ahead for how it grows over many years.'))));
-  }
+  const intStats = (() => {
+    if (!m.path.length) return null;
+    const paidYr = m.path.reduce((x, r) => x + r.interest, 0), addedYr = m.path.reduce((x, r) => x + (r.accrual || 0), 0), p0 = m.path[0], pL = m.path[m.path.length - 1];
+    return [
+      stat('Paid out each month', h('span', { class: 'pos' }, money(p0.interest)), `bonds and lending after tax · ${money(pL.interest)} by ${monthLabel(pL.month)}`),
+      stat(`Paid out by December`, h('span', { class: 'pos' }, money(paidYr)), `${m.path.length} months left`),
+      stat('Added to deposits, EPF, chits', h('span', { class: 'pos' }, money(addedYr)), 'compounds inside the balance'),
+      stat('Credit every day', h('span', { class: 'pos' }, money((p0.interest + (p0.accrual || 0)) * 12 / 365)), 'paid out and compounding together')];
+  })();
+  const subHead = (t) => h('h4', { style: { margin: '12px 0 6px' } }, t);
+  root.append(section('What the plan assumes, and interest expected', h('div', null,
+    subHead('What the plan assumes'),
+    h('div', { class: 'stats' },
+      stat('Salary with EPF', money((a.salary || 0) + (a.pfAdd || 0)), `${money(a.salary)} to bank + ${money(a.pfAdd)} to EPF`), stat('Everyday expenses', money(a.expenses), 'each month'),
+      stat('Loan EMI', money(a.emi), 'each month'),
+      stat('New investments', money(invTotal), 'each month, in total')),
+    intStats ? subHead('Interest income expected') : null,
+    intStats ? h('div', { class: 'stats' }, intStats) : null,
+    m.path.length && Math.min(...m.path.map((r) => r.cash)) < 0 ? h('p', { class: 'form-error' }, `Cash dips to its lowest point ${money(Math.min(...m.path.map((r) => r.cash)))} in ${monthLabel(m.path.reduce((b, r) => (r.cash < b.cash ? r : b)).month)}; the months after rebuild it before investing again. Check the one-time bills if that looks too low.`) : null,
+    h('details', { class: 'more' }, h('summary', null, 'How to read this'),
+      h('p', { class: 'note' }, `Interest from bonds and lending (about ${money(m.path[0] ? m.path[0].interest : 0)} a month after tax at the start) is added automatically from your holdings. New money is not a fixed amount: each month invests what is left after spending, EMI and one-time bills. Cash only dips in a month that costs more than comes in, such as tax.`),
+      intStats ? h('p', { class: 'note' }, 'Interest grows as the plan adds to bonds, lending and deposits. See Years ahead for how it grows over many years. The month by month reasons are further down, under each year of Month by month.') : null)),
+    canEdit() ? [btn('Edit target and assumptions', () => planForm(plan), '', { keep: true })] : null));
 
-  if (m.fc.length) root.append(interestWhy(m.fc, { tds: plan.a.tds ?? 0.1 }));
-  if (m.fc.length) root.append(yearsTable(m.fc, { title: `Month by month, rest of ${plan.year}` }), flowSection(m.fc, { mode: 'month', title: `Income, spending and investing, rest of ${plan.year}` }));
   root.append(section('New money going in each month', h('div', null,
     h('div', { class: 'stats' },
       stat('Available to invest', h('span', { class: tone(avail) }, money(avail)), `each month · ${money(inc)} in, ${money(spend)} out${oneMonthly > 1 ? `, ${money(oneMonthly)} set aside for yearly bills` : ''}`),
@@ -297,10 +298,9 @@ export function render(root) {
       { label: 'Return', mob: 'under', mlabel: 'return ', cls: 'r', get: (l) => (P.isMarket(l.cls) ? (l.outlook ? (outlooks().find((o) => o.id === l.outlook) || {}).name : 'class outlook') : pc(l.rate != null ? l.rate : (a.rates || {})[l.cls] || 0)) },
       { label: 'Period', mob: 'hide', get: (l) => (l.from || l.to ? `${l.from ? monthLabel(l.from) : 'next month'} to ${l.to ? monthLabel(l.to) : 'Dec'}` : 'whole plan') },
     ], inv, { footer: { label: 'Total' }, m: { key: 'year-invest', head: 'Investment', sub: ['Goes into'], views: [['Planned each month', 'Share of new money'], ['Return', 'Period']] }, onRow: canEdit() ? (l) => investForm(plan, inv.find((x) => x.id === l.id)) : null, empty: 'No new investments planned. Add where your savings will go.' }),
-    h('p', { class: 'note' }, 'The planned amounts are a guide. In the projection each month, whatever is left after spending, EMI and one-time bills is invested in these shares, so a month with tax or fees invests less and a quiet month more. Fixed-income money earns the rate shown (bonds and lending pay it out monthly; deposits, EPF and chits compound). Market-linked money follows its outlook.')),
+    h('details', { class: 'more' }, h('summary', null, 'How the planned amounts are used'),
+      h('p', { class: 'note' }, 'The planned amounts are a guide. In the projection each month, whatever is left after spending, EMI and one-time bills is invested in these shares, so a month with tax or fees invests less and a quiet month more. Fixed-income money earns the rate shown (bonds and lending pay it out monthly; deposits, EPF and chits compound). Market-linked money follows its outlook.'))),
     canEdit() ? [btn('Add investment', () => investForm(plan), '', { keep: true })] : null));
-
-  actual.render(root, plan);
 
   root.append(section('One-time income and expenses', h('div', null,
     table([
@@ -308,6 +308,12 @@ export function render(root) {
       { label: 'Amount', cls: 'r', render: (o) => h('span', { class: o.kind === 'income' ? 'pos' : 'neg' }, (o.kind === 'income' ? '+' : '−') + money(o.amount)) },
     ], oneOffs, { m: { key: 'year-oneoff', head: 'What', sub: ['When'], views: [['Amount']] }, onRow: canEdit() ? (o) => oneOffForm(plan, a.oneOffs.find((x) => x.id === o.id)) : null, empty: 'Nothing added. Add tax, school fees, insurance, a trip or a bonus so the plan sees them coming.' })),
     canEdit() ? [btn('Add item', () => oneOffForm(plan), '', { keep: true })] : null));
+
+  // ---------- how the rest of the year plays out ----------
+  // One card for the months, each year carrying the reasons the interest moves; then the chart of the same months.
+  if (m.fc.length) root.append(yearsTable(m.fc, { title: `Month by month, rest of ${plan.year}`, why: { tds: plan.a.tds ?? 0.1 } }), flowSection(m.fc, { mode: 'month', title: `Income, spending and investing, rest of ${plan.year}` }));
+
+  actual.render(root, plan);
 
   // ---------- year-end review ----------
   const r = plan.retro || {};
