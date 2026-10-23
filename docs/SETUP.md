@@ -154,6 +154,13 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.9.44 – Wealth outlook, This year: fewer, better ordered cards
+- **What the plan assumes + Interest income expected** are now one card, "What the plan assumes, and interest expected": the four plan figures, then the four interest figures, the low-cash warning, and the two explanations folded under "How to read this". Edit target and assumptions stays on the card.
+- **Month by month, rest of the year + Interest: what changes it** are now one card. Open a year to see its months, and under them "Why the interest changes, month by month" with the same table as before (interest a month, change, why). January still looks back at December.
+- **Month-end check-in + Month by month (net worth)** are now one card: today against plan, then every month end of the year underneath, with the Save snapshot button on the card. This also removes two cards both called "Month by month".
+- **New order** (top to bottom): headline, market outlook, net worth chart, month-end check-in, the plan's inputs (assumptions and interest, new money, one-time items), the forecast (months, then the chart), planned and actual new money, year-end review, where it went. Long explanations sit under "How to read this" folds; the market outlook text sits in its existing fold.
+- Nothing is calculated differently. All figures, tables, popups, sorting and phone rows are the same as before; only their place changed. Years ahead is not changed. No stored data changed.
+
 ## Release 8.9.43 – Gold rate always comes from the live price
 - **No more typing the gold rate.** The Gold rate section (the box, Update rate button and the automatic rate on/off switch) is removed. The rate is always the live world gold price in rupees per gram, adjusted by the local difference learned earlier (settings.goldPremium, unchanged), and it is read every time you refresh prices.
 - **Gold rate card** replaces "Invested in gold chits" on the Gold page. It shows the rate, the change since the last reading and how old it is. The refresh icon reads the live price straight away (gold only). Tap the card for a bottom sheet (popup on a computer) with the latest reading, a Refresh now button and the rate history.

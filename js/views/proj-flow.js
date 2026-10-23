@@ -144,7 +144,7 @@ function monthsTable(rows) {
  * A table grouped by year. Open a year to see its months: salary, interest, expenses, EMI, one-time items, EPF, growth and net worth, with a line
  * that adds them up to the year's end. Hover a spending figure for the monthly and one-time parts.
  */
-export function yearsTable(rows, { title = 'Year by year, and month by month' } = {}) {
+export function yearsTable(rows, { title = 'Year by year, and month by month', why = null } = {}) {
   if (!rows.length) return section(title, h('p', { class: 'empty' }, 'Nothing to show.'));
   const years = [...new Set(rows.map((r) => r.month.slice(0, 4)))];
   const grid = { display: 'grid', gridTemplateColumns: '1.1fr 1fr 1.3fr 1fr 1fr 1fr', gap: '8px' };
@@ -157,10 +157,38 @@ export function yearsTable(rows, { title = 'Year by year, and month by month' } 
     const sumRow = h('summary', { style: { ...grid, cursor: 'pointer', padding: '8px', alignItems: 'baseline' } },
       h('b', null, y + (yr.length < 12 ? ` (${yr.length} mo)` : '')), h('span', { style: R }, tipped(yr, salaryTip, cls('inc', money(t.salary + t.pf)))), spendCell(t.everyday + t.emi, t.oneTime, '', yr),
       h('span', { style: R }, tipped(yr, interestTip, cls('inc', money(t.interest)))), h('span', { class: 'inv', style: R }, money(t.invested)), h('span', { style: R }, money(t.nw)));
-    return h('details', { class: 'cal-month', open: yi === 0 }, sumRow, monthsTable(yr));
+    // with `why`, the reason interest moves from month to month sits under the months of the same year
+    const whyBox = why ? h('details', { class: 'more' }, h('summary', null, `Why the interest changes, month by month, ${y}`, h('small', { class: 'muted' }, `  ${money(yr[0].interest)} a month at the start, ${money(yr[yr.length - 1].interest)} at the end`)), interestWhyTable(rows, y, why.tds)) : null;
+    return h('details', { class: 'cal-month', open: yi === 0 }, sumRow, monthsTable(yr), whyBox);
   });
+  const NOTE = 'Open a year to see its months. Spending is everyday expenses plus loan EMI, with one-time items under it (hover for the split). Interest is what bonds and lending pay out after TDS. Invested is what was left after spending and went into your plan. Net worth is the month end, and for a year its December.';
+  // with `why` the two explanations share one fold, to keep the card short
   return section(title, h('div', null, h('div', { class: 'yt-scroll' }, h('div', { class: 'yt-inner' }, head, ...blocks)),
-    h('p', { class: 'note' }, 'Open a year to see its months. Spending is everyday expenses plus loan EMI, with one-time items under it (hover for the split). Interest is what bonds and lending pay out after TDS. Invested is what was left after spending and went into your plan. Net worth is the month end, and for a year its December.')));
+    why ? h('details', { class: 'more' }, h('summary', null, 'How to read this'), h('p', { class: 'note' }, NOTE), h('p', { class: 'note' }, INTEREST_NOTE)) : h('p', { class: 'note' }, NOTE)));
+}
+
+const INTEREST_NOTE = 'Interest is worked out on what is held at the start of the month. New money only starts earning the month after it goes in, and the figure is after TDS. Deposits, EPF and chits do not pay out: their interest is added to the balance and shows as Growth.';
+
+/** For one month: how much the interest moved, and the new money that moved it. */
+function interestReason(r, prev, tds) {
+  if (!prev) return { delta: null, lines: [`First month: ${money(r.interest)} comes from what you hold today.`] };
+  const lines = [];
+  for (const [k, amt] of Object.entries(prev.investedBy || {})) {
+    const e = (r.interestBy || {})[k]; if (!e || amt < 0.5) continue;
+    const extra = amt * (e.rate / 12) * (1 - tds);
+    lines.push(`${money(amt)} put into ${(P.classOf(k) || {}).label || k} in ${monthLabel(prev.month).slice(0, 3)} × ${pct(e.rate, 1)} ÷ 12 less ${Math.round(tds * 100)}% TDS = +${money(extra)} a month`);
+  }
+  return { delta: r.interest - prev.interest, lines: lines.length ? lines : ['No new money went into bonds or lending last month, so nothing changed.'] };
+}
+/** The month table of one calendar year: interest a month, the change, and why. `rows` is the whole run, so January can look back at December. */
+function interestWhyTable(rows, y, tds) {
+  const list = rows.map((r, i) => ({ r, prev: rows[i - 1] })).filter((x) => x.r.month.startsWith(y)).map((x) => ({ ...x, w: interestReason(x.r, x.prev, tds) }));
+  return table([
+    { label: 'Month', host: true, get: (x) => monthLabel(x.r.month, true) },
+    { label: 'Interest a month', cls: 'r', mob: 'under', mlabel: 'interest ', render: (x) => inc(x.r.interest) },
+    { label: 'Change', cls: 'r', mob: 'under', mlabel: 'change ', render: (x) => (x.w.delta == null || Math.abs(x.w.delta) < 0.5 ? '–' : h('span', { class: x.w.delta > 0 ? 'inc' : 'exp' }, (x.w.delta > 0 ? '+' : '−') + money(Math.abs(x.w.delta)))) },
+    { label: 'Why', mob: 'hide', render: (x) => h('span', null, x.w.lines.map((l) => h('small', { class: 'muted', style: { display: 'block' } }, l))) },
+  ], list, { m: { key: 'flow-interest', head: 'Month', views: [['Interest a month', 'Change']] } });
 }
 
 /**
@@ -169,27 +197,10 @@ export function yearsTable(rows, { title = 'Year by year, and month by month' } 
  */
 export function interestWhy(rows, { tds = 0.1, title = 'Interest: what changes it, month by month' } = {}) {
   if (!rows.length) return null;
-  const PAY = Object.keys(rows[0].interestBy || {}).concat(rows.flatMap((r) => Object.keys(r.interestBy || {}))).filter((k, i, a) => a.indexOf(k) === i);
-  const why = (r, prev) => {
-    if (!prev) return { delta: null, lines: [`First month: ${money(r.interest)} comes from what you hold today.`] };
-    const lines = [];
-    for (const [k, amt] of Object.entries(prev.investedBy || {})) {
-      const e = (r.interestBy || {})[k]; if (!e || amt < 0.5) continue;
-      const extra = amt * (e.rate / 12) * (1 - tds);
-      lines.push(`${money(amt)} put into ${(P.classOf(k) || {}).label || k} in ${monthLabel(prev.month).slice(0, 3)} × ${pct(e.rate, 1)} ÷ 12 less ${Math.round(tds * 100)}% TDS = +${money(extra)} a month`);
-    }
-    return { delta: r.interest - prev.interest, lines: lines.length ? lines : ['No new money went into bonds or lending last month, so nothing changed.'] };
-  };
   const years = [...new Set(rows.map((r) => r.month.slice(0, 4)))];
   const blocks = years.map((y, yi) => {
-    const list = rows.map((r, i) => ({ r, prev: rows[i - 1] })).filter((x) => x.r.month.startsWith(y)).map((x) => ({ ...x, w: why(x.r, x.prev) }));
-    return h('details', { class: 'cal-month', open: yi === 0 }, h('summary', { style: { padding: '8px', cursor: 'pointer' } }, h('b', null, y), h('small', { class: 'muted' }, `  ${money(list[0].r.interest)} a month at the start, ${money(list[list.length - 1].r.interest)} at the end`)),
-      table([
-        { label: 'Month', host: true, get: (x) => monthLabel(x.r.month, true) },
-        { label: 'Interest a month', cls: 'r', mob: 'under', mlabel: 'interest ', render: (x) => inc(x.r.interest) },
-        { label: 'Change', cls: 'r', mob: 'under', mlabel: 'change ', render: (x) => (x.w.delta == null || Math.abs(x.w.delta) < 0.5 ? '–' : h('span', { class: x.w.delta > 0 ? 'inc' : 'exp' }, (x.w.delta > 0 ? '+' : '−') + money(Math.abs(x.w.delta)))) },
-        { label: 'Why', mob: 'hide', render: (x) => h('span', null, x.w.lines.map((l) => h('small', { class: 'muted', style: { display: 'block' } }, l))) },
-      ], list, { m: { key: 'flow-interest', head: 'Month', views: [['Interest a month', 'Change']] } }));
+    const mine = rows.filter((r) => r.month.startsWith(y));
+    return h('details', { class: 'cal-month', open: yi === 0 }, h('summary', { style: { padding: '8px', cursor: 'pointer' } }, h('b', null, y), h('small', { class: 'muted' }, `  ${money(mine[0].interest)} a month at the start, ${money(mine[mine.length - 1].interest)} at the end`)), interestWhyTable(rows, y, tds));
   });
-  return section(title, h('div', null, ...blocks, h('p', { class: 'note' }, 'Interest is worked out on what is held at the start of the month. New money only starts earning the month after it goes in, and the figure is after TDS. Deposits, EPF and chits do not pay out: their interest is added to the balance and shows as Growth.')));
+  return section(title, h('div', null, ...blocks, h('p', { class: 'note' }, INTEREST_NOTE)));
 }
