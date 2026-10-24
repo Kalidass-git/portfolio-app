@@ -1,5 +1,5 @@
 // Money put into shares, ETFs and funds, by month (from dated buy trades and fund purchases).
-import { BUY_TYPES, guessClass, symKey } from './trades.js';
+import { BUY_TYPES, SELL_TYPES, guessClass, symKey } from './trades.js';
 
 const monthOf = (d) => (d || '').slice(0, 7);
 
@@ -23,6 +23,23 @@ export function monthlyBuys(data) {
     if (!BUY_TYPES.test(t.type) || !t.date) continue;
     const b = bucket(monthOf(t.date));
     b.funds += t.amount; b.total += t.amount; b.items.push({ date: t.date, name: t.scheme, group: 'funds', amount: t.amount });
+  }
+  return out;
+}
+
+/** Money taken out of shares, ETFs and funds by selling, by month: { 'YYYY-MM': { shares, etfs, funds, total } }. */
+export function monthlySells(data) {
+  const out = {};
+  const bucket = (m) => (out[m] = out[m] || { shares: 0, etfs: 0, funds: 0, total: 0 });
+  for (const t of data.trades || []) {
+    if (t.type !== 'SELL' || !t.date) continue;
+    const g = groupOf(data, t), b = bucket(monthOf(t.date));
+    b[g] += t.amount; b.total += t.amount;
+  }
+  for (const t of data.mfTxns || []) {
+    if (!SELL_TYPES.test(t.type) || !t.date) continue;
+    const b = bucket(monthOf(t.date));
+    b.funds += Math.abs(t.amount); b.total += Math.abs(t.amount);
   }
   return out;
 }

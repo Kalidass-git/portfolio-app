@@ -4,10 +4,11 @@ import * as P from '../projector.js';
 import { h, money, compact, pct, monthLabel, section, stat, table, btn, formDialog, canEdit, toast, setOptions, dialog } from '../ui.js';
 import { lineChart, donut, legend, stackedArea, color } from '../charts.js';
 import * as PL from '../planner.js';
-import { rerender, outlooks, ensure, signed, pc, tone, currentPlan, planPicker, notLiveCard, planSettingsCard, outlookWhatIf, outlookNow, outlookOverride } from './proj-shared.js';
+import { rerender, outlooks, ensure, signed, pc, tone, currentPlan, planPicker, notLiveCard, planSettingsCard, outlookWhatIf, outlookNow, outlookOverride, CASE_SHIFT, shiftOutlooks } from './proj-shared.js';
 import { groupedTable, groupOfClass, GROUPS } from './groupmix.js';
 import { flowSection, yearsTable, interestWhy } from './proj-flow.js';
 
+const first0 = (r) => r[0] || {};
 const yrs = (n) => (n === 1 ? '1 year' : n + ' years');
 let compare = false, viewHorizon = null, netView = 'net', catPick = 'all';
 const frac = (x) => (x == null || x === '' ? 0 : Number(x) / 100);
@@ -48,7 +49,9 @@ export function render(root) {
 
   // ---------- controls ----------
   const hz = h('select', { 'aria-label': 'Years to look ahead', onchange: (e) => { viewHorizon = +e.target.value; if (canEdit()) setOwn({ horizon: viewHorizon }); else rerender(); } }, [1, 2, 3, 4, 5, 7, 10, 15, 20, 25].map((n) => h('option', { value: n, selected: n === s.horizon }, yrs(n))));
-  root.append(h('div', { class: 'filters' }, h('label', null, 'Look ahead ', hz), h('label', { class: 'check-inline' }, h('input', { type: 'checkbox', checked: compare, onchange: (e) => { compare = e.target.checked; rerender(); } }), ' Compare all outlooks')));
+  const own = (data.projector && data.projector.ahead) || {}, safe = PL.SAFE_RATES.includes(own.safeRate) ? own.safeRate : 0.04;
+  const sw = h('select', { 'aria-label': 'Safe withdrawal rate', onchange: (e) => { if (canEdit()) setOwn({ safeRate: +e.target.value }); } }, PL.SAFE_RATES.map((x) => h('option', { value: x, selected: x === safe }, pct(x, 1))));
+  root.append(h('div', { class: 'filters' }, h('label', null, 'Look ahead ', hz), h('label', null, 'Safe withdrawal rate ', sw), h('label', { class: 'check-inline' }, h('input', { type: 'checkbox', checked: compare, onchange: (e) => { compare = e.target.checked; rerender(); } }), ' Compare all outlooks')));
 
   // ---------- numbers ----------
   const expOut = end.expenses + end.emi;
@@ -59,6 +62,16 @@ export function render(root) {
     (() => { const tg = targetAt(end.month), g = tg == null ? null : end.nw - tg; return g == null ? stat('Against the plan', '–', 'no plan figure for that month') : stat(`Against the plan, ${monthLabel(end.month)}`, h('span', { class: tone(g) }, `${money(Math.abs(g))} ${g >= 0 ? 'ahead' : 'short'}`), `plan target ${money(tg)} · projected ${money(end.nw)}`); })(),
     stat('Saved each year at the end', money(yearRows[yearRows.length - 1] ? (byYearFlows(rows, s.horizon - 1)) : 0), 'income minus spending, before new investments')));
 
+  // ---------- work-optional number ----------
+  const long = P.simulate(start, s.a, oc, 12 * 40), wo = PL.workOptional(long, b.net, safe);
+  if (wo) root.append(section('Work-optional number', h('div', null,
+    h('div', { class: 'stats' },
+      stat('Corpus needed today', money(wo.corpusToday), `${money(wo.needToday)} a year of spending ÷ ${pct(safe, 1)}`),
+      stat('You have today', h('span', { class: tone(b.net - wo.corpusToday) }, money(b.net)), `${Math.round(wo.progress * 100)}% of the number`),
+      wo.reached ? stat('Reached in', h('span', { class: 'pos' }, wo.reached.month.slice(0, 4)), `in ${yrs(wo.yearsAway)} on this plan; by then you need ${money(wo.reached.corpus)}, you have ${money(wo.reached.nw)}`) : stat('Reached in', 'Not within 40 years', 'at the saving and returns in this plan'),
+      stat('Spending covered by interest now', money(first0(rows).interest), `of ${money(first0(rows).expenses + first0(rows).emi)} a month`)),
+    h('p', { class: 'note' }, `The number is a year of living costs (everyday expenses and the yearly one-time items, without loan EMI, which ends) divided by the safe withdrawal rate: at ${pct(safe, 1)} a year, that corpus could pay those costs without running out. Costs rise with the plan’s yearly rise, so the number grows each year. Net worth here counts everything you own, including EPF and gold, so treat it as a guide, not a promise.`))));
+
   // ---------- chart ----------
   const monthly = s.horizon <= 2, pts = monthly ? rows : yearRows, stepK = monthly ? 1 : 12;   // a short look-ahead is drawn month by month
   const labels = [monthLabel(b.month), ...pts.map(year0)];
@@ -67,7 +80,12 @@ export function render(root) {
   if (compare) {
     const sc = P.scenarios(start, s.a, oc, months);
     sc.forEach((x, i) => series.push({ name: `${x.outlook.name} (${pc(x.outlook.rate, 0)})`, values: [b.net, ...Array.from({ length: pts.length }, (_, k) => x.rows[k * stepK + stepK - 1].nw)], color: i }));
-  } else series.push({ name: 'Net worth', values: line(pts), color: 0 });
+  } else {
+    const lo = P.simulate(start, s.a, shiftOutlooks(oc, -CASE_SHIFT), months), hi = P.simulate(start, s.a, shiftOutlooks(oc, CASE_SHIFT), months);
+    const at = (rr) => [b.net, ...Array.from({ length: pts.length }, (_, k) => rr[k * stepK + stepK - 1].nw)];
+    series.push({ name: `Worse case (market ${pct(-CASE_SHIFT, 0)} a year)`, values: at(lo), color: 4 }, { name: 'Expected (plan outlook)', values: line(pts), color: 0 }, { name: `Better case (market +${pct(CASE_SHIFT, 0)} a year)`, values: at(hi), color: 2 });
+  }
+  if (wo) series.push({ name: 'Work-optional number', values: [wo.corpusToday, ...pts.map((r, k) => { const y = wo.years[Math.min(wo.years.length - 1, Math.floor((k * stepK + stepK - 1) / 12))]; return y ? y.corpus : null; })], dashed: true, color: 5 });
   series.push({ name: 'Plan target', values: [targetAt(b.month), ...pts.map((r) => (r ? targetAt(r.month) : null))], dashed: true, color: 7 });
   // by category: debts, gold, equity and others, each in its own colour
   const sumGroup = (vals, gid) => P.CLASSES.filter((c) => groupOfClass(c.key) === gid).reduce((a, c) => a + ((vals && vals[c.key]) || 0), 0);
@@ -76,7 +94,7 @@ export function render(root) {
   if (catPick !== 'all' && !catSeries.some((x) => x.id === catPick)) catPick = 'all';
   const tabs = h('nav', { class: 'seg slim', 'aria-label': 'Chart view' }, [['net', 'Net worth'], ['cats', 'By category']].map(([k, l]) => h('a', { href: '#', class: netView === k ? 'on' : '', onclick: (e) => { e.preventDefault(); netView = k; rerender(); } }, l)));
   let netBody;
-  if (netView === 'net' || !catSeries.length) netBody = lineChart({ labels, fmt: money, yMin: 0, series, area: !compare });
+  if (netView === 'net' || !catSeries.length) netBody = lineChart({ labels, fmt: money, yMin: 0, series, area: false });
   else {
     const chips = h('div', { class: 'chips' }, [{ id: 'all', name: 'All together' }, ...catSeries].map((x) => h('button', { type: 'button', class: 'chip-btn' + (catPick === x.id ? ' on' : ''), onclick: () => { catPick = x.id; rerender(); } }, x.id !== 'all' ? [h('i', { class: 'gdot', style: { background: color(x.color) } }), x.name] : x.name)));
     const shown = catPick === 'all' ? catSeries : catSeries.filter((x) => x.id === catPick);
