@@ -138,3 +138,7 @@ export function planSettingsCard(plan) {
     h('p', { class: 'note' }, h('a', { href: '#/projector/planner' }, 'Change these on the Planner tab'), ', then commit the plan to make the new figures live.')));
 }
 export { datalistId } from '../ui.js';
+
+/** Best and worst case for the market classes: every outlook rate moved by this many points a year. */
+export const CASE_SHIFT = 0.02;
+export const shiftOutlooks = (oc, d) => oc.map((o) => ({ ...o, rate: o.rate + d }));

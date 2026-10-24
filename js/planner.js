@@ -9,6 +9,8 @@
 import * as P from './projector.js';
 import { monthActual } from './yearplan.js';
 import { investedByMonth } from './actuals.js';
+import { monthlySells } from './buys.js';
+import * as G from './growth.js';
 import { oneTimeSet } from './categories.js';
 import { isInterestCategory } from './insights.js';
 import { ledgerMonths, monthKey, monthLedger, monthCashflow } from './calc.js';
@@ -207,33 +209,48 @@ export const nextId = (list, prefix) => prefix + idx(list || []);
 // ---------- the year against the plan ----------
 export const statusOf = (nw, planNw) => { if (nw == null || planNw == null) return null; const p = (nw - planNw) / Math.max(1, Math.abs(planNw)); return p > 0.01 ? 'ahead' : p >= -0.01 ? 'on track' : p >= -0.03 ? 'slightly behind' : 'behind'; };
 
+/** Yearly rate of every class for the growth rules: the plan's own rates, and the plan's outlook for the market classes. */
+export function rateFn(data, all, plan, oc) {
+  const b = P.baseline(data, all), rates = (plan && plan.a && plan.a.rates) || b.rates;
+  return (k) => {
+    if (P.isMarket(k)) { const id = (plan && plan.a && plan.a.outlook && plan.a.outlook[k]) || 'steady'; return (oc.find((o) => o.id === id) || oc[3] || { rate: 0.09 }).rate; }
+    return rates[k] ?? b.rates[k] ?? (k === 'cash' ? 0.03 : 0);
+  };
+}
+/** What goes into a snapshot about its growth: the rules' figures, kept so they do not shift later. */
+const growthRecord = (row, from) => ({ v: 1, from, months: row.spanMonths, items: row.growthItems, memo: row.growthMemo, other: r0(row.growthOther), total: r0(row.growth) });
+
 /** One month as it really was, in the shape of a projected month, so the same tables and charts can show both. `prev` is the position the month started from. */
-function actualRow(data, mo, nw, classes, liab, prev, by) {
+function actualRow(data, mo, nw, classes, liab, prev, by, ctx = {}) {
   const a = monthActual(data, mo), once = oneTimeSet(data);
   const led = monthLedger(data, mo);
+  const opt = { by, sells: ctx.sells || {}, divs: ctx.divs || [] };
+  const months = G.spanOf(prev.month, mo);                       // normally just this month; more when an earlier month has no snapshot
+  const fm = G.flowsOf(data, [mo], opt), fl = months.length === 1 ? fm : G.flowsOf(data, months, opt);
   const interest = sum(led.filter((e) => e.credit > 0 && isInterestCategory(e.category)), (e) => e.credit);
-  const other = Math.max(0, a.income - a.salary - interest);
+  const other = Math.max(0, a.income - a.salary - interest) + fm.divExtra;   // dividends in your trade records, when no bank entry shows them, are income too
   const oneOut = a.oneTime + a.tax, out = a.expenses + a.emi + a.tax, income = a.salary + other + interest;
   const items = new Map();
   for (const e of led) { const c = (e.category || '').toLowerCase(); if (e.debit > 0 && (once.has(c) || c === 'tax')) items.set(e.category || 'Other', (items.get(e.category || 'Other') || 0) + e.debit); }
   const inv = by[mo] || {}, total = sum(Object.values(inv), (x) => x.amount), pfc = inv.pf ? inv.pf.amount : 0;
-  const invested = total - pfc + Math.max(0, pfc - a.pf);   // EPF is shown on its own; PPF counts as invested
+  const invested = total - pfc + fm.ppfIn;   // EPF is shown on its own; PPF counts as invested; interest credited is growth, not money put in
   const left = income - out;
+  const leftSpan = months.length === 1 ? left : sum(months, (m) => monthActual(data, m).left + G.flowsOf(data, [m], opt).divExtra);
   const investedBy = Object.fromEntries(Object.entries(inv).filter(([k]) => k !== 'pf').map(([k, x]) => [k, x.amount]));
-  // growth class by class: what the class gained beyond the money that was put into it (cash also takes what was saved and not invested)
   const assets = sum(Object.values(classes)), prevAssets = sum(Object.values(prev.values));
+  const growth = assets - prevAssets - leftSpan - fl.epfIn;   // whatever the net worth gained beyond what was saved and put into EPF
+  let ex, recorded = false;
+  const st = ctx.stored;
+  if (st && st.v === 1 && st.from === prev.month) { ex = { items: st.items || [], memo: st.memo || [], other: growth - sum(st.items || [], (x) => x.amount) }; recorded = true; }
+  else ex = G.explainGrowth({ months, open: prev.values, close: classes, openReal: !!prev.real, closeReal: ctx.closeReal !== false, total: growth, flows: fl, rate: ctx.rate || (() => 0) });
   const growthBy = {};
-  for (const c of P.CLASSES) {
-    const open = prev.values[c.key] || 0, close = classes[c.key] || 0;
-    let flow = c.key === 'cash' ? left - invested : (investedBy[c.key] || 0) + (c.key === 'pf' ? a.pf : 0);
-    if (!(Math.abs(open) + Math.abs(close) > 1)) continue;
-    growthBy[c.key] = { amount: close - open - flow, base: open, close, flow, rate: null };
-  }
+  for (const x of ex.items) growthBy[x.key] = { amount: x.amount, base: x.base, close: x.close, flow: x.flow || 0, rate: x.how === 'rate' ? x.rate : null, how: x.how };
   const loanPaid = (prev.liab || 0) - liab;   // negative when loans grew
   return {
-    month: mo, src: 'actual', has: a.has, salary: a.salary, other, interest, accrual: 0, growth: assets - prevAssets - left - a.pf, growthBy, interestBy: {}, open: { nw: prev.nw, values: prev.values, liab: prev.liab },
+    month: mo, src: 'actual', has: a.has, salary: a.salary, other, interest, accrual: 0, growth, growthBy, growthItems: ex.items, growthMemo: ex.memo, growthOther: ex.other, growthRecorded: recorded, spanMonths: months.length, leftSpan, pfSpan: fl.epfIn,
+    dividends: fm.dividends, bankInterest: fm.bankInterest, pfInterest: fm.pfInterest, interestBy: {}, open: { nw: prev.nw, values: prev.values, liab: prev.liab, real: !!prev.real },
     investedBy, loanPaid, left, refill: 0, avail: 0, oneIn: 0,
-    expenses: a.regular, emi: a.emi, oneOut, items: [...items.entries()].map(([name, amount]) => ({ name, amount, kind: 'expense' })), invested, pfAdd: a.pf, surplus: left - invested, income, out,
+    expenses: a.regular, emi: a.emi, oneOut, items: [...items.entries()].map(([name, amount]) => ({ name, amount, kind: 'expense' })), invested, pfAdd: fm.epfIn, surplus: left - invested, income, out,
     cash: classes.cash || 0, values: classes, market: sum(P.MARKET, (k) => classes[k] || 0), assets, liab, nw,
   };
 }
@@ -249,7 +266,9 @@ export function yearTrack(data, all, plan, oc, { outlook = null } = {}) {
   const aProj = outlook ? { ...plan.a, outlook: { ...outlook }, invest: (plan.a.invest || []).map((l) => (P.isMarket(l.cls) ? { ...l, outlook: '' } : l)) } : plan.a;
   const snaps = new Map(P.cfg(data).snapshots.map((s) => [s.month, s]));
   const live = P.baseline(data, all), by = investedByMonth(data);
-  let state = { values: plan.start.values, liab: plan.start.liab, month: plan.start.month, nw: plan.initial.net };
+  const ctx0 = { sells: monthlySells(data), divs: (all.stocks.eq && all.stocks.eq.dividends) || [], rate: rateFn(data, all, plan, oc) };
+  const s0 = snaps.get(plan.start.month);   // the December snapshot, when there is one, is a real starting position
+  let state = s0 && s0.classes ? { values: { ...s0.classes }, liab: s0.loans || 0, month: s0.month, nw: s0.net, real: !s0.classesEstimated } : { values: plan.start.values, liab: plan.start.liab, month: plan.start.month, nw: plan.initial.net, real: false };
   const seg = new Map();
   const project = (st) => { if (!seg.has(st.month)) seg.set(st.month, P.simulate({ values: st.values, liab: st.liab, month: st.month }, aProj, oc, P.monthsTo(st.month, year))); return seg.get(st.month); };
   const between = (a, b) => (Number(b.slice(0, 4)) - Number(a.slice(0, 4))) * 12 + Number(b.slice(5, 7)) - Number(a.slice(5, 7));
@@ -257,13 +276,13 @@ export function yearTrack(data, all, plan, oc, { outlook = null } = {}) {
   for (const mo of months) {
     const snap = snaps.get(mo);
     if (snap || mo === cur) {
-      let classes, liab, nw;
-      if (snap) { nw = snap.net; liab = snap.loans || 0; classes = snap.classes ? { ...snap.classes } : scaleClasses(state.values, snap.assets != null ? snap.assets : nw + liab); }
+      let classes, liab, nw, closeReal = true;
+      if (snap) { nw = snap.net; liab = snap.loans || 0; closeReal = !!(snap.classes && !snap.classesEstimated); classes = snap.classes ? { ...snap.classes } : scaleClasses(state.values, snap.assets != null ? snap.assets : nw + liab); }
       else { nw = live.net; liab = live.liab; classes = { ...live.values }; }
-      const row = actualRow(data, mo, nw, classes, liab, state, by);
+      const row = actualRow(data, mo, nw, classes, liab, state, by, { ...ctx0, closeReal, stored: snap && snap.growth });
       row.src = snap ? 'actual' : 'now';
       rows.push(row);
-      state = { values: classes, liab, month: mo, nw };
+      state = { values: classes, liab, month: mo, nw, real: closeReal };
     } else {
       const sim = project(state), row = sim[between(state.month, mo) - 1];
       rows.push({ ...row, src: 'projected', missing: mo < cur });
@@ -295,11 +314,29 @@ export function whereWent(plan, track, month) {
 }
 
 // ---------- month-end snapshots (moved here from projector.js: they carry the plan's own figures for the month) ----------
+/** Where a month started from: the latest earlier snapshot (a real position), else the plan's own starting position. */
+export function prevPosition(data, month) {
+  const before = P.cfg(data).snapshots.filter((x) => x.month < month && x.classes).sort((x, y) => (x.month < y.month ? -1 : 1));
+  const x = before[before.length - 1];
+  if (x) return { values: { ...x.classes }, liab: x.loans || 0, month: x.month, nw: x.net, real: !x.classesEstimated };
+  const plan = bestPlan(data, month.slice(0, 4));
+  return plan ? { values: plan.start.values, liab: plan.start.liab, month: plan.start.month, nw: plan.initial.net, real: false } : null;
+}
+/** Work out the growth of the month a snapshot closes, class by class, and keep it in the snapshot (so it is recorded, not worked out again later). Call inside mutate() or on a fresh record. */
+export function attachGrowth(data, all, snap, oc = P.cfg(data).outlooks) {
+  const prev = prevPosition(data, snap.month);
+  if (!prev || !snap.classes) { delete snap.growth; return snap; }
+  const plan = bestPlan(data, snap.month.slice(0, 4));
+  const ctx = { sells: monthlySells(data), divs: (all.stocks.eq && all.stocks.eq.dividends) || [], rate: rateFn(data, all, plan, oc), closeReal: !snap.classesEstimated };
+  const row = actualRow(data, snap.month, snap.net, snap.classes, snap.loans || 0, prev, investedByMonth(data), ctx);
+  snap.growth = growthRecord(row, prev.month);
+  return snap;
+}
 export function makeSnapshot(data, all, month, note = '', oc = P.cfg(data).outlooks) {
   const b = P.baseline(data, all), m = month || b.month, a = monthActual(data, m);
   const snap = { id: 's' + m, month: m, date: b.date, net: r0(b.net), assets: r0(b.assets), loans: r0(b.liab), classes: Object.fromEntries(Object.entries(b.values).map(([k, v]) => [k, r0(v)])), income: r0(a.income), expenses: r0(a.expenses + a.emi + a.tax), note };
   const by = investedByMonth(data)[m] || {};
-  snap.actual = { salary: r0(a.salary), income: r0(a.income), expenses: r0(a.expenses), oneTime: r0(a.oneTime), emi: r0(a.emi), tax: r0(a.tax), invested: r0(a.invested), pf: r0(a.pf), bank: r0(all.cashTotal), investedByClass: Object.fromEntries(Object.entries(by).map(([k, v]) => [k, r0(v.amount)])) };
+  snap.actual = { dividends: r0(G.flowsOf(data, [m], { divs: (all.stocks.eq && all.stocks.eq.dividends) || [] }).dividends), salary: r0(a.salary), income: r0(a.income), expenses: r0(a.expenses), oneTime: r0(a.oneTime), emi: r0(a.emi), tax: r0(a.tax), invested: r0(a.invested), pf: r0(a.pf), bank: r0(all.cashTotal), investedByClass: Object.fromEntries(Object.entries(by).map(([k, v]) => [k, r0(v.amount)])) };
   const plan = livePlan(data, m.slice(0, 4));
   if (plan) {
     const row = planPath(plan, oc).find((r) => r.month === m);
@@ -309,5 +346,42 @@ export function makeSnapshot(data, all, month, note = '', oc = P.cfg(data).outlo
       snap.variance = snap.net - snap.projected.net;
     }
   }
+  attachGrowth(data, all, snap, oc);
   return snap;
 }
+
+// ---------- work-optional number ----------
+export const SAFE_RATES = [0.03, 0.035, 0.04];
+/**
+ * The corpus at which investments could pay for living costs: yearly spending (everyday expenses and the yearly one-time items, without loan EMI, which ends)
+ * divided by a safe withdrawal rate. `rows` is a long projection from today. Returns the number for today and for every year end, and the first year net worth reaches it.
+ */
+export function workOptional(rows, netNow, rate) {
+  if (!(rate > 0) || rows.length < 12) return null;
+  const years = [];
+  for (let i = 0; i * 12 + 11 < rows.length; i++) {
+    const yr = rows.slice(i * 12, i * 12 + 12), end = yr[11], need = sum(yr, (r) => r.expenses + r.oneOut);
+    years.push({ month: end.month, need: r0(need), corpus: r0(need / rate), nw: r0(end.nw) });
+  }
+  const today = years[0], reached = years.find((y) => y.nw >= y.corpus) || null;
+  return { rate, years, needToday: today.need, corpusToday: today.corpus, progress: netNow / today.corpus, reached, yearsAway: reached ? years.indexOf(reached) + 1 : null };
+}
+
+// ---------- suggested fix for a gap against the plan ----------
+/**
+ * One-line ways to close a shortfall at the year end, from what the plan itself says: save more each month, move a coming one-time item, or what the market would need to do.
+ * `track` is a yearTrack. Returns [] when there is no gap or no month left.
+ */
+export function suggestFix(plan, track, oc) {
+  if (!track.inYear || !(track.gap < 0) || !track.monthsLeft) return [];
+  const short = -track.gap, out = [];
+  if (track.extra > 0) out.push({ kind: 'save', amount: r0(track.extra), text: `save ${fmt(track.extra)} more each month for the ${track.monthsLeft} months left` });
+  const coming = track.path.filter((r) => r.month > track.cur).flatMap((r) => (r.items || []).filter((i) => i.kind !== 'income').map((i) => ({ name: i.name, month: r.month, amount: i.amount })));
+  const big = coming.sort((a, b) => b.amount - a.amount)[0];
+  if (big) out.push({ kind: 'move', amount: r0(big.amount), text: big.amount >= short ? `push back ${big.name} (${fmt(big.amount)}, due ${big.month}) beyond the year end` : `push back ${big.name} (${fmt(big.amount)}, due ${big.month}) and save the rest, ${fmt(short - big.amount)}, another way` });
+  const startNow = { values: track.live.values, liab: track.live.liab, month: track.cur };
+  const need = P.breakEvenMarket(startNow, plan.a, oc, track.monthsLeft, track.target);
+  if (need != null) out.push({ kind: 'market', amount: need, text: `or markets return about ${(need * 100).toFixed(1)}% a year from here, instead of the plan’s outlook` });
+  return out;
+}
+const fmt = (n) => '₹' + Math.round(n).toLocaleString('en-IN');

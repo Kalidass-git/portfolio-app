@@ -394,16 +394,29 @@ if (typeof document !== 'undefined') {
 }
 /**
  * Make `trigger` open its working in a bottom sheet on a phone and a popup on a desktop (the same dialog as the rest of the app).
- * build() returns { title, rows: [{ l: label, v: value, n: short working, b: bold }], foot, note }.
+ * build() returns { title, rows, foot, note }. A row is { l: label, v: value, n: short working, b: bold, tone: 'inc'|'exp'|'inv' (colour of the value), memo: shown in grey and not counted,
+ * warn: text of a ⚠ shown beside the label (a figure worked out now rather than recorded) } or { head } or a group { group: label, v: total, tone, open, rows: [...] } whose header folds the rows under it.
  */
 export function tapSheet(trigger, build) {
   trigger.setAttribute('tabindex', '0'); trigger.setAttribute('role', 'button'); trigger.classList.add('pop-trigger');
+  const rowEl = (r) => {
+    if (r.head) return h('h4', { class: 'ts-head' }, r.head);
+    if (r.group) {
+      const d = h('details', { class: 'ts-group' + (r.tone ? ' ' + r.tone : ''), open: r.open === false ? null : '' },
+        h('summary', null, h('span', { class: 'ts-l' }, r.group), h('span', { class: 'ts-v ' + (r.tone || '') }, r.v ?? '')),
+        ...(r.rows || []).map(rowEl));
+      return d;
+    }
+    return h('div', { class: 'ts-row' + (r.b ? ' b' : '') + (r.memo ? ' memo' : '') + (r.sub ? ' sub' : '') },
+      h('span', { class: 'ts-l' }, r.l, r.warn ? h('span', { class: 'calc-alert', title: r.warn, 'aria-label': r.warn, role: 'img' }, '⚠') : null),
+      h('span', { class: 'ts-v ' + (r.tone || '') }, r.v), r.n ? h('span', { class: 'ts-n' }, r.n) : null);
+  };
   const open = (e) => {
     e.preventDefault(); e.stopPropagation();
     const c = build();
     dialog(c.title || 'Working', h('div', { class: 'tapsheet' },
       c.note ? h('p', { class: 'note', style: { marginTop: 0 } }, c.note) : null,
-      ...(c.rows || []).map((r) => (r.head ? h('h4', { class: 'ts-head' }, r.head) : h('div', { class: 'ts-row' + (r.b ? ' b' : '') }, h('span', { class: 'ts-l' }, r.l), h('span', { class: 'ts-v' }, r.v), r.n ? h('span', { class: 'ts-n' }, r.n) : null))),
+      ...(c.rows || []).map(rowEl),
       c.foot ? h('p', { class: 'note' }, c.foot) : null), [{ label: 'Done', class: 'primary', onclick: (cl) => cl() }]);
   };
   trigger.addEventListener('click', open);
