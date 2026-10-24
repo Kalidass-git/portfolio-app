@@ -4,8 +4,8 @@ import * as C from '../calc.js';
 import * as P from '../projector.js';
 import { h, money, compact, pct, dateStr, monthLabel, section, stat, table, btn, formDialog, canEdit, toast } from '../ui.js';
 import { lineChart } from '../charts.js';
-import { rerender, outlooks, ensure, signed, pc, tone, outlookToggle, outlookSelects, setAllOutlook } from './proj-shared.js';
-import { currentPlan, createPlanFor } from './proj-year.js';
+import * as PL from '../planner.js';
+import { rerender, outlooks, ensure, signed, pc, tone, outlookToggle, outlookSelects, currentPlan, planPicker, notLiveCard, outlookNow, outlookOverride, pickAll, pickClass, setOutlookOverride } from './proj-shared.js';
 
 /** The outlook scale itself: names and yearly returns. */
 function scaleForm() {
@@ -20,16 +20,15 @@ function scaleForm() {
 
 export function render(root) {
   const { data, all } = S;
-  const { plan, year } = currentPlan();
-  if (!plan) {
-    root.append(section('Market outlook', h('div', null, h('p', null, `Make a plan for ${year} first (This year tab). The market view then shows what each outlook would do to your year-end target.`),
-      canEdit() ? btn(`Create plan ${year}`, () => createPlanFor(year), 'primary', { keep: true }) : null)));
-    return;
-  }
+  const ctx = currentPlan(), { plan, year } = ctx;
+  root.append(planPicker());
+  if (!plan) { root.append(notLiveCard(ctx, 'this page')); return; }
+  plan.target = PL.planTarget(plan, outlooks());
   const oc = outlooks();
   const b = P.baseline(data, all);
-  const live = b.month > plan.baseline.month && b.month <= `${plan.year}-12`;
-  const start = live ? { values: b.values, liab: b.liab, month: b.month } : { values: plan.baseline.classes, liab: plan.baseline.loans, month: plan.baseline.month };
+  const live = b.month >= plan.start.month && b.month <= `${plan.year}-12`;
+  const start = live ? { values: b.values, liab: b.liab, month: b.month } : plan.start;
+  plan.a = { ...plan.a, outlook: { ...outlookNow(plan) } };
   const months = P.monthsTo(start.month, plan.year);
   const sc = P.scenarios(start, plan.a, oc, months);
   const cur = P.simulate(start, plan.a, oc, months);
@@ -39,16 +38,16 @@ export function render(root) {
   const be = P.breakEvenMarket(start, plan.a, oc, months, plan.target);
   const nearest = (r) => { const sorted = oc.slice().sort((x, y) => x.rate - y.rate); const lo = sorted.filter((o) => o.rate <= r).pop(), hi = sorted.find((o) => o.rate > r); return !lo ? `below ${sorted[0].name}` : !hi ? (r <= lo.rate + 0.002 ? lo.name : `above ${lo.name}`) : `between ${lo.name} and ${hi.name}`; };
 
-  root.append(h('p', { class: 'note' }, `Showing plan ${plan.year}: target ${money(plan.target)} in ${monthLabel(plan.year + '-12')}. Change the plan year on the This year tab.`));
+  root.append(h('p', { class: 'note' }, `Showing plan ${plan.year}: target ${money(plan.target)} in ${monthLabel(plan.year + '-12')}. The target is what the plan itself projects for December.`));
   root.append(h('div', { class: 'stats' },
     stat('Market-linked today', money(marketNow), 'shares, ETFs, funds and gold'),
     stat('Fresh market money planned', money(fresh), `over the ${months} months left`),
     stat('At year end (current outlook)', money(curEnd.market), h('span', { class: tone(curEnd.market - marketNow - fresh) }, `${signed(curEnd.market - marketNow - fresh)} from returns`)),
     be == null ? stat('Needed from markets', 'Out of reach', 'even 80% a year would not reach the target') : stat('Needed from markets', pc(be, 1) + ' a year', nearest(be) + ' on the outlook scale')));
 
-  root.append(section('Pick the outlook', h('div', null,
-    outlookToggle(plan.a.outlook, (id) => setAllOutlook(plan.id, id), { disabled: !canEdit() }),
-    h('details', { class: 'more' }, h('summary', null, 'Set each market class separately'), outlookSelects(plan.a.outlook, (k, id) => canEdit() && mutate((d) => { const pl = ensure(d).years[plan.id]; pl.a.outlook[k] = id; d.projector.ahead = { ...(d.projector.ahead || {}), outlook: { ...pl.a.outlook } }; }))))));
+  root.append(section('Try another outlook', h('div', null, h('p', { class: 'note' }, 'For looking only: nothing is saved. The plan’s own outlook is set on the Planner tab.'),
+    outlookToggle(plan.a.outlook, (id) => pickAll(plan, id)),
+    h('details', { class: 'more' }, h('summary', null, 'Set each market class separately'), outlookSelects(plan.a.outlook, (k, id) => pickClass(plan, k, id))))));
 
   // ---------- every outlook against the target ----------
   const curId = (() => { const ids = P.MARKET.map((k) => plan.a.outlook[k]); return ids.every((x) => x === ids[0]) ? ids[0] : null; })();
@@ -59,12 +58,12 @@ export function render(root) {
       { label: 'Net worth', cls: 'r', get: (x) => money(x.end ? x.end.nw : b.net) },
       { label: 'Against target', cls: 'r', render: (x) => { const g = (x.end ? x.end.nw : b.net) - plan.target; return h('span', { class: tone(g) }, signed(g)); } },
       { label: 'Target', mob: 'hide', render: (x) => ((x.end ? x.end.nw : b.net) >= plan.target ? h('span', { class: 'tag good' }, 'reached') : h('span', { class: 'tag' }, 'missed')) },
-    ], sc, { m: { key: 'mkt-outlooks', head: 'Outlook', mid: 'Target', views: [['Net worth', 'Against target'], ['Market-linked']] }, onRow: canEdit() ? (x) => setAllOutlook(plan.id, x.outlook.id) : null }),
-    h('p', { class: 'note' }, 'Same salary, spending and investments in every row; only the return on market-linked money changes. Tap a row to choose that outlook.'))));
+    ], sc, { m: { key: 'mkt-outlooks', head: 'Outlook', mid: 'Target', views: [['Net worth', 'Against target'], ['Market-linked']] }, onRow: (x) => pickAll(plan, x.outlook.id) }),
+    h('p', { class: 'note' }, 'Same salary, spending and investments in every row; only the return on market-linked money changes. Tap a row to try that outlook.'))));
 
   // ---------- chart ----------
   const labels = [monthLabel(start.month), ...cur.map((r) => monthLabel(r.month))];
-  const series = sc.map((x, i) => ({ name: `${x.outlook.name} (${pc(x.outlook.rate, 0)})`, values: [b.net && (live ? b.net : plan.baseline.net), ...x.rows.map((r) => r.nw)], color: i }));
+  const series = sc.map((x, i) => ({ name: `${x.outlook.name} (${pc(x.outlook.rate, 0)})`, values: [live ? b.net : plan.initial.net, ...x.rows.map((r) => r.nw)], color: i }));
   series.push({ name: 'Target', values: labels.map(() => plan.target), dashed: true, color: 7 });
   const all2 = series.flatMap((x) => x.values).filter((v) => v != null);
   root.append(section('Net worth under each outlook', lineChart({ labels, fmt: money, yMin: Math.floor((Math.min(...all2) * 0.97) / 1e6) * 1e6, series })));

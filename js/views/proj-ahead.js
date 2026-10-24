@@ -3,8 +3,8 @@ import { S, mutate } from '../store.js';
 import * as P from '../projector.js';
 import { h, money, compact, pct, monthLabel, section, stat, table, btn, formDialog, canEdit, toast, setOptions, dialog } from '../ui.js';
 import { lineChart, donut, legend, stackedArea, color } from '../charts.js';
-import { rerender, outlooks, ensure, signed, pc, tone, outlookToggle, outlookSelects } from './proj-shared.js';
-import { currentPlan } from './proj-year.js';
+import * as PL from '../planner.js';
+import { rerender, outlooks, ensure, signed, pc, tone, currentPlan, planPicker, notLiveCard, planSettingsCard, outlookWhatIf, outlookNow, outlookOverride } from './proj-shared.js';
 import { groupedTable, groupOfClass, GROUPS } from './groupmix.js';
 import { flowSection, yearsTable, interestWhy } from './proj-flow.js';
 
@@ -13,104 +13,22 @@ let compare = false, viewHorizon = null, netView = 'net', catPick = 'all';
 const frac = (x) => (x == null || x === '' ? 0 : Number(x) / 100);
 const pctIn = (x) => (x == null || x === '' ? '' : Math.round(x * 10000) / 100);
 
-/** The one-time bills that come round every year: the ones you saved here, else the yearly ones in this year's plan. Month is 'MM'. */
-const yearlyItems = (own, base) => (own.oneOffs ? own.oneOffs : (base.oneOffs || []).filter((o) => o.month.length === 2)).map((o) => ({ ...o }));
-const nextItemId = (list) => 'y' + (Math.max(0, ...list.map((x) => Number(String(x.id).replace(/\D/g, '')) || 0)) + 1);
-const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const setOwn = (patch) => mutate((d) => { const p = ensure(d); p.ahead = { ...(p.ahead || {}), ...patch }; });   // only the look-ahead length is kept here
 
-/** Assumptions for the long view: the plan's rates, investments and recurring items, plus the growth settings stored here. */
+/** Assumptions for the long view: exactly the live plan, with the market outlook what-if if one is chosen. */
 export function aheadSetup() {
   const { plan } = currentPlan();
-  const base = plan ? plan.a : P.effectiveA(S.data, P.defaults(S.data, S.all));
   const own = (S.data.projector && S.data.projector.ahead) || {};
-  const a = {
-    ...base,
-    salary: own.salary ?? base.salary, otherIncome: own.otherIncome ?? base.otherIncome, expenses: own.expenses ?? base.expenses, emi: own.emi ?? base.emi, pfAdd: own.pfAdd ?? base.pfAdd,
-    growth: { salary: own.growthSalary ?? 0.06, expenses: own.growthExpenses ?? 0.06, oneTime: own.growthOneTime ?? own.growthExpenses ?? 0.06, invest: 0 },
-    hikeMonth: own.hikeMonth ?? 3,
-    outlook: { ...(own.outlook || base.outlook) },
-    oneOffs: base.oneOffs.map((o) => ({ ...o })),
-    invest: (base.invest || []).map((l) => ({ ...l })),
-    loanPrincipal: 0,
-  };
-  return { a, yearly: a.oneOffs.filter((o) => o.month && o.month.length === 2), horizon: viewHorizon || own.horizon || 10, target: own.target || null, plan, own };
+  if (!plan) return { plan: null, horizon: viewHorizon || own.horizon || 10 };
+  const a = { ...plan.a, outlook: { ...outlookNow(plan) }, invest: (plan.a.invest || []).map((l) => ({ ...l, from: '', to: '' })) };
+  return { a, plan, horizon: viewHorizon || own.horizon || 10, target: PL.planTarget(plan, outlooks()) };
 }
-
-/** Every assumption of the long view, in one card: income, spending, saving and the market. Each field saves as soon as it is changed. */
-function assumptionsCard(s) {
-  const { a } = s;
-  const num = (label, name, value, hint, { pctField = false, step = 'any' } = {}) => h('label', null, h('span', null, label),
-    h('input', { type: 'number', step, inputmode: 'decimal', value: value === '' || value == null ? '' : String(value), disabled: !canEdit(), 'aria-label': label,
-      onchange: (e) => { const n = e.target.value === '' ? 0 : Number(e.target.value); if (Number.isFinite(n)) setOwn({ [name]: pctField ? n / 100 : n }); } }), hint ? h('small', null, hint) : null);
-  const group = (title, ...fields) => h('div', { class: 'assume-group' }, h('h4', null, title), h('div', { class: 'assume-fields' }, ...fields));
-  const hike = h('label', null, h('span', null, 'Month the raise lands'),
-    h('select', { disabled: !canEdit(), 'aria-label': 'Month the raise lands', onchange: (e) => setOwn({ hikeMonth: Number(e.target.value) }) }, MONTH_NAMES.map((m, i) => h('option', { value: i + 1, selected: i + 1 === a.hikeMonth }, m))),
-    h('small', null, 'Salary and EPF step up together from this month'));
-    const summary = `Salary +${pct(a.growth.salary, 1)} a year from ${MONTH_NAMES[a.hikeMonth - 1]}, expenses +${pct(a.growth.expenses, 1)}`;
-  return section('What the projection grows by', h('details', { class: 'more assume-wrap' }, h('summary', { style: { cursor: 'pointer' } }, h('b', null, 'Show and change the assumptions'), ' ', h('small', { class: 'muted' }, summary)), h('div', { class: 'assume', style: { marginTop: '10px' } },
-    group('Income',
-      num('Salary each month today (₹)', 'salary', a.salary, 'take-home, to your bank'),
-      num('Other income each month (₹)', 'otherIncome', a.otherIncome, 'rent, dividends and so on'),
-      num('Salary raise each year (%)', 'growthSalary', pctIn(a.growth.salary), 'also raises other income and EPF', { pctField: true }), hike),
-    group('Spending',
-      num('Everyday expenses each month today (₹)', 'expenses', a.expenses, 'without EMI and one-time bills'),
-      num('Expenses rise each year (%)', 'growthExpenses', pctIn(a.growth.expenses), 'each January', { pctField: true }),
-      num('Loan EMI each month today (₹)', 'emi', a.emi, 'stays the same, it is fixed by the loan'),
-      num('One-time bills rise each year (%)', 'growthOneTime', pctIn(a.growth.oneTime), 'tax, fees, trips (set below)', { pctField: true })),
-    group('Saving',
-      num('Added to EPF each month today (₹)', 'pfAdd', a.pfAdd, 'goes in before salary reaches the bank; rises with the salary raise'),
-      num('Net worth I want at the end (₹, optional)', 'target', s.target || '', 'shows whether you get there')),
-    h('div', { class: 'assume-group' }, h('h4', null, 'Markets'),
-      outlookToggle(s.a.outlook, (id) => canEdit() && setOwn({ outlook: Object.fromEntries(P.MARKET.map((k) => [k, id])) }), { disabled: !canEdit() }),
-      h('details', { class: 'more', style: { marginTop: '8px' } }, h('summary', null, 'Set each market class separately'), outlookSelects(s.a.outlook, (k, id) => canEdit() && setOwn({ outlook: { ...s.a.outlook, [k]: id } }))),
-      h('p', { class: 'reco' }, 'Shares, ETFs, funds and gold. Bonds and lending pay interest on what you hold and put in; deposits, EPF and chits grow at their own rates.')),
-    h('p', { class: 'note' }, 'New money is not a fixed figure. Each month the projection invests whatever is left after spending, EMI and one-time bills, split by the shares in your plan. A month with tax or school fees leaves little or nothing; if cash dipped, it is topped up to today’s level before investing again. Everything below follows these settings.'))));
-}
-
-function yearlyItemForm(s, it) {
-  const isNew = !it, list = s.yearly.map((o) => ({ ...o }));
-  formDialog({
-    title: isNew ? 'Add a yearly one-time item' : 'Edit ' + it.name, saveLabel: isNew ? 'Add' : 'Save', deleteMessage: 'Remove this yearly item?',
-    value: it ? { name: it.name, kind: it.kind || 'expense', month: it.month, amount: it.amount } : { kind: 'expense', month: '04' },
-    fields: [
-      { key: 'name', label: 'What', required: true, hint: 'Tax, school fees, vacation, insurance, a function, a bonus…' },
-      { key: 'kind', label: 'Type', type: 'select', options: [{ value: 'expense', label: 'Money going out' }, { value: 'income', label: 'Money coming in' }], half: true },
-      { key: 'month', label: 'Paid in', type: 'select', options: MONTH_NAMES.map((m, i) => ({ value: String(i + 1).padStart(2, '0'), label: m })), half: true },
-      { key: 'amount', label: 'Amount at today’s prices (₹)', type: 'number', required: true, hint: 'It goes up each year by the expense rise.' },
-    ],
-    onSave: (v) => { const rec = { name: v.name, kind: v.kind, month: v.month, amount: v.amount }; if (isNew) list.push({ id: nextItemId(list), ...rec }); else Object.assign(list.find((x) => x.id === it.id), rec); setOwn({ oneOffs: list }); },
-    onDelete: isNew ? null : () => setOwn({ oneOffs: list.filter((x) => x.id !== it.id) }),
-  });
-}
-/** Offer the one-time bills found in the last year of bank entries. */
-function suggestDialog(s) {
-  const found = P.suggestOneOffs(S.data, S.all);
-  if (!found.length) return toast('No one-time bills found in the last 12 months of bank entries.');
-  const rows = found.map((f) => ({ f, el: h('input', { type: 'checkbox', checked: true }) }));
-  dialog('One-time bills from the last 12 months', h('div', null, h('p', { class: 'note' }, 'These were paid from your bank in the last year, in categories marked one-time (and tax). Tick the ones that come round every year. Each is added as a yearly item at what you paid.'),
-    h('div', null, rows.map((x) => h('label', { class: 'check-inline', style: { display: 'block', padding: '3px 0' } }, x.el, ` ${x.f.name}, ${MONTH_NAMES[Number(x.f.month) - 1]} · ${money(x.f.amount)}`)))),
-    [{ label: 'Add the ticked ones', class: 'primary', onclick: (c) => { const list = s.yearly.map((o) => ({ ...o })); for (const x of rows) if (x.el.checked) list.push({ id: nextItemId(list), name: x.f.name, kind: 'expense', month: x.f.month, amount: x.f.amount }); setOwn({ oneOffs: list }); c(); } }, { label: 'Cancel', onclick: (c) => c() }]);
-}
-function yearlyCard(s) {
-  const list = s.yearly.slice().sort((x, y) => (x.month < y.month ? -1 : 1));
-  const out = list.filter((o) => o.kind !== 'income');
-  const total = out.reduce((a, o) => a + (o.amount || 0), 0);
-  const names = [...new Set(out.map((o) => o.name))].slice(0, 4).join(', ');
-  const det = h('details', { class: 'more' },
-    h('summary', { style: { cursor: 'pointer', display: 'flex', gap: '12px', alignItems: 'baseline', flexWrap: 'wrap' } },
-      h('b', null, list.length ? `${list.length} yearly ${list.length === 1 ? 'item' : 'items'}` : 'None yet'), list.length ? h('span', { class: 'exp' }, `−${money(total)} a year at today’s prices`) : null, names ? h('small', { class: 'muted' }, names) : null, h('small', { class: 'muted' }, 'tap to open')),
-    table([
-      { label: 'What', host: true, get: (o) => o.name }, { label: 'Paid in', mob: 'under', get: (o) => MONTH_NAMES[Number(o.month) - 1] || o.month },
-      { label: 'Amount today', cls: 'r', render: (o) => h('span', { class: o.kind === 'income' ? 'inc' : 'exp' }, (o.kind === 'income' ? '+' : '−') + money(o.amount)), total: () => h('span', { class: 'exp' }, '−' + money(total)) },
-    ], list, { footer: { label: 'Spending in a year' }, m: { key: 'ahead-yearly', head: 'What', sub: ['Paid in'], views: [['Amount today']] }, onRow: canEdit() ? (o) => yearlyItemForm(s, s.yearly.find((x) => x.id === o.id)) : null, empty: 'None yet. Add tax, school fees, vacations and so on, so the years ahead see them coming.' }),
-    h('p', { class: 'note' }, `Bills you pay once a year, outside the monthly spending. Each repeats every year in its month and grows by ${pct(s.a.growth.oneTime, 1)} a year. They come out of that month’s money, so a month with tax leaves little to invest. Items entered in the This year plan as “every year” are picked up here until you save your own list.`),
-    canEdit() ? h('div', { class: 'row-actions' }, btn('Add a yearly bill', () => yearlyItemForm(s), 'primary', { keep: true }), btn('Find them in my bank entries', () => suggestDialog(s), '', { keep: true })) : null);
-  return section('Yearly one-time bills', det);
-}
-const setOwn = (patch) => mutate((d) => { const p = ensure(d); p.ahead = { ...(p.ahead || {}), ...patch }; });
 
 export function render(root) {
   const { data, all } = S;
+  const ctx = currentPlan();
+  root.append(planPicker());
+  if (!ctx.plan) { root.append(notLiveCard(ctx, 'this page')); return; }
   const s = aheadSetup();
   const oc = outlooks();
   const b = P.baseline(data, all);
@@ -121,8 +39,8 @@ export function render(root) {
   const end = rows[rows.length - 1];
   const year0 = (r) => monthLabel(r.month);
 
-  // ---------- growth settings and yearly one-time bills: everything the projection grows by, in one place ----------
-  root.append(assumptionsCard(s), yearlyCard(s));
+  // ---------- the plan this page works from ----------
+  root.append(planSettingsCard(s.plan), section('Market outlook for this plan', outlookWhatIf(s.plan)));
 
   // ---------- controls ----------
   const hz = h('select', { 'aria-label': 'Years to look ahead', onchange: (e) => { viewHorizon = +e.target.value; if (canEdit()) setOwn({ horizon: viewHorizon }); else rerender(); } }, [1, 2, 3, 4, 5, 7, 10, 15, 20, 25].map((n) => h('option', { value: n, selected: n === s.horizon }, yrs(n))));
@@ -131,12 +49,12 @@ export function render(root) {
   // ---------- numbers ----------
   const expOut = end.expenses + end.emi;
   const cover = expOut > 0 ? end.interest / expOut : null;
-  const hit = s.target ? rows.find((r) => r.nw >= s.target) : null;
-  const need = s.target && !hit ? P.extraMonthly(start, s.a, oc, months, s.target) : 0;
+  const hit = rows.find((r) => r.nw >= s.target) || null;
+  const need = !hit ? P.extraMonthly(start, s.a, oc, months, s.target) : 0;
   root.append(h('div', { class: 'stats' },
     stat(`Net worth in ${yrs(s.horizon)}`, money(end.nw), `${monthLabel(end.month)}, from ${money(b.net)} today`),
     stat('Interest income each month then', money(end.interest), cover != null ? `pays ${Math.round(cover * 100)}% of the ${money(expOut)} monthly spending` : ''),
-    s.target ? (hit ? stat('Target reached', monthLabel(hit.month), `${money(s.target)} · ${Math.round((rows.indexOf(hit) + 1) / 12 * 10) / 10} years`) : stat('Target not reached', h('span', { class: 'neg' }, `${money(s.target - end.nw)} short`), need > 0 ? `save ${money(need)} more a month (earn more or spend less) to get there` : 'in this time')) : stat('Target', 'Not set', 'add one under Saving above'),
+    hit ? stat(`Plan ${s.plan.year} target reached`, monthLabel(hit.month), `${money(s.target)} · ${Math.round((rows.indexOf(hit) + 1) / 12 * 10) / 10} years from now`) : stat(`Plan ${s.plan.year} target not reached`, h('span', { class: 'neg' }, `${money(s.target - end.nw)} short`), need > 0 ? `save ${money(need)} more a month (earn more or spend less) to get there` : 'in this time'),
     stat('Saved each year at the end', money(yearRows[yearRows.length - 1] ? (byYearFlows(rows, s.horizon - 1)) : 0), 'income minus spending, before new investments')));
 
   // ---------- chart ----------
@@ -148,7 +66,7 @@ export function render(root) {
     const sc = P.scenarios(start, s.a, oc, months);
     sc.forEach((x, i) => series.push({ name: `${x.outlook.name} (${pc(x.outlook.rate, 0)})`, values: [b.net, ...Array.from({ length: pts.length }, (_, k) => x.rows[k * stepK + stepK - 1].nw)], color: i }));
   } else series.push({ name: 'Net worth', values: line(pts), color: 0 });
-  if (s.target) series.push({ name: 'Target', values: labels.map(() => s.target), dashed: true, color: 7 });
+  series.push({ name: 'Target', values: labels.map(() => s.target), dashed: true, color: 7 });
   // by category: debts, gold, equity and others, each in its own colour
   const sumGroup = (vals, gid) => P.CLASSES.filter((c) => groupOfClass(c.key) === gid).reduce((a, c) => a + ((vals && vals[c.key]) || 0), 0);
   const catSeries = GROUPS.map((g, gi) => ({ id: g.id, name: g.label, color: gi, values: [sumGroup(b.values, g.id), ...pts.map((r) => (r ? sumGroup(r.values, g.id) : null))] })).filter((x) => x.values.some((v) => v > 1));
@@ -243,7 +161,7 @@ export function render(root) {
     ], tbl, { m: { key: 'ahead-years', head: 'Year ending', views: [['Net worth', 'Saved that year'], ['Interest / month', 'Interest covers spending'], ['Market-linked', 'Monthly spending']] }, empty: 'Nothing to show.' }),
     h('p', { class: 'note' }, 'Interest income is what bonds and lending pay out each month after tax. When it covers your monthly spending, your investments pay your living costs without selling anything. Saved that year = income − spending, before moving money into investments.')),
     ));
-  root.append(h('p', { class: 'note' }, s.plan ? `New investments and interest rates come from your ${s.plan.year} plan on the This year tab. Everything else is set on this page.` : 'No plan yet: investments and rates come from your recent history. Create a plan on the This year tab to set them.'));
+  root.append(h('p', { class: 'note' }, `Everything here follows plan ${s.plan.year}, revision ${s.plan.rev}, made on the Planner tab. New money each month is what is left after spending, split by the plan’s shares; yearly one-time items repeat every year and rise by their own rate.`));
 }
 /** Income minus spending (before new investments) in the i-th year of the run. */
 function byYearFlows(rows, i) { let t = 0; for (const r of rows.slice(i * 12, i * 12 + 12)) t += r.income - r.out; return t; }

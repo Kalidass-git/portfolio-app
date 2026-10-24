@@ -7,12 +7,11 @@
 //
 // data.projector: {
 //   outlooks:  [{ id, name, rate, hint }]                 the market outlook scale (editable)
-//   years:     { '2027': plan }                           one plan per year, see newYearPlan()
+//   years:     { '2027': plan }                           one plan per year, see planner.js (draft, live copy, revisions)
 //   snapshots: [{ id, month, date, net, assets, loans, classes, income, expenses, note }]   month-end positions
 //   ahead:     { horizon, ... }                           the long-range setup
 // }
 import { monthActual } from './yearplan.js';
-import { investedByMonth } from './actuals.js';
 import { oneTimeSet } from './categories.js';
 import { ledgerMonths, monthKey, addMonths, monthStart, monthLedger as monthLedgerOf } from './calc.js';
 
@@ -43,6 +42,8 @@ export const CLASSES = [
   { key: 'other', label: 'Others', kind: 'accrual' },
 ];
 export const classOf = (k) => CLASSES.find((c) => c.key === k);
+/** Name shown for a class key. 'adj' is the gap between the interest figure the owner typed and what the holdings alone pay. */
+export const labelOf = (k) => (classOf(k) || {}).label || (k === 'adj' ? 'Your expected figure, beyond the holdings' : k);
 export const isMarket = (k) => MARKET.includes(k);
 const wavg = (items, val, rate) => { const pos = (x) => Math.max(0, Number(val(x)) || 0); const t = sum(items, pos); return t > 0 ? sum(items, (x) => pos(x) * (Number(rate(x)) || 0)) / t : 0; };
 
@@ -121,9 +122,15 @@ export function simulate(start, a, outlooks, months) {
   const baseYear = a.baseYear != null ? Number(a.baseYear) : Number(start.month.slice(0, 4));
   const hikeM = Number(a.hikeMonth) || 3;   // the month the yearly raise lands: salary, other income and EPF step up together
   const hikesTo = (y, m) => y + (m >= hikeM ? 1 : 0);
-  const sy = Number(start.month.slice(0, 4)), sm = Number(start.month.slice(5, 7));
+  // The salary, EPF and other income entered are for one month (`salaryMonth`, else the month the run starts). A raise already behind that month is
+  // in the figure, so it is not applied twice; an earlier month is worked back, a later one steps up.
+  const [sy, sm] = String(a.salaryMonth || start.month).split('-').map(Number);
   const cashPot = all.find((p) => p.cls === 'cash' && !p.line);
   const cushion = cashPot ? cashPot.value : 0;   // cash you start with is kept as the cushion
+  // An interest figure typed by the owner (what the month will really pay) replaces the level worked out from the holdings; new money still adds to it.
+  const typed = a.interestMonthly != null && a.interestMonthly !== '' && Number.isFinite(Number(a.interestMonthly)) ? Number(a.interestMonthly) : null;
+  const i0 = typed == null ? 0 : sum(all.filter((p) => classOf(p.cls).kind === 'payout'), (p) => p.value * ((p.rate ?? rateOf(p.cls, a, outlooks)) / 12) * (1 - (a.tds ?? 0.1)));
+  const adj = typed == null ? 0 : typed - i0;
   for (let i = 0; i < months; i++) {
     const month = addMonths(start.month + '-01', i + 1).slice(0, 7), mm = month.slice(5), my = Number(month.slice(0, 4));
     const f = (rate) => Math.pow(1 + rate, 1 / 12) - 1;
@@ -136,7 +143,8 @@ export function simulate(start, a, outlooks, months) {
       if (!(o.month === mm || o.month === month)) continue;
       // a yearly item is entered at today's prices and grows with expenses, once for every calendar year after the current one
       const yrs = o.month === mm && o.kind !== 'income' ? Math.max(0, my - baseYear) : 0;
-      const amt = (o.amount || 0) * Math.pow(1 + (g.oneTime ?? g.expenses ?? 0), yrs);
+      const rise = o.rise != null && o.rise !== '' && Number.isFinite(Number(o.rise)) ? Number(o.rise) : (g.oneTime ?? g.expenses ?? 0);   // each item can rise at its own rate
+      const amt = (o.amount || 0) * Math.pow(1 + rise, yrs);
       if (o.kind === 'income') oneIn += amt; else oneOut += amt;
       items.push({ name: o.name, amount: amt, kind: o.kind === 'income' ? 'income' : 'expense' });
     }
@@ -148,6 +156,7 @@ export function simulate(start, a, outlooks, months) {
       if (k.kind === 'payout') { const x = p.value * (r / 12) * (1 - (a.tds ?? 0.1)); interest += x; const e = interestBy[p.cls] || (interestBy[p.cls] = { amount: 0, base: 0, rate: r }); e.amount += x; e.base += p.value; }
       else { const was = p.value; p.value *= 1 + f(r); const g1 = p.value - was; growth += g1; if (k.kind === 'accrual') accrual += g1; const e = growthBy[p.cls] || (growthBy[p.cls] = { amount: 0, base: 0, rate: r }); e.amount += g1; e.base += was; }
     }
+    if (adj) { const use = Math.max(-interest, adj); interest += use; interestBy.adj = { amount: use, base: 0, rate: 0 }; }
     const pfAdd = (a.pfAdd || 0) * raise;   // EPF is a share of salary, so it steps up with the raise
     all.find((p) => p.cls === 'pf' && !p.line).value += pfAdd;
     const income = salary + other + interest + oneIn;
@@ -221,30 +230,6 @@ export const cfg = (data) => {
   const p = data.projector || {};
   return { outlooks: p.outlooks && p.outlooks.length ? p.outlooks : OUTLOOKS, years: p.years || {}, snapshots: p.snapshots || [], ahead: p.ahead || null };
 };
-const snapOf = (data, all, month, note = '') => {
-  const b = baseline(data, all), m = month || b.month, a = monthActual(data, m);
-  const snap = { id: 's' + m, month: m, date: b.date, net: r0(b.net), assets: r0(b.assets), loans: r0(b.liab), classes: Object.fromEntries(Object.entries(b.values).map(([k, v]) => [k, r0(v)])), income: r0(a.income), expenses: r0(a.expenses + a.emi + a.tax), note };
-  // everything the plan said for this month, next to what really happened, so the month can be looked at later as it stood
-  const c = cfg(data), plan = c.years[m.slice(0, 4)];
-  const by = investedByMonth(data)[m] || {};
-  snap.actual = { salary: r0(a.salary), income: r0(a.income), expenses: r0(a.expenses), oneTime: r0(a.oneTime), emi: r0(a.emi), tax: r0(a.tax), invested: r0(a.invested), pf: r0(a.pf), bank: r0(all.cashTotal), investedByClass: Object.fromEntries(Object.entries(by).map(([k, v]) => [k, r0(v.amount)])) };
-  if (plan) {
-    const ep = effectivePlan(data, plan);
-    const row = planPath(ep, c.outlooks).find((r) => r.month === m);
-    snap.plan = { year: plan.year, target: plan.target, assumptions: JSON.parse(JSON.stringify(ep.a)) };
-    if (row) {
-      snap.projected = { net: r0(row.nw), salary: r0(row.salary), other: r0(row.other + row.oneIn), interest: r0(row.interest), expenses: r0(row.expenses), emi: r0(row.emi), oneOut: r0(row.oneOut), invested: r0(row.invested), pfAdd: r0(row.pfAdd), growth: r0(row.growth || 0), income: r0(row.income), out: r0(row.out), classes: Object.fromEntries(Object.entries(row.values).map(([k, v]) => [k, r0(v)])) };
-      snap.variance = snap.net - snap.projected.net;
-    } else if (m === plan.baseline.month) {
-      // the month the plan started in: the plan's position is where it began
-      snap.projected = { net: plan.baseline.net, classes: { ...plan.baseline.classes } };
-      snap.variance = snap.net - plan.baseline.net;
-    }
-  }
-  return snap;
-};
-export { snapOf as makeSnapshot };
-
 /**
  * Month-end positions typed into the Plan sheet (Targets, "Month by month") that the projector has no snapshot for yet.
  * Returns snapshot records (no per-class split, since the sheet only had totals). Nothing is changed here.
@@ -259,47 +244,6 @@ export function planSheetSnapshots(data, asOf) {
     out.push({ id: 's' + month, month, date: m.date, net: assets - loans, assets, loans, note: 'From the Plan sheet' });
   }
   return out.sort((a, b) => (a.month < b.month ? -1 : 1));
-}
-
-/** A new plan for `year`, starting from today's position. Target defaults to what the Steady outlook reaches, rounded. */
-export function newYearPlan(data, all, year) {
-  const b = baseline(data, all), a = defaults(data, all);
-  const outlooks = cfg(data).outlooks;
-  const start = { values: b.values, liab: b.liab, month: b.month };
-  const months = monthsTo(b.month, year);
-  const end = months ? simulate(start, a, outlooks, months).pop() : null;
-  return { id: String(year), year: Number(year), target: end ? Math.ceil(end.nw / 100000) * 100000 : Math.ceil(b.net / 100000) * 100000, startMonth: b.month, baseline: { date: b.date, month: b.month, net: r0(b.net), assets: r0(b.assets), loans: r0(b.liab), classes: Object.fromEntries(Object.entries(b.values).map(([k, v]) => [k, r0(v)])) }, a: { ...a, loanPrincipal: 0 }, retro: { well: '', improve: '', savedAt: '' } };
-}
-
-/**
- * The assumptions both Wealth outlook tabs use. A plan keeps its own copy of salary, expenses and so on, but the figures set on the Years ahead
- * page (salary, raise and its month, expense rise, outlook, yearly bills) win, so This year and Years ahead always project the same way.
- * One-off items dated to a single month stay with the plan.
- */
-export function effectiveA(data, a) {
-  const own = (data.projector && data.projector.ahead) || {};
-  const all = a.oneOffs || [];
-  const yearly = all.filter((o) => o.month && o.month.length === 2), dated = all.filter((o) => !(o.month && o.month.length === 2));
-  return {
-    ...a,
-    salary: own.salary ?? a.salary, otherIncome: own.otherIncome ?? a.otherIncome, expenses: own.expenses ?? a.expenses, emi: own.emi ?? a.emi, pfAdd: own.pfAdd ?? a.pfAdd,
-    growth: { salary: own.growthSalary ?? 0.06, expenses: own.growthExpenses ?? 0.06, oneTime: own.growthOneTime ?? own.growthExpenses ?? 0.06, invest: 0 },
-    hikeMonth: own.hikeMonth ?? 3,
-    outlook: { ...(own.outlook || a.outlook) },
-    oneOffs: (own.oneOffs || yearly).map((o) => ({ ...o })).concat(dated.map((o) => ({ ...o }))),
-  };
-}
-export const effectivePlan = (data, plan) => (plan ? { ...plan, a: effectiveA(data, plan.a) } : plan);
-
-/** Planned path from the plan's starting position to December. */
-export function planPath(plan, outlooks) {
-  const start = { values: plan.baseline.classes, liab: plan.baseline.loans, month: plan.baseline.month };
-  return simulate(start, plan.a, outlooks, monthsTo(plan.baseline.month, plan.year));
-}
-/** Forecast: from the latest month-end snapshot (or today's position) with the same assumptions. */
-export function forecast(plan, outlooks, from) {
-  const start = { values: from.classes, liab: from.loans, month: from.month };
-  return simulate(start, plan.a, outlooks, monthsTo(from.month, plan.year));
 }
 
 /**

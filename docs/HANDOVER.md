@@ -2,7 +2,7 @@
 
 > **Starting a new session? Do this first.** 1) Read this file, then the top three entries of `docs/SETUP.md`. 2) Clone, branch `release-X.Y.Z` off `origin/main` (check which PRs the owner has merged: `git log origin/main`). 3) Say what you have read, list "Waiting for the owner" below, and ask what to build. 4) The owner works in short numbered requests; do them all in one release, test, bump, open one PR. He checks on his real data, which you never see: say how each rule works so he can check it.
 
-**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.9.43 (cache `family-wealth-v69`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
+**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.10.0 (cache `family-wealth-v71`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
 
 Read this first, then `docs/SETUP.md` (release notes, newest first) and `README.md`.
 
@@ -34,7 +34,7 @@ A no-build installable web app (PWA, vanilla ES modules) that mirrors the owner'
 - `#/gold` `gold.js`: gold rate, chits and schemes, purchases, jewellery, other holdings.
 - `#/flow` `flow.js`: income and expenses report. `categories.js`: category and rule editing.
 - `#/plan` `plan.js`, `plan-year.js`: the Excel plan and targets.
-- `#/projector` `projector.js` with `proj-year`, `proj-ahead`, `proj-market`, `proj-actual`: yearly target, monthly check-ins, years ahead, market outlook.
+- `#/projector` `views/projector.js` with tabs Planner (`proj-plan.js`, logic in `js/planner.js`), This year (`proj-year`), Years ahead (`proj-ahead`), Market outlook (`proj-market`); `proj-shared`, `proj-actual`, `proj-flow` are shared. Plans are set only on Planner (draft, make live, revise; revisions kept). The other tabs read `livePlan()` and never write plan figures.
 - `#/risk` `risk.js` with `proj-risk` (limits per kind, rule and holding) and `proj-whatif` (try an investment against the limits).
 - `#/report` `report.js`: Family report, printed to PDF. `#/networth` `networth.js`: net worth line from month-end snapshots plus a projection to December. `#/insights/{tax|calendar|review|anomalies|allocation}` `views/insights.js` + pure logic in `js/insights.js` (optional `data.allocGoal`). `#/incexp` `incexp.js`: Income vs expense report (category -> description drilldown, uses `calc.flowReport`).
 - `#/settings` `settings.js`, `backups.js`, `storage.js`, `archive.js`.
@@ -48,7 +48,14 @@ A no-build installable web app (PWA, vanilla ES modules) that mirrors the owner'
 ## Release process
 Branch off `origin/main` (`release-X.Y.Z`), change files, bump `js/version.js` and the cache name in `sw.js`, add notes at the top of the release list in `docs/SETUP.md`, push, and open a PR to `main` with `gh api` (GraphQL is blocked). The owner merges it. Always base on `origin/main` so stacked PRs do not leave main behind.
 
-## State after 8.9.39 (newest)
+## State after 8.10.0 (newest)
+
+- **Plan model** (`planner.js`): `projector.years['2026'] = { v:2, year, a, initial, live, revisions[] }`. `a` is the working copy, `live` a frozen copy `{rev, at, a, initial}` that every other tab and `monthinvest.js` use (`livePlan`, `effective(plan,'live')`). `commit` writes a revision with `diffPlans`. Old plans (no `v`) are ignored; `clearLegacy` deletes them and the old `projector.ahead` planning keys (only on the owner's button).
+- **Simulation changes** (`projector.js`): `a.salaryMonth` anchors salary/EPF/other income (a hike already behind it is not applied twice), `a.interestMonthly` replaces the holdings-based interest level (difference carried as `interestBy.adj`), per-item `rise` on one-time items. The year starts from `initial` as December of the year before.
+- **This year** uses `yearTrack`: snapshot months and the current month are real, the rest projected from the last real position (rows carry `src` 'actual' | 'now' | 'projected'; italic via `proj-row`). The market outlook is a what-if kept in memory (`proj-shared.js` `outlookNow`), never saved.
+- Ask the owner to check on real data: that "Delete old plans and settings" and a first plan for 2026 start from his old one-time items and rates; the interest income and expense defaults; the invested popups on This year against his bank; the first "Make this plan live" and a revision.
+
+## State after 8.9.39
 
 - **Phone rows**: `table(cols, rows, { mobile })` also renders `mobileRows` (ui.js), shown only at max-width 700px (the table is hidden there; from 701px the phone block is hidden, so desktop and tablet are byte-for-byte the same). Config: `{ key, head, midHead, first(r)->{title,sub,tag,extra}, mid(r), views:[{label,main,sub,total?}] }`. The heading pill cycles the views for all rows, choice kept in localStorage `pt.mv.<key>`; sorting is separate. Add it to a table by writing a config next to its `table()` call (see `holdMobile` in equity.js, bonds and `depMobile` in fixed.js, `loanMobile` in loans.js, accounts/transactions/savings in cash.js, running chits in gold.js).
 - **Sort/filter sheets**: `js/mobilebar.js` (`sortFilterBar`, `openSort`, `openFilter`). A screen passes `{ sort: { options:[{value,label,kind}], value, dir, apply }, filters: { fields:[{key,label,type,options,default,showIf,chip,count}], values, apply }, search }`; `apply` changes the screen's own existing state and re-renders. `kind` (num, text, date, due, none) picks the direction labels. Desktop controls get class `desk-ctl` (hidden at max-width 700px). Used in equity.js (`mobileSort`), fixed.js (`quickFilter`) and cash.js (ledger). To add to another list, give it the same config.
