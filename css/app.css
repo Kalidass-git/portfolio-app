@@ -908,3 +908,16 @@ tr.proj-row td.host i, tr.proj-row td i { font-style: italic; }
 .ts-v { text-align: right; font-variant-numeric: tabular-nums; } .ts-n { grid-column: 1 / -1; font-size: .8rem; color: var(--muted); }
 .ts-head { margin: 12px 0 2px; font-size: .9rem; }
 .pop-trigger { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+
+/* 8.11 — grouped workings, colours, calculated-now alert */
+.ts-group { border-bottom: 1px solid var(--line); margin: 4px 0; }
+.ts-group > summary { display: grid; grid-template-columns: 1fr auto; gap: 0 12px; padding: 8px 0; cursor: pointer; font-weight: 700; list-style: none; align-items: baseline; }
+.ts-group > summary::-webkit-details-marker { display: none; }
+.ts-group > summary .ts-l::before { content: '▾'; display: inline-block; width: 1.1em; color: var(--muted); }
+.ts-group:not([open]) > summary .ts-l::before { content: '▸'; }
+.ts-group > .ts-row { padding-left: 1.1em; }
+.ts-row.memo { color: var(--muted); font-style: italic; }
+.ts-row.sub .ts-l { padding-left: 1.1em; }
+.ts-v.inc { color: var(--pos); } .ts-v.exp { color: var(--neg); } .ts-v.inv { color: var(--s1); }
+.calc-alert { display: inline-block; margin-left: 6px; color: var(--warn); font-size: .85em; cursor: help; font-style: normal; }
+.findings li.fix { border-left: 4px solid var(--s1); } .row-actions { display: inline-flex; gap: 6px; }

@@ -154,6 +154,16 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.11.0 – Wealth outlook: snapshot month, real growth by class, notes, three cases, suggested fix, work-optional number
+
+- **Snapshots ask for the month.** "Save snapshot" always asks which month end you are saving (October's can be saved in the first week of November). It saves today's holdings as that month end, with an optional note, and replaces a snapshot already saved for that month. Every saved snapshot is listed under the check-in table: tap one to see what was saved, edit it or delete it (any month, not only the latest). The note shows under the month in the table.
+- **Growth of real months is explained by rules, not by what is left over** (`js/growth.js`). Net worth change − saved − EPF put in = growth, then: market assets (shares, ETFs, funds, gold) = closing value − opening value − bought + sold; EPF/PPF = interest credited in that month's passbook entries (a memo shows interest still building up, not counted until credited); FDs, chits, RDs and others = opening × rate ÷ 12; cash only when no bank interest is in your entries; bonds and lending give no growth because the interest received is income. Dividends are income (taken from your trade records when no bank entry shows them). Whatever the rules do not explain is shown as "Other changes", so the total always adds up and nothing is counted twice.
+- **Recorded, not recalculated.** The growth is worked out when the snapshot is saved, from the previous snapshot, and kept in it (`snapshot.growth`). A month whose snapshot has no such record shows a ⚠ beside its growth: it was worked out now. Saving the snapshot again records it. A month with no earlier snapshot to start from uses the outlook rate for market assets until real values exist. After a gap of months, the growth covers all the months since the last snapshot.
+- **Workings are grouped** (Income in green, Expenses in red, EPF and investments in blue, Growth); tap a heading to fold it.
+- **Three cases** on the This year chart and on Years ahead: expected (the plan's outlook), worse (market returns 2 points a year lower) and better (2 points higher), carried on from the last real position.
+- **Suggested fix** under "Where it went right or wrong": how much more to save each month, a coming one-time item that could move, and the market return that would close the gap.
+- **Work-optional number** on Years ahead: a year of living costs (without EMI) ÷ a safe withdrawal rate (3%, 3.5% or 4%, kept as a view setting), what you have as a share of it, and the year the plan reaches it. Shown as a dashed line on the Years ahead chart.
+
 ## Release 8.10.2 – Wealth outlook: deletions, workings in sheets, plan vs actual by item, Plan sheet removed
 
 - **Delete a plan** (Planner, red button): allowed until a month-end snapshot has been saved for that plan's year, so a 2027 plan can go until the January 2027 snapshot. Deleting a plan never touches snapshots.
