@@ -25,9 +25,10 @@ export function render(root) {
   if (!plan) { root.append(notLiveCard(ctx, 'this page')); return; }
   plan.target = PL.planTarget(plan, outlooks());
   const oc = outlooks();
-  const b = P.baseline(data, all);
-  const live = b.month >= plan.start.month && b.month <= `${plan.year}-12`;
-  const start = live ? { values: b.values, liab: b.liab, month: b.month } : plan.start;
+  // from the plan's latest real position (last snapshot, or the starting net worth), never today's holdings
+  const from = PL.yearTrack(data, all, plan, oc).from;
+  const b = { net: from.nw };
+  const start = { values: from.values, liab: from.liab, month: from.month };
   plan.a = { ...plan.a, outlook: { ...outlookNow(plan) } };
   const months = P.monthsTo(start.month, plan.year);
   const sc = P.scenarios(start, plan.a, oc, months);
@@ -40,7 +41,7 @@ export function render(root) {
 
   root.append(h('p', { class: 'note' }, `Showing plan ${plan.year}: target ${money(plan.target)} in ${monthLabel(plan.year + '-12')}. The target is what the plan itself projects for December.`));
   root.append(h('div', { class: 'stats' },
-    stat('Market-linked today', money(marketNow), 'shares, ETFs, funds and gold'),
+    stat(`Market-linked, end of ${monthLabel(start.month)}`, money(marketNow), 'shares, ETFs, funds and gold'),
     stat('Fresh market money planned', money(fresh), `over the ${months} months left`),
     stat('At year end (current outlook)', money(curEnd.market), h('span', { class: tone(curEnd.market - marketNow - fresh) }, `${signed(curEnd.market - marketNow - fresh)} from returns`)),
     be == null ? stat('Needed from markets', 'Out of reach', 'even 80% a year would not reach the target') : stat('Needed from markets', pc(be, 1) + ' a year', nearest(be) + ' on the outlook scale')));
@@ -63,7 +64,7 @@ export function render(root) {
 
   // ---------- chart ----------
   const labels = [monthLabel(start.month), ...cur.map((r) => monthLabel(r.month))];
-  const series = sc.map((x, i) => ({ name: `${x.outlook.name} (${pc(x.outlook.rate, 0)})`, values: [live ? b.net : plan.initial.net, ...x.rows.map((r) => r.nw)], color: i }));
+  const series = sc.map((x, i) => ({ name: `${x.outlook.name} (${pc(x.outlook.rate, 0)})`, values: [from.nw, ...x.rows.map((r) => r.nw)], color: i }));
   series.push({ name: 'Target', values: labels.map(() => plan.target), dashed: true, color: 7 });
   const all2 = series.flatMap((x) => x.values).filter((v) => v != null);
   root.append(section('Net worth under each outlook', lineChart({ labels, fmt: money, yMin: Math.floor((Math.min(...all2) * 0.97) / 1e6) * 1e6, series })));

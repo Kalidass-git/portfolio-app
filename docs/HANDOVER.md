@@ -2,7 +2,7 @@
 
 > **Starting a new session? Do this first.** 1) Read this file, then the top three entries of `docs/SETUP.md`. 2) Clone, branch `release-X.Y.Z` off `origin/main` (check which PRs the owner has merged: `git log origin/main`). 3) Say what you have read, list "Waiting for the owner" below, and ask what to build. 4) The owner works in short numbered requests; do them all in one release, test, bump, open one PR. He checks on his real data, which you never see: say how each rule works so he can check it.
 
-**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.11.0 (cache `family-wealth-v74`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
+**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.12.0 (cache `family-wealth-v75`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
 
 Read this first, then `docs/SETUP.md` (release notes, newest first) and `README.md`.
 
@@ -48,7 +48,15 @@ A no-build installable web app (PWA, vanilla ES modules) that mirrors the owner'
 ## Release process
 Branch off `origin/main` (`release-X.Y.Z`), change files, bump `js/version.js` and the cache name in `sw.js`, add notes at the top of the release list in `docs/SETUP.md`, push, and open a PR to `main` with `gh api` (GraphQL is blocked). The owner merges it. Always base on `origin/main` so stacked PRs do not leave main behind.
 
-## State after 8.10.0 (newest)
+## State after 8.12.0 (newest)
+
+- **Plan start**: `plan.initial.asOfMonth` is the month end the plan starts from (absent = December before). `effective()` sets `start.month` from it; `planPath` simulates `monthsTo(start.month, year)` months, so a plan made in October has three rows. `yearTrack` returns `rows` only for months after the start, `from` (last real position: latest in-plan snapshot, else the starting figure), `anchor`. Snapshots at or before the start are ignored by `yearTrack`, `prevPosition` and `canDeletePlan`. There is no "now" month any more: a month is `actual` (snapshot) or `projected`.
+- **Rules for next sessions**: never mix today's holdings into the plan views; the projection has no loan paydown (`loanPaid` is gone from rows); FDs class = FDs only; interest comes from bonds and lending, `a.interestMonthly` null by default (typed figure gives the `adj` line, labelled "Adjustment to your expected figure").
+- **Popups** (`proj-flow.js`): `interestTip`, `otherTip`, `investedTip` return `{ rows, parts }`; chart bars carry `detail` from `parts` (`charts.js` hover). Cells given to `table()` must be built per render, never one shared element (a table draws desktop and phone views).
+- Test data: there is no real data in the repo. `tests/anchor.test.mjs <data.json>` works on any file with bonds, lending, FDs and a ledger. `planner.test.mjs` still needs the owner's file for "old plans are listed as legacy".
+- Ask the owner to check on real data: the September start figure for 2026 and the October snapshot he saves; that interest income (bonds and lending only) now looks right against his bank; the Not explained difference of his first snapshot month; creating plan 2027 in December.
+
+## State after 8.10.0
 
 - **Plan model** (`planner.js`): `projector.years['2026'] = { v:2, year, a, initial, live, revisions[] }`. `a` is the working copy, `live` a frozen copy `{rev, at, a, initial}` that every other tab and `monthinvest.js` use (`livePlan`, `effective(plan,'live')`). `commit` writes a revision with `diffPlans`. Old plans (no `v`) are ignored; `clearLegacy` deletes them and the old `projector.ahead` planning keys (only on the owner's button).
 - **Simulation changes** (`projector.js`): `a.salaryMonth` anchors salary/EPF/other income (a hike already behind it is not applied twice), `a.interestMonthly` replaces the holdings-based interest level (difference carried as `interestBy.adj`), per-item `rise` on one-time items. The year starts from `initial` as December of the year before.

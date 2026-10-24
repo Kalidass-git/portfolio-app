@@ -32,8 +32,11 @@ export function render(root) {
   if (!ctx.plan) { root.append(notLiveCard(ctx, 'this page')); return; }
   const s = aheadSetup();
   const oc = outlooks();
-  const b = P.baseline(data, all);
+  // The long view starts from the plan's latest real position (its last snapshot, or the starting net worth entered on the Planner), never from today's holdings.
+  const from = PL.yearTrack(data, all, s.plan, oc).from;
+  const b = { values: from.values, liab: from.liab, month: from.month, net: from.nw, real: from.real };
   const start = { values: b.values, liab: b.liab, month: b.month };
+  const asAt = monthLabel(b.month, true);
   const months = s.horizon * 12;
   const rows = P.simulate(start, s.a, oc, months);
   const yearRows = Array.from({ length: s.horizon }, (_, i) => rows[i * 12 + 11]);
@@ -57,7 +60,7 @@ export function render(root) {
   const expOut = end.expenses + end.emi;
   const cover = expOut > 0 ? end.interest / expOut : null;
   root.append(h('div', { class: 'stats' },
-    stat(`Net worth in ${yrs(s.horizon)}`, money(end.nw), `${monthLabel(end.month)}, from ${money(b.net)} today`),
+    stat(`Net worth in ${yrs(s.horizon)}`, money(end.nw), `${monthLabel(end.month)}, from ${money(b.net)} at the end of ${asAt}`),
     stat('Interest income each month then', money(end.interest), cover != null ? `pays ${Math.round(cover * 100)}% of the ${money(expOut)} monthly spending` : ''),
     (() => { const tg = targetAt(end.month), g = tg == null ? null : end.nw - tg; return g == null ? stat('Against the plan', '–', 'no plan figure for that month') : stat(`Against the plan, ${monthLabel(end.month)}`, h('span', { class: tone(g) }, `${money(Math.abs(g))} ${g >= 0 ? 'ahead' : 'short'}`), `plan target ${money(tg)} · projected ${money(end.nw)}`); })(),
     stat('Saved each year at the end', money(yearRows[yearRows.length - 1] ? (byYearFlows(rows, s.horizon - 1)) : 0), 'income minus spending, before new investments')));
@@ -67,7 +70,7 @@ export function render(root) {
   if (wo) root.append(section('Work-optional number', h('div', null,
     h('div', { class: 'stats' },
       stat('Corpus needed today', money(wo.corpusToday), `${money(wo.needToday)} a year of spending ÷ ${pct(safe, 1)}`),
-      stat('You have today', h('span', { class: tone(b.net - wo.corpusToday) }, money(b.net)), `${Math.round(wo.progress * 100)}% of the number`),
+      stat(`You had at the end of ${monthLabel(b.month)}`, h('span', { class: tone(b.net - wo.corpusToday) }, money(b.net)), `${Math.round(wo.progress * 100)}% of the number`),
       wo.reached ? stat('Reached in', h('span', { class: 'pos' }, wo.reached.month.slice(0, 4)), `in ${yrs(wo.yearsAway)} on this plan; by then you need ${money(wo.reached.corpus)}, you have ${money(wo.reached.nw)}`) : stat('Reached in', 'Not within 40 years', 'at the saving and returns in this plan'),
       stat('Spending covered by interest now', money(first0(rows).interest), `of ${money(first0(rows).expenses + first0(rows).emi)} a month`)),
     h('p', { class: 'note' }, `The number is a year of living costs (everyday expenses and the yearly one-time items, without loan EMI, which ends) divided by the safe withdrawal rate: at ${pct(safe, 1)} a year, that corpus could pay those costs without running out. Costs rise with the plan’s yearly rise, so the number grows each year. Net worth here counts everything you own, including EPF and gold, so treat it as a guide, not a promise.`))));
@@ -102,13 +105,13 @@ export function render(root) {
     netBody = h('div', null, chips, stackedArea({ labels, fmt: money, series: shown, height: 250 }),
       table([
         { label: 'Category', host: true, render: (x) => h('span', null, h('i', { class: 'gdot', style: { background: color(x.color) } }), x.name, fastest[0] && fastest[0].id === x.id && fastest.length > 1 ? h('small', { class: 'now-tag' }, ' fastest') : null) },
-        { label: 'Today', cls: 'r', get: (x) => money(x.now) },
+        { label: 'At start', cls: 'r', get: (x) => money(x.now) },
         { label: `In ${yrs(s.horizon)}`, cls: 'r', get: (x) => money(x.far) },
         { label: 'Grows by', cls: 'r', mob: 'under', mlabel: '', render: (x) => h('span', { class: x.change >= 0 ? 'pos' : 'neg' }, (x.change >= 0 ? '+' : '−') + money(Math.abs(x.change))) },
         { label: 'Times', cls: 'r', mob: 'hide', get: (x) => (x.mult == null ? '–' : x.mult.toFixed(2) + '×') },
         { label: 'Yearly growth', cls: 'r', mob: 'under', mlabel: 'per year ', get: (x) => (x.cagr == null ? '–' : pct(x.cagr, 1)) },
-      ], growth.slice().sort((a, b) => (b.cagr ?? -9) - (a.cagr ?? -9)), { m: { key: 'ahead-growth', head: 'Category', views: [['Today', `In ${yrs(s.horizon)}`], ['Grows by', 'Yearly growth'], ['Times']],
-        sort: [{ value: 'cagr', label: 'Yearly growth', kind: 'num', get: (x) => x.cagr }, { value: 'now', label: 'Value today', kind: 'num', get: (x) => x.now }, { value: 'far', label: `Value in ${yrs(s.horizon)}`, kind: 'num', get: (x) => x.far }, { value: 'name', label: 'Category', kind: 'text', get: (x) => String(x.name || '').toLowerCase() }], sortDefault: { value: 'cagr', dir: 'desc' } } }),
+      ], growth.slice().sort((a, b) => (b.cagr ?? -9) - (a.cagr ?? -9)), { m: { key: 'ahead-growth', head: 'Category', views: [['At start', `In ${yrs(s.horizon)}`], ['Grows by', 'Yearly growth'], ['Times']],
+        sort: [{ value: 'cagr', label: 'Yearly growth', kind: 'num', get: (x) => x.cagr }, { value: 'now', label: 'Value at start', kind: 'num', get: (x) => x.now }, { value: 'far', label: `Value in ${yrs(s.horizon)}`, kind: 'num', get: (x) => x.far }, { value: 'name', label: 'Category', kind: 'text', get: (x) => String(x.name || '').toLowerCase() }], sortDefault: { value: 'cagr', dir: 'desc' } } }),
       h('p', { class: 'note' }, 'Assets only (loans are left out). Growth includes the new money you add to each category as well as returns, so a category can grow fast simply because you keep feeding it. Yearly growth is the compound rate from today to the end of the period.'));
   }
   root.append(section('Net worth over the years', h('div', null, tabs, netBody)));
@@ -120,7 +123,7 @@ export function render(root) {
   const grp = [['Cash', v.cash || 0], ['Fixed income (bonds, lending, FDs, chits, insurance)', (v.bonds || 0) + (v.lending || 0) + (v.fds || 0) + (v.chits || 0) + (v.lic || 0) + (v.other || 0)], ['EPF & PPF', v.pf || 0], ['Shares, ETFs and funds', (v.shares || 0) + (v.etfs || 0) + (v.funds || 0)], ['Gold', v.gold || 0]].filter((x) => x[1] > 1).map(([label, value]) => ({ label, value }));
   const nowGrp = [['Cash', b.values.cash || 0], ['Fixed income (bonds, lending, FDs, chits, insurance)', (b.values.bonds || 0) + (b.values.lending || 0) + (b.values.fds || 0) + (b.values.chits || 0) + (b.values.lic || 0) + (b.values.other || 0)], ['EPF & PPF', b.values.pf || 0], ['Shares, ETFs and funds', (b.values.shares || 0) + (b.values.etfs || 0) + (b.values.funds || 0)], ['Gold', b.values.gold || 0]].filter((x) => x[1] > 1).map(([label, value]) => ({ label, value }));
   root.append(h('div', { class: 'grid2' },
-    section('What you hold today', h('div', null, donut(nowGrp, { fmt: money, center: compact(b.net + b.liab), sub: 'assets', size: 190 }), legend(nowGrp, { fmt: money }))),
+    section(`What you held at the end of ${monthLabel(b.month)}`, h('div', null, donut(nowGrp, { fmt: money, center: compact(b.net + b.liab), sub: 'assets', size: 190 }), legend(nowGrp, { fmt: money }))),
     section(`What you could hold in ${yrs(s.horizon)}`, h('div', null, donut(grp, { fmt: money, center: compact(end.assets), sub: 'assets', size: 190 }), legend(grp, { fmt: money })))));
 
   // ---------- by class: today, this year end, horizon ----------
@@ -130,20 +133,20 @@ export function render(root) {
   const sumOf = (it, k) => it.reduce((a, x) => a + x[k], 0);
   const share = (v, tot) => (tot > 0 ? Math.round((v / tot) * 100) + '%' : '');
   const tNow = cr.reduce((a, x) => a + x.now, 0), tYr = cr.reduce((a, x) => a + x.yr, 0), tFar = cr.reduce((a, x) => a + x.far, 0);
-  root.append(section('Where it sits: today, this year end, and later', h('div', null,
+  root.append(section('Where it sits: at the start, this year end, and later', h('div', null,
     cr.length ? groupedTable({
       rows: cr, groupOf: (x) => groupOfClass(x.key), footerLabel: 'Total assets',
       cols: [
         { label: 'Asset' },
-        { label: 'Today', cls: 'r', parent: (it) => money(sumOf(it, 'now')), child: (x) => money(x.now), total: () => money(tNow) },
-        { label: 'Share today', cls: 'r', hide: true, parent: (it) => share(sumOf(it, 'now'), tNow), child: (x) => share(x.now, tNow) },
+        { label: 'At start', cls: 'r', parent: (it) => money(sumOf(it, 'now')), child: (x) => money(x.now), total: () => money(tNow) },
+        { label: 'Share at start', cls: 'r', hide: true, parent: (it) => share(sumOf(it, 'now'), tNow), child: (x) => share(x.now, tNow) },
         { label: `End of ${String(yEnd.month).slice(0, 4)}`, cls: 'r', parent: (it) => money(sumOf(it, 'yr')), child: (x) => money(x.yr), total: () => money(tYr) },
         { label: 'Share', cls: 'r', hide: true, parent: (it) => share(sumOf(it, 'yr'), tYr), child: (x) => share(x.yr, tYr) },
         { label: `In ${yrs(s.horizon)}`, cls: 'r', parent: (it) => money(sumOf(it, 'far')), child: (x) => money(x.far), total: () => money(tFar) },
         { label: 'Share ', cls: 'r', hide: true, parent: (it) => share(sumOf(it, 'far'), tFar), child: (x) => share(x.far, tFar) },
       ],
     }) : h('p', { class: 'empty' }, 'Nothing to show.'),
-    h('p', { class: 'note' }, plan0 ? `Today’s holdings plus the ${money(plan0)} a month of new money from your plan, grown at the rates and outlook above. Cash is what is left after spending and investing.` : 'No new money is planned, so only growth of what you hold today is shown.'))));
+    h('p', { class: 'note' }, plan0 ? `The starting position plus the ${money(plan0)} a month of new money from your plan, grown at the rates and outlook above. Cash is what is left after spending and investing.` : 'No new money is planned, so only growth of what you hold today is shown.'))));
 
   // ---------- interest income: how it grows ----------
   const debtSum = (r) => P.CLASSES.filter((c) => c.kind === 'payout' || c.kind === 'accrual').reduce((a, c) => a + ((r.values && r.values[c.key]) || 0), 0);
