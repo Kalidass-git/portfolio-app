@@ -7,7 +7,8 @@
 // spending still expected before month end.
 import { monthActual } from './yearplan.js';
 import { investedByMonth, actualOf } from './actuals.js';
-import { simulate, classOf, effectiveA, defaults, cfg, baseline } from './projector.js';
+import { simulate, classOf, baseline } from './projector.js';
+import { livePlan, fallbackA } from './planner.js';
 import { monthKey, addMonths } from './calc.js';
 
 const sum = (a, f = (x) => x) => a.reduce((s, x) => s + (Number(f(x)) || 0), 0);
@@ -41,9 +42,8 @@ export function splitMonth({ actualIn, planIn, actualOut, planOut, bank, lines, 
 /** Everything for the current month, from the data. `a` are the assumptions both Wealth outlook tabs use. */
 export function monthInvest(data, all, outlooks) {
   const cur = monthKey(all.asOf);
-  const c = cfg(data);
-  const plan = c.years[cur.slice(0, 4)];
-  const a = plan ? effectiveA(data, plan.a) : effectiveA(data, defaults(data, all));
+  const plan = livePlan(data, cur.slice(0, 4));   // only a plan that has been made live counts
+  const a = plan ? plan.a : fallbackA(data, all);
   // the projection's first month, started from the month before this one, is this month
   const bl = baseline(data, all);
   const start = { values: bl.values, liab: bl.liab, month: addMonths(cur + '-01', -1).slice(0, 7) };

@@ -7,7 +7,7 @@ import { h, money, pct, dateStr, monthLabel, section, stat, table, setOptions } 
 import { lineChart, stackedArea } from '../charts.js';
 import * as I from '../insights.js';
 import { btn } from '../ui.js';
-import { model } from './proj-year.js';
+import * as PL from '../planner.js';
 
 let range = 'year';
 const RANGES = [['3m', 'Past 3 months'], ['6m', 'Past 6 months'], ['12m', 'Past 12 months'], ['year', 'This year'], ['last', 'Last year'], ['2y', 'Past 2 years'], ['all', 'Everything']];
@@ -24,9 +24,9 @@ export function plannedByMonth(data, all) {
     for (const t of C.targets(data, C.projection(data, all))) if (t.estAsset != null) out.set(t.date.slice(0, 7), Math.round(t.estAsset - t.plannedLiab));
   } catch (e) { /* no Plan sheet in this file */ }
   const cfg = P.cfg(data);
-  for (const plan of Object.values(cfg.years).map((x) => P.effectivePlan(data, x))) {
+  for (const plan of Object.keys(cfg.years).map((y) => PL.livePlan(data, y)).filter(Boolean)) {   // plans that are live: the start of the year, then each month
     if (!out.has(plan.baseline.month)) out.set(plan.baseline.month, Math.round(plan.baseline.net));
-    for (const r of P.planPath(plan, P.cfg(data).outlooks)) if (!out.has(r.month)) out.set(r.month, Math.round(r.nw));
+    for (const r of PL.planPath(plan, cfg.outlooks)) if (!out.has(r.month)) out.set(r.month, Math.round(r.nw));
   }
   return out;
 }
@@ -45,12 +45,12 @@ export function netWorthRows(data, all) {
   const actual = [...by.values()].sort((a, b) => (a.month < b.month ? -1 : 1));
   // projection to December from today's position, using this year's plan (or what a fresh plan would assume)
   const cfg = P.cfg(data);
-  const plan = P.effectivePlan(data, cfg.years[year] || P.newYearPlan(data, all, Number(year)));
-  const m = model(plan);
+  const plan = PL.livePlan(data, year);
+  const a = plan ? plan.a : PL.fallbackA(data, all);
   const live = P.baseline(data, all);
-  const fc = (live.month === cur ? P.simulate({ values: live.values, liab: live.liab, month: live.month }, plan.a, m.oc, P.monthsTo(live.month, Number(year))) : []).filter((r) => r.month > cur && r.month <= year + '-12');
+  const fc = (live.month === cur ? P.simulate({ values: live.values, liab: live.liab, month: live.month }, a, cfg.outlooks, P.monthsTo(live.month, Number(year))) : []).filter((r) => r.month > cur && r.month <= year + '-12');
   const projected = fc.map((r) => ({ month: r.month, value: Math.round(r.nw), src: 'Projected' }));
-  return { actual, projected, plan, hasPlan: !!cfg.years[year] };
+  return { actual, projected, plan, hasPlan: !!plan };
 }
 
 export function render() {

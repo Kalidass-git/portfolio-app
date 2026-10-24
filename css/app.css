@@ -873,3 +873,28 @@ dialog.msheet::backdrop { background: rgba(10, 18, 14, .55); }
 .stat.gold-rate .gr-refresh svg { width: 18px; height: 18px; }
 .stat.gold-rate .gr-refresh.busy svg { animation: gr-spin .9s linear infinite; }
 @keyframes gr-spin { to { transform: rotate(360deg); } }
+
+/* ---------- Wealth outlook 8.10: Planner tab, projected rows, plan settings ---------- */
+.stat.tap { font: inherit; text-align: left; color: inherit; cursor: default; position: relative; width: 100%; }
+.stat.tap.editable { cursor: pointer; border-color: color-mix(in srgb, var(--brand, #17744a) 40%, var(--line)); }
+.stat.tap.editable:hover, .stat.tap.editable:focus-visible { background: color-mix(in srgb, var(--brand, #17744a) 7%, var(--surface)); }
+.stat.tap .tap-edit { position: absolute; top: 8px; right: 10px; font-size: .85rem; color: var(--brand, #17744a); opacity: .8; }
+.plan-sub { margin: 14px 0 6px; font-size: .95rem; } .plan-sub:first-child { margin-top: 0; }
+.plan-state { display: flex; gap: 10px 14px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.plan-badge { display: inline-block; padding: 4px 12px; border-radius: 999px; font-weight: 700; font-size: .82rem; border: 1px solid var(--line); white-space: nowrap; }
+.plan-badge.pos { color: var(--pos); border-color: var(--pos); background: color-mix(in srgb, var(--pos) 10%, var(--surface)); }
+.plan-badge.warn { color: var(--warn); border-color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--surface)); }
+.row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.pdl { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
+.pdl-group { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; background: var(--surface); }
+.pdl-group h4 { margin: 0 0 6px; font-size: .9rem; }
+.pdl-row { display: grid; grid-template-columns: 1fr auto; gap: 0 10px; padding: 3px 0; border-bottom: 1px dotted var(--line-2, var(--line)); align-items: baseline; }
+.pdl-row small { grid-column: 1 / -1; }
+.pdl-row:last-child { border-bottom: 0; }
+ul.chg { list-style: none; margin: 4px 0; padding: 0; display: grid; gap: 4px; font-size: .9rem; }
+ul.chg li { padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.chg-g { font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-right: 4px; }
+.cal-month.rev { border: 1px solid var(--line); border-radius: var(--radius); margin: 8px 0; background: var(--surface-2, var(--surface)); }
+tr.proj-row td.host i, tr.proj-row td i { font-style: italic; }
+.mrow.proj-row .mr-title, .mrow.proj-row .mr-main, .mrow.proj-row .mr-sub, .mrow.proj-row .mr-subline { font-style: italic; color: var(--muted); }
+.mrow.proj-row .mr-title { color: var(--ink); opacity: .8; }

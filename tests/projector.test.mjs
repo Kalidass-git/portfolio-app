@@ -1,13 +1,15 @@
 import fs from 'node:fs';
 import * as C from '../js/calc.js';
 import * as P from '../js/projector.js';
+import * as PL from '../js/planner.js';
 const data = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
 const all = C.computeAll(data, { asOf: '2026-10-11', useLive: false });
 let fail = 0;
 const ok = (label, cond, info = '') => { if (!cond) fail++; console.log(cond ? 'ok  ' : 'FAIL', label, info); };
 const b = P.baseline(data, all);
 ok('baseline reconciles to total assets', Math.abs(Object.values(b.values).reduce((a, x) => a + x, 0) - all.totalAssets) < 1);
-const plan = P.newYearPlan(data, all, 2027);
+const plan0 = PL.freshPlan(data, all, 2027), pe = PL.effective(plan0, 'working');
+const plan = { a: pe.a, baseline: pe.baseline, target: PL.planTarget(pe, P.cfg(data).outlooks) };
 const oc = P.cfg(data).outlooks;
 const start = { values: plan.baseline.classes, liab: plan.baseline.loans, month: plan.baseline.month };
 const n = P.monthsTo(start.month, 2027);

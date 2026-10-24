@@ -6,7 +6,8 @@ import * as R from '../risk.js';
 import { h, money, compact, monthLabel, section, stat, table, btn, formDialog, toast } from '../ui.js';
 import { lineChart, donut, legend, riskColor } from '../charts.js';
 import { rerender, outlooks, signed, pc, tone, outlookToggle, datalistId } from './proj-shared.js';
-import { currentPlan } from './proj-year.js';
+import { currentPlan } from './proj-shared.js';
+import { fallbackA } from '../planner.js';
 import { statusTag, limitText, shareText } from './proj-risk.js';
 import { groupedTable } from './groupmix.js';
 import { allocationBody, groupSetup, groupToggle, allocMode } from './allocview.js';
@@ -111,7 +112,7 @@ export function render(root) {
 
   // ---------- over time ----------
   const years = wi.years, months = years * 12;
-  const a0 = plan ? plan.a : P.effectiveA(data, P.defaults(data, all));
+  const a0 = plan ? plan.a : fallbackA(data, all);
   const uni = Object.fromEntries(P.MARKET.map((k) => [k, wi.outlook]));
   const keepInv = wi.keep ? (a0.invest || []) : [];
   // a bond, loan or deposit with its own rate is its own pot from day one; everything else joins its kind at the usual rate
