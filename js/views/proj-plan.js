@@ -20,7 +20,7 @@ const homeInterest = () => { try { return Math.round(C.monthCashflow(S.data, S.a
 
 /** A card that shows one setting and opens its bottom sheet on a tap. */
 function tile(label, value, sub, onTap, ed) {
-  return h('button', { type: 'button', class: 'stat tap' + (ed ? ' editable' : ''), onclick: onTap || null, 'aria-label': `${label}. ${ed ? 'Tap to change.' : ''}` },
+  return h('button', { type: 'button', class: 'stat tap' + (ed ? ' editable' : '') + (onTap && !ed ? ' hastap' : ''), onclick: onTap || null, 'aria-label': `${label}. ${ed ? 'Tap to change.' : ''}` },
     h('span', { class: 'stat-label' }, label), h('strong', { class: 'stat-value' }, value), sub ? h('span', { class: 'stat-sub' }, sub) : null, ed ? h('span', { class: 'tap-edit', 'aria-hidden': 'true' }, '✎') : null);
 }
 const subHead = (t) => h('h4', { class: 'plan-sub' }, t);
@@ -173,6 +173,31 @@ async function discard(st) {
   revising.delete(st.year); toast('Changes discarded');
 }
 
+
+/** The working behind "Saved each month" and "Invested each month": twelve months added up, then divided by twelve. */
+function stepsSheet(st, path, which) {
+  const n = path.length || 1, S1 = (f) => path.reduce((t, r) => t + (f(r) || 0), 0), avg = (f) => S1(f) / n;
+  const sal = avg((r) => r.salary), epf = avg((r) => r.pfAdd), intr = avg((r) => r.interest), oth = avg((r) => r.other + r.oneIn), emi = avg((r) => r.emi), exp = avg((r) => r.expenses), one = avg((r) => r.oneOut);
+  const saved = sal + epf + intr + oth - emi - exp - one, inv = avg((r) => r.invested), kept = avg((r) => r.surplus), refill = avg((r) => r.refill);
+  const row = (l, v, note, b) => ({ l, v, note, b });
+  const lines = which === 'saved' ? [
+    row('Salary reaching the bank', money(sal), 'Expected salary, raised in the hike month'), row('EPF', money(epf), 'Goes in before the salary reaches the bank, so it is saved too'),
+    row('Interest income', money(intr), 'Your expected figure, growing as new money goes into bonds and lending'), row('Other income', money(oth), 'Any other income and one-time income'),
+    row('Loan EMI', '−' + money(emi)), row('Everyday expenses', '−' + money(exp), 'Rising each year from January'), row('One-time items', '−' + money(one), 'Tax, fees and so on, added up over the year and divided by 12'),
+    row('Saved each month', money(saved), 'Salary + EPF + interest + other − EMI − expenses − one-time', true),
+  ] : [
+    row('Saved each month', money(saved), 'From the steps of “Saved each month”', true), row('Less EPF', '−' + money(epf), 'EPF is already in EPF/PPF; it is not new money'),
+    row('Money left in the bank after spending', money(saved - epf), 'What can be invested'), row('Kept back to rebuild cash', '−' + money(refill), 'After a short month (tax, fees) cash is topped up before investing'),
+    row('Invested each month', money(inv), 'Split by the shares in New money going in', true), row('Left in cash', money(kept), 'Anything not invested stays in the bank'),
+  ];
+  dialog(which === 'saved' ? 'Saved each month: the steps' : 'Invested each month: the steps', h('div', null,
+    h('p', { class: 'note' }, `Averages of the ${n} months of the plan year. Each month is worked out on its own, so a month with tax saves less.`),
+    table([{ label: 'Step', host: true, render: (x) => h('span', null, x.b ? h('b', null, x.l) : x.l, x.note ? h('small', { class: 'muted', style: { display: 'block', whiteSpace: 'normal' } }, x.note) : null) }, { label: 'Each month', cls: 'r', render: (x) => (x.b ? h('b', null, x.v) : x.v) }], lines, {}),
+    h('details', { class: 'more' }, h('summary', null, 'Month by month'),
+      table([{ label: 'Month', host: true, get: (r) => monthLabel(r.month, true) }, { label: 'Saved', cls: 'r', get: (r) => money(r.left + (r.pfAdd || 0)) }, { label: 'Invested', cls: 'r', get: (r) => money(r.invested) }, { label: 'Net worth', cls: 'r', get: (r) => money(r.nw) }], path, { m: { key: 'plan-steps-months', head: 'Month', views: [['Saved', 'Invested'], ['Net worth']] } }))),
+    [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
+}
+
 // ---------- cards ----------
 function statusBar(st, path) {
   const dirty = PL.isDirty(st), live = !!st.live, rev = revising.has(st.year) || dirty;
@@ -186,7 +211,9 @@ function statusBar(st, path) {
   const end = path.length ? path[path.length - 1].nw : st.initial.net;
   const saved = path.length ? path.reduce((s, r) => s + r.left + (r.pfAdd || 0), 0) / path.length : 0, inv = path.length ? path.reduce((s, r) => s + r.invested, 0) / path.length : 0;
   return section(`Plan ${st.year}`, h('div', null, h('div', { class: 'plan-state' }, badge, h('p', { class: 'note', style: { margin: 0 } }, text)),
-    h('div', { class: 'stats' }, stat(`Net worth, December ${st.year}`, money(end), `as this plan projects it, from ${money(st.initial.net)} in January`), stat('Saved each month', h('span', { class: tone(saved) }, money(saved)), 'on average, with EPF'), stat('Invested each month', money(inv), 'on average, new money')),
+    h('div', { class: 'stats' }, stat(`Net worth, December ${st.year}`, money(end), `as this plan projects it, from ${money(st.initial.net)} in January`),
+      tile('Saved each month', h('span', { class: tone(saved) }, money(saved)), 'on average, with EPF · tap for the steps', () => stepsSheet(st, path, 'saved'), false),
+      tile('Invested each month', money(inv), 'on average, new money · tap for the steps', () => stepsSheet(st, path, 'invested'), false)),
     actions ? h('div', { class: 'row-actions' }, ...actions) : null));
 }
 
@@ -256,12 +283,11 @@ function availExplain(st, a, f) {
     row('Money in each month', money(f.inc), '', true),
     row('Everyday expenses', '−' + money(a.expenses), `from the plan. Your last ${hist.length} months of everyday spending, without one-time bills, averaged ${money(avg(hist, 'regular'))} (${list(hist, 'regular')})`),
     row('Loan EMI', '−' + money(a.emi), `from the plan. Your last ${last3.length} months of EMI averaged ${money(avg(last3, 'emi'))}`),
-    row('Yearly one-time bills, one twelfth', '−' + money(f.oneMonthly), `${money(f.yearOnce)} of tax, fees, trips and so on in ${st.year}, spread evenly so the cash is there when they fall due`),
-    row('Available to invest each month', money(f.avail), 'in − spending − EMI − bills set aside', true),
+    row('Available to invest each month', money(f.avail), 'money in − expenses − EMI. One-time bills are paid in their own month', true),
   ];
   return h('details', { class: 'more' }, h('summary', null, 'How this is worked out'),
     table([{ label: 'Step', host: true, render: (x) => h('span', null, x.bold ? h('b', null, x.label) : x.label, x.src ? h('small', { class: 'muted', style: { display: 'block', whiteSpace: 'normal' } }, x.src) : null) }, { label: 'Each month', cls: 'r', render: (x) => (x.bold ? h('b', null, x.val) : x.val) }], lines, {}),
-    hist.length ? h('p', { class: Math.abs(diff) > Math.max(5000, 0.2 * Math.abs(kept)) ? 'form-error' : 'note' }, `Check against the bank: in the last ${hist.length} months you actually kept about ${money(kept)} a month after all spending, tax and one-time bills, before investing. This plan says ${money(f.avail)}. ${Math.abs(diff) > Math.max(5000, 0.2 * Math.abs(kept)) ? (diff > 0 ? 'The plan is more hopeful than your history. Check that the salary and expense figures are realistic.' : 'The plan is more cautious than your history. It may be assuming more spending or less income than you have seen.') : 'They are close, so the plan matches how you have really been living.'}`) : h('p', { class: 'note' }, 'There is not enough bank history to check this against.'),
+    hist.length ? h('p', { class: Math.abs(diff) > Math.max(5000, 0.2 * Math.abs(kept)) ? 'form-error' : 'note' }, `Check against the bank: in the last ${hist.length} months you actually kept about ${money(kept)} a month after all spending, tax and one-time bills, before investing. This plan says ${money(f.avail - f.oneMonthly)} once yearly one-time bills are spread over the year. ${Math.abs(diff) > Math.max(5000, 0.2 * Math.abs(kept)) ? (diff > 0 ? 'The plan is more hopeful than your history. Check that the salary and expense figures are realistic.' : 'The plan is more cautious than your history. It may be assuming more spending or less income than you have seen.') : 'They are close, so the plan matches how you have really been living.'}`) : h('p', { class: 'note' }, 'There is not enough bank history to check this against.'),
     h('p', { class: 'note' }, `Not in this figure: EPF (${money(a.pfAdd || 0)} a month goes in before the salary reaches the bank) and the new investments themselves.`));
 }
 function newMoneyCard(st, ed, path) {
@@ -269,15 +295,16 @@ function newMoneyCard(st, ed, path) {
   const r0m = path[0];
   const inc = r0m ? r0m.salary + r0m.other + r0m.interest : 0, spend = r0m ? r0m.expenses + r0m.emi : 0;
   const yearOnce = (a.oneOffs || []).filter((o) => o.kind !== 'income' && (o.month.length === 2 || o.month.startsWith(String(st.year)))).reduce((x, o) => x + (o.amount || 0), 0);
-  const oneMonthly = yearOnce / 12, avail = inc - spend - oneMonthly;
+  const oneMonthly = yearOnce / 12, avail = inc - spend;   // yearly one-time bills are not taken off here: the projection pays them in their own month
   const shareOf = (v) => (invTotal > 0 ? pct(v / invTotal, 0) : '–');
   return section('New money going in each month', h('div', null,
     h('div', { class: 'stats' },
-      stat('Available to invest', h('span', { class: tone(avail) }, money(avail)), `each month · ${money(inc)} in, ${money(spend)} out${oneMonthly > 1 ? `, ${money(oneMonthly)} set aside for yearly bills` : ''}`),
+      stat('Available to invest', h('span', { class: tone(avail) }, money(avail)), `each month · ${money(inc)} in, ${money(spend)} out`),
       stat('New money is split', `${inv.length} ${inv.length === 1 ? 'line' : 'lines'}`, 'each month invests what is left, by the shares below')),
     (a.pfAdd || 0) > 0 ? h('p', { class: 'note' }, `Your EPF (${money(a.pfAdd)} a month, yours and the employer’s) goes in before salary reaches the bank, so it is already saved and is not part of the available amount.`) : null,
     availExplain(st, a, { inc, salary: r0m ? r0m.salary : 0, other: r0m ? r0m.other : 0, interest: r0m ? r0m.interest : 0, oneMonthly, yearOnce, avail }),
-    avail <= 0 ? h('p', { class: 'form-error' }, 'Nothing is left in an average month after expenses, EMI and the yearly bills, so little or nothing would be invested.') : null,
+    oneMonthly > 1 ? h('p', { class: 'note' }, `Yearly one-time bills (${money(yearOnce)} in ${st.year}, about ${money(oneMonthly)} a month) are not taken off this figure. They come out in the month they fall due, so that month invests less. With them spread over the year it would be ${money(avail - oneMonthly)} a month.`) : null,
+    avail <= 0 ? h('p', { class: 'form-error' }, 'Nothing is left in an average month after expenses and EMI, so little or nothing would be invested.') : null,
     table([
       { label: 'Investment', host: true, get: (l) => l.name }, { label: 'Goes into', mob: 'under', get: (l) => P.classOf(l.cls).label },
       { label: 'Share of new money', mob: 'under', mlabel: 'share ', cls: 'r', render: (l) => h('b', null, shareOf(l.monthly)), total: () => shareOf(invTotal) },
@@ -285,6 +312,7 @@ function newMoneyCard(st, ed, path) {
       { label: 'Return', mob: 'under', mlabel: 'return ', cls: 'r', get: (l) => (P.isMarket(l.cls) ? (l.outlook ? (outlooks().find((o) => o.id === l.outlook) || {}).name : 'class outlook') : pc(l.rate != null ? l.rate : (a.rates || {})[l.cls] || 0)) },
       { label: 'Period', mob: 'hide', get: (l) => (l.from || l.to ? `${l.from ? monthLabel(l.from) : 'January'} to ${l.to ? monthLabel(l.to) : 'Dec'}` : 'whole year') },
     ], inv, { footer: { label: 'Total' }, m: { key: 'plan-invest', head: 'Investment', sub: ['Goes into'], views: [['Share of new money', 'Illustrative amount'], ['Return', 'Period']] }, onRow: ed ? (l) => investForm(st, inv.find((x) => x.id === l.id)) : null, empty: 'No new investments planned. Add where your savings will go.' }),
+    h('p', { class: 'note' }, 'EPF is added automatically from “Expected EPF” on the Income card (it goes into EPF/PPF), so do not add it here. A line here is for new money you choose to invest.'),
     h('p', { class: 'note' }, 'The amounts are only to show the split. In the projection each month, whatever is really left after spending, EMI and one-time bills is invested by these shares (percentages), so a month with tax or fees invests less and a quiet month more. Fixed-income money earns the rate shown; market-linked money follows its outlook.'),
     ed ? h('div', { class: 'row-actions' }, btn('Add investment', () => investForm(st), '', { keep: true })) : null));
 }

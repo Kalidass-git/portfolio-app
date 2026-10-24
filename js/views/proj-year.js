@@ -105,7 +105,7 @@ export function render(root) {
 
   // ---------- headline ----------
   root.append(h('div', { class: 'stats' },
-    stat(`Target as per plan, Dec ${year}`, money(t.target), `from ${money(plan.initial.net)} in January · revision ${plan.rev}`),
+    stat(`Target as per plan, Dec ${year}`, money(t.target), `from ${money(plan.initial.net)} in January · ${plan.which === 'working' ? 'draft' : 'revision ' + plan.rev}`),
     stat('Projected year end', h('span', { class: tone(t.gap) }, money(t.projected)), t.inYear ? `from today’s ${money(t.live.net)}, with the plan’s settings${ov ? ' on the what-if outlook' : ''}` : 'following the plan'),
     stat(t.gap >= 0 ? 'Ahead by' : 'Short by', h('span', { class: tone(t.gap) }, money(Math.abs(t.gap))), h('span', { class: stTone }, stLabel)),
     t.gap < 0 && t.extra > 0 ? stat('Extra to save', money(t.extra) + ' / month', `to reach the planned target, over the ${t.monthsLeft} months left (earn more or spend less)`) : stat('Extra to save', t.gap >= 0 ? 'Nothing' : '–', t.gap >= 0 ? 'you are on course for the planned target' : 'no months left this year')));
@@ -128,7 +128,7 @@ export function render(root) {
   })));
 
   // ---------- month-end check-in: every month of the year ----------
-  const mine = t.snaps.get(nowM), planNow = planBy.has(nowM) ? planBy.get(nowM).nw : null;
+  const yr0 = Number(year), mine = t.snaps.get(nowM), planNow = planBy.has(nowM) ? planBy.get(nowM).nw : null;
   const lines = rows.map((r, i) => { const pr = t.path[i]; return { r, pr, month: r.month, planNw: pr.nw, nw: r.nw, diff: r.nw - pr.nw, status: PL.statusOf(r.nw, pr.nw), proj: r.src === 'projected', missing: !!r.missing, now: r.src === 'now' }; });
   const fromSheet = P.planSheetSnapshots(data, all.asOf).filter((x) => x.month.slice(0, 4) === String(year));
   const it = (x, node) => (x.proj ? h('i', null, node) : node);
@@ -136,7 +136,7 @@ export function render(root) {
   root.append(section(`Month-end check-in · ${monthLabel(nowM, true)}`, h('div', null,
     h('div', { class: 'stats' },
       stat('Net worth today', money(all.netAsset), `as on ${dateStr(all.asOf)}`),
-      planNow != null ? stat(`Plan for end of ${monthLabel(nowM)}`, money(planNow), h('span', { class: tone(all.netAsset - planNow) }, `${signed(all.netAsset - planNow)} ${all.netAsset >= planNow ? 'ahead' : 'behind'} so far`)) : stat('This month', year > Number(nowM.slice(0, 4)) ? 'Not started' : 'Finished', year > Number(nowM.slice(0, 4)) ? `plan ${year} begins in January` : `plan ${year} has ended`),
+      planNow != null ? stat(`Plan for end of ${monthLabel(nowM)}`, money(planNow), h('span', { class: tone(all.netAsset - planNow) }, `${signed(all.netAsset - planNow)} ${all.netAsset >= planNow ? 'ahead' : 'behind'} so far`)) : stat('This month', yr0 > Number(nowM.slice(0, 4)) ? 'Not started' : 'Finished', yr0 > Number(nowM.slice(0, 4)) ? `plan ${year} begins in January` : `plan ${year} has ended`),
       mine ? stat('Snapshot saved', money(mine.net), mine.note || dateStr(mine.date)) : stat('Snapshot', 'Not saved yet', 'save it on the last day of the month')),
     fromSheet.length && canEdit() ? h('div', { class: 'alert warn' }, h('b', null, `${fromSheet.length} month-end${fromSheet.length === 1 ? '' : 's'} from your Plan sheet ${fromSheet.length === 1 ? 'is' : 'are'} not in this table yet`),
       h('p', null, `${fromSheet.map((x) => monthLabel(x.month).slice(0, 3)).join(', ')}: these were typed into Plan → Month by month. Bring them in as snapshots so they show here. Months that already have a snapshot are not changed.`),
@@ -156,18 +156,18 @@ export function render(root) {
     h('details', { class: 'more' }, h('summary', null, 'How to read this'),
       h('p', { class: 'note' }, 'Plain rows are what really happened: net worth from the month-end snapshot (or today’s position for the current month, marked “now”). Italic rows are projected: the plan’s settings carried forward from the last real position, so a month you forgot to snapshot is filled in until you add it.'),
       h('p', { class: 'note' }, 'Plan net worth is recalculated from the plan’s settings and its starting net worth. Short / ahead is actual (or projected) minus plan. Tap the invested figures to see the working: salary + EPF + interest − EMI − spending − one-time items, and where the saving went. Tap a row to type in that month’s snapshot.')),
-    canEdit() && year === Number(nowM.slice(0, 4)) ? [btn(mine ? 'Update snapshot' : 'Save snapshot', () => saveSnapshot(nowM), 'primary', { keep: true })] : null)));
+    canEdit() && yr0 === Number(nowM.slice(0, 4)) ? [btn(mine ? 'Update snapshot' : 'Save snapshot', () => saveSnapshot(nowM), 'primary', { keep: true })] : null)));
 
   // ---------- the whole year, month by month ----------
-  root.append(yearsTable(rows, { title: `Month by month, ${year}`, why: { tds: plan.a.tds ?? 0.1 }, legend: true }), flowSection(rows, { mode: 'month', title: `Income, spending and investing, ${year}` }));
+  root.append(yearsTable(rows, { title: `Month by month, ${year}`, why: { tds: plan.a.tds ?? 0.1 }, legend: true }), flowSection(rows, { mode: 'month', title: `Income, spending and investing, ${year}`, initial: nowM.startsWith(String(year)) ? nowM : rows[0].month }));
 
   actual.render(root, plan, t.path);
 
   // ---------- where it went right or wrong, up to a chosen month ----------
-  const cy = Number(nowM.slice(0, 4));
-  const upto = year < cy ? rows.map((r) => r.month) : year === cy ? rows.map((r) => r.month).filter((m) => m <= nowM) : [];
+  const cy = Number(nowM.slice(0, 4)), yr = Number(year);
+  const upto = yr < cy ? rows.map((r) => r.month) : yr === cy ? rows.map((r) => r.month).filter((m) => m <= nowM) : [];
   if (upto.length) {
-    if (whereYear !== year || !upto.includes(whereMonth)) { whereYear = year; whereMonth = upto[upto.length - 1]; }
+    if (whereYear !== yr || !upto.includes(whereMonth)) { whereYear = yr; whereMonth = upto[upto.length - 1]; }
     const w = PL.whereWent(plan, t, whereMonth);
     if (w) {
       const list = w.list, grp = (f) => list.filter(f).reduce((a, x) => a + x.diff, 0);

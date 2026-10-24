@@ -83,7 +83,7 @@ export function freshPlan(data, all, year) {
   const inYear = (m) => !m || String(m).length === 2 || String(m).startsWith(y);
   const items = (list) => (list || []).filter((o) => inYear(o.month)).map((o, i) => ({ ...o, id: o.id || 'o' + (i + 1) }));
   const oneOffs = items(oa.oneOffs && oa.oneOffs.length ? oa.oneOffs : ahead.oneOffs && ahead.oneOffs.length ? ahead.oneOffs : d.oneOffs);
-  const invest = (oa.invest && oa.invest.length ? oa.invest : d.invest).map((l, i) => ({ ...l, id: l.id || 'i' + (i + 1), from: inYear(l.from) ? l.from || '' : '', to: inYear(l.to) ? l.to || '' : '' }));
+  const invest = (oa.invest && oa.invest.length ? oa.invest : d.invest).map((l, i) => ({ ...l, name: String(l.name || '').replace(/^EPF,\s*/, ''), id: l.id || 'i' + (i + 1), from: inYear(l.from) ? l.from || '' : '', to: inYear(l.to) ? l.to || '' : '' }));
   const a = {
     salary: d.salary, pfAdd: d.pfAdd, salaryMonth: d.salaryMonth, otherIncome: 0, interestMonthly: d.interestMonthly,
     expenses: d.expenses, emi: d.emi, tds: d.tds,

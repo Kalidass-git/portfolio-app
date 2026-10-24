@@ -69,7 +69,7 @@ const oneNames = (r) => (r.items || []).filter((i) => i.kind !== 'income').map((
  * The chart. mode 'month' draws a column set per month, 'year' one per calendar year. Tap a column to see what it is made of:
  * a year opens its own month by month chart, a month shows each part and the one-time items in it.
  */
-export function flowSection(rows, { mode = 'month', title = 'Income, spending and investing', embed = false } = {}) {
+export function flowSection(rows, { mode = 'month', title = 'Income, spending and investing', embed = false, initial = null } = {}) {
   if (!rows.length) return section(title, h('p', { class: 'empty' }, 'Nothing to show.'));
   const box = h('div');
   const groups = [];
@@ -77,6 +77,7 @@ export function flowSection(rows, { mode = 'month', title = 'Income, spending an
     const years = [...new Set(rows.map((r) => r.month.slice(0, 4)))];
     for (const y of years) { const yr = rows.filter((r) => r.month.startsWith(y)); groups.push({ key: y, label: y, title: `${y}${yr.length < 12 ? ` (${yr.length} months)` : ''}`, rows: yr, t: total(yr) }); }
   } else for (const r of rows) groups.push({ key: r.month, label: monthLabel(r.month).slice(0, 3), title: monthLabel(r.month, true), rows: [r], t: total([r]) });
+  if (picks[title] === undefined && initial && groups.some((g) => g.key === initial)) picks[title] = initial;   // open with a month already chosen, so its table is not empty
   if (picks[title] && !groups.some((g) => g.key === picks[title])) picks[title] = null;
   const draw = () => {
     const pick = picks[title];

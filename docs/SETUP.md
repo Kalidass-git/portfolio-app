@@ -154,6 +154,13 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.10.1 – Wealth outlook: draft plans on every tab, plan targets by year end
+
+- **Draft plans work everywhere.** This year, Years ahead and Market outlook no longer wait for "Make this plan live". The **Version** dropdown lists "Draft (not committed)" (or "Draft (changes not live yet)" while revising) and every committed revision; a banner says when you are not looking at the live one. Home's "Investing this month" still uses only the live plan.
+- **Planner.** "Available to invest" no longer subtracts the one-twelfth of yearly bills (it is a note under the card; the bills come out in their own month). "Saved each month" and "Invested each month" open the steps: salary + EPF + interest + other − EMI − expenses − one-time, and then less EPF and the cash kept back. EPF is added automatically from "Expected EPF"; the default investment line from your Plan sheet is now called "RDs and FDs" (not "EPF, RD and FDs"), and a note says not to add EPF as a line.
+- **This year.** Fixed: "Where it went right or wrong" (with the "compare up to" dropdown) was missing because of a bug. The month table under "Income, spending and investing" now opens with the current month already selected. Saving a snapshot stays manual (button at the bottom of the check-in).
+- **Years ahead.** The single "target reached" card is gone. Each year end now has a **plan target** (the plan's own path carried on with its own settings) and an ahead/short figure, in the table and as a dashed line on the chart.
+
 ## Release 8.10.0 – Wealth outlook: new Planner tab, plans you commit and revise
 
 - **Planner tab (first tab).** All planning now happens here, for this year and next. Cards: **Income** (Salary: expected salary, EPF, hike %, hike month; Other income: expected interest income, any other income; the net worth the year starts from), **Expenses** (expected expenses, yearly rise, loan EMI, and one-time items, each with its own yearly rise %), **Market outlook for this plan**, **New money going in each month**, and **Revision history**. Tap any card to change it in a bottom sheet (a dialog on desktop).

@@ -87,7 +87,7 @@ export function defaults(data, all) {
   for (const m of months.slice(-12)) { const a = monthActual(data, m); if (a.tax > 0) tax.set(m.slice(5), (tax.get(m.slice(5)) || 0) + a.tax); }
   const b = baseline(data, all);
   const map = { 'EPF + RD + FDs': ['fds', 'EPF, RD and FDs'], Gold: ['gold', 'Gold'], Bonds: ['bonds', 'Bonds'], 'Lending Private': ['lending', 'Private lending'], Stocks: ['shares', 'Shares and funds'], Chits: ['chits', 'Chits'], 'Lending Family': ['fds', 'Lending to family'] };
-  const invest = ((data.targets && data.targets.investmentPlan) || []).filter((p) => p.capital > 0 && map[p.name]).map((p, i) => ({ id: 'i' + (i + 1), name: map[p.name][1], cls: map[p.name][0], monthly: r0(p.capital / 12) }));
+  const invest = ((data.targets && data.targets.investmentPlan) || []).filter((p) => p.capital > 0 && map[p.name]).map((p, i) => ({ id: 'i' + (i + 1), name: map[p.name][1].replace(/^EPF, /, ''), cls: map[p.name][0], monthly: r0(p.capital / 12) }));
   return {
     salary: r0(avg(last3, 'salary')), otherIncome: 0, expenses: r0(avg(last6, 'regular')), emi: r0(avg(last3, 'emi')), pfAdd: r0(avg(last3, 'pf')),
     tds: (data.settings && data.settings.tdsRate) ?? 0.1,
