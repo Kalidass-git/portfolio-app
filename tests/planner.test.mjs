@@ -50,6 +50,9 @@ ok('where it went for a past month', ww && Math.abs(ww.diff - (3300000 - track.p
 const ov = PL.yearTrack(data, all, PL.effective(plan, 'live'), oc, { outlook: { gold: 'loss', shares: 'loss', etfs: 'loss', funds: 'loss' } });
 ok('what-if outlook only changes the projected months', ov.rows[4].nw === track.rows[4].nw && ov.projected <= track.projected, `${Math.round(ov.projected)} <= ${Math.round(track.projected)}`);
 data.projector.years['2026'] = plan;
+const r1 = PL.effective(plan, 1), r2e = PL.effective(plan, 2);
+ok('an earlier revision can be projected with its own settings', r1 && r1.rev === 1 && r1.a.salary === 150000 && r2e.a.salary === 170000 && PL.planTarget(r1, oc) !== PL.planTarget(r2e, oc));
+ok('a revision without saved settings is not offered', PL.effective(plan, 99) === null);
 const snap = PL.makeSnapshot(data, all, '2026-09', '', oc);
 ok('snapshot carries the live plan figures', snap.plan && snap.plan.rev === 2 && snap.projected && snap.projected.net > 0);
 const d2 = JSON.parse(JSON.stringify(data)); d2.projector.years['2025'] = { id: '2025', year: 2025, a: {}, baseline: {} }; d2.projector.ahead = { horizon: 7, salary: 5 };

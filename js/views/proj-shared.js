@@ -19,6 +19,7 @@ export const monthRange = (from, to) => { const out = []; for (let m = from; m <
 
 // ---------- which plan is shown (the same on every tab) ----------
 let selYear = null;
+const selRev = {};   // year -> revision number being looked at (empty = the live one)
 const thisYear = () => Number(String(S.all.asOf).slice(0, 4));
 export const setSelYear = (y) => { selYear = String(y); };
 /**
@@ -31,13 +32,23 @@ export function currentPlan() {
   const choices = [...new Set([String(cy), String(cy + 1), ...mine])].sort();
   if (!selYear || !choices.includes(selYear)) selYear = mine.includes(String(cy)) ? String(cy) : mine[0] || String(cy);
   const raw = cfg.years[selYear], stored = PL.isV2(raw) ? raw : null;
-  return { stored, plan: stored && stored.live ? PL.effective(stored, 'live') : null, working: stored ? PL.effective(stored, 'working') : null, year: selYear, choices, cfg, legacy: !!raw && !stored };
+  const revs = stored ? (stored.revisions || []).filter((r) => r.state).map((r) => r.rev).sort((a, b) => b - a) : [];
+  const liveRev = stored && stored.live ? stored.live.rev : null;
+  const rev = selRev[selYear] != null && revs.includes(selRev[selYear]) ? selRev[selYear] : liveRev;
+  const viewing = stored && stored.live ? (rev === liveRev ? PL.effective(stored, 'live') : PL.effective(stored, rev)) : null;
+  return { stored, revs, liveRev, rev, old: rev != null && rev !== liveRev, plan: viewing, working: stored ? PL.effective(stored, 'working') : null, year: selYear, choices, cfg, legacy: !!raw && !stored };
 }
 const choiceLabel = (y, cfg) => { const p = cfg.years[y]; return y + (PL.isV2(p) ? (p.live ? ` · live, revision ${p.live.rev}` : ' · not committed') : ' · no plan yet'); };
 /** The plan dropdown. */
-export function planPicker({ onPick } = {}) {
-  const { choices, year, cfg } = currentPlan();
-  return h('div', { class: 'filters' }, h('label', null, 'Plan ', h('select', { 'aria-label': 'Plan', onchange: (e) => { setSelYear(e.target.value); if (onPick) onPick(); rerender(); } }, choices.map((y) => h('option', { value: y, selected: y === year }, choiceLabel(y, cfg))))));
+export function planPicker({ onPick, versions = false } = {}) {
+  const { choices, year, cfg, revs, liveRev, rev, old, stored } = currentPlan();
+  const box = h('div', { class: 'filters' }, h('label', null, 'Plan ', h('select', { 'aria-label': 'Plan', onchange: (e) => { setSelYear(e.target.value); if (onPick) onPick(); rerender(); } }, choices.map((y) => h('option', { value: y, selected: y === year }, choiceLabel(y, cfg))))));
+  if (versions && revs.length > 1) {
+    const label = (n) => { const r = stored.revisions.find((x) => x.rev === n); return `Revision ${n}${n === liveRev ? ' · live' : ''}${r ? ' · ' + dateStr(r.at.slice(0, 10)) : ''}`; };
+    box.append(h('label', null, 'Version ', h('select', { 'aria-label': 'Plan version', onchange: (e) => { const n = Number(e.target.value); if (n === liveRev) delete selRev[year]; else selRev[year] = n; rerender(); } }, revs.map((n) => h('option', { value: n, selected: n === rev }, label(n))))));
+  }
+  if (old) box.append(h('p', { class: 'alert warn', style: { flexBasis: '100%', margin: 0 } }, h('b', null, `You are looking at revision ${rev}, not the live revision ${liveRev}`), 'The numbers below use that revision’s settings, with your real months since. Nothing is changed. ', h('a', { href: 'javascript:void 0', onclick: (e) => { e.preventDefault(); delete selRev[year]; rerender(); } }, 'Back to the live revision')));
+  return box;
 }
 /** Shown on a tab when the chosen year has no plan that is live. */
 export function notLiveCard(ctx, what = 'this page') {
@@ -111,7 +122,7 @@ export function planSettingsCard(plan) {
   const rates = Object.entries(a.rates || {}).filter(([k]) => !P.isMarket(k) && k !== 'cash').map(([k, v]) => `${P.labelOf(k)} ${pc(v, 1)}`).join(' · ');
   const summary = `${money(a.salary || 0)} salary, ${pc(g.salary || 0, 1)} hike · ${money(a.expenses || 0)} expenses · ${money(a.emi || 0)} EMI`;
   return section('Plan settings', h('details', { class: 'more assume-wrap' },
-    h('summary', { style: { cursor: 'pointer' } }, h('b', null, `Plan ${plan.year} · revision ${plan.rev}`), ' ', h('small', { class: 'muted' }, `live since ${dateStr((plan.at || '').slice(0, 10))} · ${summary}`)),
+    h('summary', { style: { cursor: 'pointer' } }, h('b', null, `Plan ${plan.year} · revision ${plan.rev}`), ' ', h('small', { class: 'muted' }, `made ${dateStr((plan.at || '').slice(0, 10))} · ${summary}`)),
     h('div', { class: 'pdl', style: { marginTop: '10px' } },
       group('Salary', row('Expected salary', money(a.salary || 0), 'a month, take-home'), row('Expected EPF', money(a.pfAdd || 0), 'a month'), row('Salary and EPF hike', pc(g.salary || 0, 1), `each ${PL.MONTH_NAMES[(Number(a.hikeMonth) || 4) - 1]}`), a.salaryMonth ? row('Figures are for', monthLabel(a.salaryMonth, true)) : null),
       group('Other income', row('Expected interest income', money(a.interestMonthly || 0), 'a month'), row('Other income', money(a.otherIncome || 0), 'a month'), row('Net worth at the start', money(plan.initial.net), `January ${plan.year}`)),

@@ -27,7 +27,7 @@ export function aheadSetup() {
 export function render(root) {
   const { data, all } = S;
   const ctx = currentPlan();
-  root.append(planPicker());
+  root.append(planPicker({ versions: true }));
   if (!ctx.plan) { root.append(notLiveCard(ctx, 'this page')); return; }
   const s = aheadSetup();
   const oc = outlooks();

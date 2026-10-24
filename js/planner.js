@@ -101,10 +101,13 @@ export function simAssumptions(a, year) {
   return { ...clone(a), baseYear: Number(year), tds: a.tds ?? 0.1, hikeMonth: Number(a.hikeMonth) || 4, loanPrincipal: 0,
     growth: { salary: g.salary || 0, expenses: g.expenses || 0, oneTime: g.oneTime ?? g.expenses ?? 0, invest: 0 }, outlook: { ...(a.outlook || {}) } };
 }
-/** which: 'live' (the committed copy) or 'working' (what is being edited). Null when there is no such copy. */
+/** which: 'live' (the committed copy), 'working' (what is being edited) or a revision number (its saved settings). Null when there is no such copy. */
 export function effective(plan, which = 'live') {
   if (!isV2(plan)) return null;
-  const src = which === 'live' ? plan.live : { a: plan.a, initial: plan.initial, rev: null, at: null };
+  let src;
+  if (which === 'live') src = plan.live;
+  else if (typeof which === 'number') { const r = (plan.revisions || []).find((x) => x.rev === which); src = r && r.state ? { a: r.state.a, initial: r.state.initial, rev: r.rev, at: r.at } : null; }
+  else src = { a: plan.a, initial: plan.initial, rev: null, at: null };
   if (!src) return null;
   const ini = src.initial, start = { values: ini.classes, liab: ini.liab, month: prevDec(plan.year) };
   return { id: plan.id, year: plan.year, which, rev: src.rev, at: src.at, a: simAssumptions(src.a, plan.year), raw: src.a, initial: ini, start, baseline: { month: start.month, net: ini.net, assets: ini.assets, loans: ini.liab, classes: ini.classes, date: ini.date }, stored: plan };
@@ -177,7 +180,7 @@ export function commit(plan, note, oc, now = new Date().toISOString()) {
   if (prev && !changes.length) changes = [{ g: 'Other', l: 'Other settings changed', from: null, to: null, f: 'note' }];
   const rev = (prev ? prev.rev : 0) + 1;
   plan.live = { rev, at: now, ...next };
-  const rec = { id: 'r' + rev, rev, at: now, note: note || '', kind: prev ? 'revision' : 'first', changes, key: keyFigures(plan, oc) };
+  const rec = { id: 'r' + rev, rev, at: now, note: note || '', kind: prev ? 'revision' : 'first', changes, key: keyFigures(plan, oc), state: clone(next) };   // the full settings of this revision, so it can be looked at later
   plan.revisions = [...(plan.revisions || []), rec];
   return rec;
 }
