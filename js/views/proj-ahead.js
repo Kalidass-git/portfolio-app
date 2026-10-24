@@ -38,6 +38,10 @@ export function render(root) {
   const yearRows = Array.from({ length: s.horizon }, (_, i) => rows[i * 12 + 11]);
   const end = rows[rows.length - 1];
   const year0 = (r) => monthLabel(r.month);
+  // the plan's own path carried on past its year with the plan's own settings: the target for every year end
+  const planRows = P.simulate(s.plan.start, { ...s.plan.a, loanPrincipal: 0 }, oc, 12 * (s.horizon + 2));
+  const targetBy = new Map(planRows.map((r) => [r.month, r.nw]));
+  const targetAt = (m) => (targetBy.has(m) ? targetBy.get(m) : null);
 
   // ---------- the plan this page works from ----------
   root.append(planSettingsCard(s.plan), section('Market outlook for this plan', outlookWhatIf(s.plan)));
@@ -49,12 +53,10 @@ export function render(root) {
   // ---------- numbers ----------
   const expOut = end.expenses + end.emi;
   const cover = expOut > 0 ? end.interest / expOut : null;
-  const hit = rows.find((r) => r.nw >= s.target) || null;
-  const need = !hit ? P.extraMonthly(start, s.a, oc, months, s.target) : 0;
   root.append(h('div', { class: 'stats' },
     stat(`Net worth in ${yrs(s.horizon)}`, money(end.nw), `${monthLabel(end.month)}, from ${money(b.net)} today`),
     stat('Interest income each month then', money(end.interest), cover != null ? `pays ${Math.round(cover * 100)}% of the ${money(expOut)} monthly spending` : ''),
-    hit ? stat(`Plan ${s.plan.year} target reached`, monthLabel(hit.month), `${money(s.target)} · ${Math.round((rows.indexOf(hit) + 1) / 12 * 10) / 10} years from now`) : stat(`Plan ${s.plan.year} target not reached`, h('span', { class: 'neg' }, `${money(s.target - end.nw)} short`), need > 0 ? `save ${money(need)} more a month (earn more or spend less) to get there` : 'in this time'),
+    (() => { const tg = targetAt(end.month), g = tg == null ? null : end.nw - tg; return g == null ? stat('Against the plan', '–', 'no plan figure for that month') : stat(`Against the plan, ${monthLabel(end.month)}`, h('span', { class: tone(g) }, `${money(Math.abs(g))} ${g >= 0 ? 'ahead' : 'short'}`), `plan target ${money(tg)} · projected ${money(end.nw)}`); })(),
     stat('Saved each year at the end', money(yearRows[yearRows.length - 1] ? (byYearFlows(rows, s.horizon - 1)) : 0), 'income minus spending, before new investments')));
 
   // ---------- chart ----------
@@ -66,7 +68,7 @@ export function render(root) {
     const sc = P.scenarios(start, s.a, oc, months);
     sc.forEach((x, i) => series.push({ name: `${x.outlook.name} (${pc(x.outlook.rate, 0)})`, values: [b.net, ...Array.from({ length: pts.length }, (_, k) => x.rows[k * stepK + stepK - 1].nw)], color: i }));
   } else series.push({ name: 'Net worth', values: line(pts), color: 0 });
-  series.push({ name: 'Target', values: labels.map(() => s.target), dashed: true, color: 7 });
+  series.push({ name: 'Plan target', values: [targetAt(b.month), ...pts.map((r) => (r ? targetAt(r.month) : null))], dashed: true, color: 7 });
   // by category: debts, gold, equity and others, each in its own colour
   const sumGroup = (vals, gid) => P.CLASSES.filter((c) => groupOfClass(c.key) === gid).reduce((a, c) => a + ((vals && vals[c.key]) || 0), 0);
   const catSeries = GROUPS.map((g, gi) => ({ id: g.id, name: g.label, color: gi, values: [sumGroup(b.values, g.id), ...pts.map((r) => (r ? sumGroup(r.values, g.id) : null))] })).filter((x) => x.values.some((v) => v > 1));
@@ -148,20 +150,22 @@ export function render(root) {
   root.append(interestWhy(rows.slice(0, Math.min(rows.length, 36)), { tds: s.a.tds ?? 0.1 }));
 
   // ---------- table ----------
-  const tbl = yearRows.map((r, i) => ({ r, i, flow: byYearFlows(rows, i) }));
+  const tbl = yearRows.map((r, i) => { const tg = targetAt(r.month); return { r, i, flow: byYearFlows(rows, i), tg, gap: tg == null ? null : r.nw - tg }; });
   root.append(section('Year by year', h('div', null,
     table([
       { label: 'Year ending', host: true, get: (x) => year0(x.r) },
       { label: 'Net worth', cls: 'r', get: (x) => money(x.r.nw) },
+      { label: 'Plan target', cls: 'r', get: (x) => (x.tg == null ? '–' : money(x.tg)) },
+      { label: 'Ahead / short', cls: 'r', render: (x) => (x.gap == null ? h('span', { class: 'muted' }, '–') : h('span', { class: tone(x.gap) }, signed(x.gap))) },
       { label: 'Saved that year', mob: 'under', mlabel: 'saved ', cls: 'r', get: (x) => money(x.flow) },
       { label: 'Interest / month', mob: 'under', mlabel: 'interest ', cls: 'r', get: (x) => money(x.r.interest) },
       { label: 'Market-linked', mob: 'hide', cls: 'r', get: (x) => money(x.r.market) },
       { label: 'Monthly spending', mob: 'hide', cls: 'r', get: (x) => money(x.r.expenses + x.r.emi) },
       { label: 'Interest covers spending', mob: 'under', mlabel: 'covers ', cls: 'r', get: (x) => { const sp = x.r.expenses + x.r.emi; return sp ? Math.round((x.r.interest / sp) * 100) + '%' : '–'; } },
-    ], tbl, { m: { key: 'ahead-years', head: 'Year ending', views: [['Net worth', 'Saved that year'], ['Interest / month', 'Interest covers spending'], ['Market-linked', 'Monthly spending']] }, empty: 'Nothing to show.' }),
-    h('p', { class: 'note' }, 'Interest income is what bonds and lending pay out each month after tax. When it covers your monthly spending, your investments pay your living costs without selling anything. Saved that year = income − spending, before moving money into investments.')),
+    ], tbl, { m: { key: 'ahead-years', head: 'Year ending', views: [['Net worth', 'Plan target'], ['Ahead / short', 'Saved that year'], ['Interest / month', 'Interest covers spending'], ['Market-linked', 'Monthly spending']] }, empty: 'Nothing to show.' }),
+    h('p', { class: 'note' }, 'Interest income is what bonds and lending pay out each month after tax. When it covers your monthly spending, your investments pay your living costs without selling anything. Plan target is what the plan itself reaches at that month end, carried on with the plan’s own settings; ahead / short is the projection from today’s real position against it. Saved that year = income − spending, before moving money into investments.')),
     ));
-  root.append(h('p', { class: 'note' }, `Everything here follows plan ${s.plan.year}, revision ${s.plan.rev}, made on the Planner tab. New money each month is what is left after spending, split by the plan’s shares; yearly one-time items repeat every year and rise by their own rate.`));
+  root.append(h('p', { class: 'note' }, `Everything here follows plan ${s.plan.year}, ${s.plan.which === 'working' ? 'draft' : 'revision ' + s.plan.rev}, made on the Planner tab. New money each month is what is left after spending, split by the plan’s shares; yearly one-time items repeat every year and rise by their own rate.`));
 }
 /** Income minus spending (before new investments) in the i-th year of the run. */
 function byYearFlows(rows, i) { let t = 0; for (const r of rows.slice(i * 12, i * 12 + 12)) t += r.income - r.out; return t; }

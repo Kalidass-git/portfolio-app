@@ -87,7 +87,7 @@ export function defaults(data, all) {
   for (const m of months.slice(-12)) { const a = monthActual(data, m); if (a.tax > 0) tax.set(m.slice(5), (tax.get(m.slice(5)) || 0) + a.tax); }
   const b = baseline(data, all);
   const map = { 'EPF + RD + FDs': ['fds', 'EPF, RD and FDs'], Gold: ['gold', 'Gold'], Bonds: ['bonds', 'Bonds'], 'Lending Private': ['lending', 'Private lending'], Stocks: ['shares', 'Shares and funds'], Chits: ['chits', 'Chits'], 'Lending Family': ['fds', 'Lending to family'] };
-  const invest = ((data.targets && data.targets.investmentPlan) || []).filter((p) => p.capital > 0 && map[p.name]).map((p, i) => ({ id: 'i' + (i + 1), name: map[p.name][1], cls: map[p.name][0], monthly: r0(p.capital / 12) }));
+  const invest = ((data.targets && data.targets.investmentPlan) || []).filter((p) => p.capital > 0 && map[p.name]).map((p, i) => ({ id: 'i' + (i + 1), name: map[p.name][1].replace(/^EPF, /, ''), cls: map[p.name][0], monthly: r0(p.capital / 12) }));
   return {
     salary: r0(avg(last3, 'salary')), otherIncome: 0, expenses: r0(avg(last6, 'regular')), emi: r0(avg(last3, 'emi')), pfAdd: r0(avg(last3, 'pf')),
     tds: (data.settings && data.settings.tdsRate) ?? 0.1,
@@ -230,22 +230,6 @@ export const cfg = (data) => {
   const p = data.projector || {};
   return { outlooks: p.outlooks && p.outlooks.length ? p.outlooks : OUTLOOKS, years: p.years || {}, snapshots: p.snapshots || [], ahead: p.ahead || null };
 };
-/**
- * Month-end positions typed into the Plan sheet (Targets, "Month by month") that the projector has no snapshot for yet.
- * Returns snapshot records (no per-class split, since the sheet only had totals). Nothing is changed here.
- */
-export function planSheetSnapshots(data, asOf) {
-  const have = new Set(((data.projector && data.projector.snapshots) || []).map((x) => x.month));
-  const out = [];
-  for (const m of (data.targets && data.targets.months) || []) {
-    const month = (m.date || '').slice(0, 7);
-    if (!month || have.has(month) || !(m.actualAsset > 0) || m.date.slice(0, 7) > asOf.slice(0, 7)) continue;
-    const loans = Math.round(m.actualLiability || 0), assets = Math.round(m.actualAsset);
-    out.push({ id: 's' + month, month, date: m.date, net: assets - loans, assets, loans, note: 'From the Plan sheet' });
-  }
-  return out.sort((a, b) => (a.month < b.month ? -1 : 1));
-}
-
 /**
  * One-time bills found in the last 12 months of bank entries (tax, school fees, a holiday…): one line per category and month, ready to repeat every year.
  * Amounts are what was paid; a yearly item then grows with the expense rise.

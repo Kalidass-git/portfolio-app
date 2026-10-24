@@ -393,6 +393,24 @@ if (typeof document !== 'undefined') {
   window.addEventListener('rerender', closePop); window.addEventListener('hashchange', closePop);
 }
 /**
+ * Make `trigger` open its working in a bottom sheet on a phone and a popup on a desktop (the same dialog as the rest of the app).
+ * build() returns { title, rows: [{ l: label, v: value, n: short working, b: bold }], foot, note }.
+ */
+export function tapSheet(trigger, build) {
+  trigger.setAttribute('tabindex', '0'); trigger.setAttribute('role', 'button'); trigger.classList.add('pop-trigger');
+  const open = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const c = build();
+    dialog(c.title || 'Working', h('div', { class: 'tapsheet' },
+      c.note ? h('p', { class: 'note', style: { marginTop: 0 } }, c.note) : null,
+      ...(c.rows || []).map((r) => (r.head ? h('h4', { class: 'ts-head' }, r.head) : h('div', { class: 'ts-row' + (r.b ? ' b' : '') }, h('span', { class: 'ts-l' }, r.l), h('span', { class: 'ts-v' }, r.v), r.n ? h('span', { class: 'ts-n' }, r.n) : null))),
+      c.foot ? h('p', { class: 'note' }, c.foot) : null), [{ label: 'Done', class: 'primary', onclick: (cl) => cl() }]);
+  };
+  trigger.addEventListener('click', open);
+  trigger.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') open(e); });
+  return trigger;
+}
+/**
  * Make `trigger` open a popover. build() returns { title, rows: [{ l: label, v: value, n: short working }], foot }.
  * Tapping the trigger again, tapping outside or pressing Escape closes it.
  */

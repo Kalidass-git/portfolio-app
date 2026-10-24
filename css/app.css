@@ -898,3 +898,13 @@ ul.chg li { padding: 6px 10px; border: 1px solid var(--line); border-radius: 10p
 tr.proj-row td.host i, tr.proj-row td i { font-style: italic; }
 .mrow.proj-row .mr-title, .mrow.proj-row .mr-main, .mrow.proj-row .mr-sub, .mrow.proj-row .mr-subline { font-style: italic; color: var(--muted); }
 .mrow.proj-row .mr-title { color: var(--ink); opacity: .8; }
+
+.stat.tap.hastap { cursor: pointer; } .stat.tap.hastap:hover { background: color-mix(in srgb, var(--brand, #17744a) 7%, var(--surface)); }
+
+/* tap-to-open working (bottom sheet on phones, popup on desktop) */
+.tapsheet { display: grid; gap: 2px; }
+.ts-row { display: grid; grid-template-columns: 1fr auto; gap: 0 12px; padding: 7px 0; border-bottom: 1px solid var(--line-2, var(--line)); align-items: baseline; }
+.ts-row.b { font-weight: 700; border-bottom-color: var(--line); }
+.ts-v { text-align: right; font-variant-numeric: tabular-nums; } .ts-n { grid-column: 1 / -1; font-size: .8rem; color: var(--muted); }
+.ts-head { margin: 12px 0 2px; font-size: .9rem; }
+.pop-trigger { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }

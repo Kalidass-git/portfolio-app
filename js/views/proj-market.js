@@ -21,7 +21,7 @@ function scaleForm() {
 export function render(root) {
   const { data, all } = S;
   const ctx = currentPlan(), { plan, year } = ctx;
-  root.append(planPicker());
+  root.append(planPicker({ versions: true }));
   if (!plan) { root.append(notLiveCard(ctx, 'this page')); return; }
   plan.target = PL.planTarget(plan, outlooks());
   const oc = outlooks();

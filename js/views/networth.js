@@ -1,5 +1,5 @@
 // Net worth report: the month-end snapshots as one line, today's position, and a different-coloured line projected to December.
-// Snapshots come from the Wealth outlook (month-end check-ins). Months that only exist in the Plan sheet are included too.
+// Snapshots come from the Wealth outlook (month-end check-ins). The plan line comes from the Wealth outlook plan of each year (the live revision, else the draft).
 import { S } from '../store.js';
 import * as C from '../calc.js';
 import * as P from '../projector.js';
@@ -15,16 +15,13 @@ const rerender = () => window.dispatchEvent(new Event('rerender'));
 const monthsBetween = (a, b) => { const out = []; for (let m = a; m <= b; m = C.addMonths(m + '-01', 1).slice(0, 7)) out.push(m); return out; };
 
 /**
- * The plan as it was set at the start, month by month: the Plan sheet's own path (start position plus the planned saving
- * each month, never re-based on what really happened), then any Wealth outlook year plan for months the sheet does not cover.
+ * The plan month by month: for every year that has a Wealth outlook plan, its starting net worth and each month of its path.
+ * A year uses its live revision, or its draft when it has not been made live.
  */
 export function plannedByMonth(data, all) {
-  const out = new Map();
-  try {
-    for (const t of C.targets(data, C.projection(data, all))) if (t.estAsset != null) out.set(t.date.slice(0, 7), Math.round(t.estAsset - t.plannedLiab));
-  } catch (e) { /* no Plan sheet in this file */ }
-  const cfg = P.cfg(data);
-  for (const plan of Object.keys(cfg.years).map((y) => PL.livePlan(data, y)).filter(Boolean)) {   // plans that are live: the start of the year, then each month
+  const out = new Map(), cfg = P.cfg(data);
+  for (const y of Object.keys(cfg.years)) {
+    const plan = PL.bestPlan(data, y); if (!plan) continue;
     if (!out.has(plan.baseline.month)) out.set(plan.baseline.month, Math.round(plan.baseline.net));
     for (const r of PL.planPath(plan, cfg.outlooks)) if (!out.has(r.month)) out.set(r.month, Math.round(r.nw));
   }
@@ -38,18 +35,15 @@ const tone = (n) => (n > 0 ? 'pos' : n < 0 ? 'neg' : '');
 export function netWorthRows(data, all) {
   const cur = C.monthKey(all.asOf), year = cur.slice(0, 4);
   const by = new Map();
-  for (const s of P.planSheetSnapshots(data, all.asOf)) by.set(s.month, { month: s.month, value: s.net, src: 'Plan sheet' });
   for (const s of (data.projector && data.projector.snapshots) || []) if (s.month <= cur) by.set(s.month, { month: s.month, value: s.net, src: 'Snapshot' });
   // the current month is today's live position until its month-end snapshot is saved
   by.set(cur, { month: cur, value: Math.round(all.netAsset), src: 'Today' });
   const actual = [...by.values()].sort((a, b) => (a.month < b.month ? -1 : 1));
-  // projection to December from today's position, using this year's plan (or what a fresh plan would assume)
-  const cfg = P.cfg(data);
-  const plan = PL.livePlan(data, year);
-  const a = plan ? plan.a : PL.fallbackA(data, all);
-  const live = P.baseline(data, all);
-  const fc = (live.month === cur ? P.simulate({ values: live.values, liab: live.liab, month: live.month }, a, cfg.outlooks, P.monthsTo(live.month, Number(year))) : []).filter((r) => r.month > cur && r.month <= year + '-12');
-  const projected = fc.map((r) => ({ month: r.month, value: Math.round(r.nw), src: 'Projected' }));
+  // the rest of the year, as This year shows it: the plan's settings carried forward from today's position
+  const cfg = P.cfg(data), plan = PL.bestPlan(data, year);
+  let projected;
+  if (plan) projected = PL.yearTrack(data, all, plan, cfg.outlooks).rows.filter((r) => r.src === 'projected' && r.month > cur).map((r) => ({ month: r.month, value: Math.round(r.nw), src: 'Projected' }));
+  else { const live = P.baseline(data, all); projected = (live.month === cur ? P.simulate({ values: live.values, liab: live.liab, month: live.month }, PL.fallbackA(data, all), cfg.outlooks, P.monthsTo(live.month, Number(year))) : []).filter((r) => r.month > cur && r.month <= year + '-12').map((r) => ({ month: r.month, value: Math.round(r.nw), src: 'Projected' })); }
   return { actual, projected, plan, hasPlan: !!plan };
 }
 
@@ -97,7 +91,7 @@ export function render() {
   if (prj.length) series.push({ name: 'Projected from today', values: pVals, dashed: true, color: 3 });
   root.append(section('Net worth, month by month', h('div', null,
     lineChart({ labels, fmt: money, yMin: Math.floor((lo * 0.97) / 1e5) * 1e5, height: 260, series }),
-    h('p', { class: 'note' }, `The solid line is each month-end snapshot, ending at today. ${havePlan ? 'The dotted line is the plan as it was made at the start (the Plan sheet, or the year plan in the Wealth outlook), so the gap between the two is how far you have moved from it. ' : ''}${prj.length ? `The dashed line carries today’s position to December using ${hasPlan ? 'your ' + year + ' plan' : 'the standard assumptions (no ' + year + ' plan saved yet)'} and the market outlook set under Wealth outlook.` : ''}`))));
+    h('p', { class: 'note' }, `The solid line is each month-end snapshot, ending at today. ${havePlan ? 'The dotted line is the plan as it was made at the start (your Wealth outlook plan for the year), so the gap between the two is how far you have moved from it. ' : ''}${prj.length ? `The dashed line carries today’s position to December using ${hasPlan ? 'your ' + year + ' plan' : 'the standard assumptions (no ' + year + ' plan yet)'} and the market outlook set under Wealth outlook.` : ''}`))));
 
   root.append(mixChart(data, all, months, lbl));
 
@@ -112,7 +106,7 @@ export function render() {
   ].filter(Boolean), rows, { rowClass: (r) => (r.current ? 'cur-row' : r.src === 'Projected' ? 'proj-row' : ''), m: { key: 'networth', head: 'Month', sub: ['Source'],
     views: havePlan ? [['Net worth', 'Change'], ['Planned', 'Against plan']] : [['Net worth', 'Change']],
     sort: [{ value: 'month', label: 'Month', kind: 'date', get: (r) => r.month }, { value: 'value', label: 'Net worth', kind: 'num', get: (r) => r.value }, { value: 'change', label: 'Change from the month before', kind: 'num', get: (r) => r.change }], sortDefault: { value: 'month', dir: 'asc' } } }),
-  h('p', { class: 'note' }, '“Plan sheet” months were typed in the Plan sheet before snapshots began; “Snapshot” months are saved on the Wealth outlook. Change is against the month before. “Against plan” is net worth minus the planned net worth for that month.'))));
+  h('p', { class: 'note' }, '“Snapshot” months are the month-end snapshots saved on the Wealth outlook; “Today” is the live position. Change is against the month before. “Against plan” is net worth minus the planned net worth for that month.'))));
   return root;
 }
 

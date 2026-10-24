@@ -55,6 +55,17 @@ ok('an earlier revision can be projected with its own settings', r1 && r1.rev ==
 ok('a revision without saved settings is not offered', PL.effective(plan, 99) === null);
 const snap = PL.makeSnapshot(data, all, '2026-09', '', oc);
 ok('snapshot carries the live plan figures', snap.plan && snap.plan.rev === 2 && snap.projected && snap.projected.net > 0);
+// growth class by class for a real month: opening + put in + growth = closing, and the net worth identity holds
+const gm = track.rows[4], gb = Object.values(gm.growthBy);
+ok('real month growth by class adds up', gb.every((v) => Math.abs(v.base + v.flow + v.amount - v.close) < 1) && Math.abs(gm.open.nw + gm.left + gm.pfAdd + gm.growth + gm.loanPaid - gm.nw) < 1, Math.round(gm.growth));
+ok('best plan is the live one, or the draft', PL.bestPlan(data, 2026).rev === 2 && PL.bestPlan(data, 2027) === null);
+ok('a plan with a snapshot in its year cannot be deleted; one without can', !PL.canDeletePlan(data, 2026) && (() => { const d3 = JSON.parse(JSON.stringify(data)); d3.projector.years['2027'] = PL.freshPlan(d3, all, 2027); return PL.canDeletePlan(d3, 2027); })());
+// deleting the latest revision goes back to the one before; the first goes back to a draft
+const dp = JSON.parse(JSON.stringify(plan));
+const res = PL.deleteLatestRevision(dp);
+ok('latest revision deleted: back to revision 1 with its settings', res.back === 1 && dp.live.rev === 1 && dp.a.salary === 150000 && dp.revisions.length === 1 && !PL.isDirty(dp), JSON.stringify(res));
+const res1 = PL.deleteLatestRevision(dp);
+ok('first revision deleted: back to a draft that keeps its settings', res1.back === null && dp.live === null && dp.revisions.length === 0 && dp.a.salary === 150000);
 const d2 = JSON.parse(JSON.stringify(data)); d2.projector.years['2025'] = { id: '2025', year: 2025, a: {}, baseline: {} }; d2.projector.ahead = { horizon: 7, salary: 5 };
 PL.clearLegacy(d2);
 ok('clearing removes old plans and old planning figures only', !d2.projector.years['2025'] && d2.projector.years['2026'].v === 2 && d2.projector.snapshots.length === 2 && d2.projector.ahead.horizon === 7 && d2.projector.ahead.salary === undefined);

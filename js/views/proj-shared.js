@@ -32,29 +32,34 @@ export function currentPlan() {
   const choices = [...new Set([String(cy), String(cy + 1), ...mine])].sort();
   if (!selYear || !choices.includes(selYear)) selYear = mine.includes(String(cy)) ? String(cy) : mine[0] || String(cy);
   const raw = cfg.years[selYear], stored = PL.isV2(raw) ? raw : null;
+  // versions on offer: the committed revisions (newest first) and the draft, when the plan has no live copy or has changes that are not live yet
   const revs = stored ? (stored.revisions || []).filter((r) => r.state).map((r) => r.rev).sort((a, b) => b - a) : [];
   const liveRev = stored && stored.live ? stored.live.rev : null;
-  const rev = selRev[selYear] != null && revs.includes(selRev[selYear]) ? selRev[selYear] : liveRev;
-  const viewing = stored && stored.live ? (rev === liveRev ? PL.effective(stored, 'live') : PL.effective(stored, rev)) : null;
-  return { stored, revs, liveRev, rev, old: rev != null && rev !== liveRev, plan: viewing, working: stored ? PL.effective(stored, 'working') : null, year: selYear, choices, cfg, legacy: !!raw && !stored };
+  const hasDraft = !!stored && (!stored.live || PL.isDirty(stored));
+  const pickd = selRev[selYear];
+  const rev = pickd === 'draft' && hasDraft ? 'draft' : typeof pickd === 'number' && revs.includes(pickd) ? pickd : liveRev != null ? liveRev : hasDraft ? 'draft' : null;
+  const plan = !stored || rev == null ? null : rev === 'draft' ? PL.effective(stored, 'working') : rev === liveRev ? PL.effective(stored, 'live') : PL.effective(stored, rev);
+  return { stored, revs, liveRev, rev, hasDraft, draft: rev === 'draft', old: typeof rev === 'number' && rev !== liveRev, plan, working: stored ? PL.effective(stored, 'working') : null, year: selYear, choices, cfg, legacy: !!raw && !stored };
 }
-const choiceLabel = (y, cfg) => { const p = cfg.years[y]; return y + (PL.isV2(p) ? (p.live ? ` · live, revision ${p.live.rev}` : ' · not committed') : ' · no plan yet'); };
-/** The plan dropdown. */
+const choiceLabel = (y, cfg) => { const p = cfg.years[y]; return y + (PL.isV2(p) ? (p.live ? ` · live, revision ${p.live.rev}${PL.isDirty(p) ? ' (draft changes)' : ''}` : ' · draft') : ' · no plan yet'); };
+/** The plan dropdown, and with `versions` the version dropdown (draft and every committed revision). */
 export function planPicker({ onPick, versions = false } = {}) {
-  const { choices, year, cfg, revs, liveRev, rev, old, stored } = currentPlan();
+  const { choices, year, cfg, revs, liveRev, rev, old, draft, hasDraft, stored } = currentPlan();
   const box = h('div', { class: 'filters' }, h('label', null, 'Plan ', h('select', { 'aria-label': 'Plan', onchange: (e) => { setSelYear(e.target.value); if (onPick) onPick(); rerender(); } }, choices.map((y) => h('option', { value: y, selected: y === year }, choiceLabel(y, cfg))))));
-  if (versions && revs.length > 1) {
-    const label = (n) => { const r = stored.revisions.find((x) => x.rev === n); return `Revision ${n}${n === liveRev ? ' · live' : ''}${r ? ' · ' + dateStr(r.at.slice(0, 10)) : ''}`; };
-    box.append(h('label', null, 'Version ', h('select', { 'aria-label': 'Plan version', onchange: (e) => { const n = Number(e.target.value); if (n === liveRev) delete selRev[year]; else selRev[year] = n; rerender(); } }, revs.map((n) => h('option', { value: n, selected: n === rev }, label(n))))));
+  const opts = [...(hasDraft ? ['draft'] : []), ...revs];
+  if (versions && stored && (opts.length > 1 || draft)) {
+    const label = (n) => { if (n === 'draft') return liveRev == null ? 'Draft (not committed)' : 'Draft (changes not live yet)'; const r = stored.revisions.find((x) => x.rev === n); return `Revision ${n}${n === liveRev ? ' · live' : ''}${r ? ' · ' + dateStr(r.at.slice(0, 10)) : ''}`; };
+    box.append(h('label', null, 'Version ', h('select', { 'aria-label': 'Plan version', onchange: (e) => { const v = e.target.value === 'draft' ? 'draft' : Number(e.target.value); if (v === liveRev) delete selRev[year]; else selRev[year] = v; rerender(); } }, opts.map((n) => h('option', { value: n, selected: n === rev }, label(n))))));
   }
-  if (old) box.append(h('p', { class: 'alert warn', style: { flexBasis: '100%', margin: 0 } }, h('b', null, `You are looking at revision ${rev}, not the live revision ${liveRev}`), 'The numbers below use that revision’s settings, with your real months since. Nothing is changed. ', h('a', { href: 'javascript:void 0', onclick: (e) => { e.preventDefault(); delete selRev[year]; rerender(); } }, 'Back to the live revision')));
+  if (draft) box.append(h('p', { class: 'alert warn', style: { flexBasis: '100%', margin: 0 } }, h('b', null, liveRev == null ? 'You are looking at the draft, which is not live yet' : `You are looking at the draft, not the live revision ${liveRev}`), 'The numbers below use the draft’s settings from the Planner tab, with your real months. Nothing is changed.', liveRev != null ? h('span', null, ' ', h('a', { href: 'javascript:void 0', onclick: (e) => { e.preventDefault(); delete selRev[year]; rerender(); } }, 'Back to the live revision')) : null));
+  else if (old) box.append(h('p', { class: 'alert warn', style: { flexBasis: '100%', margin: 0 } }, h('b', null, `You are looking at revision ${rev}, not the live revision ${liveRev}`), 'The numbers below use that revision’s settings, with your real months since. Nothing is changed. ', h('a', { href: 'javascript:void 0', onclick: (e) => { e.preventDefault(); delete selRev[year]; rerender(); } }, 'Back to the live revision')));
   return box;
 }
 /** Shown on a tab when the chosen year has no plan that is live. */
 export function notLiveCard(ctx, what = 'this page') {
-  const { year, stored } = ctx;
-  return section(`Plan ${year}`, h('div', { class: 'alert warn' }, h('b', null, stored ? `Plan ${year} is not committed yet` : `There is no plan for ${year} yet`),
-    h('p', null, `${what[0].toUpperCase() + what.slice(1)} only uses a plan that has been made live. ${stored ? 'Finish the plan and press “Make this plan live” on the Planner tab.' : 'Create it on the Planner tab, then make it live.'}`),
+  const { year } = ctx;
+  return section(`Plan ${year}`, h('div', { class: 'alert warn' }, h('b', null, `There is no plan for ${year} yet`),
+    h('p', null, `${what[0].toUpperCase() + what.slice(1)} works from a plan. Create it on the Planner tab: a draft is enough to look at, and you can make it live later.`),
     btn('Open Planner', () => { location.hash = '#/projector/planner'; }, 'primary', { keep: true })));
 }
 
@@ -113,7 +118,7 @@ export const when = (iso) => { if (!iso) return ''; const d = new Date(iso); ret
 
 /** The plan's settings, read only and folded shut: first item on This year and Years ahead. */
 export function planSettingsCard(plan) {
-  const a = plan.raw, g = a.growth || {}, oc = outlooks();
+  const a = plan.raw, g = a.growth || {}, oc = outlooks(), isDraft = plan.which === 'working';
   const row = (label, value, sub) => h('div', { class: 'pdl-row' }, h('span', { class: 'pdl-l' }, label), h('b', { class: 'pdl-v' }, value), sub ? h('small', { class: 'muted' }, sub) : null);
   const group = (title, ...rows) => h('div', { class: 'pdl-group' }, h('h4', null, title), ...rows);
   const ids = P.MARKET.map((k) => (a.outlook || {})[k] || 'steady'), common = ids.every((x) => x === ids[0]);
@@ -122,7 +127,7 @@ export function planSettingsCard(plan) {
   const rates = Object.entries(a.rates || {}).filter(([k]) => !P.isMarket(k) && k !== 'cash').map(([k, v]) => `${P.labelOf(k)} ${pc(v, 1)}`).join(' · ');
   const summary = `${money(a.salary || 0)} salary, ${pc(g.salary || 0, 1)} hike · ${money(a.expenses || 0)} expenses · ${money(a.emi || 0)} EMI`;
   return section('Plan settings', h('details', { class: 'more assume-wrap' },
-    h('summary', { style: { cursor: 'pointer' } }, h('b', null, `Plan ${plan.year} · revision ${plan.rev}`), ' ', h('small', { class: 'muted' }, `made ${dateStr((plan.at || '').slice(0, 10))} · ${summary}`)),
+    h('summary', { style: { cursor: 'pointer' } }, h('b', null, isDraft ? `Plan ${plan.year} · draft` : `Plan ${plan.year} · revision ${plan.rev}`), ' ', h('small', { class: 'muted' }, `${isDraft ? 'not committed' : 'made ' + dateStr((plan.at || '').slice(0, 10))} · ${summary}`)),
     h('div', { class: 'pdl', style: { marginTop: '10px' } },
       group('Salary', row('Expected salary', money(a.salary || 0), 'a month, take-home'), row('Expected EPF', money(a.pfAdd || 0), 'a month'), row('Salary and EPF hike', pc(g.salary || 0, 1), `each ${PL.MONTH_NAMES[(Number(a.hikeMonth) || 4) - 1]}`), a.salaryMonth ? row('Figures are for', monthLabel(a.salaryMonth, true)) : null),
       group('Other income', row('Expected interest income', money(a.interestMonthly || 0), 'a month'), row('Other income', money(a.otherIncome || 0), 'a month'), row('Net worth at the start', money(plan.initial.net), `January ${plan.year}`)),
@@ -130,6 +135,6 @@ export function planSettingsCard(plan) {
       group('One-time items', ...(ones.length ? ones.map((o) => row(o.name + (o.kind === 'income' ? ' (income)' : ''), (o.kind === 'income' ? '+' : '−') + money(o.amount), (o.month.length === 2 ? `every ${PL.MONTH_NAMES[Number(o.month) - 1]}` : monthLabel(o.month, true)) + (o.rise != null && o.rise !== '' ? `, rises ${pc(o.rise, 1)} a year` : ''))) : [h('small', { class: 'muted' }, 'None')])),
       group('Market outlook', row('Outlook', common ? outlookName(ids[0]) : P.MARKET.map((k, i) => `${P.classOf(k).label} ${outlookName(ids[i])}`).join(', ')), rates ? h('small', { class: 'muted' }, 'Fixed income: ' + rates) : null),
       group('New money', ...(inv.length ? inv.map((l) => row(l.name, tot > 0 ? pct((l.monthly || 0) / tot, 0) : '–', P.labelOf(l.cls))) : [h('small', { class: 'muted' }, 'None')]))),
-    h('p', { class: 'note' }, h('a', { href: '#/projector/planner' }, 'Change these on the Planner tab'), ', then commit the plan to use the new figures here.')));
+    h('p', { class: 'note' }, h('a', { href: '#/projector/planner' }, 'Change these on the Planner tab'), ', then commit the plan to make the new figures live.')));
 }
 export { datalistId } from '../ui.js';
