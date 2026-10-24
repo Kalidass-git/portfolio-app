@@ -154,6 +154,16 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.10.2 – Wealth outlook: deletions, workings in sheets, plan vs actual by item, Plan sheet removed
+
+- **Delete a plan** (Planner, red button): allowed until a month-end snapshot has been saved for that plan's year, so a 2027 plan can go until the January 2027 snapshot. Deleting a plan never touches snapshots.
+- **Delete the latest revision** (Revision history): the plan goes back to the revision before it (its settings become live and the working copy again). Deleting the first revision, also in the current year, turns the plan back into a draft that keeps its settings. Changes made since are discarded.
+- **Workings open in a bottom sheet on the phone and a popup on desktop** (no small popovers): tap Plan: net worth, Actual: net worth, the Growth column, Spending, Interest, Salary + EPF. Net worth shows start of month + saved + EPF + growth (+ loan paid) = end, with growth class by class: EPF/PPF, deposits and market assets at opening × rate ÷ 12 for projected months.
+- **Real months now show their growth working too**: each class's growth is what it gained beyond the money put into it (opening + put in + growth = closing), from the month-end snapshots. Loan paid down is the fall in loans.
+- **Income, spending and investing**: tap a month to see Plan, Actual (or Projected) and Difference for every item: salary, interest, expenses, EMI, each one-time item, saved, investments, EPF, growth and net worth.
+- **Plan sheet removed**: no menu entry, no link, and nothing reads it any more (the "month-end from your Plan sheet" notice is gone). Your data in it is not deleted.
+- **Net worth over time** now takes its plan line and the projection only from the Wealth outlook plan of each year (live revision, else draft), and its actuals only from month-end snapshots and today.
+
 ## Release 8.10.1 – Wealth outlook: draft plans on every tab, plan targets by year end
 
 - **Draft plans work everywhere.** This year, Years ahead and Market outlook no longer wait for "Make this plan live". The **Version** dropdown lists "Draft (not committed)" (or "Draft (changes not live yet)" while revising) and every committed revision; a banner says when you are not looking at the live one. Home's "Investing this month" still uses only the live plan.

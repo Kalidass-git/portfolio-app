@@ -113,6 +113,24 @@ export function effective(plan, which = 'live') {
   return { id: plan.id, year: plan.year, which, rev: src.rev, at: src.at, a: simAssumptions(src.a, plan.year), raw: src.a, initial: ini, start, baseline: { month: start.month, net: ini.net, assets: ini.assets, loans: ini.liab, classes: ini.classes, date: ini.date }, stored: plan };
 }
 export const livePlan = (data, year) => effective(P.cfg(data).years[String(year)], 'live');
+/** The plan to show for a year when no version is picked: the live one, else the draft. Null when there is no plan. */
+export const bestPlan = (data, year) => { const p = P.cfg(data).years[String(year)]; return isV2(p) ? effective(p, 'live') || effective(p, 'working') : null; };
+/** A plan can be deleted until a month-end snapshot has been taken for its year. */
+export const canDeletePlan = (data, year) => { const p = P.cfg(data).years[String(year)]; return isV2(p) && !P.cfg(data).snapshots.some((s) => s.month.slice(0, 4) === String(year)); };
+/**
+ * Delete the latest revision. The plan goes back to the one before (its settings become both the live and the working copy). With only one revision the plan
+ * goes back to a draft with the settings it has now. Returns what happened, for the message. Call inside mutate().
+ */
+export function deleteLatestRevision(plan) {
+  const revs = plan.revisions || [];
+  if (!revs.length) return null;
+  const gone = revs[revs.length - 1], prev = revs[revs.length - 2];
+  plan.revisions = revs.slice(0, -1);
+  if (!prev) { plan.live = null; return { gone: gone.rev, back: null }; }
+  if (prev.state) { plan.live = { rev: prev.rev, at: prev.at, a: clone(prev.state.a), initial: clone(prev.state.initial) }; plan.a = clone(prev.state.a); plan.initial = clone(prev.state.initial); return { gone: gone.rev, back: prev.rev }; }
+  plan.live = { rev: prev.rev, at: prev.at, a: clone(plan.live.a), initial: clone(plan.live.initial) };   // an older revision kept no settings: the figures stay as they are
+  return { gone: gone.rev, back: prev.rev, kept: true };
+}
 /** The plan every other tab uses for a year, or null. */
 export const planPath = (p, oc) => P.simulate(p.start, p.a, oc, 12);
 export const planTarget = (p, oc) => { const r = planPath(p, oc); return r.length ? r[r.length - 1].nw : p.initial.net; };
@@ -189,8 +207,8 @@ export const nextId = (list, prefix) => prefix + idx(list || []);
 // ---------- the year against the plan ----------
 export const statusOf = (nw, planNw) => { if (nw == null || planNw == null) return null; const p = (nw - planNw) / Math.max(1, Math.abs(planNw)); return p > 0.01 ? 'ahead' : p >= -0.01 ? 'on track' : p >= -0.03 ? 'slightly behind' : 'behind'; };
 
-/** One month as it really was, in the shape of a projected month, so the same tables and charts can show both. */
-function actualRow(data, mo, nw, classes, liab, prevNw, by) {
+/** One month as it really was, in the shape of a projected month, so the same tables and charts can show both. `prev` is the position the month started from. */
+function actualRow(data, mo, nw, classes, liab, prev, by) {
   const a = monthActual(data, mo), once = oneTimeSet(data);
   const led = monthLedger(data, mo);
   const interest = sum(led.filter((e) => e.credit > 0 && isInterestCategory(e.category)), (e) => e.credit);
@@ -201,11 +219,22 @@ function actualRow(data, mo, nw, classes, liab, prevNw, by) {
   const inv = by[mo] || {}, total = sum(Object.values(inv), (x) => x.amount), pfc = inv.pf ? inv.pf.amount : 0;
   const invested = total - pfc + Math.max(0, pfc - a.pf);   // EPF is shown on its own; PPF counts as invested
   const left = income - out;
+  const investedBy = Object.fromEntries(Object.entries(inv).filter(([k]) => k !== 'pf').map(([k, x]) => [k, x.amount]));
+  // growth class by class: what the class gained beyond the money that was put into it (cash also takes what was saved and not invested)
+  const assets = sum(Object.values(classes)), prevAssets = sum(Object.values(prev.values));
+  const growthBy = {};
+  for (const c of P.CLASSES) {
+    const open = prev.values[c.key] || 0, close = classes[c.key] || 0;
+    let flow = c.key === 'cash' ? left - invested : (investedBy[c.key] || 0) + (c.key === 'pf' ? a.pf : 0);
+    if (!(Math.abs(open) + Math.abs(close) > 1)) continue;
+    growthBy[c.key] = { amount: close - open - flow, base: open, close, flow, rate: null };
+  }
+  const loanPaid = (prev.liab || 0) - liab;   // negative when loans grew
   return {
-    month: mo, src: 'actual', has: a.has, salary: a.salary, other, interest, accrual: 0, growth: nw - prevNw - left - a.pf, growthBy: {}, interestBy: {},
-    investedBy: Object.fromEntries(Object.entries(inv).filter(([k]) => k !== 'pf').map(([k, x]) => [k, x.amount])), loanPaid: 0, left, refill: 0, avail: 0, oneIn: 0,
+    month: mo, src: 'actual', has: a.has, salary: a.salary, other, interest, accrual: 0, growth: assets - prevAssets - left - a.pf, growthBy, interestBy: {}, open: { nw: prev.nw, values: prev.values, liab: prev.liab },
+    investedBy, loanPaid, left, refill: 0, avail: 0, oneIn: 0,
     expenses: a.regular, emi: a.emi, oneOut, items: [...items.entries()].map(([name, amount]) => ({ name, amount, kind: 'expense' })), invested, pfAdd: a.pf, surplus: left - invested, income, out,
-    cash: classes.cash || 0, values: classes, market: sum(P.MARKET, (k) => classes[k] || 0), assets: sum(Object.values(classes)), liab, nw,
+    cash: classes.cash || 0, values: classes, market: sum(P.MARKET, (k) => classes[k] || 0), assets, liab, nw,
   };
 }
 
@@ -231,7 +260,7 @@ export function yearTrack(data, all, plan, oc, { outlook = null } = {}) {
       let classes, liab, nw;
       if (snap) { nw = snap.net; liab = snap.loans || 0; classes = snap.classes ? { ...snap.classes } : scaleClasses(state.values, snap.assets != null ? snap.assets : nw + liab); }
       else { nw = live.net; liab = live.liab; classes = { ...live.values }; }
-      const row = actualRow(data, mo, nw, classes, liab, state.nw, by);
+      const row = actualRow(data, mo, nw, classes, liab, state, by);
       row.src = snap ? 'actual' : 'now';
       rows.push(row);
       state = { values: classes, liab, month: mo, nw };

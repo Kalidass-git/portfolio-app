@@ -233,10 +233,9 @@ export function maturityAlerts(data, all, days = 31) {
 }
 
 // ---------- 3. Annual review ----------
-/** Net worth readings from the Plan sheet, projector snapshots and the daily history, one per month (the latest in that month). */
+/** Net worth readings from the Wealth outlook month-end snapshots and today, one per month (the latest in that month). */
 export function netWorthPoints(data, all) {
   const by = new Map();
-  for (const s of P.planSheetSnapshots(data, all.asOf)) by.set(s.month, s.net);
   for (const s of (data.projector && data.projector.snapshots) || []) if (s.month <= C.monthKey(all.asOf)) by.set(s.month, s.net);
   by.set(C.monthKey(all.asOf), all.netAsset);
   return by;

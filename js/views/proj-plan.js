@@ -198,6 +198,20 @@ function stepsSheet(st, path, which) {
     [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
 }
 
+async function deletePlan(st) {
+  if (!(await confirmDialog(h('div', null, h('p', null, `Delete the whole plan for ${st.year}, with its ${(st.revisions || []).length} revision${(st.revisions || []).length === 1 ? '' : 's'}?`), h('p', { class: 'note' }, `You can delete it because no month-end snapshot has been saved for ${st.year} yet. Snapshots of other years are not touched. A restore point is saved every day, so a mistake can be undone from Settings.`)), 'Delete plan'))) return;
+  mutate((d) => { delete ensure(d).years[st.id]; revising.delete(st.year); }); toast(`Plan ${st.year} deleted`);
+}
+async function deleteRevision(st) {
+  const revs = st.revisions || [], last = revs[revs.length - 1], prev = revs[revs.length - 2];
+  const msg = prev ? `Delete revision ${last.rev}? The plan goes back to revision ${prev.rev}, and its settings become live again.${PL.isDirty(st) ? ' Changes you made since are discarded.' : ''}`
+    : `Delete revision ${last.rev}, the first version? The plan goes back to a draft (not live) and keeps the settings it has now, so you can change it and make it live again.`;
+  if (!(await confirmDialog(msg, 'Delete revision'))) return;
+  let res = null;
+  mutate((d) => { res = PL.deleteLatestRevision(ensure(d).years[st.id]); revising.delete(st.year); });
+  toast(res ? (res.back ? `Back to revision ${res.back}` : 'Plan is a draft again') : 'Nothing to delete');
+}
+
 // ---------- cards ----------
 function statusBar(st, path) {
   const dirty = PL.isDirty(st), live = !!st.live, rev = revising.has(st.year) || dirty;
@@ -208,6 +222,7 @@ function statusBar(st, path) {
   const actions = !canEdit() ? null : !live ? [btn('Make this plan live', () => commitDialog(st), 'primary', { keep: true })]
     : rev ? [btn('Commit changes', () => commitDialog(st), 'primary', { keep: true }), btn(dirty ? 'Discard changes' : 'Cancel', () => (dirty ? discard(st) : (revising.delete(st.year), rerender())), '', { keep: true })]
       : [btn('Revise plan', () => { revising.add(st.year); rerender(); }, 'primary', { keep: true })];
+  if (actions && PL.canDeletePlan(S.data, st.year)) actions.push(btn('Delete plan', () => deletePlan(st), 'danger', { keep: true }));
   const end = path.length ? path[path.length - 1].nw : st.initial.net;
   const saved = path.length ? path.reduce((s, r) => s + r.left + (r.pfAdd || 0), 0) / path.length : 0, inv = path.length ? path.reduce((s, r) => s + r.invested, 0) / path.length : 0;
   return section(`Plan ${st.year}`, h('div', null, h('div', { class: 'plan-state' }, badge, h('p', { class: 'note', style: { margin: 0 } }, text)),
@@ -330,12 +345,13 @@ function historyCard(st) {
       h('div', { style: { padding: '0 8px 8px' } },
         r.note ? h('p', { class: 'note-box' }, r.note) : null,
         h('h4', { style: { margin: '6px 0 4px' } }, r.kind === 'first' ? 'The plan started with' : 'What changed'), changeList(r.changes),
+        canEdit() && i === 0 ? h('div', { class: 'row-actions' }, btn(r.kind === 'first' ? 'Delete this revision (back to draft)' : `Delete this revision (back to revision ${r.rev - 1})`, () => deleteRevision(st), 'danger', { keep: true })) : null,
         k ? h('p', { class: 'note' }, `Key figures then: net worth in December ${money(k.yearEnd)}, saved about ${money(k.saved)} a month (with EPF), invested about ${money(k.invested)} a month.`) : null));
   });
   return section('Revision history', h('div', null,
     pending ? h('div', { class: 'alert warn' }, h('b', null, `Not live yet: ${pending.length || 1} ${pending.length === 1 ? 'change' : 'changes'} since revision ${st.live.rev}`), changeList(pending.length ? pending : [{ g: 'Other', l: 'Other settings changed', f: 'note' }])) : null,
     items.length ? items : h('p', { class: 'empty' }, 'No revisions yet. The first one is written when you make the plan live.'),
-    h('p', { class: 'note' }, 'Every time a plan is made live or revised, what changed and when is kept here, with the key figures at that time. Revisions cannot be edited.')));
+    h('p', { class: 'note' }, 'Every time a plan is made live or revised, what changed and when is kept here, with the key figures at that time. Revisions cannot be edited; the latest one can be deleted, which puts the plan back to the one before it.')));
 }
 
 function legacyCard(data) {
