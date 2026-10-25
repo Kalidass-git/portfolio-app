@@ -154,6 +154,10 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.13.1 – Home: Net worth over time moved to the bottom
+
+- The Net worth over time chart is now the last card on Home.
+
 ## Release 8.13.0 – Investable cards with working, Net worth over time, Month in detail page, Work-optional exclusions
 
 - **Investable balance (both cards on Home).** The blue tile and the card in "Investing this month" now show how much is invested so far this month and open the same popup with two tabs: **How it is calculated** (opens first) and **Invested this month**, which lists each plan line by asset class with what went in, what the plan needs and what is still to go (anything in a class the plan has no line for is shown as "not in your plan"). The remaining amount is in italics because it includes projected expenses.

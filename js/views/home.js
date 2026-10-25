@@ -514,13 +514,14 @@ export function render() {
   const place = (el, ...cls) => { if (el) el.classList.add(...cls); return el; };
   const root = h('div', { class: 'page dash' });
   const parts = [
-    hero(all, series, ox), place(netWorthHistory(data, all), 'span-12'), tiles(all, data, C.monthCashflow(data, all, C.monthKey(all.asOf)), plan),
+    hero(all, series, ox), tiles(all, data, C.monthCashflow(data, all, C.monthKey(all.asOf)), plan),
     place(attention(data, all), 'span-12'),
     place(toReceiveCard(data, all), 'span-6'), place(comingUp(data, all), 'span-6'),
     place(thisMonth(data, all, months), 'span-12'),
     place(investCard(data, all, plan), 'span-12'),
     place(allocation(all), 'span-7'), place(riskAlerts(all), 'span-5'),
-    place(returnsCard(data, all, rets, ox), 'span-12')];
+    place(returnsCard(data, all, rets, ox), 'span-12'),
+    place(netWorthHistory(data, all), 'span-12')];
   root.append(...parts.filter(Boolean));
   return root;
 }
