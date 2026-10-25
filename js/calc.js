@@ -1113,6 +1113,20 @@ export function netWorthSeries(data, all) {
   return [...pts.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
 }
 
+/**
+ * Every saved reading of net worth with its assets and loans, oldest first.
+ * Sources: the daily readings the app keeps whenever the owner opens it (`history`: net, assets, liab), the month-end figures typed on the Plan sheet (`targets.months`),
+ * month-end check-ins (`projector.snapshots`, net only) and today's live position. A day with a daily reading wins over a month-end figure for the same day.
+ */
+export function netWorthPoints(data, all) {
+  const pts = new Map();
+  for (const s of (data.projector && data.projector.snapshots) || []) { const d = monthEnd(s.month + '-01'); if (d <= all.asOf && s.net != null) pts.set(d, { date: d, net: s.net, assets: null, liab: null, src: 'month end' }); }
+  for (const m of (data.targets && data.targets.months) || []) if (m.actualAsset > 0 && m.date <= all.asOf) pts.set(m.date, { date: m.date, net: m.actualAsset - (m.actualLiability || 0), assets: m.actualAsset, liab: m.actualLiability || 0, src: 'month end' });
+  for (const h of data.history || []) if (h.date <= all.asOf) pts.set(h.date, { date: h.date, net: h.net, assets: h.assets != null ? h.assets : null, liab: h.liab != null ? h.liab : null, src: 'daily' });
+  pts.set(all.asOf, { date: all.asOf, net: all.netAsset, assets: all.totalAssets, liab: all.liabTotal, src: 'today' });
+  return [...pts.values()].filter((p) => Number.isFinite(p.net)).sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
 /** How many months the cash in the bank would cover, from the last three full months of spending. */
 export function runway(data, all) {
   const cur = monthKey(all.asOf);

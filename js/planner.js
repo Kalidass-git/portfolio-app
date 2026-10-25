@@ -398,15 +398,35 @@ export const SAFE_RATES = [0.03, 0.035, 0.04];
  * The corpus at which investments could pay for living costs: yearly spending (everyday expenses and the yearly one-time items, without loan EMI, which ends)
  * divided by a safe withdrawal rate. `rows` is a long projection from today. Returns the number for today and for every year end, and the first year net worth reaches it.
  */
-export function workOptional(rows, netNow, rate) {
+export function workOptional(rows, netNow, rate, skip = null) {
   if (!(rate > 0) || rows.length < 12) return null;
+  // `skip` = { frac, items }: the share of the everyday expenses and the names of one-time items that will not be spent after work (rent, tax and so on)
+  const frac = skip && skip.frac > 0 ? Math.min(1, skip.frac) : 0, names = new Set(((skip && skip.items) || []).map((x) => String(x).toLowerCase()));
+  const skippedOne = (r) => sum((r.items || []).filter((i) => i.kind !== 'income' && names.has(String(i.name).toLowerCase())), (i) => i.amount);
   const years = [];
   for (let i = 0; i * 12 + 11 < rows.length; i++) {
-    const yr = rows.slice(i * 12, i * 12 + 12), end = yr[11], need = sum(yr, (r) => r.expenses + r.oneOut);
-    years.push({ month: end.month, need: r0(need), corpus: r0(need / rate), nw: r0(end.nw) });
+    const yr = rows.slice(i * 12, i * 12 + 12), end = yr[11];
+    const gross = sum(yr, (r) => r.expenses + r.oneOut), left = sum(yr, (r) => r.expenses * frac + Math.min(r.oneOut, skippedOne(r))), need = gross - left;
+    years.push({ month: end.month, need: r0(need), gross: r0(gross), skipped: r0(left), corpus: r0(need / rate), nw: r0(end.nw) });
   }
   const today = years[0], reached = years.find((y) => y.nw >= y.corpus) || null;
-  return { rate, years, needToday: today.need, corpusToday: today.corpus, progress: netNow / today.corpus, reached, yearsAway: reached ? years.indexOf(reached) + 1 : null };
+  return { rate, years, needToday: today.need, grossToday: today.gross, skippedToday: today.skipped, corpusToday: today.corpus, progress: today.corpus > 0 ? netNow / today.corpus : 1, reached, yearsAway: reached ? years.indexOf(reached) + 1 : null };
+}
+
+/**
+ * What the plan's monthly everyday expenses are made of: the average per month of each category over the last 12 full months (the same entries the plan's figure is
+ * averaged from: no investments, loan EMI, tax or one-time categories). `share` is the part of the total; the plan's figure is split by these shares.
+ */
+export function regularShares(data, all) {
+  const cur = monthKey(all.asOf), once = oneTimeSet(data), kind = kindOf(data);
+  const months = ledgerMonths(data).filter((m) => m < cur).slice(-12), by = new Map();
+  for (const m of months) for (const e of monthLedger(data, m)) {
+    const name = String(e.category || '').trim(), k = name.toLowerCase();
+    if (!name || !(e.debit > 0) || kind(e.category) === 'investment' || k === 'loan' || k === 'tax' || once.has(k)) continue;
+    by.set(k, { name, total: (by.get(k) ? by.get(k).total : 0) + e.debit });
+  }
+  const total = sum([...by.values()], (x) => x.total), n = Math.max(1, months.length);
+  return [...by.entries()].map(([key, x]) => ({ key, name: x.name, monthly: r0(x.total / n), share: total > 0 ? x.total / total : 0 })).sort((a, b) => b.share - a.share);
 }
 
 // ---------- suggested fix for a gap against the plan ----------

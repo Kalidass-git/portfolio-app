@@ -2,7 +2,7 @@
 import { evalAlerts } from '../watch.js';
 import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
-import { h, money, compact, pct, dateStr, monthLabel, section, monthPicker, rowList, kpi, dateChip, btn, canEdit, dec, toast, dialog } from '../ui.js';
+import { h, money, compact, pct, dateStr, monthLabel, section, stat, monthPicker, rowList, kpi, dateChip, btn, canEdit, dec, toast, dialog } from '../ui.js';
 import { strip, legend, hbars, lineChart, donut, spark, color, riskColor } from '../charts.js';
 import * as R from '../risk.js';
 import { rateHistory, ageText } from './gold.js';
@@ -19,6 +19,55 @@ const shortDate = (d) => dateStr(d).replace(/ (\d\d)(\d\d)$/, " '$2");
 const sgp = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + pct(Math.abs(n), 2);
 const tone = (n) => (n > 0 ? 'pos' : n < 0 ? 'neg' : '');
 const RISK_ORDER = ['Safe', 'Medium', 'Medium High', 'High'];
+
+
+// ---------- net worth over time ----------
+const NW_RANGES = [['1w', '1 week', 7], ['1m', '1 month', 1], ['3m', '3 months', 3], ['6m', '6 months', 6], ['1y', '1 year', 12]];
+let nwRange = '3m';
+const dayMs = 86400000, isoMs = (d) => Date.parse(d + 'T00:00:00Z'), msIso = (t) => new Date(t).toISOString().slice(0, 10);
+/** Net worth for every day of the chosen range: readings where they exist, straight lines in between. */
+function nwDaily(pts, from, to) {
+  const out = [];
+  let k = 0;
+  for (let t = isoMs(from); t <= isoMs(to); t += dayMs) {
+    const d = msIso(t);
+    while (k < pts.length - 2 && pts[k + 1].date <= d) k++;
+    const a = pts[k], b = pts[Math.min(k + 1, pts.length - 1)];
+    const lerp = (x, y) => { if (x == null || y == null) return null; if (d <= a.date || a === b) return x; if (d >= b.date) return y; const f = (isoMs(d) - isoMs(a.date)) / (isoMs(b.date) - isoMs(a.date)); return x + (y - x) * f; };
+    const exact = pts.find((p) => p.date === d);
+    out.push({ date: d, net: exact ? exact.net : lerp(a.net, b.net), assets: exact ? exact.assets : lerp(a.assets, b.assets), exact: !!exact });
+  }
+  return out;
+}
+function netWorthHistory(data, all) {
+  const pts = C.netWorthPoints(data, all);
+  const r = NW_RANGES.find((x) => x[0] === nwRange) || NW_RANGES[2];
+  const to = all.asOf;
+  const from = r[0] === '1w' ? msIso(isoMs(to) - 6 * dayMs) : C.addMonths(to, -r[2]);
+  const first = pts[0].date, start = from < first ? first : from;
+  const chips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Period' }, NW_RANGES.map(([k, l]) => h('button', { type: 'button', class: 'chip-btn' + (nwRange === k ? ' on' : ''), 'aria-pressed': String(nwRange === k), onclick: () => { nwRange = k; rerender(); } }, l)));
+  const inRange = pts.filter((p) => p.date >= start && p.date <= to);
+  const daily = inRange.filter((p) => p.src === 'daily' || p.src === 'today').length, monthly = inRange.filter((p) => p.src === 'month end').length;
+  if (inRange.length < 2) return section('Net worth over time', h('div', null, chips, h('p', { class: 'empty' }, 'Not enough saved readings in this period yet.'), h('p', { class: 'note' }, `The app saves one reading each day you open it on the owner’s device, and keeps the month-end figures too. The oldest reading is ${dateStr(first)}.`)));
+  const days = nwDaily(pts, start, to);
+  const nets = days.map((d) => d.net), hasAssets = days.every((d) => d.assets != null);
+  const lo = Math.min(...nets), hi = Math.max(...nets);
+  const step = (hi - lo) || 1, yMin = Math.max(0, Math.floor((lo - step * 0.15) / 1e4) * 1e4);
+  const long = days.length > 100;
+  const labels = days.map((d) => { const dt = new Date(isoMs(d.date)); const mon = dt.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' }); return long ? `${mon} '${d.date.slice(2, 4)}` : `${dt.getUTCDate()} ${mon}`; });
+  const series = [{ name: 'Net worth', values: nets, color: 0 }];
+  if (hasAssets) series.push({ name: 'Total assets', values: days.map((d) => d.assets), color: 2, dashed: true });
+  const yLo = hasAssets ? Math.max(0, Math.floor((Math.min(lo, ...days.map((d) => d.assets)) - step * 0.15) / 1e4) * 1e4) : yMin;
+  const change = nets[nets.length - 1] - nets[0], hiDay = days.find((d) => d.net === hi), loDay = days.find((d) => d.net === lo);
+  return section('Net worth over time', h('div', null, chips,
+    h('div', { class: 'stats' },
+      stat('Change in ' + r[1], h('span', { class: tone(change) }, sgn(change)), nets[0] ? sgp(change / nets[0]) + ' since ' + shortDate(days[0].date) : ''),
+      stat('Highest', money(hi), shortDate(hiDay.date)),
+      stat('Lowest', money(lo), shortDate(loDay.date)),
+      stat('Readings used', `${daily + monthly}`, `${daily} daily · ${monthly} month-end`)),
+    lineChart({ labels, tipLabels: days.map((d) => dateStr(d.date) + (d.exact ? '' : ' (between readings)')), fmt: money, yMin: yLo, height: 250, series }),
+    h('p', { class: 'note' }, `Drawn from the readings the app has saved: one for each day you open it on the owner’s device (net worth, assets and loans on that day), plus the month-end figures from your Plan sheet and check-ins. Where a day has no reading, the line runs straight between the nearest two. The oldest reading is ${dateStr(first)}, so a longer period shows a flatter, month-end-only line until daily readings build up.${hasAssets ? '' : ' Total assets appear once the period has daily readings throughout.'} Hover or touch the chart for the figure on any day.`)));
+}
 
 function hero(all, series, ox) {
   const monthStartIso = C.monthStart(all.asOf);
@@ -88,14 +137,42 @@ function investableBody(m) {
       { title: 'Interest income still expected', sub: 'bonds and lending still to come this month', value: h('span', { class: 'pos' }, '+ ' + money(m.interest)) },
       { title: 'Pending mandatory investments', sub: `${mand.pending.length} chit${mand.pending.length === 1 ? '' : 's'} and gold chit${mand.pending.length === 1 ? '' : 's'} not paid yet`, value: '− ' + money(mand.total) },
       { title: 'Expenses still to come', sub: h('i', null, `projected: ${pr.left} day${pr.left === 1 ? '' : 's'} left at the pace so far, no rent`), value: h('i', { class: 'neg' }, '− ' + money(pr.total)) },
-      { title: 'Investable balance', value: h('b', { class: m.current >= 0 ? 'inv' : 'neg' }, money(m.current)) },
+      { title: 'Investable balance', value: h('b', { class: m.current >= 0 ? 'inv' : 'neg', style: { fontStyle: 'italic' } }, money(m.current)), sub: h('i', null, 'italic: it includes projected expenses') },
     ]),
     h('p', { class: 'note' }, 'Bank balance + cash in hand + interest still expected − pending mandatory investments − projected expenses. Mark an account as a wallet in its settings (or name it wallet or cash) to count it as cash in hand.'));
 }
-const showInvestable = (m) => dialog('Investable balance', investableBody(m), [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
-
-/** Blue Investable balance tile: on a phone a tap opens the breakdown, on a desktop it drops down. */
-function place2(el, plan) { el.classList.add('blue'); el.addEventListener('click', (e) => { if (!mqDesk() && !e.target.closest('.kpi-pop')) showInvestable(plan); }); return el; }
+/** What went into each asset class this month against what the plan says is needed. */
+function investedBody(m) {
+  const cls = (c) => { try { return P.classOf(c).label; } catch (e) { return c; } };
+  const rows = m.rows.map((r) => ({
+    title: r.name, sub: `${cls(r.cls)} · ${Math.round(r.share * 100)}% of the plan · needed ${money(r.target)}`,
+    value: h('span', { class: r.done > 0.5 ? 'pos' : '' }, money(r.done)),
+    valueSub: r.over > 0.5 ? h('span', { class: 'warn' }, `${money(r.over)} over`) : r.left > 0.5 ? h('span', { class: 'neg' }, `${money(r.left)} to go`) : '✓ done',
+  })).concat(m.unplanned.map((u) => ({ title: cls(u.cls), sub: 'not in your plan', value: h('span', { class: 'pos' }, money(u.done)) })));
+  const needed = m.rows.reduce((a, r) => a + r.target, 0);
+  return h('div', null,
+    h('div', { class: 'trio' },
+      h('div', null, h('span', { class: 'mini-title' }, 'Invested so far'), h('b', { class: 'pos' }, money(m.done))),
+      h('div', null, h('span', { class: 'mini-title' }, 'Plan needs'), h('b', null, money(needed))),
+      h('div', null, h('span', { class: 'mini-title' }, 'Still to go'), h('b', { class: m.stillToInvest > 0.5 ? 'neg' : 'pos' }, money(m.stillToInvest)))),
+    m.rows.length || m.unplanned.length ? rowList(rows) : h('p', { class: 'empty' }, 'Nothing invested yet this month, and no plan lines to compare with.'),
+    h('p', { class: 'note' }, `Invested comes from bank entries and asset records of ${monthLabel(m.month, true)}. “Needed” is the month’s income less its spending (${money(m.investable)}), shared by the weights of your Wealth outlook plan lines${m.hasPlan ? '' : ' (no live plan yet, so standard assumptions are used)'}.`));
+}
+/** Both Investable balance cards open this: how it is worked out (first), and what was invested this month by asset class. */
+function showInvestable(m, start = 'calc') {
+  let tab = start;
+  const body = h('div');
+  const draw = () => {
+    const seg = h('nav', { class: 'seg', 'aria-label': 'Investable balance' }, [['calc', 'How it is calculated'], ['done', 'Invested this month']].map(([k, l]) => h('a', { href: 'javascript:void 0', class: tab === k ? 'on' : '', 'aria-selected': String(tab === k), onclick: (e) => { e.preventDefault(); tab = k; draw(); } }, l)));
+    body.replaceChildren(seg, tab === 'calc' ? investableBody(m) : investedBody(m));
+  };
+  draw();
+  dialog('Investable balance · ' + monthLabel(m.month), body, [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
+}
+const investSub = (m) => h('span', null, `invested so far ${money(m.done)} this month · tap for working`);
+/** The remaining amount uses projected expenses, so it is shown in italics. */
+const blueTile = (el) => { el.classList.add('blue'); el.setAttribute('role', 'button'); return el; };
+const italicValue = (el) => { const v = el.querySelector('.kpi-value'); if (v) v.style.fontStyle = 'italic'; return el; };
 function tiles(all, data, mc, plan) {
   const mk = marketGroups(all), gd = all.gold.day;
   const dayAll = mk.total.day + (gd ? gd.total : 0);
@@ -104,7 +181,7 @@ function tiles(all, data, mc, plan) {
   const dayPctAll = baseAll ? dayAll / baseAll : 0;
   const spent = mc.totalSpent + mc.lifestyle.amount;
   return h('div', { class: 'kpis span-12' },
-    plan ? place2(tile('Investable balance', money(plan.current), `bank ${money(plan.bank)} + cash ${money(plan.cash)} + interest ${money(plan.interest)} − chits − expenses`, { tone: plan.current >= 0 ? 'inv' : 'neg', pop: investableBody(plan) }), plan)
+    plan ? blueTile(italicValue(tile('Investable balance', money(plan.current), investSub(plan), { tone: plan.current >= 0 ? 'inv' : 'neg', sheet: () => showInvestable(plan) })))
       : tile('Net monthly inflow', money(all.netMonthly), h('span', null, `${money(all.cfTotal.perMonth)} earned `, all.loans.monthlyInterest > 0 ? h('span', { class: 'neg' }, `− ${money(all.loans.monthlyInterest)} loan interest`) : '− ₹ 0 loan interest'), { tone: tone(all.netMonthly), href: '#/fixed/loans' }),
     tile('Earning every day', money(all.cfTotal.perDay), h('span', null, `${money(all.cfTotal.perDay - all.loans.monthlyInterest / 30)} after `, h('span', { class: 'neg' }, `${money(all.loans.monthlyInterest / 30)} loan interest`)), { href: '#/fixed', pop: h('div', null, earningBody(all, false), h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income'))), sheet: () => openInfo('Earning every day', h('div', null, earningBody(all, true), h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income')))) }),
     tile('Markets today', anyDay ? sgn(dayAll) : '–', anyDay ? `${sgp(dayPctAll)} · shares, funds, ETFs, gold` : 'refresh prices to see', { tone: anyDay ? tone(dayAll) : '', href: '#/equity', pop: h('div', null, todayBody(all), h('p', null, h('a', { href: '#/equity' }, 'Open Shares & funds'))), sheet: () => openInfo('Markets today', h('div', null, todayBody(all), h('p', null, h('a', { href: '#/equity' }, 'Open Shares & funds')))) }),
@@ -200,7 +277,7 @@ function investCard(data, all, planIn) {
   if (!m) { try { m = monthPlan(data, all, P.cfg(data).outlooks); } catch (e) { return null; } }
   const mand = m.mandatory, pr = m.proj;
   const incomeNote = m.planIn > m.actualIn ? 'expected' : 'received';
-  const showInvestable = () => detail('Investable income added, ' + monthLabel(m.month, true), [
+  const showIncomeAdded = () => detail('Investable income added, ' + monthLabel(m.month, true), [
     { title: 'Money in this month', sub: `the higher of ${money(m.actualIn)} received so far and ${money(m.planIn)} the plan expects (${incomeNote})`, value: money(m.income) },
     { title: 'Money out this month', sub: `the higher of ${money(m.actualOut)} paid so far and ${money(m.planOut)} the plan expects (expenses, EMI, tax, yearly bills)`, value: '− ' + money(m.spend) },
     { title: 'Investable income added', sub: 'what is left to invest from this month’s money', value: h('b', { class: 'inv' }, money(m.investable)) },
@@ -211,10 +288,10 @@ function investCard(data, all, planIn) {
   const showCurrent = () => showInvestable(m);
   return section('Investing this month · ' + monthLabel(m.month), h('div', null,
     h('div', { class: 'stats' },
-      tapStat('Investable income added this month', money(m.investable), `${money(m.income)} in − ${money(m.spend)} out · tap for working`, 'inv', showInvestable),
+      tapStat('Investable income added this month', money(m.investable), `${money(m.income)} in − ${money(m.spend)} out · tap for working`, 'inv', showIncomeAdded),
       tapStat('Pending mandatory investments (approx.)', money(mand.total), mand.pending.length ? `${mand.pending.length} chit${mand.pending.length === 1 ? '' : 's'} not paid yet this month${mand.done.length ? ', ' + mand.done.length + ' paid' : ''} · chits and gold chits` : (mand.done.length ? `all ${mand.done.length} paid this month · chits and gold chits` : 'no chits running · chits and gold chits'), mand.total > 0.5 ? 'warn' : '', showMandatory),
       tapStat('Expenses still to come (projected)', h('i', { class: 'neg' }, '− ' + money(pr.total)), h('i', null, `${pr.left} day${pr.left === 1 ? '' : 's'} left · regular spending, no rent`), '', showSpend),
-      tapStat('Investable balance', money(m.current), h('span', null, `bank ${money(m.bank)} + cash ${money(m.cash)} + interest ${money(m.interest)} − ${money(mand.total)} chits `, h('i', { class: 'neg' }, `− ${money(pr.total)} expenses (projected)`)), m.current >= 0 ? 'inv' : 'neg', showCurrent)),
+      tapStat('Investable balance', h('i', null, money(m.current)), investSub(m), m.current >= 0 ? 'inv' : 'neg', showCurrent)),
     m.current < 0 ? h('p', { class: 'note warn' }, `The bank is short by ${money(-m.current)} for what is still expected this month.`) : null,
     h('h4', { style: { margin: '12px 0 4px' } }, 'Where the current investable amount can go'),
     m.current > 0.5 ? rowList([
@@ -437,7 +514,7 @@ export function render() {
   const place = (el, ...cls) => { if (el) el.classList.add(...cls); return el; };
   const root = h('div', { class: 'page dash' });
   const parts = [
-    hero(all, series, ox), tiles(all, data, C.monthCashflow(data, all, C.monthKey(all.asOf)), plan),
+    hero(all, series, ox), place(netWorthHistory(data, all), 'span-12'), tiles(all, data, C.monthCashflow(data, all, C.monthKey(all.asOf)), plan),
     place(attention(data, all), 'span-12'),
     place(toReceiveCard(data, all), 'span-6'), place(comingUp(data, all), 'span-6'),
     place(thisMonth(data, all, months), 'span-12'),

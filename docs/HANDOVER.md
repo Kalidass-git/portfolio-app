@@ -2,7 +2,7 @@
 
 > **Starting a new session? Do this first.** 1) Read this file, then the top three entries of `docs/SETUP.md`. 2) Clone, branch `release-X.Y.Z` off `origin/main` (check which PRs the owner has merged: `git log origin/main`). 3) Say what you have read, list "Waiting for the owner" below, and ask what to build. 4) The owner works in short numbered requests; do them all in one release, test, bump, open one PR. He checks on his real data, which you never see: say how each rule works so he can check it.
 
-**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.12.0 (cache `family-wealth-v75`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
+**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.13.0 (cache `family-wealth-v76`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
 
 Read this first, then `docs/SETUP.md` (release notes, newest first) and `README.md`.
 
@@ -32,7 +32,7 @@ A no-build installable web app (PWA, vanilla ES modules) that mirrors the owner'
 - `#/equity` `equity*.js`: today, shares and ETFs, funds, insights, sold, dividends, imports. Refresh prices sits on the right with "updated X ago".
 - `#/savings` `savings.js` (code in `cash.js`): tabs Chits, Provident fund, Insurance, RDs, Closed.
 - `#/gold` `gold.js`: gold rate, chits and schemes, purchases, jewellery, other holdings.
-- `#/flow` `flow.js`: income and expenses report. `categories.js`: category and rule editing.
+- `#/flow` `flow.js`: income and expenses report. `#/monthdetail` `views/monthdetail.js` (+ pure `js/monthdetail.js`): Month in detail, status per month against the expected interest income. `categories.js`: category and rule editing.
 - `#/plan` `plan.js`, `plan-year.js`: the Excel plan and targets.
 - `#/projector` `views/projector.js` with tabs Planner (`proj-plan.js`, logic in `js/planner.js`), This year (`proj-year`), Years ahead (`proj-ahead`), Market outlook (`proj-market`); `proj-shared`, `proj-actual`, `proj-flow` are shared. Plans are set only on Planner (draft, make live, revise; revisions kept). The other tabs read `livePlan()` and never write plan figures.
 - `#/risk` `risk.js` with `proj-risk` (limits per kind, rule and holding) and `proj-whatif` (try an investment against the limits).
@@ -48,7 +48,15 @@ A no-build installable web app (PWA, vanilla ES modules) that mirrors the owner'
 ## Release process
 Branch off `origin/main` (`release-X.Y.Z`), change files, bump `js/version.js` and the cache name in `sw.js`, add notes at the top of the release list in `docs/SETUP.md`, push, and open a PR to `main` with `gh api` (GraphQL is blocked). The owner merges it. Always base on `origin/main` so stacked PRs do not leave main behind.
 
-## State after 8.12.0 (newest)
+## State after 8.13.0 (newest)
+
+- **Investable cards** (`home.js`): `showInvestable(m)` is the one popup for the blue tile and the Investing-this-month stat (tabs `calc` and `done`; `investedBody` uses `m.rows`, `m.unplanned`, `m.done` from `splitMonth`). The remaining amount is italic.
+- **Net worth over time** (`netWorthHistory` in `home.js`, `netWorthPoints` in `calc.js`): daily readings (`data.history`: net, assets, liab) + month-end figures + today, straight lines between readings; `lineChart` takes `tipLabels` for the hover title.
+- **Month in detail**: `statusOf` levels (under 75% well, to 100% marginal, to 120% over, then beyond), `monthRow` = Home's Spent against `totalExpected`. What counts is a local override in localStorage `pt.md.count` (name -> true/false), nothing in the data file.
+- **Work-optional**: `workOptional(rows, net, rate, { frac, items })`, `regularShares(data, all)` splits the plan's monthly expenses by 12 months of bank categories. Saved at `projector.ahead.woSkip { cats[], items[] }`.
+- Ask the owner to check on real data: that Home's invested-so-far matches his bank/asset entries; the net worth chart after a few days of daily readings (before that it is month-end only); Month in detail colours against the months he remembers; that ticking Rent and Tax moves the Work-optional corpus the way he expects.
+
+## State after 8.12.0
 
 - **Plan start**: `plan.initial.asOfMonth` is the month end the plan starts from (absent = December before). `effective()` sets `start.month` from it; `planPath` simulates `monthsTo(start.month, year)` months, so a plan made in October has three rows. `yearTrack` returns `rows` only for months after the start, `from` (last real position: latest in-plan snapshot, else the starting figure), `anchor`. Snapshots at or before the start are ignored by `yearTrack`, `prevPosition` and `canDeletePlan`. There is no "now" month any more: a month is `actual` (snapshot) or `projected`.
 - **Rules for next sessions**: never mix today's holdings into the plan views; the projection has no loan paydown (`loanPaid` is gone from rows); FDs class = FDs only; interest comes from bonds and lending, `a.interestMonthly` null by default (typed figure gives the `adj` line, labelled "Adjustment to your expected figure").
