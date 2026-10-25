@@ -154,6 +154,17 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.12.0 – Wealth outlook: plans start from a month-end net worth, simpler numbers
+
+- **A plan starts from a month end you give it, and nothing before it is used.** Made in October, it starts from the net worth at the end of September and projects October, November and December. A plan for the next year starts from December (suggested from the earlier plan's end, or your December snapshot). Creating a plan now asks for the month end and its net worth. Stored as the optional `initial.asOfMonth`; older plans without it keep starting from the December before (`PL.defaultAnchor`, `anchorOptions`, `suggestStart`, `startAt`).
+- **Actual means a saved snapshot, projected means the plan.** Today's holdings are no longer mixed into This year, Month-end check-in or Saved snapshots. A month with a snapshot inside the plan is real; every other month is projected from the latest real figure (last snapshot, else the starting net worth). Snapshots from before the plan's start are kept but not used. Years ahead also starts from that position, not from today.
+- **Simplified:** FDs are FDs only (the old "FDs & compounding loans" class is now "FDs"; money lent at compounding interest sits under Others with no growth assumed). Loans are out of the projection: "Loan paid down" and "Loan paid" are gone (the EMI is still counted as spending). "Other changes" is renamed "Not explained (difference)" and a first month with no known split by asset class shows growth as one figure.
+- **Interest income:** the plan works it out from bonds and lending alone by default. The old "adj" line only existed when you typed an expected figure on the Planner; it is now called "Adjustment to your expected figure" and says what it is made of. Leave the Planner field empty to have none. Popups list interest by bank category for real months, and by bonds and lending for projected months.
+- **Breakups:** Other income and Invested open a popup on the month table, the month detail and the check-in table; hovering the interest, other income, one-time and invested bars on the income chart shows the same split. Invested shows which investment the money went to (from your records for real months, from the plan's lines for projected ones).
+- **Fix:** the month detail (for example "2027, month by month" on Years ahead) showed empty amounts because each cell was one element drawn in both the table and the phone card. Cells are now built on every draw. The projection also no longer fails when a snapshot holds no value for some asset class.
+- **Saved snapshots** is folded by default.
+- Tests: `tests/anchor.test.mjs` (new); `tests/planner.test.mjs` updated for the start month.
+
 ## Release 8.11.0 – Wealth outlook: snapshot month, real growth by class, notes, three cases, suggested fix, work-optional number
 
 - **Snapshots ask for the month.** "Save snapshot" always asks which month end you are saving (October's can be saved in the first week of November). It saves today's holdings as that month end, with an optional note, and replaces a snapshot already saved for that month. Every saved snapshot is listed under the check-in table: tap one to see what was saved, edit it or delete it (any month, not only the latest). The note shows under the month in the table.

@@ -7,7 +7,7 @@ import * as PL from '../planner.js';
 import { h, money, compact, dateStr, monthLabel, section, stat, table, btn, formDialog, confirmDialog, canEdit, toast, dialog, tapSheet } from '../ui.js';
 import { lineChart } from '../charts.js';
 import * as actual from './proj-actual.js';
-import { flowSection, yearsTable, netWorthTip, growthTip } from './proj-flow.js';
+import { flowSection, yearsTable, netWorthTip, growthTip, investedTip } from './proj-flow.js';
 import { rerender, outlooks, ensure, signed, pc, tone, currentPlan, planPicker, notLiveCard, planSettingsCard, outlookWhatIf, outlookOverride, CASE_SHIFT, shiftOutlooks } from './proj-shared.js';
 
 const STATUS = { ahead: ['Ahead of target', 'pos'], 'on track': ['On track', 'pos'], close: ['Slightly behind', 'warn'], behind: ['Behind target', 'neg'] };
@@ -30,9 +30,10 @@ function snapshotDetail(s) {
     h('p', { class: 'note' }, `Saved ${s.date}. ${s.plan ? `Plan ${s.plan.year}${s.plan.rev ? `, revision ${s.plan.rev}` : ''}, target ${money(s.plan.target)}. ` : 'No live plan existed for this year when it was saved. '}${s.note ? 'Note: ' + s.note : ''}`),
     t(rows), h('h4', { style: { margin: '10px 0 4px' } }, 'Where the money sat'), t(cls),
     s.growth ? h('div', null, h('h4', { style: { margin: '10px 0 4px' } }, 'Growth recorded with it'),
-      table([{ label: 'Asset class', host: true, get: (x) => x.label }, { label: 'Growth', cls: 'r', render: (x) => h('span', { class: x.amount >= 0 ? 'inc' : 'exp' }, signed(x.amount)) }],
-        [...s.growth.items, ...(Math.abs(s.growth.other) > 0.5 ? [{ label: 'Other changes', amount: s.growth.other }] : [])], { m: { key: 'year-snap-growth', head: 'Asset class', views: [['Growth']] } }),
-      h('p', { class: 'note' }, 'Worked out when the snapshot was saved, from the previous snapshot: market assets by value change after buying and selling, EPF/PPF by interest credited, deposits and chits by their rate. Bank, bond and lending interest and dividends are income.')) : null,
+      s.growth.real === false ? h('p', { class: 'note' }, `${signed(s.growth.total)} in all. This month starts from the net worth you entered on the Planner, and how that was spread over asset classes is not known, so growth is shown as one figure.`)
+        : table([{ label: 'Asset class', host: true, get: (x) => x.label }, { label: 'Growth', cls: 'r', render: (x) => h('span', { class: x.amount >= 0 ? 'inc' : 'exp' }, signed(x.amount)) }],
+          [...s.growth.items, ...(Math.abs(s.growth.other) > 0.5 ? [{ label: 'Not explained (difference)', amount: s.growth.other }] : [])], { m: { key: 'year-snap-growth', head: 'Asset class', views: [['Growth']] } }),
+      h('p', { class: 'note' }, 'Worked out when the snapshot was saved, from the previous snapshot: market assets by value change after buying and selling, EPF/PPF by interest credited, FDs, RDs, insurance and chits by their rate. Bank, bond and lending interest and dividends are income.')) : null,
     s.plan ? h('p', { class: 'note' }, 'The plan column is what the plan said for that month with the assumptions of the day: salary ' + money(s.plan.assumptions.salary) + ', everyday expenses ' + money(s.plan.assumptions.expenses) + ', EMI ' + money(s.plan.assumptions.emi) + '.') : null), [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
 }
 /** Type in a month-end position. A month with no snapshot starts from the projected position, so only what differs needs changing. */
@@ -94,17 +95,20 @@ function snapshotActions(mo) {
   dialog(`${monthLabel(mo, true)} snapshot`, h('div', null, h('p', null, `Net worth ${money(sn.net)}, saved ${dateStr(sn.date)}.`), sn.note ? h('p', { class: 'note' }, 'Note: ' + sn.note) : null),
     [{ label: 'Close', onclick: (c) => c() }, { label: 'Delete', class: 'danger', onclick: (c) => { c(); deleteSnapshot(mo); } }, { label: 'See what was saved', onclick: (c) => { c(); snapshotDetail(sn); } }, { label: 'Edit', class: 'primary', onclick: (c) => { c(); snapshotForm(mo, null); } }]);
 }
-/** Every saved snapshot of the year, with its note, and a way to open or delete each. */
-function snapshotList(year) {
-  const list = P.cfg(S.data).snapshots.filter((x) => x.month.startsWith(String(year))).sort((a, b) => (a.month < b.month ? 1 : -1));
+/** The saved snapshots that belong to the plan (its months only), folded shut: each with its note, and a way to open, edit or delete it. */
+function snapshotList(year, from) {
+  const all = P.cfg(S.data).snapshots.filter((x) => x.month.startsWith(String(year)));
+  const list = all.filter((x) => x.month > from).sort((a, b) => (a.month < b.month ? 1 : -1)), older = all.length - list.length;
   if (!list.length) return null;
-  return h('div', null, h('h4', { style: { margin: '14px 0 4px' } }, `Saved snapshots, ${year}`),
+  return h('details', { class: 'more' },
+    h('summary', { style: { cursor: 'pointer' } }, h('b', null, `Saved snapshots, ${year}`), h('small', { class: 'muted' }, `  ${list.length} saved`)),
     table([
       { label: 'Month end', host: true, render: (x) => h('span', null, monthLabel(x.month, true), x.note ? h('small', { class: 'muted', style: { display: 'block' } }, x.note) : null) },
       { label: 'Net worth', cls: 'r', get: (x) => money(x.net) },
       { label: 'Saved on', mob: 'under', mlabel: 'saved ', cls: 'r', get: (x) => dateStr(x.date) },
     ], list, { m: { key: 'year-snaps', head: 'Month end', views: [['Net worth', 'Saved on']] }, onRow: canEdit() ? (x) => snapshotActions(x.month) : null }),
-    canEdit() ? h('p', { class: 'note' }, 'Tap a month to see what was saved, edit it or delete it. Deleting one never touches the others or your plans.') : null);
+    canEdit() ? h('p', { class: 'note' }, 'Tap a month to see what was saved, edit it or delete it. Deleting one never touches the others or your plans.') : null,
+    older > 0 ? h('p', { class: 'note' }, `${older} snapshot${older === 1 ? '' : 's'} from before ${monthLabel(from, true)} ${older === 1 ? 'is' : 'are'} kept but not used by this plan, which starts from the net worth at the end of ${monthLabel(from, true)}.`) : null);
 }
 
 /** The working behind a month's "invested": what came in, what went out, what was left, and where it went. Same for the plan and for what happened. */
@@ -123,7 +127,7 @@ function investTip(r, title, source) {
           { l: 'Loan EMI', v: '−' + money(r.emi), tone: 'exp' }, { l: 'Everyday spending', v: '−' + money(r.expenses), tone: 'exp' }, { l: 'One-time items', v: '−' + money(r.oneOut), tone: 'exp', n: one || null }] },
         { l: 'Saved this month', v: money(saved), b: true, n: 'salary + EPF + interest − EMI − spending − one-time' },
         { group: 'Where it went', tone: 'inv', v: money(r.invested + (r.pfAdd || 0)), rows: [
-          { l: 'Went into investments', v: money(r.invested), tone: 'inv', n: 'new money' }, { l: 'Added to EPF', v: money(r.pfAdd || 0), tone: 'inv' }, { l: 'Kept in cash', v: money(r.left - r.invested) }] },
+          ...(investedTip([r]).parts.length ? [{ group: 'Went into investments', tone: 'inv', v: money(r.invested), rows: investedTip([r]).parts.map((x) => ({ l: x.name, v: money(x.amount), tone: 'inv', sub: true, n: x.note })) }] : [{ l: 'Went into investments', v: money(r.invested), tone: 'inv', n: 'new money' }]), { l: 'Added to EPF', v: money(r.pfAdd || 0), tone: 'inv' }, { l: 'Kept in cash', v: money(r.left - r.invested) }] },
       ],
       foot: source,
     };
@@ -147,8 +151,8 @@ export function render(root) {
 
   // ---------- headline ----------
   root.append(h('div', { class: 'stats' },
-    stat(`Target as per plan, Dec ${year}`, money(t.target), `from ${money(plan.initial.net)} in January · ${plan.which === 'working' ? 'draft' : 'revision ' + plan.rev}`),
-    stat('Projected year end', h('span', { class: tone(t.gap) }, money(t.projected)), t.inYear ? `from today’s ${money(t.live.net)}, with the plan’s settings${ov ? ' on the what-if outlook' : ''}` : 'following the plan'),
+    stat(`Target as per plan, Dec ${year}`, money(t.target), `from ${money(plan.initial.net)} at the end of ${monthLabel(t.anchor, true)} · ${plan.which === 'working' ? 'draft' : 'revision ' + plan.rev}`),
+    stat('Projected year end', h('span', { class: tone(t.gap) }, money(t.projected)), `from ${money(t.from.nw)} (${t.from.month === t.anchor ? 'the starting figure' : monthLabel(t.from.month, true) + ' snapshot'}), with the plan’s settings${ov ? ' on the what-if outlook' : ''}`),
     stat(t.gap >= 0 ? 'Ahead by' : 'Short by', h('span', { class: tone(t.gap) }, money(Math.abs(t.gap))), h('span', { class: stTone }, stLabel)),
     t.gap < 0 && t.extra > 0 ? stat('Extra to save', money(t.extra) + ' / month', `to reach the planned target, over the ${t.monthsLeft} months left (earn more or spend less)`) : stat('Extra to save', t.gap >= 0 ? 'Nothing' : '–', t.gap >= 0 ? 'you are on course for the planned target' : 'no months left this year')));
 
@@ -156,7 +160,7 @@ export function render(root) {
   root.append(section('Market outlook for this plan', outlookWhatIf(plan)));
 
   // ---------- chart ----------
-  const labels = ['Start', ...rows.map((r) => monthLabel(r.month))], n = labels.length;
+  const labels = [`${monthLabel(t.anchor)} end`, ...rows.map((r) => monthLabel(r.month))], n = labels.length;
   const targetS = labels.map((_, i) => Math.round(plan.initial.net + ((t.target - plan.initial.net) * i) / Math.max(1, n - 1)));
   const planS = [plan.initial.net, ...t.path.map((r) => r.nw)];
   const act = Array(n).fill(null); act[0] = plan.initial.net;
@@ -182,10 +186,11 @@ export function render(root) {
   const src = (x) => (x.proj ? 'Projected from the plan’s settings, carried forward from the last real position.' : x.now ? 'Month to date from your bank entries; the month is not over.' : 'From your bank entries and the month-end snapshot.');
   root.append(section(`Month-end check-in · ${monthLabel(nowM, true)}`, h('div', null,
     h('div', { class: 'stats' },
-      stat('Net worth today', money(all.netAsset), `as on ${dateStr(all.asOf)}`),
-      planNow != null ? stat(`Plan for end of ${monthLabel(nowM)}`, money(planNow), h('span', { class: tone(all.netAsset - planNow) }, `${signed(all.netAsset - planNow)} ${all.netAsset >= planNow ? 'ahead' : 'behind'} so far`)) : stat('This month', yr0 > Number(nowM.slice(0, 4)) ? 'Not started' : 'Finished', yr0 > Number(nowM.slice(0, 4)) ? `plan ${year} begins in January` : `plan ${year} has ended`),
+      stat(`Starting net worth, end of ${monthLabel(t.anchor)}`, money(plan.initial.net), 'entered on the Planner; the plan starts here'),
+      stat('Net worth today', money(all.netAsset), `as on ${dateStr(all.asOf)}, for reference: the plan only uses saved snapshots`),
+      planNow != null ? stat(`Plan for end of ${monthLabel(nowM)}`, money(planNow), mine ? h('span', { class: tone(mine.net - planNow) }, `snapshot is ${signed(mine.net - planNow)} ${mine.net >= planNow ? 'ahead' : 'behind'}`) : 'compared once you save this month’s snapshot') : stat('This month', yr0 > Number(nowM.slice(0, 4)) ? 'Not started' : 'Finished', yr0 > Number(nowM.slice(0, 4)) ? `plan ${year} begins in January` : `plan ${year} has ended`),
       mine ? stat('Snapshot saved', money(mine.net), mine.note || dateStr(mine.date)) : stat('Snapshot', 'Not saved yet', 'save it once the month’s entries are done; you choose the month')),
-    h('h4', { style: { margin: '14px 0 4px' } }, `Every month end of ${year}`),
+    h('h4', { style: { margin: '14px 0 4px' } }, rows.length ? `Month ends, ${monthLabel(rows[0].month, true)} to ${monthLabel(rows[rows.length - 1].month, true)}` : `Month ends of ${year}`),
     table([
       { label: 'Month end', host: true, render: (x) => h('span', null, x.proj ? h('i', null, monthLabel(x.month)) : monthLabel(x.month), x.now ? h('small', { class: 'now-tag' }, ' now') : null, x.missing && canEdit() ? h('small', { class: 'muted' }, ' · tap to add snapshot') : null, x.note ? h('small', { class: 'muted', style: { display: 'block', whiteSpace: 'normal' } }, x.note) : null) },
       { label: 'Plan: net worth', cls: 'r', render: (x) => tipNode(() => netWorthTip(x.pr, 'Plan net worth'), money(x.planNw)) },
@@ -198,13 +203,13 @@ export function render(root) {
       sort: [{ value: 'month', label: 'Month', kind: 'date', get: (x) => x.month }, { value: 'diff', label: 'Short / ahead by', kind: 'num', get: (x) => x.diff }, { value: 'nw', label: 'Actual net worth', kind: 'num', get: (x) => x.nw }], sortDefault: { value: 'month', dir: 'asc' } },
     onRow: canEdit() ? (x) => (x.month <= nowM ? snapshotForm(x.month, x.r) : toast('A month-end snapshot can only be saved for a month that has begun.')) : null }),
     h('details', { class: 'more' }, h('summary', null, 'How to read this'),
-      h('p', { class: 'note' }, 'Plain rows are what really happened: net worth from the month-end snapshot (or today’s position for the current month, marked “now”). Italic rows are projected: the plan’s settings carried forward from the last real position, so a month you forgot to snapshot is filled in until you add it.'),
+      h('p', { class: 'note' }, `The plan starts from the net worth you entered for the end of ${monthLabel(t.anchor, true)}. A month with a saved month-end snapshot is plain: what really happened. Every other month is italic and projected from the plan’s settings, starting from the latest real figure (the last snapshot, or the starting net worth). Save a snapshot at the end of each month and the projection moves on from it.`),
       h('p', { class: 'note' }, 'Plan net worth is recalculated from the plan’s settings and its starting net worth; tap it (or the actual figure) to see how the month was worked out, including the growth of EPF/PPF and the market assets. Short / ahead is actual (or projected) minus plan. Tap the invested figures to see the working: salary + EPF + interest − EMI − spending − one-time items, and where the saving went. Tap a row to type in that month’s snapshot.')),
-    snapshotList(year),
+    snapshotList(year, t.anchor),
     canEdit() && saveMonths.length ? [btn('Save snapshot', () => saveSnapshot(saveMonths), 'primary', { keep: true })] : null)));
 
   // ---------- the whole year, month by month ----------
-  root.append(yearsTable(rows, { title: `Month by month, ${year}`, why: { tds: plan.a.tds ?? 0.1 } }), flowSection(rows, { mode: 'month', planBy, title: `Income, spending and investing, ${year}`, initial: nowM.startsWith(String(year)) ? nowM : rows[0].month }));
+  root.append(yearsTable(rows, { title: `Month by month, ${year}`, why: { tds: plan.a.tds ?? 0.1 } }), flowSection(rows, { mode: 'month', planBy, title: `Income, spending and investing, ${year}`, initial: rows.some((r) => r.month === nowM) ? nowM : rows[0] ? rows[0].month : null }));
 
   actual.render(root, plan, t.path);
 

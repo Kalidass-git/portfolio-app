@@ -16,6 +16,9 @@ const MON = PL.MONTH_NAMES;
 const upd = (st, fn) => mutate((d) => fn(ensure(d).years[st.id], d));
 /** Open for editing: the owner, and the plan is a draft, being revised, or has changes that are not live yet. */
 const editable = (st) => canEdit() && (!st.live || revising.has(st.year) || PL.isDirty(st));
+const startMonthOf = (st) => (st.initial && st.initial.asOfMonth) || `${st.year - 1}-12`;
+const nextMonth = (m) => C.addMonths(m + '-01', 1).slice(0, 7);
+const snapOf = (m) => P.cfg(S.data).snapshots.find((x) => x.month === m);
 const homeInterest = () => { try { return Math.round(C.monthCashflow(S.data, S.all, C.monthKey(S.all.asOf)).totalExpected); } catch (e) { return 0; } };
 
 /** A card that shows one setting and opens its bottom sheet on a tap. */
@@ -45,27 +48,33 @@ function salarySheet(st, focus) {
   });
 }
 function otherIncomeSheet(st, focus) {
-  const a = st.a, now = homeInterest();
+  const a = st.a, now = homeInterest(), fromHoldings = a.interestMonthly == null || a.interestMonthly === '';
   formDialog({
     title: 'Other income (monthly)', focus, saveLabel: 'Save',
-    value: { interest: a.interestMonthly ?? now, other: a.otherIncome || 0 },
+    value: { interest: fromHoldings ? '' : a.interestMonthly, other: a.otherIncome || 0 },
     fields: [
-      { key: 'interest', label: 'Expected interest income each month (₹)', type: 'number', hint: `This month’s card on Home expects ${money(now)}. The plan starts from this figure and adds the interest on new money put into bonds and lending.` },
+      { key: 'interest', label: 'Expected interest income each month (₹)', type: 'number', hint: `This month’s card on Home expects ${money(now)}. The plan starts from this figure and adds the interest on new money put into bonds and lending. Leave it empty to work it out from your bonds and lending alone (their amounts × rates, less TDS).` },
       { key: 'other', label: 'Any other income each month (₹)', type: 'number', hint: 'Rent, dividends and so on. It rises with the salary hike.' },
     ],
-    onSave: (v) => upd(st, (p) => { p.a.interestMonthly = v.interest || 0; p.a.otherIncome = v.other || 0; }),
-    extraActions: [{ label: 'Use this month’s Home figure', onclick: () => { upd(st, (p) => { p.a.interestMonthly = homeInterest(); }); toast('Interest income set from Home'); } }],
+    onSave: (v) => upd(st, (p) => { p.a.interestMonthly = v.interest == null ? null : v.interest; p.a.otherIncome = v.other || 0; }),
+    extraActions: [{ label: 'Use this month’s Home figure', onclick: () => { upd(st, (p) => { p.a.interestMonthly = homeInterest(); }); toast('Interest income set from Home'); } },
+      { label: 'Work it out from my bonds and lending', onclick: () => { upd(st, (p) => { p.a.interestMonthly = null; }); toast('Interest income will be worked out from your bonds and lending'); } }],
   });
 }
+/** Where the plan starts: the net worth at the end of a month. The plan runs from the month after it to December. */
 function initialSheet(st) {
-  const b = P.baseline(S.data, S.all), dec = P.cfg(S.data).snapshots.find((s) => s.month === `${st.year - 1}-12`);
+  const b = P.baseline(S.data, S.all), cur = startMonthOf(st), opts = PL.anchorOptions(S.all, st.year), months = opts.includes(cur) ? opts : [cur, ...opts].sort();
+  const sn = snapOf(cur);
   formDialog({
-    title: 'Net worth at the start of the year', saveLabel: 'Save', value: { net: st.initial.net },
-    fields: [{ key: 'net', label: `Net worth in January ${st.year} (₹)`, type: 'number', required: true,
-      hint: `Treated as where you stood at the start of January: January’s income and spending are added on top. Today it is ${money(b.net)}.${dec ? ` Your saved month-end for December ${st.year - 1} was ${money(dec.net)}.` : ''}` }],
-    onSave: (v) => upd(st, (p) => PL.setInitialNet(p, v.net)),
-    extraActions: [{ label: 'Use today’s net worth', onclick: () => { upd(st, (p, d) => { p.initial = PL.initialFrom(d, S.all); }); toast('Starting net worth set to today'); } },
-      ...(dec ? [{ label: `Use December ${st.year - 1}`, onclick: () => { upd(st, (p) => { const liab = dec.loans || 0, assets = dec.assets != null ? dec.assets : dec.net + liab; p.initial = { net: dec.net, assets, liab, classes: dec.classes ? { ...dec.classes } : PL.scaleClasses(p.initial.classes, assets), date: dec.date }; }); toast('Starting net worth set from the December snapshot'); } }] : [])],
+    title: 'Where the plan starts', saveLabel: 'Save', value: { month: cur, net: st.initial.net },
+    fields: [
+      { key: 'month', label: 'The plan starts from the end of', type: 'select', required: true, options: months.map((m) => ({ value: m, label: monthLabel(m, true) + (snapOf(m) ? ' · snapshot saved' : '') })), hint: 'Pick the last month end you know the net worth for. The plan is worked out for every month after it, up to December, and nothing before it is used.' },
+      { key: 'net', label: 'Net worth at the end of that month (₹)', type: 'number', required: true,
+        hint: `Total assets minus loans at that month end.${sn ? ` Your saved snapshot for ${monthLabel(cur, true)} says ${money(sn.net)}.` : ''} Today it is ${money(b.net)}, which is only a rough guide for an earlier month.` },
+    ],
+    onSave: (v) => { if (v.month === cur && Math.round(v.net) === st.initial.net) return; upd(st, (p, d) => { const s1 = snapOf(v.month); p.initial = PL.startAt(d, S.all, v.month, v.net, s1 && Math.round(s1.net) === Math.round(v.net) ? s1 : null); }); },
+    extraActions: [...(sn ? [{ label: `Use the ${monthLabel(cur, true)} snapshot`, onclick: () => { upd(st, (p, d) => { p.initial = PL.startAt(d, S.all, cur, sn.net, sn); }); toast('Starting net worth set from the snapshot'); } }] : []),
+      { label: 'Use today’s net worth (rough)', onclick: () => { upd(st, (p, d) => { p.initial = PL.startAt(d, S.all, cur, null, null); }); toast('Starting net worth set to today’s figure'); } }],
   });
 }
 function expensesSheet(st, focus) {
@@ -138,7 +147,7 @@ function investForm(st, l) {
     onDelete: isNew ? null : () => upd(st, (p) => { p.a.invest = p.a.invest.filter((x) => x.id !== l.id); }),
   });
 }
-const RATE_KEYS = [['bonds', 'Bonds'], ['lending', 'Private lending'], ['fds', 'FDs and compounding loans'], ['pf', 'EPF and PPF'], ['chits', 'Chits'], ['lic', 'Insurance and recurring deposits'], ['cash', 'Cash in banks'], ['other', 'Others']];
+const RATE_KEYS = [['bonds', 'Bonds'], ['lending', 'Private lending'], ['fds', 'FDs'], ['pf', 'EPF and PPF'], ['chits', 'Chits'], ['lic', 'Insurance and recurring deposits'], ['cash', 'Cash in banks'], ['other', 'Others']];
 function ratesSheet(st) {
   const r = st.a.rates || {};
   formDialog({
@@ -191,7 +200,7 @@ function stepsSheet(st, path, which) {
     row('Invested each month', money(inv), 'Split by the shares in New money going in', true), row('Left in cash', money(kept), 'Anything not invested stays in the bank'),
   ];
   dialog(which === 'saved' ? 'Saved each month: the steps' : 'Invested each month: the steps', h('div', null,
-    h('p', { class: 'note' }, `Averages of the ${n} months of the plan year. Each month is worked out on its own, so a month with tax saves less.`),
+    h('p', { class: 'note' }, `Averages of the ${n} month${n === 1 ? '' : 's'} the plan covers. Each month is worked out on its own, so a month with tax saves less.`),
     table([{ label: 'Step', host: true, render: (x) => h('span', null, x.b ? h('b', null, x.l) : x.l, x.note ? h('small', { class: 'muted', style: { display: 'block', whiteSpace: 'normal' } }, x.note) : null) }, { label: 'Each month', cls: 'r', render: (x) => (x.b ? h('b', null, x.v) : x.v) }], lines, {}),
     h('details', { class: 'more' }, h('summary', null, 'Month by month'),
       table([{ label: 'Month', host: true, get: (r) => monthLabel(r.month, true) }, { label: 'Saved', cls: 'r', get: (r) => money(r.left + (r.pfAdd || 0)) }, { label: 'Invested', cls: 'r', get: (r) => money(r.invested) }, { label: 'Net worth', cls: 'r', get: (r) => money(r.nw) }], path, { m: { key: 'plan-steps-months', head: 'Month', views: [['Saved', 'Invested'], ['Net worth']] } }))),
@@ -226,7 +235,7 @@ function statusBar(st, path) {
   const end = path.length ? path[path.length - 1].nw : st.initial.net;
   const saved = path.length ? path.reduce((s, r) => s + r.left + (r.pfAdd || 0), 0) / path.length : 0, inv = path.length ? path.reduce((s, r) => s + r.invested, 0) / path.length : 0;
   return section(`Plan ${st.year}`, h('div', null, h('div', { class: 'plan-state' }, badge, h('p', { class: 'note', style: { margin: 0 } }, text)),
-    h('div', { class: 'stats' }, stat(`Net worth, December ${st.year}`, money(end), `as this plan projects it, from ${money(st.initial.net)} in January`),
+    h('div', { class: 'stats' }, stat(`Net worth, December ${st.year}`, money(end), `as this plan projects it, from ${money(st.initial.net)} at the end of ${monthLabel(startMonthOf(st), true)}`),
       tile('Saved each month', h('span', { class: tone(saved) }, money(saved)), 'on average, with EPF · tap for the steps', () => stepsSheet(st, path, 'saved'), false),
       tile('Invested each month', money(inv), 'on average, new money · tap for the steps', () => stepsSheet(st, path, 'invested'), false)),
     actions ? h('div', { class: 'row-actions' }, ...actions) : null));
@@ -244,10 +253,10 @@ function incomeCard(st, ed) {
       tile('Hike month', MON[(Number(a.hikeMonth) || 4) - 1], a.salaryMonth ? `figures above are for ${monthLabel(a.salaryMonth, true)}` : 'when the raise lands', tap(salarySheet, 'hikeMonth'), ed)),
     subHead('Other income (monthly)'),
     h('div', { class: 'stats' },
-      tile('Expected interest income', money(a.interestMonthly || 0), `a month · Home expects ${money(now)} this month`, tap(otherIncomeSheet, 'interest'), ed),
+      tile('Expected interest income', a.interestMonthly == null || a.interestMonthly === '' ? 'From holdings' : money(a.interestMonthly), a.interestMonthly == null || a.interestMonthly === '' ? `bonds and lending, less TDS · Home expects ${money(now)} this month` : `a month · Home expects ${money(now)} this month`, tap(otherIncomeSheet, 'interest'), ed),
       tile('Any other income', money(a.otherIncome || 0), 'a month', tap(otherIncomeSheet, 'other'), ed)),
     subHead('Starting point'),
-    h('div', { class: 'stats' }, tile(`Net worth at the start of ${st.year}`, money(st.initial.net), `treated as January ${st.year}; projections start here`, ed ? () => initialSheet(st) : canEdit() ? locked : null, ed)),
+    h('div', { class: 'stats' }, tile(`Net worth at the end of ${monthLabel(startMonthOf(st), true)}`, money(st.initial.net), `the plan starts here and runs ${monthLabel(nextMonth(startMonthOf(st)), true)} to December`, ed ? () => initialSheet(st) : canEdit() ? locked : null, ed)),
     ed ? h('p', { class: 'note' }, 'Tap any card to change it.') : null));
 }
 
@@ -366,15 +375,28 @@ function legacyCard(data) {
     }, '', { keep: true }) : null));
 }
 
+/** Create a plan: first ask where it starts (the month end and the net worth at it), so nothing is guessed. */
+function createDialog(year) {
+  const opts = PL.anchorOptions(S.all, year), def = PL.defaultAnchor(S.all, year), sug = PL.suggestStart(S.data, S.all, year, def);
+  const why = sug.source === 'snapshot' ? `Your saved snapshot for ${monthLabel(def, true)}.` : sug.source === 'plan' ? `Where your ${Number(year) - 1} plan ends.` : `Today’s figure, only a rough guide: replace it with your net worth at the end of ${monthLabel(def, true)}.`;
+  formDialog({
+    title: `Plan ${year}: where it starts`, saveLabel: 'Create plan', value: { month: def, net: sug.net },
+    fields: [
+      { key: 'month', label: 'The plan starts from the end of', type: 'select', required: true, options: opts.map((m) => ({ value: m, label: monthLabel(m, true) + (snapOf(m) ? ' · snapshot saved' : '') })), hint: `The plan is worked out for every month after it, up to December. For example, made in October it starts from the end of September and projects October to December.` },
+      { key: 'net', label: 'Net worth at the end of that month (₹)', type: 'number', required: true, hint: `${why} Total assets minus loans.` },
+    ],
+    onSave: (v) => { mutate((d) => { ensure(d).years[String(year)] = PL.freshPlan(d, S.all, year, { month: v.month, net: v.net }); }); toast(`Plan ${year} created as a draft`); },
+  });
+}
 function createCard(ctx) {
   const { year, legacy } = ctx;
   return section(`Plan ${year}`, h('div', null,
-    h('p', null, `Set up the plan for ${year} here: salary and EPF, other income, expenses, one-time items, the market outlook and where new money goes. It starts from today’s figures, which you can change on each card.`),
-    h('p', { class: 'note' }, 'It stays a draft until you make it live. Then it is locked and This year, Years ahead and Market outlook work from it. Later changes are made by revising it, and each revision is kept. Best done in December for the coming year, or in January.'),
+    h('p', null, `Set up the plan for ${year} here: where it starts, salary and EPF, other income, expenses, one-time items, the market outlook and where new money goes. Other figures start from today’s, which you can change on each card.`),
+    h('p', { class: 'note' }, 'You choose the net worth at a month end, and the plan is worked out from the month after it to December. Real months come from the month-end snapshots you save, so there is nothing to guess. It stays a draft until you make it live; then it is locked, and later changes are made by revising it.'),
     legacy ? h('p', { class: 'alert warn' }, `An older plan for ${year} exists. Creating this one replaces it, and its one-time items, investment lines and rates become the starting point.`) : null,
     canEdit() ? btn(`Create plan ${year}`, async () => {
       if (legacy && !(await confirmDialog(`Replace the older plan for ${year}? Its one-time items, investment lines and rates are carried over into the new plan.`, 'Replace'))) return;
-      mutate((d) => { ensure(d).years[String(year)] = PL.freshPlan(d, S.all, year); }); toast(`Plan ${year} created as a draft`);
+      createDialog(year);
     }, 'primary', { keep: true }) : h('p', { class: 'muted' }, 'The owner has not made a plan for this year yet.')));
 }
 

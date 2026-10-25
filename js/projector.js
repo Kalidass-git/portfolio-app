@@ -31,7 +31,7 @@ export const CLASSES = [
   { key: 'cash', label: 'Cash in banks', kind: 'cash' },
   { key: 'bonds', label: 'Bonds', kind: 'payout' },
   { key: 'lending', label: 'Private lending', kind: 'payout' },
-  { key: 'fds', label: 'FDs & compounding loans', kind: 'accrual' },
+  { key: 'fds', label: 'FDs', kind: 'accrual' },
   { key: 'pf', label: 'EPF & PPF', kind: 'accrual' },
   { key: 'chits', label: 'Chits', kind: 'accrual' },
   { key: 'lic', label: 'Insurance & recurring deposits', kind: 'accrual' },
@@ -42,8 +42,8 @@ export const CLASSES = [
   { key: 'other', label: 'Others', kind: 'accrual' },
 ];
 export const classOf = (k) => CLASSES.find((c) => c.key === k);
-/** Name shown for a class key. 'adj' is the gap between the interest figure the owner typed and what the holdings alone pay. */
-export const labelOf = (k) => (classOf(k) || {}).label || (k === 'adj' ? 'Your expected figure, beyond the holdings' : k);
+/** Name shown for a class key. 'adj' is the gap between the interest figure typed on the Planner and what the bonds and lending alone pay. */
+export const labelOf = (k) => (classOf(k) || {}).label || (k === 'adj' ? 'Adjustment to your expected figure' : k);
 export const isMarket = (k) => MARKET.includes(k);
 const wavg = (items, val, rate) => { const pos = (x) => Math.max(0, Number(val(x)) || 0); const t = sum(items, pos); return t > 0 ? sum(items, (x) => pos(x) * (Number(rate(x)) || 0)) / t : 0; };
 
@@ -51,15 +51,15 @@ const wavg = (items, val, rate) => { const pos = (x) => Math.max(0, Number(val(x
 export function baseline(data, all) {
   const sv = (types) => all.savings.filter((s) => types.includes(s.type));
   const lend = all.lending;   // same set the Home totals use
-  const payout = lend.filter((l) => l.interestType === 'Payout'), comp = lend.filter((l) => l.interestType !== 'Payout');
+  const payout = lend.filter((l) => l.interestType === 'Payout');
   const items = all.stocks.items;
-  const fdItems = all.fds.concat(comp);
+  const fdItems = all.fds;   // fixed deposits only. Money lent out at compounding interest is not an FD: it stays in net worth under Others, with no growth assumed
   const known = ['EPF', 'PPF', 'Chit'];
   const c = {
     cash: { value: all.cashTotal, rate: 0.03 },
     bonds: { value: all.fixed.bondPrincipal, rate: wavg(all.bonds, (x) => x.principal, (x) => x.rate) },
     lending: { value: sum(payout, (x) => x.principal), rate: wavg(payout, (x) => x.principal, (x) => x.rate) },
-    fds: { value: sum(fdItems, (x) => x.value ?? x.principal + (x.accrued || 0)), rate: wavg(fdItems, (x) => x.principal, (x) => x.rate) },
+    fds: { value: sum(fdItems, (x) => x.value ?? x.principal + (x.accrued || 0)), rate: wavg(fdItems, (x) => x.principal, (x) => x.rate) },   // principal plus interest earned so far, as on Fixed income → FDs
     pf: { value: sum(sv(['EPF', 'PPF']), (x) => x.principal), rate: wavg(sv(['EPF', 'PPF']), (x) => x.principal, (x) => x.rate) },
     chits: { value: sum(sv(['Chit']), (x) => x.principal), rate: wavg(sv(['Chit']), (x) => x.principal, (x) => x.rate) },
     lic: { value: sum(all.savings.filter((s) => !known.includes(s.type)), (x) => x.principal), rate: wavg(all.savings.filter((s) => !known.includes(s.type)), (x) => x.principal, (x) => x.rate) },
@@ -86,7 +86,7 @@ export function defaults(data, all) {
   const tax = new Map();
   for (const m of months.slice(-12)) { const a = monthActual(data, m); if (a.tax > 0) tax.set(m.slice(5), (tax.get(m.slice(5)) || 0) + a.tax); }
   const b = baseline(data, all);
-  const map = { 'EPF + RD + FDs': ['fds', 'EPF, RD and FDs'], Gold: ['gold', 'Gold'], Bonds: ['bonds', 'Bonds'], 'Lending Private': ['lending', 'Private lending'], Stocks: ['shares', 'Shares and funds'], Chits: ['chits', 'Chits'], 'Lending Family': ['fds', 'Lending to family'] };
+  const map = { 'EPF + RD + FDs': ['fds', 'EPF, RD and FDs'], Gold: ['gold', 'Gold'], Bonds: ['bonds', 'Bonds'], 'Lending Private': ['lending', 'Private lending'], Stocks: ['shares', 'Shares and funds'], Chits: ['chits', 'Chits'], 'Lending Family': ['other', 'Lending to family'] };
   const invest = ((data.targets && data.targets.investmentPlan) || []).filter((p) => p.capital > 0 && map[p.name]).map((p, i) => ({ id: 'i' + (i + 1), name: map[p.name][1].replace(/^EPF, /, ''), cls: map[p.name][0], monthly: r0(p.capital / 12) }));
   return {
     salary: r0(avg(last3, 'salary')), otherIncome: 0, expenses: r0(avg(last6, 'regular')), emi: r0(avg(last3, 'emi')), pfAdd: r0(avg(last3, 'pf')),
@@ -112,12 +112,13 @@ const rateOf = (cls, a, outlooks) => {
  * Returns rows: { month, salary, other, interest, oneIn, expenses, emi, oneOut, invested, surplus, cash, values, market, assets, liab, nw }.
  */
 export function simulate(start, a, outlooks, months) {
-  const pots = Object.entries(start.values).map(([cls, value]) => ({ cls, value, rate: null }));
+  // every asset class has a pot, even when the starting position (a snapshot) holds nothing in it
+  const pots = CLASSES.map((c) => ({ cls: c.key, value: Number(start.values[c.key]) || 0, rate: null })).concat(Object.keys(start.values).filter((k) => !classOf(k)).map((cls) => ({ cls, value: Number(start.values[cls]) || 0, rate: null })));
   const line = (l) => ({ cls: l.cls, value: Number(l.lump) || 0, rate: l.rate != null && l.rate !== '' ? Number(l.rate) : l.outlook && isMarket(l.cls) ? rateOf(l.cls, { outlook: { [l.cls]: l.outlook } }, outlooks) : null, line: l });
   const linePots = (a.invest || []).map(line);
   const all = pots.concat(linePots);
   const g = a.growth || {};
-  let liab = start.liab || 0;
+  const liab = start.liab || 0;   // loans are carried as they are: the EMI is spending, and no paydown is assumed
   const rows = [];
   const baseYear = a.baseYear != null ? Number(a.baseYear) : Number(start.month.slice(0, 4));
   const hikeM = Number(a.hikeMonth) || 3;   // the month the yearly raise lands: salary, other income and EPF step up together
@@ -156,7 +157,8 @@ export function simulate(start, a, outlooks, months) {
       if (k.kind === 'payout') { const x = p.value * (r / 12) * (1 - (a.tds ?? 0.1)); interest += x; const e = interestBy[p.cls] || (interestBy[p.cls] = { amount: 0, base: 0, rate: r }); e.amount += x; e.base += p.value; }
       else { const was = p.value; p.value *= 1 + f(r); const g1 = p.value - was; growth += g1; if (k.kind === 'accrual') accrual += g1; const e = growthBy[p.cls] || (growthBy[p.cls] = { amount: 0, base: 0, rate: r }); e.amount += g1; e.base += was; }
     }
-    if (adj) { const use = Math.max(-interest, adj); interest += use; interestBy.adj = { amount: use, base: 0, rate: 0 }; }
+    // The Planner's expected figure replaces what the holdings alone give; the difference is kept as one plain line, with the two figures it is made of.
+    if (adj) { const use = Math.max(-interest, adj); interest += use; interestBy.adj = { amount: use, base: 0, rate: 0, typed, holdings: i0 }; }
     const pfAdd = (a.pfAdd || 0) * raise;   // EPF is a share of salary, so it steps up with the raise
     all.find((p) => p.cls === 'pf' && !p.line).value += pfAdd;
     const income = salary + other + interest + oneIn;
@@ -169,16 +171,14 @@ export function simulate(start, a, outlooks, months) {
     const refill = a.refillCash === false || !cashPot ? 0 : Math.max(0, cushion - cashPot.value);
     const avail = weight > 0 ? Math.max(0, left - refill) : 0;
     let invested = 0;
-    const investedBy = {};
-    for (const p of live) { const amt = weight > 0 ? avail * Math.max(0, p.line.monthly || 0) / weight : 0; p.value += amt; invested += amt; if (amt > 0) investedBy[p.cls] = (investedBy[p.cls] || 0) + amt; }
+    const investedBy = {}, investedLines = [];
+    for (const p of live) { const amt = weight > 0 ? avail * Math.max(0, p.line.monthly || 0) / weight : 0; p.value += amt; invested += amt; if (amt > 0) { investedBy[p.cls] = (investedBy[p.cls] || 0) + amt; investedLines.push({ name: p.line.name || classOf(p.cls).label, cls: p.cls, amount: amt }); } }
     const surplus = left - invested;
     cashPot.value += surplus;
-    const loanPaid = a.loanPrincipal ? Math.min(liab, a.loanPrincipal) : 0;
-    liab -= loanPaid;
     const values = {};
     for (const p of all) values[p.cls] = (values[p.cls] || 0) + p.value;
     const assets = sum(Object.values(values));
-    rows.push({ month, items, salary, other, interest, accrual, growth, growthBy, interestBy, investedBy, loanPaid, left, refill, avail, oneIn, expenses, emi, oneOut, invested, pfAdd, surplus, income, out, cash: values.cash, values, market: sum(MARKET, (k) => values[k] || 0), assets, liab, nw: assets - liab });
+    rows.push({ month, items, salary, other, interest, accrual, growth, growthBy, interestBy, investedBy, investedLines, left, refill, avail, oneIn, expenses, emi, oneOut, invested, pfAdd, surplus, income, out, cash: values.cash, values, market: sum(MARKET, (k) => values[k] || 0), assets, liab, nw: assets - liab });
   }
   return rows;
 }

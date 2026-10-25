@@ -3,6 +3,7 @@
 import { h, money, compact, pct, monthLabel, section, table, tapSheet } from '../ui.js';
 import * as P from '../projector.js';
 import { stackedBars } from '../charts.js';
+import { signed } from './proj-shared.js';
 
 const sum = (a, f) => a.reduce((s, x) => s + (Number(f(x)) || 0), 0);
 const SERIES = ['Income', 'Spending', 'Invested'];
@@ -11,16 +12,18 @@ const picks = {};   // which column is open, per chart title, so it survives a r
 /** Add up the rows of one period. */
 function total(rows) {
   return {
-    salary: sum(rows, (r) => r.salary), interest: sum(rows, (r) => r.interest), other: sum(rows, (r) => r.other + r.oneIn), growth: sum(rows, (r) => r.growth || 0), loanPaid: sum(rows, (r) => r.loanPaid || 0), left: sum(rows, (r) => r.left || 0), refill: sum(rows, (r) => r.refill || 0),
+    salary: sum(rows, (r) => r.salary), interest: sum(rows, (r) => r.interest), other: sum(rows, (r) => r.other + r.oneIn), growth: sum(rows, (r) => r.growth || 0), left: sum(rows, (r) => r.left || 0), refill: sum(rows, (r) => r.refill || 0),
     everyday: sum(rows, (r) => r.expenses), emi: sum(rows, (r) => r.emi), oneTime: sum(rows, (r) => r.oneOut), invested: sum(rows, (r) => r.invested),
     pf: sum(rows, (r) => r.pfAdd || 0), income: sum(rows, (r) => r.income), out: sum(rows, (r) => r.out), nw: rows.length ? rows[rows.length - 1].nw : 0, accrual: sum(rows, (r) => r.accrual || 0),
-    items: rows.flatMap((r) => (r.items || []).filter((i) => i.kind !== 'income').map((i) => ({ ...i, month: r.month }))),
+    items: rows.flatMap((r) => (r.items || []).filter((i) => i.kind !== 'income').map((i) => ({ ...i, month: r.month }))), rows,
   };
 }
+/** The bars of one period. Interest, other income and new investments carry their breakup (by category or investment), shown when you hover a bar. */
+const detailOf = (tip, rows) => tip(rows).parts.map((x) => ({ name: x.name, amount: x.amount }));
 const parts = (t) => [
-  [{ name: 'Salary', value: t.salary }, { name: 'Interest paid out', value: t.interest }, { name: 'Other income', value: t.other }],
-  [{ name: 'Everyday expenses', value: t.everyday }, { name: 'Loan EMI', value: t.emi }, { name: 'One-time items', value: t.oneTime }],
-  [{ name: 'New investments', value: t.invested }],
+  [{ name: 'Salary', value: t.salary }, { name: 'Interest income', value: t.interest, detail: detailOf(interestTip, t.rows) }, { name: 'Other income', value: t.other, detail: detailOf(otherTip, t.rows) }],
+  [{ name: 'Everyday expenses', value: t.everyday }, { name: 'Loan EMI', value: t.emi }, { name: 'One-time items', value: t.oneTime, detail: t.items.map((i) => ({ name: i.name, amount: i.amount })) }],
+  [{ name: 'New investments', value: t.invested, detail: detailOf(investedTip, t.rows) }],
 ];
 const money0 = (v) => (v > 0.5 ? money(v) : '–');
 
@@ -44,43 +47,94 @@ function itemNote(x, n) {
   if (x.how === 'market') return `closing ${money(x.close)} − opening ${money(x.base)} − put in ${money(x.put || 0)}${x.took ? ` + sold ${money(x.took)}` : ''}`;
   return x.note || null;
 }
-/** The growth lines of some rows as sheet rows (a real month from its rules, a projected one from opening × rate ÷ 12). */
+/**
+ * The growth lines of some rows as sheet rows (a real month from its rules, a projected one from opening × rate ÷ 12).
+ * A real month whose opening position is only the starting net worth you entered has no known split by asset class, so it shows as one figure (`unsplit`).
+ */
 export function growthRows(rows) {
-  const by = new Map(), memo = new Map();
-  let other = 0, calc = false, hasReal = false;
+  const by = new Map();
+  let other = 0, calc = false, hasReal = false, unsplit = 0;
   for (const r of rows) {
     const real = r.src && r.src !== 'projected';
     if (real && r.growthItems) {
-      hasReal = true; if (r.src === 'actual' && !r.growthRecorded) calc = true;
+      hasReal = true;
+      if (!(r.open && r.open.real)) { unsplit += r.growth || 0; continue; }
+      if (r.src === 'actual' && !r.growthRecorded) calc = true;
       for (const x of r.growthItems) { const e = by.get(x.key) || { ...x, amount: 0, put: 0, took: 0 }; e.amount += x.amount; e.put += x.put || 0; e.took += x.took || 0; e.close = x.close; by.set(x.key, e); }
-      for (const x of r.growthMemo || []) { const e = memo.get(x.key) || { ...x, amount: 0 }; e.amount += x.amount; memo.set(x.key, e); }
       other += r.growthOther || 0;
     } else for (const [k, v] of Object.entries(r.growthBy || {})) { const e = by.get(k) || { key: k, label: P.labelOf(k), amount: 0, base: v.base, close: v.close, rate: v.rate, how: 'rate' }; e.amount += v.amount; e.close = v.close; by.set(k, e); }
   }
   const n = rows.length === 1 ? (rows[0].spanMonths || 1) : 0;
   const list = [...by.values()].filter((x) => Math.abs(x.amount) > 0.5 || (x.how === 'market')).sort((a, b) => b.amount - a.amount);
   const out = list.map((x) => ({ l: x.label || P.labelOf(x.key), v: money(x.amount), tone: tone$(x.amount), n: rows.length === 1 ? itemNote(x, n) : null, warn: calc && hasReal && x.how !== 'projected' ? WARN : null }));
-  if (hasReal && Math.abs(other) > 0.5) out.push({ l: 'Other changes', v: money(other), tone: tone$(other), n: 'what the rules above do not explain: money moved between assets, maturities, anything not recorded', warn: calc ? WARN : null });
-  if (rows.length === 1) for (const x of memo.values()) out.push({ l: x.label + ' (not counted)', v: money(x.amount), memo: true, n: x.note });
-  return { rows: out, total: sum(rows, (r) => r.growth || 0), calc, hasReal };
+  if (Math.abs(unsplit) > 0.5) out.push({ l: 'Month after the starting figure', v: money(unsplit), tone: tone$(unsplit), n: 'how the starting net worth was spread over asset classes is not known, so this month is shown as one figure' });
+  if (hasReal && Math.abs(other) > 0.5) out.push({ l: 'Not explained (difference)', v: money(other), tone: tone$(other), n: 'what saving, EPF and the rules above do not account for: spending paid in cash, the loan balance falling, money moved between assets, a snapshot taken on a different day', warn: calc ? WARN : null });
+  return { rows: out, total: sum(rows, (r) => r.growth || 0), calc, hasReal, unsplit };
 }
 /** Sheet content: where a period's growth came from, class by class. */
 export function growthTip(rows) {
   const g = growthRows(rows), one = rows.length === 1, real = rows.every((r) => r.src && r.src !== 'projected');
+  const onlyTotal = one && g.unsplit !== 0 && !g.rows.some((x) => !x.l.startsWith('Month after'));
   return {
     title: one ? `Growth · ${monthLabel(rows[0].month, true)}` : 'Growth',
-    note: real ? 'A real month. Growth is what net worth gained beyond what was saved and put into EPF, explained class by class: market assets by value change after buying and selling, EPF/PPF by interest credited, deposits and chits by their rate, cash only when no bank interest is recorded. Interest received from bonds and lending, bank interest and dividends are income, so they are not counted here.' : 'A projected month: each class grows by its yearly rate ÷ 12 on its value at the start of the month. EPF and PPF, chits and deposits compound; shares, ETFs, funds and gold follow the market outlook. New money adds from the next month.',
+    note: onlyTotal ? 'This month starts from the net worth you entered on the Planner. How that was spread over asset classes is not known, so the growth is shown as one figure: what net worth gained beyond what was saved and put into EPF. From the next snapshot on it is explained class by class.'
+      : real ? 'A real month. Growth is what net worth gained beyond what was saved and put into EPF, explained class by class: market assets by value change after buying and selling, EPF/PPF by interest credited, FDs, RDs, insurance and chits by their rate, cash only when no bank interest is recorded. Interest from bonds and lending, bank interest and dividends are income, so they are not counted here.'
+        : 'A projected month: each class grows by its yearly rate ÷ 12 on its value at the start of the month. EPF and PPF, FDs, RDs, insurance and chits compound; shares, ETFs, funds and gold follow the market outlook. New money adds from the next month.',
     rows: [...g.rows, { l: 'Total growth', v: money(g.total), b: true, tone: tone$(g.total) }],
     foot: g.calc ? '⚠ means the figure was worked out now. Save the month’s snapshot again to record it.' : 'Interest paid out by bonds and lending is under Interest, not here.',
   };
 }
-/** Sheet content: interest paid out by bonds and lending. */
+const catLabel = (n) => (/bond/i.test(n) ? 'Bonds' : /lend/i.test(n) ? 'Private lending' : n);
+const isReal = (r) => r.src && r.src !== 'projected';
+/** Add up named parts across rows: [{ name, amount, note }]. */
+function gather(rows, each) {
+  const by = new Map();
+  for (const r of rows) each(r, (name, amount, note) => { const e = by.get(name) || { name, amount: 0, note }; e.amount += amount; by.set(name, e); });
+  return [...by.values()];
+}
+/** Sheet content: interest income by category. Real months from the bank's categories, projected ones from the holdings (and the one plain top-up line, when your expected figure differs). */
 function interestTip(rows) {
-  const by = {};
-  for (const r of rows) for (const [k, v] of Object.entries(r.interestBy || {})) { const e = by[k] || (by[k] = { amount: 0, base: 0, rate: v.rate }); e.amount += v.amount; e.base = v.base; e.rate = v.rate; }
+  const one = rows.length === 1, all = rows.every(isReal), none = rows.every((r) => !isReal(r));
+  const parts = gather(rows, (r, add) => {
+    if (isReal(r)) { for (const x of r.interestByCat || []) add(catLabel(x.name), x.amount, `credits in your bank under “${x.name}”`); return; }
+    for (const [k, v] of Object.entries(r.interestBy || {})) {
+      if (k === 'adj') add('Adjustment to your expected figure', v.amount, `your expected interest income on the Planner is ${money(v.typed)} a month; the holdings gave ${money(v.holdings)} when the plan started. The difference is added so the plan starts from your figure (change it on the Planner, Income).`);
+      else add((P.classOf(k) || {}).label || k, v.amount, `${money(v.base)} × ${pct(v.rate, 1)} ÷ 12, less TDS`);
+    }
+  });
+  const total = sum(rows, (r) => r.interest);
   return {
-    title: 'Interest paid out',
-    rows: [...Object.entries(by).filter(([, v]) => v.amount > 0.5).map(([k, v]) => ({ l: (P.classOf(k) || {}).label || k, v: money(v.amount), tone: 'inc', n: rows.length === 1 ? `${money(v.base)} × ${pct(v.rate, 1)} ÷ 12, less TDS` : null })), { l: 'Total', v: money(sum(rows, (r) => r.interest)), b: true, tone: 'inc' }],
+    title: all ? 'Interest received' : none ? 'Interest paid out' : 'Interest income',
+    note: all ? 'Interest credited to your bank in the month, by category.' : 'Bonds and lending pay interest on what is held at the start of the month, after TDS. FDs, EPF, chits and RDs do not pay out: their interest is added to the balance and shows as growth.',
+    parts: parts.filter((x) => Math.abs(x.amount) > 0.5),
+    rows: [...parts.filter((x) => Math.abs(x.amount) > 0.5).map((x) => ({ l: x.name, v: signedIf(x), tone: x.amount >= 0 ? 'inc' : 'exp', n: one ? x.note : null })), { l: 'Total', v: money(total), b: true, tone: 'inc' }],
+  };
+}
+const signedIf = (x) => (x.name.startsWith('Adjustment') ? signed(x.amount) : money(x.amount));
+/** Sheet content: other income, by category. */
+function otherTip(rows) {
+  const one = rows.length === 1, all = rows.every(isReal);
+  const parts = gather(rows, (r, add) => {
+    if (isReal(r)) { for (const x of r.otherByCat || []) add(x.name, x.amount, 'credits in your bank, and dividends from your trade records when the bank does not show them'); return; }
+    if (r.other > 0.5) add('Other income in the plan', r.other, 'set on the Planner (Income), raised with the salary hike');
+    for (const i of (r.items || []).filter((x) => x.kind === 'income')) add(i.name, i.amount, 'one-time income in the plan');
+  });
+  const total = sum(rows, (r) => r.other + (r.oneIn || 0));
+  return { title: all ? 'Other income received' : 'Other income', parts: parts.filter((x) => x.amount > 0.5), rows: [...parts.filter((x) => x.amount > 0.5).map((x) => ({ l: x.name, v: money(x.amount), tone: 'inc', n: one ? x.note : null })), ...(!parts.some((x) => x.amount > 0.5) ? [{ l: 'Nothing', v: money(0) }] : []), { l: 'Total', v: money(total), b: true, tone: 'inc' }] };
+}
+/** Sheet content: where the money invested went, by investment. Real months from your records, projected ones from the plan's lines. */
+export function investedTip(rows) {
+  const one = rows.length === 1, all = rows.every(isReal), none = rows.every((r) => !isReal(r));
+  const parts = gather(rows, (r, add) => {
+    if (isReal(r)) { for (const [k, amt] of Object.entries(r.investedBy || {})) add((P.classOf(k) || {}).label || k, amt, ((r.investedSrc || {})[k] || []).length ? `from ${r.investedSrc[k].join(', ')}` : null); return; }
+    for (const l of r.investedLines || []) add(l.name, l.amount, `goes into ${(P.classOf(l.cls) || {}).label || l.cls}`);
+  });
+  const total = sum(rows, (r) => r.invested);
+  return {
+    title: all ? 'Invested, from your records' : none ? 'Invested, as planned' : 'Invested',
+    note: all ? 'What went into each kind of investment in the month: share and ETF trades, fund purchases, the start date of each bond, deposit and loan, gold purchases and chit entries. Bank entries fill any gap. EPF is counted with salary, not here.' : 'What is left each month after spending, split by the shares of the plan’s new-money lines. EPF is counted with salary, not here.',
+    parts: parts.filter((x) => x.amount > 0.5).sort((x, y) => y.amount - x.amount),
+    rows: [...parts.filter((x) => x.amount > 0.5).sort((x, y) => y.amount - x.amount).map((x) => ({ l: x.name, v: money(x.amount), tone: 'inv', n: one ? x.note : null })), ...(!parts.some((x) => x.amount > 0.5) ? [{ l: all ? 'Nothing recorded this month' : 'Nothing left to invest', v: money(0) }] : []), { l: 'Total invested', v: money(total), b: true, tone: 'inv' }],
   };
 }
 const spendTip = (rows) => {
@@ -109,13 +163,12 @@ export function netWorthTip(r, label = 'Net worth') {
     { l: 'Saved in the bank', v: money(left), b: true, tone: tone$(left), n: more ? 'income − spending, all the months' : 'income − spending (moving money into investments does not change net worth)' },
     { l: 'Added to EPF', v: money(pfIn), tone: 'inv', n: 'goes in before the salary reaches the bank' },
     { group: 'Growth of all assets', tone: tone$(r.growth || 0), v: money(r.growth || 0), rows: growthRows$ },
-    ...(Math.abs(r.loanPaid || 0) > 0.5 ? [{ l: r.loanPaid > 0 ? 'Loan paid down' : 'Loans grew', v: money(r.loanPaid) }] : []),
-    { l: `${label} at the end of the month`, v: money(r.nw), b: true, n: `${money(open)} + saved ${money(left)} + EPF ${money(pfIn)} + growth ${money(r.growth || 0)}${Math.abs(r.loanPaid || 0) > 0.5 ? ` + loan ${money(r.loanPaid)}` : ''}` },
+    { l: `${label} at the end of the month`, v: money(r.nw), b: true, n: `${money(open)} + saved ${money(left)} + EPF ${money(pfIn)} + growth ${money(r.growth || 0)}` },
   ];
   return { title: `${label} · ${monthLabel(r.month, true)}`, note: real ? 'What really happened: income and spending are from your bank entries, the closing figure is the month-end snapshot (or today’s position for the current month), and growth is what the assets gained beyond that. Tap a heading to fold it.' : 'Projected from the plan’s settings. Growth uses each asset class’s own yearly rate ÷ 12: EPF/PPF at their rate, market assets at the plan’s outlook. Tap a heading to fold it.', rows };
 }
 /** Net worth at the start of a run of rows, worked back from its first month. */
-const openingNw = (r) => r.open ? r.open.nw : r.nw - (r.income - r.out) - (r.pfAdd || 0) - (r.growth || 0) - (r.loanPaid || 0);
+const openingNw = (r) => r.open ? r.open.nw : r.nw - (r.income - r.out) - (r.pfAdd || 0) - (r.growth || 0);
 const oneNames = (r) => (r.items || []).filter((i) => i.kind !== 'income').map((i) => `${i.name} ${money(i.amount)}`).join(', ');
 
 /**
@@ -160,18 +213,18 @@ function compareDetail(g, pr) {
   const amt = (row, n) => (row.items || []).filter((i) => i.kind !== 'income' && low(i.name) === low(n)).reduce((a, i) => a + i.amount, 0);
   const L = (label, a, b, o = {}) => ({ label, plan: a, act: b, ...o });
   const lines = [
-    L('Salary', pr.salary, r.salary, { sign: 1, tone: 'inc' }), L('Interest income', pr.interest, r.interest, { sign: 1, tone: 'inc' }), (pr.other + (pr.oneIn || 0) > 0.5 || r.other > 0.5) ? L('Other income', pr.other + (pr.oneIn || 0), r.other + (r.oneIn || 0), { sign: 1, tone: 'inc' }) : null,
+    L('Salary', pr.salary, r.salary, { sign: 1, tone: 'inc' }), L('Interest income', pr.interest, r.interest, { sign: 1, tone: 'inc', pop: interestTip }), (pr.other + (pr.oneIn || 0) > 0.5 || r.other + (r.oneIn || 0) > 0.5) ? L('Other income', pr.other + (pr.oneIn || 0), r.other + (r.oneIn || 0), { sign: 1, tone: 'inc', pop: otherTip }) : null,
     L('Total income', pr.income, r.income, { sign: 1, b: true, tone: 'inc' }),
     L('Everyday expenses', pr.expenses, r.expenses, { sign: -1, tone: 'exp' }), L('Loan EMI', pr.emi, r.emi, { sign: -1, tone: 'exp' }),
     ...names.map((n) => L('One-time: ' + n, amt(pr, n), amt(r, n), { sign: -1, tone: 'exp' })),
     (pr.oneOut > 0.5 || r.oneOut > 0.5) && names.length > 1 ? L('One-time, total', pr.oneOut, r.oneOut, { sign: -1, b: true, tone: 'exp' }) : null,
     L('Saved in the bank', pr.left, r.left, { sign: 1, b: true }),
-    L('New investments', pr.invested, r.invested, { sign: 0, tone: 'inv' }), L('Added to EPF', pr.pfAdd || 0, r.pfAdd || 0, { sign: 1, tone: 'inv' }),
+    L('New investments', pr.invested, r.invested, { sign: 0, tone: 'inv', pop: investedTip }), L('Added to EPF', pr.pfAdd || 0, r.pfAdd || 0, { sign: 1, tone: 'inv' }),
     L('Growth of assets', pr.growth || 0, r.growth || 0, { sign: 1, tip: true }),
     L('Net worth at month end', pr.nw, r.nw, { sign: 1, b: true, nw: true }),
   ].filter(Boolean);
   const diffNode = (x) => { const d = x.act - x.plan; if (Math.abs(d) < 0.5) return h('span', { class: 'muted' }, '–'); const good = x.sign === 0 ? 0 : d * x.sign; return h('span', { class: good > 0 ? 'pos' : good < 0 ? 'neg' : '' }, (d > 0 ? '+' : '−') + money(Math.abs(d))); };
-  const cell = (row, x, v) => (x.tip ? tipped([row], growthTip, h('span', null, money(v), row === r ? calcMark(r) : null)) : x.nw ? tapSheet(h('span', null, money(v)), () => netWorthTip(row)) : x.tone ? h('span', { class: x.tone }, money(v)) : money(v));
+  const cell = (row, x, v) => (x.tip ? tipped([row], growthTip, h('span', null, money(v), row === r ? calcMark(r) : null)) : x.nw ? tapSheet(h('span', null, money(v)), () => netWorthTip(row)) : x.pop && Math.abs(v) > 0.5 ? tipped([row], x.pop, h('span', { class: x.tone }, money(v))) : x.tone ? h('span', { class: x.tone }, money(v)) : money(v));
   return h('div', { class: 'card inner', style: { marginTop: '10px' } }, h('h4', { style: { margin: '0 0 6px' } }, g.title + (real ? '' : ' · projected')),
     table([
       { label: 'Item', host: true, render: (x) => (x.b ? h('b', null, x.label) : x.label) },
@@ -185,24 +238,24 @@ function compareDetail(g, pr) {
 function monthDetail(g, planBy = null) {
   if (planBy && g.rows.length === 1 && planBy.get(g.rows[0].month)) return compareDetail(g, planBy.get(g.rows[0].month));
   const t = g.t, r = g.rows[0], real = r.src && r.src !== 'projected';
-  const line = (label, val, sub, tone) => ({ label, val, sub, tone });
+  const line = (label, val, sub, tone) => ({ label, val: typeof val === 'function' ? val : () => val, sub, tone });   // val is built on every draw: one element cannot sit in the table and in the phone card at once
   const one = (r.items || []).filter((i) => i.kind !== 'income');
   const lines = [
-    line('Salary', cls('inc', money(t.salary)), real ? 'salary credited in your bank' : 'today’s salary, raised in the raise month'), line('Interest paid out', real ? cls('inc', money(t.interest)) : tipped([r], interestTip, cls('inc', money(t.interest))), real ? 'interest credits in your bank' : 'bonds and lending after TDS (hover for each)'), t.other > 0.5 ? line('Other income and one-time income', cls('inc', money(t.other))) : null,
-    line('Total income', cls('inc', money(t.income)), null, 'b'),
-    line('Everyday expenses', cls('exp', '−' + money(t.everyday)), real ? 'everyday spending in your bank, without EMI and one-time bills' : 'today’s monthly spending, grown by the yearly rise'), t.emi > 0.5 ? line('Loan EMI', cls('exp', '−' + money(t.emi)), 'stays the same') : null,
-    ...one.map((i) => line('One-time: ' + i.name, cls('exp', '−' + money(i.amount)), 'yearly item, grown by the one-time rise')),
-    line('Left after spending', cls(t.left >= 0 ? 'inc' : 'exp', (t.left < 0 ? '−' : '') + money(Math.abs(t.left))), 'income − spending', 'b'),
+    line('Salary', () => cls('inc', money(t.salary)), real ? 'salary credited in your bank' : 'today’s salary, raised in the raise month'), line('Interest income', () => tipped([r], interestTip, cls('inc', money(t.interest))), real ? 'interest credits in your bank (tap for each)' : 'bonds and lending after TDS (tap for each)'), t.other > 0.5 ? line('Other income and one-time income', () => tipped([r], otherTip, cls('inc', money(t.other))), 'tap for the breakup') : null,
+    line('Total income', () => cls('inc', money(t.income)), null, 'b'),
+    line('Everyday expenses', () => cls('exp', '−' + money(t.everyday)), real ? 'everyday spending in your bank, without EMI and one-time bills' : 'today’s monthly spending, grown by the yearly rise'), t.emi > 0.5 ? line('Loan EMI', () => cls('exp', '−' + money(t.emi)), 'stays the same') : null,
+    ...one.map((i) => line('One-time: ' + i.name, () => cls('exp', '−' + money(i.amount)), 'yearly item, grown by the one-time rise')),
+    line('Left after spending', () => cls(t.left >= 0 ? 'inc' : 'exp', (t.left < 0 ? '−' : '') + money(Math.abs(t.left))), 'income − spending', 'b'),
     t.refill > 0.5 ? line('Kept back to rebuild cash', money(Math.min(t.refill, Math.max(0, t.left))), 'cash is topped up to what you hold today before investing') : null,
-    line('New investments', cls('inv', '−' + money(t.invested)), real ? 'what went into investments, from your records' : t.invested > 0.5 ? 'what is left, split by the plan shares' : 'nothing left to invest this month'),
+    line('New investments', () => tipped([r], investedTip, cls('inv', '−' + money(t.invested))), real ? 'what went into investments, from your records (tap for each)' : t.invested > 0.5 ? 'what is left, split by the plan shares (tap for each)' : 'nothing left to invest this month'),
     line('Left in cash', money(r.surplus), 'left after spending − investments', 'b'),
-    r.pfAdd > 0.5 ? line('Added to EPF', cls('inc', money(r.pfAdd)), 'goes in before salary reaches the bank') : null,
-    line('Growth added to balances', tipped([r], growthTip, h('span', null, money(r.growth || 0), calcMark(r))), real ? 'what the assets gained beyond saving and EPF (tap for each class)' : 'market, deposits, chits, EPF, cash interest (tap for each)'),
+    r.pfAdd > 0.5 ? line('Added to EPF', () => cls('inc', money(r.pfAdd)), 'goes in before salary reaches the bank') : null,
+    line('Growth added to balances', () => tipped([r], growthTip, h('span', null, money(r.growth || 0), calcMark(r))), real ? 'what the assets gained beyond saving and EPF (tap for each class)' : 'market, deposits, chits, EPF, cash interest (tap for each)'),
     line('Net worth at the month end', money(r.nw), null, 'b'),
   ].filter(Boolean);
   return h('div', { class: 'card inner', style: { marginTop: '10px' } }, h('h4', { style: { margin: '0 0 6px' } }, g.title),
-    table([{ label: 'Item', host: true, render: (x) => h('span', null, x.tone ? h('b', null, x.label) : x.label, x.sub ? h('small', { class: 'muted', style: { display: 'block' } }, x.sub) : null) }, { label: 'Amount', cls: 'r', render: (x) => (x.tone ? h('b', null, x.val) : x.val) }], lines, { m: { key: 'flow-lines', head: 'Item', views: [['Amount']] } }),
-    h('p', { class: 'reco' }, `Net worth moves by income − spending + EPF + growth${t.loanPaid > 0.5 ? ' + loan paid down' : ''}. New investing moves money from cash into assets and does not change it.`));
+    table([{ label: 'Item', host: true, render: (x) => h('span', null, x.tone ? h('b', null, x.label) : x.label, x.sub ? h('small', { class: 'muted', style: { display: 'block' } }, x.sub) : null) }, { label: 'Amount', cls: 'r', render: (x) => (x.tone ? h('b', null, x.val()) : x.val()) }], lines, { m: { key: 'flow-lines', head: 'Item', views: [['Amount']] } }),
+    h('p', { class: 'reco' }, `Net worth moves by income − spending + EPF + growth. New investing moves money from cash into assets and does not change it.`));
 }
 
 /** The month rows of a period, with every part that moves net worth, and a line adding them up. */
@@ -213,19 +266,18 @@ function monthsTable(rows) {
     { label: 'Month', host: true, render: (r) => (r.src === 'projected' ? h('i', null, monthLabel(r.month, true)) : r.src === 'now' ? h('span', null, monthLabel(r.month, true), h('small', { class: 'now-tag' }, ' now')) : monthLabel(r.month, true)) },
     { label: 'Salary + EPF', cls: 'r', mob: 'under', mlabel: 'salary ', render: (r) => tipped([r], salaryTip, cls('inc', money(r.salary + (r.pfAdd || 0)))), total: () => tipped(rows, salaryTip, cls('inc', money(t.salary + t.pf))) },
     { label: 'Interest', cls: 'r', mob: 'hide', render: (r) => tipped([r], interestTip, inc(r.interest)), total: () => tipped(rows, interestTip, inc(t.interest)) },
-    any((r) => r.other + r.oneIn) ? { label: 'Other income', cls: 'r', mob: 'hide', render: (r) => inc(r.other + r.oneIn), total: () => inc(t.other) } : null,
+    any((r) => r.other + r.oneIn) ? { label: 'Other income', cls: 'r', mob: 'hide', render: (r) => tipped([r], otherTip, inc(r.other + r.oneIn)), total: () => tipped(rows, otherTip, inc(t.other)) } : null,
     { label: 'Spending', cls: 'r', mob: 'under', mlabel: 'spending ', render: (r) => tipped([r], spendTip, exp(r.expenses + r.emi + r.oneOut)), total: () => tipped(rows, spendTip, exp(t.everyday + t.emi + t.oneTime)) },
-    { label: 'Invested', cls: 'r', mob: 'under', mlabel: 'invested ', render: (r) => inv(r.invested), total: () => inv(t.invested) },
+    { label: 'Invested', cls: 'r', mob: 'under', mlabel: 'invested ', render: (r) => tipped([r], investedTip, inv(r.invested)), total: () => tipped(rows, investedTip, inv(t.invested)) },
     { label: 'Growth', cls: 'r', mob: 'hide', render: (r) => tipped([r], growthTip, h('span', null, money(r.growth || 0), calcMark(r))), total: () => tipped(rows, growthTip, h('span', null, money(t.growth), rows.some((r) => needsCalc(r)) ? calcAlert() : null)) },
-    any((r) => r.loanPaid) ? { label: 'Loan paid', cls: 'r', mob: 'hide', render: (r) => inc(r.loanPaid), total: () => inc(t.loanPaid) } : null,
     { label: 'Net worth', cls: 'r', mob: 'under', mlabel: 'net worth ', render: (r) => tapSheet(h('span', null, money(r.nw)), () => netWorthTip(r)), total: () => money(t.nw) },
   ].filter(Boolean);
   const labels = cols.map((c) => c.label), has = (l) => labels.includes(l);
-  const views = [['Net worth', 'Salary + EPF'], ['Spending', 'Invested'], ...(has('Interest') ? [['Interest', 'Growth']] : []), ...(has('Other income') ? [['Other income']] : []), ...(has('Loan paid') ? [['Loan paid']] : [])];
+  const views = [['Net worth', 'Salary + EPF'], ['Spending', 'Invested'], ...(has('Interest') ? [['Interest', 'Growth']] : []), ...(has('Other income') ? [['Other income']] : [])];
   const anyProj = rows.some((r) => r.src === 'projected');
   return h('div', null, table(cols, rows, { footer: { label: rows.length > 1 ? 'Total' : '' }, rowClass: (r) => (r.src === 'projected' ? 'proj-row' : r.src === 'now' ? 'cur-row' : ''), m: { key: 'flow-months', head: 'Month', views } }),
     anyProj ? h('p', { class: 'note' }, 'Italic months are projected from the plan’s settings. Plain months are what really happened, with net worth from the month-end snapshot (the month marked now is the month so far).') : null,
-    h('p', { class: 'reco' }, `Net worth ${money(start)} at the start + income ${money(t.income)} − spending ${money(t.out)} + EPF ${money(t.pf)} + growth ${money(t.growth)}${t.loanPaid > 0.5 ? ` + loan paid down ${money(t.loanPaid)}` : ''} = ${money(t.nw)}. Invested ${money(t.invested)} is not in that sum: it only moves cash into assets.`));
+    h('p', { class: 'reco' }, `Net worth ${money(start)} at the start + income ${money(t.income)} − spending ${money(t.out)} + EPF ${money(t.pf)} + growth ${money(t.growth)} = ${money(t.nw)}. Invested ${money(t.invested)} is not in that sum: it only moves cash into assets.`));
 }
 
 /**

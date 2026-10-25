@@ -19,7 +19,7 @@ export function render(root, plan) {
   const by = A.investedByMonth(S.data);
   const cur = String(S.all.asOf).slice(0, 7);
   const year = String(plan.year);
-  const months = A.yearMonths(plan.year);
+  const months = A.yearMonths(plan.year).filter((m) => m > plan.start.month);   // only the months the plan covers: it starts after its starting month end
   if (!selMonth || !months.includes(selMonth)) selMonth = months.includes(cur) ? cur : months[months.length - 1];
   const years = [...new Set([year, ...A.yearsWithData(by).filter((y) => y >= String(Number(year) - 3) && y <= year)])].sort().reverse();
   if (!selYear || !years.includes(selYear)) selYear = year;
@@ -43,10 +43,10 @@ export function render(root, plan) {
         { label: 'Taken from', mob: 'hide', get: (r) => r.src.join(', ') },
       ], rows, { footer: { label: 'Total' }, m: { key: 'actual-month', head: 'Goes into', sub: ['Taken from'], views: [['Actual', 'Planned'], ['Difference']] }, empty: 'Nothing planned or invested this month.' }));
   } else {
-    const ms = A.yearMonths(Number(selYear));
     const planYear = selYear === year;
+    const ms = A.yearMonths(Number(selYear)).filter((m) => !planYear || m > plan.start.month);
     const upto = (m) => m <= cur;
-    const rows = classes(ms).sort(order).map((k) => ({ k, label: P.classOf(k).label, planned: planYear ? ms.reduce((s, m) => s + plannedFor(plan, m, k), 0) : null, plannedSoFar: planYear ? ms.filter(upto).reduce((s, m) => s + plannedFor(plan, m, k), 0) : null, actual: A.yearTotal(by, selYear, k), src: A.sourcesOf(by, ms, k) }));
+    const rows = classes(ms).sort(order).map((k) => ({ k, label: P.classOf(k).label, planned: planYear ? ms.reduce((s, m) => s + plannedFor(plan, m, k), 0) : null, plannedSoFar: planYear ? ms.filter(upto).reduce((s, m) => s + plannedFor(plan, m, k), 0) : null, actual: ms.reduce((t, m) => t + A.actualOf(by, m, k), 0), src: A.sourcesOf(by, ms, k) }));   // the plan's months only, so planned and actual cover the same months
     const tp = rows.reduce((s, r) => s + (r.planned || 0), 0), tps = rows.reduce((s, r) => s + (r.plannedSoFar || 0), 0), ta = rows.reduce((s, r) => s + r.actual, 0);
     const groups = ms.map((m) => ({ label: monthLabel(m).slice(0, 3), values: [classes(ms).filter((k) => !SKIP.has(k)).reduce((s, k) => s + (planYear ? plannedFor(plan, m, k) : 0), 0), classes(ms).reduce((s, k) => s + A.actualOf(by, m, k), 0)] }));
     body = h('div', null,

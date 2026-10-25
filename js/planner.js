@@ -2,7 +2,8 @@
 //
 // One plan per calendar year in data.projector.years['2027'] (a "version 2" plan, v: 2):
 //   a        the working assumptions, edited on the Planner tab
-//   initial  net worth at the start of the year (January) and how it is spread over asset classes
+//   initial  net worth at the end of the plan's starting month (initial.asOfMonth; December before the year when absent) and how it is spread over asset classes.
+//            The plan runs from the month after it to December, so a plan made in October starts from September's end and projects October to December.
 //   live     null until the plan is made live, then a frozen copy { rev, at, a, initial } that every other tab uses
 //   revisions[]  one record per commit: what changed, when, and the key figures at that time
 // Only optional fields are added, so older files and older records still work. Plans of the earlier version (no v) are left alone and ignored.
@@ -11,9 +12,9 @@ import { monthActual } from './yearplan.js';
 import { investedByMonth } from './actuals.js';
 import { monthlySells } from './buys.js';
 import * as G from './growth.js';
-import { oneTimeSet } from './categories.js';
+import { oneTimeSet, kindOf } from './categories.js';
 import { isInterestCategory } from './insights.js';
-import { ledgerMonths, monthKey, monthLedger, monthCashflow } from './calc.js';
+import { ledgerMonths, monthKey, monthLedger, monthCashflow, addMonths } from './calc.js';
 
 const sum = (a, f = (x) => x) => a.reduce((s, x) => s + (Number(f(x)) || 0), 0);
 const r0 = (n) => Math.round(n);
@@ -53,7 +54,37 @@ export function initialFrom(data, all, net = null) {
 }
 export function setInitialNet(plan, net) {
   const liab = plan.initial.liab, assets = net + liab;
-  plan.initial = { ...plan.initial, net: r0(net), assets: r0(assets), classes: scaleClasses(plan.initial.classes, assets) };
+  plan.initial = { ...plan.initial, net: r0(net), assets: r0(assets), classes: scaleClasses(plan.initial.classes, assets), classesReal: false };
+}
+
+// ---------- the starting point: net worth at the end of a month ----------
+/**
+ * The month end a plan starts from. A plan for this year starts from the end of last month (made in October: September's end, so October to December are projected);
+ * a plan for a later year starts from December. The owner can pick an earlier month end of the plan's year.
+ */
+export function defaultAnchor(all, year) {
+  const cy = Number(String(all.asOf).slice(0, 4));
+  return Number(year) === cy ? addMonths(monthKey(all.asOf) + '-01', -1).slice(0, 7) : prevDec(year);
+}
+/** Month ends a plan can start from: December before the year up to the last month that has ended (never later than November of the plan year). */
+export function anchorOptions(all, year) {
+  const first = prevDec(year), last = defaultAnchor(all, year), cap = `${year}-11`, end = last > cap ? cap : last, out = [];
+  for (let m = first; m <= end; m = addMonths(m + '-01', 1).slice(0, 7)) out.push(m);
+  return out.length ? out : [first];
+}
+/** What to suggest as the net worth at the end of `month`: its saved snapshot, else (for the December before) the previous year's plan taken to its end, else today's figure, a rough guide only. */
+export function suggestStart(data, all, year, month, oc = P.cfg(data).outlooks) {
+  const snap = P.cfg(data).snapshots.find((x) => x.month === month);
+  if (snap) return { net: snap.net, source: 'snapshot', snap };
+  const prev = month === prevDec(year) ? bestPlan(data, Number(year) - 1) : null;
+  if (prev) { try { const t = yearTrack(data, all, prev, oc); if (t.rows.length) return { net: r0(t.rows[t.rows.length - 1].nw), source: 'plan', plan: prev.year }; } catch (e) { /* fall through to today's figure */ } }
+  return { net: r0(P.baseline(data, all).net), source: 'today' };
+}
+/** The plan's starting position: net worth at the end of `month`. The split over asset classes is a real one only when it comes from that month's snapshot; else today's mix scaled to the net worth. */
+export function startAt(data, all, month, net = null, snap = null) {
+  const b = P.baseline(data, all), liab = snap ? snap.loans || 0 : b.liab, n = net == null ? b.net : net, assets = n + liab;
+  const real = !!(snap && snap.classes && !snap.classesEstimated && Math.round(snap.net) === Math.round(n));
+  return { net: r0(n), assets: r0(assets), liab: r0(liab), classes: real ? { ...snap.classes } : scaleClasses(snap && snap.classes ? snap.classes : b.values, assets), date: snap ? snap.date : b.date, asOfMonth: month, classesReal: real };
 }
 
 // ---------- what a new plan starts with ----------
@@ -78,7 +109,7 @@ export function defaultsFor(data, all) {
 }
 
 /** A new draft plan. Where the earlier version had settings for the same year, they are the starting point, so nothing has to be typed again. */
-export function freshPlan(data, all, year) {
+export function freshPlan(data, all, year, start = null) {
   const c = P.cfg(data), ahead = c.ahead || {}, y = String(year);
   const old = c.years[y] && !isV2(c.years[y]) ? c.years[y] : null, oa = (old && old.a) || {};
   const d = defaultsFor(data, all);
@@ -87,20 +118,22 @@ export function freshPlan(data, all, year) {
   const oneOffs = items(oa.oneOffs && oa.oneOffs.length ? oa.oneOffs : ahead.oneOffs && ahead.oneOffs.length ? ahead.oneOffs : d.oneOffs);
   const invest = (oa.invest && oa.invest.length ? oa.invest : d.invest).map((l, i) => ({ ...l, name: String(l.name || '').replace(/^EPF,\s*/, ''), id: l.id || 'i' + (i + 1), from: inYear(l.from) ? l.from || '' : '', to: inYear(l.to) ? l.to || '' : '' }));
   const a = {
-    salary: d.salary, pfAdd: d.pfAdd, salaryMonth: d.salaryMonth, otherIncome: 0, interestMonthly: d.interestMonthly,
+    salary: d.salary, pfAdd: d.pfAdd, salaryMonth: d.salaryMonth, otherIncome: 0, interestMonthly: null,   // null: interest is worked out from the bonds and lending alone (their amounts × rates, less TDS); a figure typed on the Planner replaces it
     expenses: d.expenses, emi: d.emi, tds: d.tds,
     growth: { salary: ahead.growthSalary ?? 0.06, expenses: ahead.growthExpenses ?? 0.06, oneTime: ahead.growthOneTime ?? ahead.growthExpenses ?? 0.06 },
     hikeMonth: ahead.hikeMonth ?? 4,
     oneOffs, invest, rates: { ...d.rates, ...(oa.rates || {}) }, outlook: clone(oa.outlook || ahead.outlook || d.outlook),
   };
-  return { id: y, year: Number(year), v: 2, a, initial: initialFrom(data, all), live: null, revisions: [], createdAt: new Date().toISOString() };
+  const month = start && start.month ? start.month : defaultAnchor(all, year), sug = suggestStart(data, all, year, month);
+  const initial = startAt(data, all, month, start && start.net != null ? start.net : sug.net, sug.snap || null);
+  return { id: y, year: Number(year), v: 2, a, initial, live: null, revisions: [], createdAt: new Date().toISOString() };
 }
 
 // ---------- plans as the projection sees them ----------
 /** Assumptions in the shape simulate() reads. */
 export function simAssumptions(a, year) {
   const g = a.growth || {};
-  return { ...clone(a), baseYear: Number(year), tds: a.tds ?? 0.1, hikeMonth: Number(a.hikeMonth) || 4, loanPrincipal: 0,
+  return { ...clone(a), baseYear: Number(year), tds: a.tds ?? 0.1, hikeMonth: Number(a.hikeMonth) || 4,
     growth: { salary: g.salary || 0, expenses: g.expenses || 0, oneTime: g.oneTime ?? g.expenses ?? 0, invest: 0 }, outlook: { ...(a.outlook || {}) } };
 }
 /** which: 'live' (the committed copy), 'working' (what is being edited) or a revision number (its saved settings). Null when there is no such copy. */
@@ -111,14 +144,18 @@ export function effective(plan, which = 'live') {
   else if (typeof which === 'number') { const r = (plan.revisions || []).find((x) => x.rev === which); src = r && r.state ? { a: r.state.a, initial: r.state.initial, rev: r.rev, at: r.at } : null; }
   else src = { a: plan.a, initial: plan.initial, rev: null, at: null };
   if (!src) return null;
-  const ini = src.initial, start = { values: ini.classes, liab: ini.liab, month: prevDec(plan.year) };
+  const ini = src.initial, start = { values: ini.classes, liab: ini.liab, month: ini.asOfMonth || prevDec(plan.year) };   // the month end the plan starts from
   return { id: plan.id, year: plan.year, which, rev: src.rev, at: src.at, a: simAssumptions(src.a, plan.year), raw: src.a, initial: ini, start, baseline: { month: start.month, net: ini.net, assets: ini.assets, loans: ini.liab, classes: ini.classes, date: ini.date }, stored: plan };
 }
 export const livePlan = (data, year) => effective(P.cfg(data).years[String(year)], 'live');
 /** The plan to show for a year when no version is picked: the live one, else the draft. Null when there is no plan. */
 export const bestPlan = (data, year) => { const p = P.cfg(data).years[String(year)]; return isV2(p) ? effective(p, 'live') || effective(p, 'working') : null; };
-/** A plan can be deleted until a month-end snapshot has been taken for its year. */
-export const canDeletePlan = (data, year) => { const p = P.cfg(data).years[String(year)]; return isV2(p) && !P.cfg(data).snapshots.some((s) => s.month.slice(0, 4) === String(year)); };
+/** A plan can be deleted until a month-end snapshot has been taken for one of its months (snapshots from before its starting month are not part of it). */
+export const canDeletePlan = (data, year) => {
+  const p = P.cfg(data).years[String(year)]; if (!isV2(p)) return false;
+  const from = (p.initial && p.initial.asOfMonth) || prevDec(year);
+  return !P.cfg(data).snapshots.some((s) => s.month.slice(0, 4) === String(year) && s.month > from);
+};
 /**
  * Delete the latest revision. The plan goes back to the one before (its settings become both the live and the working copy). With only one revision the plan
  * goes back to a draft with the settings it has now. Returns what happened, for the message. Call inside mutate().
@@ -134,12 +171,12 @@ export function deleteLatestRevision(plan) {
   return { gone: gone.rev, back: prev.rev, kept: true };
 }
 /** The plan every other tab uses for a year, or null. */
-export const planPath = (p, oc) => P.simulate(p.start, p.a, oc, 12);
+export const planPath = (p, oc) => P.simulate(p.start, p.a, oc, P.monthsTo(p.start.month, p.year));   // from the month after the start to December
 export const planTarget = (p, oc) => { const r = planPath(p, oc); return r.length ? r[r.length - 1].nw : p.initial.net; };
 /** What the plan assumes when there is no live plan: the older defaults, only for screens that still need a number (Home's investing card, What-if). */
 export function fallbackA(data, all) {
   const d = P.defaults(data, all), ahead = P.cfg(data).ahead || {};
-  return { ...d, growth: { salary: ahead.growthSalary ?? 0.06, expenses: ahead.growthExpenses ?? 0.06, oneTime: ahead.growthOneTime ?? ahead.growthExpenses ?? 0.06, invest: 0 }, hikeMonth: ahead.hikeMonth ?? 4, loanPrincipal: 0 };
+  return { ...d, growth: { salary: ahead.growthSalary ?? 0.06, expenses: ahead.growthExpenses ?? 0.06, oneTime: ahead.growthOneTime ?? ahead.growthExpenses ?? 0.06, invest: 0 }, hikeMonth: ahead.hikeMonth ?? 4 };
 }
 
 export const isDirty = (plan) => !!(plan && plan.live && stable({ a: plan.a, initial: plan.initial }) !== stable({ a: plan.live.a, initial: plan.live.initial }));
@@ -154,7 +191,7 @@ const FIELDS = [
   ['Income', 'Salary and EPF hike', (s) => (s.a.growth && s.a.growth.salary) || 0, 'pct'], ['Income', 'Hike month', (s) => MONTH_NAMES[(Number(s.a.hikeMonth) || 4) - 1], 'text'],
   ['Income', 'Salary figures are for', (s) => s.a.salaryMonth || '', 'ym'],
   ['Income', 'Expected interest income (monthly)', (s) => s.a.interestMonthly ?? 0, 'money'], ['Income', 'Other income (monthly)', (s) => s.a.otherIncome || 0, 'money'],
-  ['Income', 'Net worth at the start of the year', (s) => s.initial.net, 'money'],
+  ['Income', 'Net worth at the start', (s) => s.initial.net, 'money'], ['Income', 'Start is the end of', (s) => s.initial.asOfMonth || '', 'ym'],
   ['Expenses', 'Expected expenses (monthly)', (s) => s.a.expenses || 0, 'money'], ['Expenses', 'Expenses rise each year', (s) => (s.a.growth && s.a.growth.expenses) || 0, 'pct'],
   ['Expenses', 'Loan EMI', (s) => s.a.emi || 0, 'money'],
 ];
@@ -218,7 +255,7 @@ export function rateFn(data, all, plan, oc) {
   };
 }
 /** What goes into a snapshot about its growth: the rules' figures, kept so they do not shift later. */
-const growthRecord = (row, from) => ({ v: 1, from, months: row.spanMonths, items: row.growthItems, memo: row.growthMemo, other: r0(row.growthOther), total: r0(row.growth) });
+const growthRecord = (row, from) => ({ v: 1, from, months: row.spanMonths, items: row.growthItems, memo: row.growthMemo, other: r0(row.growthOther), total: r0(row.growth), real: !!(row.open && row.open.real) });
 
 /** One month as it really was, in the shape of a projected month, so the same tables and charts can show both. `prev` is the position the month started from. */
 function actualRow(data, mo, nw, classes, liab, prev, by, ctx = {}) {
@@ -228,6 +265,12 @@ function actualRow(data, mo, nw, classes, liab, prev, by, ctx = {}) {
   const months = G.spanOf(prev.month, mo);                       // normally just this month; more when an earlier month has no snapshot
   const fm = G.flowsOf(data, [mo], opt), fl = months.length === 1 ? fm : G.flowsOf(data, months, opt);
   const interest = sum(led.filter((e) => e.credit > 0 && isInterestCategory(e.category)), (e) => e.credit);
+  // where the interest and the other income came from, by bank category (aggregated), for the popups
+  const kind = kindOf(data), byCat = (f) => { const m = new Map(); for (const e of led) if (e.credit > 0 && f(e)) m.set(e.category || 'Other', (m.get(e.category || 'Other') || 0) + e.credit); return m; };
+  const interestByCat = byCat((e) => isInterestCategory(e.category));
+  const otherByCat = byCat((e) => kind(e.category) === 'income' && (e.category || '').toLowerCase() !== 'salary' && !isInterestCategory(e.category));
+  if (fm.divExtra > 0.5) otherByCat.set('Dividends in your trade records', fm.divExtra);
+  const list = (m) => [...m.entries()].map(([name, amount]) => ({ name, amount })).sort((x, y) => y.amount - x.amount);
   const other = Math.max(0, a.income - a.salary - interest) + fm.divExtra;   // dividends in your trade records, when no bank entry shows them, are income too
   const oneOut = a.oneTime + a.tax, out = a.expenses + a.emi + a.tax, income = a.salary + other + interest;
   const items = new Map();
@@ -237,65 +280,64 @@ function actualRow(data, mo, nw, classes, liab, prev, by, ctx = {}) {
   const left = income - out;
   const leftSpan = months.length === 1 ? left : sum(months, (m) => monthActual(data, m).left + G.flowsOf(data, [m], opt).divExtra);
   const investedBy = Object.fromEntries(Object.entries(inv).filter(([k]) => k !== 'pf').map(([k, x]) => [k, x.amount]));
-  const assets = sum(Object.values(classes)), prevAssets = sum(Object.values(prev.values));
-  const growth = assets - prevAssets - leftSpan - fl.epfIn;   // whatever the net worth gained beyond what was saved and put into EPF
+  const investedSrc = Object.fromEntries(Object.entries(inv).filter(([k]) => k !== 'pf').map(([k, x]) => [k, [...x.src]]));
+  const assets = sum(Object.values(classes));
+  const growth = (nw - prev.nw) - leftSpan - fl.epfIn;   // whatever net worth gained beyond what was saved and put into EPF (loans are not tracked separately: a falling loan balance is part of this)
   let ex, recorded = false;
   const st = ctx.stored;
   if (st && st.v === 1 && st.from === prev.month) { ex = { items: st.items || [], memo: st.memo || [], other: growth - sum(st.items || [], (x) => x.amount) }; recorded = true; }
   else ex = G.explainGrowth({ months, open: prev.values, close: classes, openReal: !!prev.real, closeReal: ctx.closeReal !== false, total: growth, flows: fl, rate: ctx.rate || (() => 0) });
   const growthBy = {};
   for (const x of ex.items) growthBy[x.key] = { amount: x.amount, base: x.base, close: x.close, flow: x.flow || 0, rate: x.how === 'rate' ? x.rate : null, how: x.how };
-  const loanPaid = (prev.liab || 0) - liab;   // negative when loans grew
   return {
     month: mo, src: 'actual', has: a.has, salary: a.salary, other, interest, accrual: 0, growth, growthBy, growthItems: ex.items, growthMemo: ex.memo, growthOther: ex.other, growthRecorded: recorded, spanMonths: months.length, leftSpan, pfSpan: fl.epfIn,
-    dividends: fm.dividends, bankInterest: fm.bankInterest, pfInterest: fm.pfInterest, interestBy: {}, open: { nw: prev.nw, values: prev.values, liab: prev.liab, real: !!prev.real },
-    investedBy, loanPaid, left, refill: 0, avail: 0, oneIn: 0,
+    dividends: fm.dividends, bankInterest: fm.bankInterest, pfInterest: fm.pfInterest, interestBy: {}, interestByCat: list(interestByCat), otherByCat: list(otherByCat), open: { nw: prev.nw, values: prev.values, liab: prev.liab, real: !!prev.real },
+    investedBy, investedSrc, left, refill: 0, avail: 0, oneIn: 0,
     expenses: a.regular, emi: a.emi, oneOut, items: [...items.entries()].map(([name, amount]) => ({ name, amount, kind: 'expense' })), invested, pfAdd: fm.epfIn, surplus: left - invested, income, out,
     cash: classes.cash || 0, values: classes, market: sum(P.MARKET, (k) => classes[k] || 0), assets, liab, nw,
   };
 }
 
 /**
- * Walk the plan's year month by month. A month is "actual" when it has a month-end snapshot, "now" for the current month (today's position, the month is still running),
- * and "projected" otherwise: carried forward from the latest actual position with the plan's settings. `outlook` (optional) replaces the plan's market outlook for the
- * projected months only, to see how the year would go on another outlook.
+ * Walk the plan month by month, from the month after its starting month end to December.
+ * A month is "actual" when it has a month-end snapshot and "projected" otherwise: carried forward from the latest real position (the last snapshot, or the
+ * starting net worth entered on the Planner) with the plan's settings. Today's holdings are never mixed in, so a month is either a saved snapshot or a projection.
+ * Snapshots from before the plan's starting month are not part of it. `outlook` (optional) replaces the plan's market outlook for the projected months only.
  */
 export function yearTrack(data, all, plan, oc, { outlook = null } = {}) {
-  const cur = monthKey(all.asOf), year = plan.year, months = monthsOfYear(year);
+  const cur = monthKey(all.asOf), year = plan.year, first = plan.start.month, months = monthsOfYear(year).filter((m) => m > first);
   const path = planPath(plan, oc), target = path.length ? path[path.length - 1].nw : plan.initial.net;
   const aProj = outlook ? { ...plan.a, outlook: { ...outlook }, invest: (plan.a.invest || []).map((l) => (P.isMarket(l.cls) ? { ...l, outlook: '' } : l)) } : plan.a;
-  const snaps = new Map(P.cfg(data).snapshots.map((s) => [s.month, s]));
+  const snaps = new Map(P.cfg(data).snapshots.filter((s) => s.month > first).map((s) => [s.month, s]));
   const live = P.baseline(data, all), by = investedByMonth(data);
   const ctx0 = { sells: monthlySells(data), divs: (all.stocks.eq && all.stocks.eq.dividends) || [], rate: rateFn(data, all, plan, oc) };
-  const s0 = snaps.get(plan.start.month);   // the December snapshot, when there is one, is a real starting position
-  let state = s0 && s0.classes ? { values: { ...s0.classes }, liab: s0.loans || 0, month: s0.month, nw: s0.net, real: !s0.classesEstimated } : { values: plan.start.values, liab: plan.start.liab, month: plan.start.month, nw: plan.initial.net, real: false };
+  let state = { values: { ...plan.start.values }, liab: plan.start.liab, month: first, nw: plan.initial.net, real: !!plan.initial.classesReal };
   const seg = new Map();
   const project = (st) => { if (!seg.has(st.month)) seg.set(st.month, P.simulate({ values: st.values, liab: st.liab, month: st.month }, aProj, oc, P.monthsTo(st.month, year))); return seg.get(st.month); };
   const between = (a, b) => (Number(b.slice(0, 4)) - Number(a.slice(0, 4))) * 12 + Number(b.slice(5, 7)) - Number(a.slice(5, 7));
   const rows = [];
   for (const mo of months) {
     const snap = snaps.get(mo);
-    if (snap || mo === cur) {
-      let classes, liab, nw, closeReal = true;
-      if (snap) { nw = snap.net; liab = snap.loans || 0; closeReal = !!(snap.classes && !snap.classesEstimated); classes = snap.classes ? { ...snap.classes } : scaleClasses(state.values, snap.assets != null ? snap.assets : nw + liab); }
-      else { nw = live.net; liab = live.liab; classes = { ...live.values }; }
-      const row = actualRow(data, mo, nw, classes, liab, state, by, { ...ctx0, closeReal, stored: snap && snap.growth });
-      row.src = snap ? 'actual' : 'now';
+    if (snap) {
+      const nw = snap.net, liab = snap.loans || 0, closeReal = !!(snap.classes && !snap.classesEstimated);
+      const classes = snap.classes ? { ...snap.classes } : scaleClasses(state.values, snap.assets != null ? snap.assets : nw + liab);
+      const row = actualRow(data, mo, nw, classes, liab, state, by, { ...ctx0, closeReal, stored: snap.growth });
+      row.src = 'actual';
       rows.push(row);
       state = { values: classes, liab, month: mo, nw, real: closeReal };
     } else {
       const sim = project(state), row = sim[between(state.month, mo) - 1];
-      rows.push({ ...row, src: 'projected', missing: mo < cur });
+      rows.push({ ...row, src: 'projected', missing: mo < cur });   // missing: the month is over and no snapshot has been saved for it
     }
   }
   const projected = rows.length ? rows[rows.length - 1].nw : plan.initial.net;
   const gap = projected - target;
   const status = gap >= 0 ? (gap > target * 0.03 ? 'ahead' : 'on track') : gap >= -target * 0.03 ? 'close' : 'behind';
-  const inYear = cur >= plan.start.month && cur <= `${year}-12`;
-  const monthsLeft = inYear ? P.monthsTo(cur, year) : 0;
-  const startNow = inYear ? { values: live.values, liab: live.liab, month: cur } : null;
-  const extra = gap < 0 && startNow && monthsLeft ? P.extraMonthly(startNow, aProj, oc, monthsLeft, target) : 0;
-  return { rows, path, target, projected, gap, status, cur, live, inYear, monthsLeft, extra, snaps };
+  const inYear = cur >= first && cur <= `${year}-12`;
+  const from = state;   // the last real position: the latest snapshot, or the starting net worth
+  const monthsLeft = P.monthsTo(from.month, year);
+  const extra = gap < 0 && monthsLeft ? P.extraMonthly({ values: from.values, liab: from.liab, month: from.month }, aProj, oc, monthsLeft, target) : 0;
+  return { rows, path, target, projected, gap, status, cur, live, inYear, monthsLeft, extra, snaps, from, anchor: first };
 }
 
 /** What a month's snapshot form should start from when the month has no snapshot yet: the projected position. */
@@ -314,13 +356,13 @@ export function whereWent(plan, track, month) {
 }
 
 // ---------- month-end snapshots (moved here from projector.js: they carry the plan's own figures for the month) ----------
-/** Where a month started from: the latest earlier snapshot (a real position), else the plan's own starting position. */
+/** Where a month started from: the latest earlier snapshot inside the plan (a real position), else the plan's own starting position. Snapshots from before the plan's starting month are not used. */
 export function prevPosition(data, month) {
-  const before = P.cfg(data).snapshots.filter((x) => x.month < month && x.classes).sort((x, y) => (x.month < y.month ? -1 : 1));
+  const plan = bestPlan(data, month.slice(0, 4)), floor = plan ? plan.start.month : null;
+  const before = P.cfg(data).snapshots.filter((x) => x.month < month && x.classes && (!floor || x.month > floor)).sort((x, y) => (x.month < y.month ? -1 : 1));
   const x = before[before.length - 1];
   if (x) return { values: { ...x.classes }, liab: x.loans || 0, month: x.month, nw: x.net, real: !x.classesEstimated };
-  const plan = bestPlan(data, month.slice(0, 4));
-  return plan ? { values: plan.start.values, liab: plan.start.liab, month: plan.start.month, nw: plan.initial.net, real: false } : null;
+  return plan ? { values: plan.start.values, liab: plan.start.liab, month: plan.start.month, nw: plan.initial.net, real: !!plan.initial.classesReal } : null;
 }
 /** Work out the growth of the month a snapshot closes, class by class, and keep it in the snapshot (so it is recorded, not worked out again later). Call inside mutate() or on a fresh record. */
 export function attachGrowth(data, all, snap, oc = P.cfg(data).outlooks) {
@@ -374,12 +416,13 @@ export function workOptional(rows, netNow, rate) {
  */
 export function suggestFix(plan, track, oc) {
   if (!track.inYear || !(track.gap < 0) || !track.monthsLeft) return [];
+  const from = track.from || { values: track.live.values, liab: track.live.liab, month: track.cur };   // the last real position
   const short = -track.gap, out = [];
   if (track.extra > 0) out.push({ kind: 'save', amount: r0(track.extra), text: `save ${fmt(track.extra)} more each month for the ${track.monthsLeft} months left` });
-  const coming = track.path.filter((r) => r.month > track.cur).flatMap((r) => (r.items || []).filter((i) => i.kind !== 'income').map((i) => ({ name: i.name, month: r.month, amount: i.amount })));
+  const coming = track.path.filter((r) => r.month > from.month).flatMap((r) => (r.items || []).filter((i) => i.kind !== 'income').map((i) => ({ name: i.name, month: r.month, amount: i.amount })));
   const big = coming.sort((a, b) => b.amount - a.amount)[0];
   if (big) out.push({ kind: 'move', amount: r0(big.amount), text: big.amount >= short ? `push back ${big.name} (${fmt(big.amount)}, due ${big.month}) beyond the year end` : `push back ${big.name} (${fmt(big.amount)}, due ${big.month}) and save the rest, ${fmt(short - big.amount)}, another way` });
-  const startNow = { values: track.live.values, liab: track.live.liab, month: track.cur };
+  const startNow = { values: from.values, liab: from.liab, month: from.month };
   const need = P.breakEvenMarket(startNow, plan.a, oc, track.monthsLeft, track.target);
   if (need != null) out.push({ kind: 'market', amount: need, text: `or markets return about ${(need * 100).toFixed(1)}% a year from here, instead of the plan’s outlook` });
   return out;
