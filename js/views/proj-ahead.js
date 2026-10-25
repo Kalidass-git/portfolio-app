@@ -66,14 +66,25 @@ export function render(root) {
     stat('Saved each year at the end', money(yearRows[yearRows.length - 1] ? (byYearFlows(rows, s.horizon - 1)) : 0), 'income minus spending, before new investments')));
 
   // ---------- work-optional number ----------
-  const long = P.simulate(start, s.a, oc, 12 * 40), wo = PL.workOptional(long, b.net, safe);
+  const long = P.simulate(start, s.a, oc, 12 * 40);
+  // spending that will not be there after work (rent, tax and so on): left out of the number
+  const shares = PL.regularShares(data, all), skipSaved = own.woSkip || {};
+  const skipCats = new Set((skipSaved.cats || []).map((x) => String(x).toLowerCase())), skipItems = new Set((skipSaved.items || []).map((x) => String(x).toLowerCase()));
+  const oneNames = [...new Set((s.a.oneOffs || []).filter((o) => o.kind !== 'income' && o.name).map((o) => o.name))];
+  const skipShares = shares.filter((x) => skipCats.has(x.key)), frac = skipShares.reduce((a, x) => a + x.share, 0);
+  const skipOnes = oneNames.filter((n) => skipItems.has(n.toLowerCase()));
+  const wo = PL.workOptional(long, b.net, safe, { frac, items: skipOnes });
+  const leftOut = [...skipShares.map((x) => x.name), ...skipOnes];
   if (wo) root.append(section('Work-optional number', h('div', null,
+    h('div', { class: 'filters' },
+      h('button', { class: 'chip-btn' + (leftOut.length ? ' primary' : ''), onclick: () => woSkipDialog(shares, oneNames, skipCats, skipItems) }, leftOut.length ? '⚙ Leaving out: ' + (leftOut.length > 3 ? leftOut.length + ' items' : leftOut.join(', ')) : '⚙ Leave out spending you will not have after work'),
+      leftOut.length ? h('span', { class: 'muted' }, `${money(wo.skippedToday)} a year left out of ${money(wo.grossToday)}`) : null),
     h('div', { class: 'stats' },
-      stat('Corpus needed today', money(wo.corpusToday), `${money(wo.needToday)} a year of spending ÷ ${pct(safe, 1)}`),
+      stat('Corpus needed today', money(wo.corpusToday), `${money(wo.needToday)} a year of spending${leftOut.length ? ' (after leaving out ' + money(wo.skippedToday) + ')' : ''} ÷ ${pct(safe, 1)}`),
       stat(`You had at the end of ${monthLabel(b.month)}`, h('span', { class: tone(b.net - wo.corpusToday) }, money(b.net)), `${Math.round(wo.progress * 100)}% of the number`),
       wo.reached ? stat('Reached in', h('span', { class: 'pos' }, wo.reached.month.slice(0, 4)), `in ${yrs(wo.yearsAway)} on this plan; by then you need ${money(wo.reached.corpus)}, you have ${money(wo.reached.nw)}`) : stat('Reached in', 'Not within 40 years', 'at the saving and returns in this plan'),
       stat('Spending covered by interest now', money(first0(rows).interest), `of ${money(first0(rows).expenses + first0(rows).emi)} a month`)),
-    h('p', { class: 'note' }, `The number is a year of living costs (everyday expenses and the yearly one-time items, without loan EMI, which ends) divided by the safe withdrawal rate: at ${pct(safe, 1)} a year, that corpus could pay those costs without running out. Costs rise with the plan’s yearly rise, so the number grows each year. Net worth here counts everything you own, including EPF and gold, so treat it as a guide, not a promise.`))));
+    h('p', { class: 'note' }, `The number is a year of living costs (everyday expenses and the yearly one-time items, without loan EMI, which ends${leftOut.length ? ', and without ' + leftOut.join(', ') : ''}) divided by the safe withdrawal rate: at ${pct(safe, 1)} a year, that corpus could pay those costs without running out. Costs rise with the plan’s yearly rise, so the number grows each year. Net worth here counts everything you own, including EPF and gold, so treat it as a guide, not a promise.`))));
 
   // ---------- chart ----------
   const monthly = s.horizon <= 2, pts = monthly ? rows : yearRows, stepK = monthly ? 1 : 12;   // a short look-ahead is drawn month by month
@@ -187,6 +198,25 @@ export function render(root) {
     h('p', { class: 'note' }, 'Interest income is what bonds and lending pay out each month after tax. When it covers your monthly spending, your investments pay your living costs without selling anything. Plan target is what the plan itself reaches at that month end, carried on with the plan’s own settings; ahead / short is the projection from today’s real position against it. Saved that year = income − spending, before moving money into investments.')),
     ));
   root.append(h('p', { class: 'note' }, `Everything here follows plan ${s.plan.year}, ${s.plan.which === 'working' ? 'draft' : 'revision ' + s.plan.rev}, made on the Planner tab. New money each month is what is left after spending, split by the plan’s shares; yearly one-time items repeat every year and rise by their own rate.`));
+}
+
+/** Choose the spending that will not be there after work. Everyday categories take their share of the plan's monthly expenses (from the last 12 months of bank entries); one-time items come from the plan. */
+function woSkipDialog(shares, oneNames, cats, items) {
+  const cb = (checked, value) => h('input', { type: 'checkbox', checked, value, disabled: !canEdit() });
+  const cBoxes = shares.map((x) => cb(cats.has(x.key), x.key)), iBoxes = oneNames.map((n) => cb(items.has(n.toLowerCase()), n));
+  const preset = (re) => { shares.forEach((x, i) => { cBoxes[i].checked = re.test(x.name); }); oneNames.forEach((n, i) => { iBoxes[i].checked = re.test(n); }); };
+  const body = h('div', { class: 'form' },
+    h('p', { class: 'note', style: { marginTop: 0 } }, 'Tick what you will not spend after you stop working. The Work-optional number is worked out again without it. Loan EMI is already left out.'),
+    canEdit() ? h('div', { class: 'chips-row' }, h('button', { type: 'button', class: 'chip-btn', onclick: () => preset(/rent|tax/i) }, 'Rent & tax'), h('button', { type: 'button', class: 'chip-btn', onclick: () => preset(/^$/) }, 'Clear ticks')) : null,
+    shares.length ? h('div', null, h('p', { class: 'mini-title' }, 'Everyday expenses (per month, last 12 months)'),
+      h('div', { class: 'checklist' }, shares.map((x, i) => h('label', { class: 'check-row' }, cBoxes[i], h('span', null, `${x.name} · ${money(x.monthly)} (${Math.round(x.share * 100)}%)`))))) : h('p', { class: 'note' }, 'No everyday expenses in the bank entries yet.'),
+    oneNames.length ? h('div', null, h('p', { class: 'mini-title' }, 'Yearly and one-time items in the plan'),
+      h('div', { class: 'checklist' }, oneNames.map((n, i) => h('label', { class: 'check-row' }, iBoxes[i], h('span', null, n))))) : null,
+    canEdit() ? null : h('p', { class: 'note' }, 'Only the owner can change this.'));
+  dialog('Spending left out after work', body, canEdit() ? [
+    { label: 'Cancel', onclick: (c) => c() },
+    { label: 'Apply', class: 'primary', onclick: (c) => { setOwn({ woSkip: { cats: cBoxes.filter((b) => b.checked).map((b) => b.value), items: iBoxes.filter((b) => b.checked).map((b) => b.value) } }); c(); rerender(); } },
+  ] : [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
 }
 /** Income minus spending (before new investments) in the i-th year of the run. */
 function byYearFlows(rows, i) { let t = 0; for (const r of rows.slice(i * 12, i * 12 + 12)) t += r.income - r.out; return t; }
