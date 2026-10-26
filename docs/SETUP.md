@@ -154,6 +154,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.14.1 – Orderable New money, slimmer Home cards, chit projection for gold schemes
+
+- **Wealth outlook → New money: order is the priority.** The table is shown in priority order. Move a line with its ▲ ▼ buttons (phones and computers) or drag a row (computers). Every move renumbers all lines 1, 2, 3 ... so the new order is the new priority. The Add and Edit form still lets you type a priority.
+- **Home cards.** Removed "Tap to view details" from Investable balance (the card is still tappable). Cards are back to a smaller type size, all four have the same height, and the Spent this month note is one line ("96% of ₹67,839 budget · ₹51,219 not counted").
+- **Gold chits: projection also for monthly gold savings schemes** (such as GRT Savings Account), which use the usual gold chit length. When every instalment of a chit is already paid, the card now says so instead of staying hidden.
+
 ## Release 8.14.0 – Month heat map, gold chit projection, priority and fixed-amount allocation, redesigned Home cards
 
 - **Month in detail: heat map.** Each month tile is now coloured by how much of its limit was used. Under the limit, the less spent the deeper the green, fading to a pale colour at 100%. Over the limit it grows from that pale colour into deep red by 160% of the limit. Both sides meet at the same pale colour, so the change at the limit is smooth. Text switches between dark and white so it stays readable. The legend is now one gradient bar (0%, 75%, 100%, 120%, 160%+) with the limit marked. The month you are looking at is lifted, ringed and larger, so it stands out. Status pills and everything else are unchanged.
