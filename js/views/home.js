@@ -275,13 +275,16 @@ function pendingBonds(bonds, month) {
 }
 /** Which bonds still have interest to come this month, with the amount and day each is due (shown on hover). */
 const pendingText = (bonds) => bonds.filter((b) => b.pending > 0.5).map((b) => `${b.name}: ${money(b.pending)} due ${shortDate(b.due)}`).join('\n') || 'Nothing pending';
-/** Bond interest counted as received (its due date has passed) that the bank does not show yet: either the money has not arrived or the bank entry is missing. */
+/** Current month: bond interest due so far against what the bank has credited under Income Bond, in total (nothing is matched bond by bond). */
 function bankGapDialog(g) {
-  const rows = g.bonds.map((b) => ({ title: b.name, sub: `${b.holder ? b.holder + ' · ' : ''}due ${shortDate(b.due)} · expected ${money(b.expected)}`, value: h('span', { class: 'warn' }, money(b.short)), valueSub: 'not seen in bank' }));
-  dialog('Bond interest not seen in the bank', h('div', null,
-    h('div', { class: 'trio' }, h('div', null, h('span', { class: 'mini-title' }, 'Due so far'), h('b', null, money(g.due))), h('div', null, h('span', { class: 'mini-title' }, 'Seen in bank'), h('b', null, money(g.credited))), h('div', null, h('span', { class: 'mini-title' }, 'Not seen'), h('b', { class: 'warn' }, money(g.gap)))),
-    rowList(rows),
-    h('p', { class: 'note' }, 'Home counts a bond as received once its due date has passed. This checks each bond against the bank\'s “Income Bond” credits for this month only (by amount, or the bond\'s name in the description, and never before its due date). Either the money has not been credited yet, or the bank entry has not been made. Differences under ₹' + C.BANK_TOLERANCE + ' are ignored. It is not added to the totals above.')),
+  const dueRows = g.dueBonds.map((b) => ({ title: b.name, sub: `${b.holder ? b.holder + ' · ' : ''}due ${shortDate(b.due)}`, value: money(b.expected) }));
+  const credRows = g.credits.map((c) => ({ title: c.desc || 'Bank credit', sub: shortDate(c.date), value: h('span', { class: 'pos' }, money(c.amount)) }));
+  dialog('Bond interest and the bank, ' + monthLabel(C.monthKey(S.all.asOf), true), h('div', null,
+    h('div', { class: 'trio' }, h('div', null, h('span', { class: 'mini-title' }, 'Due so far'), h('b', null, money(g.due))), h('div', null, h('span', { class: 'mini-title' }, 'In the bank'), h('b', null, money(g.credited))),
+      h('div', null, h('span', { class: 'mini-title' }, g.gap >= 0 ? 'Not in bank' : 'Bank has more'), h('b', { class: g.short ? 'warn' : 'pos' }, money(Math.abs(g.gap))))),
+    h('h4', { style: { margin: '10px 0 4px' } }, 'Due so far'), dueRows.length ? rowList(dueRows) : h('p', { class: 'empty' }, 'Nothing yet.'),
+    h('h4', { style: { margin: '10px 0 4px' } }, 'Bank credits under Income Bond'), credRows.length ? rowList(credRows) : h('p', { class: 'empty' }, 'No Income Bond credit in the bank this month.'),
+    h('p', { class: 'note' }, 'Home counts a bond as received once its due date has passed. This is a cross-check of the totals for this month only: what is due so far against everything the bank credited as Income Bond. No credit is tied to a particular bond. ' + (g.short ? 'The difference is either not credited yet, or its bank entry has not been made. ' : 'The difference is small, so nothing is flagged. ') + 'A difference under ₹' + C.BANK_TOLERANCE + ' is ignored. It is not added to the totals above.')),
   [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
 }
 function toReceiveCard(data, all) {
@@ -298,7 +301,9 @@ function toReceiveCard(data, all) {
       lead: dateChip(r.due), title: r.name, sub: r.overdue ? h('span', { class: 'neg' }, 'Overdue since ' + shortDate(r.due)) : r.dueToday ? h('span', { class: 'warn' }, 'Due today') : 'Due ' + shortDate(r.due),
       value: money(r.dueAmount ?? r.expected ?? 0), tone: r.overdue ? 'neg' : r.dueToday ? 'warn' : '',
     }))) : h('p', { class: 'empty' }, 'Everything due this month has been received.'),
-    bankGap ? h('div', { class: 'bank-gap' }, rowList([{ title: 'Income Bond · not in the bank yet', sub: `${bankGap.bonds.map((b) => b.name).join(', ')} · tap for details`, onClick: () => bankGapDialog(bankGap), value: h('span', { class: 'warn' }, money(bankGap.gap)), valueSub: h('span', { class: 'warn' }, 'to check') }])) : null,
+    bankGap ? (bankGap.short
+      ? h('div', { class: 'bank-gap' }, rowList([{ title: 'Income Bond · not in the bank yet', sub: `due so far ${money(bankGap.due)}, bank shows ${money(bankGap.credited)} · tap for details`, onClick: () => bankGapDialog(bankGap), value: h('span', { class: 'warn' }, money(bankGap.gap)), valueSub: h('span', { class: 'warn' }, 'to check') }]))
+      : h('p', { class: 'note bank-ok' }, '✓ Bank check: ', money(bankGap.due), ' of bond interest due so far, ', money(bankGap.credited), ' credited. ', h('a', { href: 'javascript:void 0', onclick: (e) => { e.preventDefault(); bankGapDialog(bankGap); } }, 'Details'))) : null,
     all2.length ? h('p', { class: 'summary-line' }, `Waiting for ${money(total)}`, over.length ? h('span', { class: 'neg' }, ` · ${over.length} overdue`) : null, rows.some((r) => r.dueToday) ? h('span', { class: 'warn' }, ` · ${rows.filter((r) => r.dueToday).length} due today`) : null) : null,
     h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income'))));
 }
