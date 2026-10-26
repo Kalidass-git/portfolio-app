@@ -203,7 +203,7 @@ export function diffPlans(prev, next, oc) {
   const ra = prev.a.rates || {}, rb = next.a.rates || {};
   for (const k of Object.keys({ ...ra, ...rb })) if (Math.abs((ra[k] || 0) - (rb[k] || 0)) > 1e-9) out.push({ g: 'Market outlook', l: `Yearly rate: ${P.labelOf(k)}`, from: ra[k] || 0, to: rb[k] || 0, f: 'pct' });
   const list = (s, key) => s.a[key] || [];
-  for (const [key, g, label, desc, fields] of [['oneOffs', 'One-time items', 'One-time', oneName, ['amount', 'month', 'kind', 'rise']], ['invest', 'New money', 'Investment', (x) => `${x.name} (${P.labelOf(x.cls)})`, ['monthly', 'cls', 'from', 'to', 'rate', 'outlook']]]) {
+  for (const [key, g, label, desc, fields] of [['oneOffs', 'One-time items', 'One-time', oneName, ['amount', 'month', 'kind', 'rise']], ['invest', 'New money', 'Investment', (x) => `${x.name} (${P.labelOf(x.cls)})`, ['monthly', 'cls', 'mode', 'priority', 'from', 'to', 'rate', 'outlook']]]) {
     const A = new Map(list(prev, key).map((x) => [x.id, x])), B = new Map(list(next, key).map((x) => [x.id, x]));
     const amt = key === 'oneOffs' ? 'amount' : 'monthly';
     for (const [id, x] of B) {

@@ -2,7 +2,7 @@
 
 > **Starting a new session? Do this first.** 1) Read this file, then the top three entries of `docs/SETUP.md`. 2) Clone, branch `release-X.Y.Z` off `origin/main` (check which PRs the owner has merged: `git log origin/main`). 3) Say what you have read, list "Waiting for the owner" below, and ask what to build. 4) The owner works in short numbered requests; do them all in one release, test, bump, open one PR. He checks on his real data, which you never see: say how each rule works so he can check it.
 
-**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.13.1 (cache `family-wealth-v77`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
+**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.14.0 (cache `family-wealth-v78`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
 
 Read this first, then `docs/SETUP.md` (release notes, newest first) and `README.md`.
 
@@ -123,6 +123,13 @@ Anything the owner raises next. Possible: tax view whole months for FDs; reminde
 - Home "Investing this month" (`monthPlan` in `js/monthinvest.js`): investable income added, pending chit instalments from last month (chit length from `tenure`, else start/end dates; old `savings[].chitMonths` and gold `months` are still read as a last resort but no longer asked for), projected expenses for the rest of the month (rent and one-offs left out), current investable amount (bank minus wallets, optional `accounts[].wallet`) and its allocation by plan line weights.
 - Tests that pass on synthetic data: allocgoal, watch, tax, monthinvest, bondmonth. projector, risk, safety, categories and features fail on synthetic data and did before.
 - Verified with Playwright on synthetic data only, never on the real file. Ask the owner to check Annapurna, Navi, BelStar, Pandi and the new Home cards on his real data.
+
+## Added in 8.14.0
+
+- `js/allocation.js` is the one rule for sharing a month's money among Wealth outlook "New money" lines: optional `mode` ('pct' default, or 'amt' fixed) and `priority` (1 first) on each line; filled in priority order, each line capped at what is left, the last line takes any excess. Used by `projector.simulate`, `monthinvest.splitMonth` and `monthPlan` (Home cards), and shown in `proj-plan.js` and `proj-shared.js`. With no mode or priority anywhere it behaves exactly as the old plain shares. `tests/allocation.test.mjs` needs no data file.
+- Month in detail heat map: `heat()` and `heatGradient()` in `js/monthdetail.js`, tiles and legend in `js/views/monthdetail.js`.
+- Gold chit projection: `chitProjection()` in `js/monthinvest.js`, card drawn in `js/views/gold.js`.
+- Home summary cards: `dress()` in `js/views/home.js` and the `.kt-*` rules at the end of `css/app.css`. The trend lines are decorative, not data.
 
 ## Not testable by Claude
 Live Apps Script sync, Yahoo and mfapi prices, a real Android device. Ask the owner to try those after a release.

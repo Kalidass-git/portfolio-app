@@ -154,6 +154,15 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.14.0 – Month heat map, gold chit projection, priority and fixed-amount allocation, redesigned Home cards
+
+- **Month in detail: heat map.** Each month tile is now coloured by how much of its limit was used. Under the limit, the less spent the deeper the green, fading to a pale colour at 100%. Over the limit it grows from that pale colour into deep red by 160% of the limit. Both sides meet at the same pale colour, so the change at the limit is smooth. Text switches between dark and white so it stays readable. The legend is now one gradient bar (0%, 75%, 100%, 120%, 160%+) with the limit marked. The month you are looking at is lifted, ringed and larger, so it stands out. Status pills and everything else are unchanged.
+- **Gold chits: projection card.** Inside each chit's "Best option" card, a quiet italic card shows the gold you would end up with if the instalments still to pay are paid at today's gold rate (or the rate typed in "Try a gold rate"). It counts the chit's length (11 months unless set) less the months already paid, at the last instalment paid (else the chit's monthly amount). Not shown for monthly gold savings schemes, which have no fixed length.
+- **Wealth outlook → New money: priority and fixed amount.** Each line now has **How much goes in** (share of the month's money, the default, or a fixed amount) and a **Priority** (1 is filled first; empty comes after the numbered ones, in the order listed). Lines are filled in priority order, a short month fills the first priorities and leaves later ones empty, and money left after every line goes to the last one. A share line takes its calculated percentage (its amount over the total of the share lines) of the month's money. Plans that set neither work exactly as before. New file `js/allocation.js` holds the rule; `tests/allocation.test.mjs` checks it.
+  - Used by: This year and Years ahead (`js/projector.js`), Home → Investable balance card and "Where the current investable amount can go", Home → Investing this month and its "Invested this month" tab (`js/monthinvest.js`, `js/views/home.js`), the New money table and Plan settings summary (`js/views/proj-plan.js`, `js/views/proj-shared.js`), and the plan change list (`js/planner.js`).
+  - Stored: lines get two optional fields, `mode` ('pct' or 'amt') and `priority`. Old lines work without them. No stored field was changed or removed.
+- **Home: four redesigned cards.** Investable balance (pale blue, blue left edge, blue amount, still italic as it is projected), Earning every day (green amount), Markets today (red or green by the day's result) and Spent this month (progress bar from amber to red with the percentage). Same figures, pop-ups and taps as before. The small trend lines show direction only; they are not drawn from data.
+
 ## Release 8.13.1 – Home: Net worth over time moved to the bottom
 
 - The Net worth over time chart is now the last card on Home.

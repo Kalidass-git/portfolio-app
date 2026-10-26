@@ -4,7 +4,7 @@ import { S, mutate, nextId } from '../store.js';
 import * as C from '../calc.js';
 import { h, money, dec, dateStr, gainText, section, table, btn, formDialog, canEdit, toast, stat, num, segTabs, subTab, pct, posNeg, dialog, confirmDialog, mobileFrom, icon } from '../ui.js';
 import { reopen } from './closing.js';
-import { goldChitMonths, GOLD_CHIT_MONTHS } from '../monthinvest.js';
+import { goldChitMonths, GOLD_CHIT_MONTHS, chitProjection } from '../monthinvest.js';
 
 const rerender = () => window.dispatchEvent(new Event('rerender'));
 
@@ -127,6 +127,20 @@ function chitOptions(c, rate) {
 function schemeAsChit(x) {
   return { id: x.id, name: x.name, entries: x.entries.map((e) => ({ date: e.date, amount: e.amount, rate: e.rate > 0 ? e.rate : e.grams > 0 ? e.amount / e.grams : 0 })) };
 }
+/** A quiet, italic projection: the gold estimated if the instalments still to pay are all paid at today's rate (or the rate being tried). Not shown for gold savings schemes, which have no fixed length. */
+function projectionCard(c, rate, mocked, scheme) {
+  // the stored chit, not the computed copy: that one carries `months` = payments made, while the stored one may hold the chit's own length
+  const raw = scheme ? null : (S.data.gold.chits || []).find((x) => x.id === c.id) || c;
+  const p = scheme ? null : chitProjection(S.data, raw, rate);
+  if (!p) return null;
+  const line = (a, b) => h('span', { class: 'proj-line' }, h('span', null, a), h('b', null, b));
+  return h('div', { class: 'proj-card', 'aria-label': 'Projection' },
+    h('span', { class: 'proj-title' }, 'Projection · if the rest is paid at ' + (mocked ? 'the rate above' : 'today’s rate') + ' (' + money(rate) + ' / g)'),
+    line(`${p.remaining} instalment${p.remaining === 1 ? '' : 's'} left × ${money(p.instalment)} = ${money(p.toPay)}`, `≈ ${dec(p.newGrams, 2)} g more`),
+    line(`Gold at the end, by value (${money(p.total)} paid in all)`, `≈ ${dec(p.byValue, 2)} g`),
+    p.byGold != null ? line('Gold at the end, by gold saved', `≈ ${dec(p.byGold, 2)} g`) : null,
+    h('span', { class: 'proj-note' }, `An estimate: it assumes each remaining instalment equals the last one paid, over a ${p.dur}-month chit.`));
+}
 function chitBestCard(c, actualRate, scheme) {
   const card = h('div', { class: 'card' });
   const head = h('h3'), hint = h('span', { class: 'note', style: { margin: 0 } }), reset = btn('Use actual rate', () => { input.value = ''; draw(); });
@@ -153,6 +167,7 @@ function chitBestCard(c, actualRate, scheme) {
           ? `Choose gold basis: ${dec(o.grams - o.byValueGrams, 2)} g more, which is ${money(o.edge)} more than the value basis and a profit of ${money(o.goldValue - o.paid)} over the ${money(o.paid)} you paid.`
           : `Choose value basis: ${dec(o.byValueGrams - o.grams, 2)} g more, which is ${money(o.edge)} more than the gold basis. Gold basis would be ${money(o.paid - o.goldValue)} below what you paid.`)
         : 'Value basis gives you the money paid in as gold at the rate above.'),
+      projectionCard(c, rate, mocked, scheme),
       canEdit() ? h('div', { class: 'actions' }, btn('Close this chit', () => closeChit(c, scheme))) : null].filter(Boolean));
   };
   card.append(head, h('div', { class: 'price-bar inline', style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' } },
