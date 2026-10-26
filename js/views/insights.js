@@ -1,4 +1,5 @@
 // Insights: Tax summary, Cash calendar, Annual review, Spending anomalies and the Allocation goal, as sub tabs of one menu.
+import { currentPlan, planPicker, planSettingsCard } from './proj-shared.js';
 import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
 import * as P from '../projector.js';
@@ -342,6 +343,11 @@ const OUTLOOK_OPTS = P.OUTLOOKS.map((o) => ({ value: o.id, label: `${o.name} (${
 const gname = (id) => (I.GOAL_GROUPS.find((x) => x.id === id) || {}).label || id;
 function allocation(root) {
   const { data, all } = S;
+  // The Wealth outlook plan the goal is read alongside: pick it like on the Wealth outlook pages. Its settings are shown read only, folded.
+  const ctx = currentPlan();
+  root.append(planPicker({ versions: true }));
+  if (ctx.plan) root.append(planSettingsCard(ctx.plan));
+  else root.append(h('p', { class: 'note' }, `Plan ${ctx.year} has no live plan to show. Make one on the Wealth outlook Planner tab.`));
   const goal = I.normGoal(data.allocGoal);
   const outlookId = (goal && goal.outlook) || 'steady';
   const outlook = P.OUTLOOKS.find((o) => o.id === outlookId);

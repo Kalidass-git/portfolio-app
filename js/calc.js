@@ -628,8 +628,9 @@ export function monthCashflow(data, all, month) {
   // A bond counts as received once its due date has come (today included), and as pending until then.
   for (const x of per) { x.credited = x.received; x.received = x.due <= all.asOf ? x.expected : 0; x.pending = x.expected - x.received; }
   const bondsReceived = sum(per, (x) => x.received);
+  const bankCredit = sum(rows.filter((e) => (e.category || '').toLowerCase() === 'income bond' && e.credit > 0), (e) => e.credit);
   const income = [
-    { name: 'Income Bond', expected: bondsExpected, received: bondsReceived, bonds: per },
+    { name: 'Income Bond', expected: bondsExpected, received: bondsReceived, bonds: per, bankCredit },
   ];
   const mStart = month + '-01', mEnd = `${month}-${String(daysInMonthOf(mStart)).padStart(2, '0')}`;
   for (const m of data.manualMonthlyIncome || []) {
@@ -1174,4 +1175,24 @@ export function loanDues(data, asOf) {
     return { id: l.id, name: l.name, emi: l.emi, date, days, status, paid };
   });
   return out.sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
+/** A difference smaller than this (₹) between what bonds should have paid and what the bank shows is ignored. */
+export const BANK_TOLERANCE = 300;
+/**
+ * Current month only: bond interest whose due date has passed counts as received on Home, whatever the bank says. This checks it against the bank's "Income Bond" credits.
+ * Returns null when the month is not the current one, when nothing is due yet, or when the gap is under BANK_TOLERANCE.
+ * Otherwise { due, credited, gap, bonds } where gap is the amount not yet seen in the bank (not credited yet, or the bank entry is missing)
+ * and bonds lists the bonds that are due but have no matching credit, with what each is short.
+ */
+export function bondBankGap(mc, month, asOf) {
+  if (month !== monthKey(asOf)) return null;
+  const line = (mc.income || []).find((x) => x.bonds);
+  if (!line) return null;
+  const due = sum(line.bonds, (b) => b.received);
+  if (!(due > 0.5)) return null;
+  const credited = line.bankCredit || 0, gap = due - credited;
+  if (gap < BANK_TOLERANCE) return null;
+  const short = line.bonds.filter((b) => b.received > 0.5 && (b.credited || 0) < b.expected - 1).map((b) => ({ name: b.name, holder: b.holder, due: b.due, expected: b.expected, short: b.expected - (b.credited || 0) }));
+  return { due, credited, gap, bonds: short };
 }

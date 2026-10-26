@@ -154,6 +154,13 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.15.0 – Bond bank check, orderable New money highlight, Allocation goal plan, spending popup
+
+- **Home → Money to receive this month: bank cross-check (current month only).** Bond interest still counts as received once its due date passes. A second check compares the bond interest due so far with the bank's "Income Bond" credits this month. If the bank shows at least ₹300 less, a separate line "Income Bond · not in the bank yet" appears with the amount. Tap it for the bonds with no matching credit. It means either the money has not arrived or the bank entry is missing. A gap under ₹300 shows nothing. It is not added to the totals, Waiting for, or the Investable balance.
+- **Wealth outlook → New money:** a row you move glows green and the rows it pushed are shaded amber, then it fades after about four seconds. The add and edit form is two columns, so it fits without scrolling on a computer.
+- **Month in detail → What counts as spending:** one clean row per line, name on the left and amount on the right, so long names no longer overlap.
+- **Insights → Allocation goal:** pick the Wealth outlook plan (and version) at the top, and see that plan's settings read only, folded, as on the Wealth outlook pages. The goal itself is unchanged.
+
 ## Release 8.14.1 – Orderable New money, slimmer Home cards, chit projection for gold schemes
 
 - **Wealth outlook → New money: order is the priority.** The table is shown in priority order. Move a line with its ▲ ▼ buttons (phones and computers) or drag a row (computers). Every move renumbers all lines 1, 2, 3 ... so the new order is the new priority. The Add and Edit form still lets you type a priority.

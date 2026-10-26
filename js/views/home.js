@@ -274,6 +274,15 @@ function pendingBonds(bonds, month) {
 }
 /** Which bonds still have interest to come this month, with the amount and day each is due (shown on hover). */
 const pendingText = (bonds) => bonds.filter((b) => b.pending > 0.5).map((b) => `${b.name}: ${money(b.pending)} due ${shortDate(b.due)}`).join('\n') || 'Nothing pending';
+/** Bond interest counted as received (its due date has passed) that the bank does not show yet: either the money has not arrived or the bank entry is missing. */
+function bankGapDialog(g) {
+  const rows = g.bonds.map((b) => ({ title: b.name, sub: `${b.holder ? b.holder + ' · ' : ''}due ${shortDate(b.due)} · expected ${money(b.expected)}`, value: h('span', { class: 'warn' }, money(b.short)), valueSub: 'not seen in bank' }));
+  dialog('Bond interest not seen in the bank', h('div', null,
+    h('div', { class: 'trio' }, h('div', null, h('span', { class: 'mini-title' }, 'Due so far'), h('b', null, money(g.due))), h('div', null, h('span', { class: 'mini-title' }, 'Bank credits'), h('b', null, money(g.credited))), h('div', null, h('span', { class: 'mini-title' }, 'Not seen'), h('b', { class: 'warn' }, money(g.gap)))),
+    rows.length ? rowList(rows) : h('p', { class: 'empty' }, 'No single bond stands out; the bank total is simply lower than what is due.'),
+    h('p', { class: 'note' }, 'Home counts a bond as received once its due date has passed. This is a cross-check against the bank\'s “Income Bond” credits for this month only. Either the money has not been credited yet, or the bank entry has not been made. Differences under ₹' + C.BANK_TOLERANCE + ' are ignored. It is not added to the totals above.')),
+  [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
+}
 function toReceiveCard(data, all) {
   const month = C.monthKey(all.asOf);
   const mc = C.monthCashflow(data, all, month);
@@ -282,11 +291,13 @@ function toReceiveCard(data, all) {
   const pend = mc.income.filter((x) => x.expected - x.received > 1).map((x) => ({ due: null, name: x.name, expected: x.expected - x.received, income: true, bonds: x.bonds, sub: `expected ${money(x.expected)}, received ${money(x.received)}${x.bonds ? ' · tap to see which bonds' : canEdit() ? ' · tap to fix' : ''}` }));
   const total = rows.reduce((a, r) => a + (r.dueAmount ?? r.expected ?? 0), 0) + pend.reduce((a, r) => a + r.expected, 0), over = rows.filter((r) => r.overdue);
   const all2 = rows.concat(pend);
+  const bankGap = C.bondBankGap(mc, month, all.asOf);   // current month only: due bond interest against the bank's Income Bond credits (under ₹300 is ignored)
   return section('Money to receive this month', h('div', null,
     all2.length ? rowList(all2.map((r) => r.income ? { title: r.name, sub: r.sub, onClick: r.bonds ? () => pendingBonds(r.bonds, month) : canEdit() ? () => fixIncome(r.name, month) : null, value: money(r.expected), valueSub: h('span', { class: 'warn', title: r.bonds ? pendingText(r.bonds) : 'pending' }, 'pending') } : ({
       lead: dateChip(r.due), title: r.name, sub: r.overdue ? h('span', { class: 'neg' }, 'Overdue since ' + shortDate(r.due)) : r.dueToday ? h('span', { class: 'warn' }, 'Due today') : 'Due ' + shortDate(r.due),
       value: money(r.dueAmount ?? r.expected ?? 0), tone: r.overdue ? 'neg' : r.dueToday ? 'warn' : '',
     }))) : h('p', { class: 'empty' }, 'Everything due this month has been received.'),
+    bankGap ? h('div', { class: 'bank-gap' }, rowList([{ title: 'Income Bond · not in the bank yet', sub: `bond interest due so far ${money(bankGap.due)}, bank credits ${money(bankGap.credited)} · tap for the bonds`, onClick: () => bankGapDialog(bankGap), value: h('span', { class: 'warn' }, money(bankGap.gap)), valueSub: h('span', { class: 'warn' }, 'to check') }])) : null,
     all2.length ? h('p', { class: 'summary-line' }, `Waiting for ${money(total)}`, over.length ? h('span', { class: 'neg' }, ` · ${over.length} overdue`) : null, rows.some((r) => r.dueToday) ? h('span', { class: 'warn' }, ` · ${rows.filter((r) => r.dueToday).length} due today`) : null) : null,
     h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income'))));
 }

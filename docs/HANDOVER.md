@@ -2,7 +2,7 @@
 
 > **Starting a new session? Do this first.** 1) Read this file, then the top three entries of `docs/SETUP.md`. 2) Clone, branch `release-X.Y.Z` off `origin/main` (check which PRs the owner has merged: `git log origin/main`). 3) Say what you have read, list "Waiting for the owner" below, and ask what to build. 4) The owner works in short numbered requests; do them all in one release, test, bump, open one PR. He checks on his real data, which you never see: say how each rule works so he can check it.
 
-**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.14.1 (cache `family-wealth-v79`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
+**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.15.0 (cache `family-wealth-v80`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
 
 Read this first, then `docs/SETUP.md` (release notes, newest first) and `README.md`.
 
@@ -48,7 +48,21 @@ A no-build installable web app (PWA, vanilla ES modules) that mirrors the owner'
 ## Release process
 Branch off `origin/main` (`release-X.Y.Z`), change files, bump `js/version.js` and the cache name in `sw.js`, add notes at the top of the release list in `docs/SETUP.md`, push, and open a PR to `main` with `gh api` (GraphQL is blocked). The owner merges it. Always base on `origin/main` so stacked PRs do not leave main behind.
 
-## State after 8.13.0 (newest)
+## State after 8.15.0 (newest)
+
+Releases 8.14.0, 8.14.1 and 8.15.0 (read their notes at the top of `docs/SETUP.md`):
+
+- **Allocation rule** `js/allocation.js`: each Wealth outlook "New money" line (`plan.a.invest[]`) has optional `mode` ('pct' default, 'amt' fixed) and `priority` (1 first). `allocate(amount, lines)` fills lines in priority order, each capped at what is left; the last line takes any excess. Used by `projector.simulate` (This year, Years ahead), `monthinvest.splitMonth` and `monthPlan` (Home Investable balance and Investing this month; when any line has a priority or fixed mode, `monthPlan.rules` is true and gold and chits follow the rule instead of last month's gold buying), and shown in `proj-plan.js` and `proj-shared.js`. No mode or priority anywhere = the old plain shares. Test: `tests/allocation.test.mjs` (no data file).
+- **New money table** (`newMoneyCard` in `proj-plan.js`): shown in priority order; up/down buttons and drag-and-drop (`dragRows`, desktop) call `move()`, which renumbers every line 1..n and flashes the moved rows (`.moved` classes). The add/edit form is two columns.
+- **Home cards** (`dress()` in `home.js`, `.kt-*` CSS at the end of `app.css`): icon, amount, one quiet line; Investable balance is pale blue and italic; trend lines are decorative. Cards share one height; the Spent note is one line.
+- **Home bank check** `bondBankGap()` in `calc.js` (test: `tests/bankgap.test.mjs`): current month only, bond interest due so far against the bank's "Income Bond" credits (`income[0].bankCredit`); a gap under `BANK_TOLERANCE` (300) is ignored. Display only, in `toReceiveCard` and `bankGapDialog`.
+- **Month in detail**: heat map (`heat()`, `heatGradient()` in `js/monthdetail.js`), selected month raised and ringed, gradient legend; the "What counts as spending" popup uses `.count-list` rows.
+- **Gold chits**: `chitProjection()` in `monthinvest.js`, italic card from `projectionCard()` in `gold.js`, for chits and monthly gold schemes; says so when all instalments are paid.
+- **Allocation goal** (`allocation()` in `insights.js`): plan picker plus read-only `planSettingsCard`.
+- Tests that pass on synthetic data: allocation, bankgap, allocgoal, watch, tax, taxbonds, monthinvest, bondmonth, monthdetail, pendingreceive, expensedrill. `anchor`, `planner`, `projector`, `risk`, `safety`, `categories`, `features` need the owner's real data file.
+- Browser checks used Playwright with a synthetic data set put in localStorage (`pt.data`, `pt.cfg` with `asOf`); the gold rate lives in `settings.goldRate`, and `settings.goldLive` has `usdOz, prevUsdOz, inr, prevInr`.
+
+## State after 8.13.0
 
 - **Investable cards** (`home.js`): `showInvestable(m)` is the one popup for the blue tile and the Investing-this-month stat (tabs `calc` and `done`; `investedBody` uses `m.rows`, `m.unplanned`, `m.done` from `splitMonth`). The remaining amount is italic.
 - **Net worth over time** (`netWorthHistory` in `home.js`, `netWorthPoints` in `calc.js`): daily readings (`data.history`: net, assets, liab) + month-end figures + today, straight lines between readings; `lineChart` takes `tipLabels` for the hover title.
@@ -94,7 +108,7 @@ Branch off `origin/main` (`release-X.Y.Z`), change files, bump `js/version.js` a
 
 ## Waiting for the owner (never testable by Claude)
 
-Check on the real data after merging: October's pending bonds; that no lending line shows before its first month and the part month looks right (Pandi, Lathish); the chit popups and gold chits; a real split of a bank entry; the Investable balance figure against his own sum; the family report print; the Tax summary bank comparison. Live Apps Script sync, Yahoo and mfapi prices and the Android install are only for him to try.
+Check on the real data after merging: the new allocation rules (set a priority and a fixed amount on a few lines and compare This year, Years ahead and the Home cards with your own sums); the Income Bond 'not in the bank yet' line against your bank entries; the gold chit projection on your real chits and GRT scheme; October's pending bonds; that no lending line shows before its first month and the part month looks right (Pandi, Lathish); the chit popups and gold chits; a real split of a bank entry; the Investable balance figure against his own sum; the family report print; the Tax summary bank comparison. Live Apps Script sync, Yahoo and mfapi prices and the Android install are only for him to try.
 
 ## Ideas not built yet
 

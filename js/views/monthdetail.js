@@ -40,7 +40,7 @@ function countDialog(rows, ov) {
       h('button', { type: 'button', class: 'chip-btn', onclick: () => set((x) => !x.other && !/^rent$/i.test(x.name)) }, 'Regular only (no rent, EMI, tax, other)'),
       h('button', { type: 'button', class: 'chip-btn', onclick: () => set((x) => !x.other) }, 'Leave out EMI, tax & other'),
       h('button', { type: 'button', class: 'chip-btn', onclick: () => set(() => true) }, 'Count everything')),
-    h('div', { class: 'checklist' }, names.map((x, i) => h('label', { class: 'check-row' }, boxes[i], h('span', null, `${x.name} · ${money(x.amount)}`, x.other ? h('small', { class: 'tag' }, 'other payment') : null)))));
+    h('div', { class: 'count-list' }, names.map((x, i) => h('label', { class: 'count-row' }, boxes[i], h('span', { class: 'cr-name' }, x.name, x.other ? h('small', { class: 'tag' }, 'other payment') : null), h('span', { class: 'cr-amt' }, money(x.amount))))));
   dialog('What counts as spending', body, [
     { label: 'Like Home', onclick: (c) => { saveOv({}); c(); rerender(); } },
     { label: 'Apply', class: 'primary', onclick: (c) => { const o = {}; boxes.forEach((b) => { o[b.value] = b.checked; }); saveOv(o); c(); rerender(); } },

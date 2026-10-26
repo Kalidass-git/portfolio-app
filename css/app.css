@@ -975,3 +975,18 @@ tr.proj-row td.host i, tr.proj-row td i { font-style: italic; }
 
 .mv { display: inline-flex; align-items: center; gap: 4px; } .mv-btn { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 0 6px; min-width: 26px; height: 24px; font-size: .7rem; cursor: pointer; } .mv-btn:disabled { opacity: .3; cursor: default; }
 tr.dragrow { cursor: grab; } tr.dragging { opacity: .45; } tr.dragover td { box-shadow: inset 0 2px 0 var(--brand); }
+
+/* What counts as spending: one clean row per line, amount on the right, so long names wrap without touching the next row */
+.count-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0 20px; max-height: 52vh; overflow: auto; border: 1px solid var(--line); border-radius: 10px; padding: 4px 12px; }
+.count-row { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line-2); height: auto; min-height: 0; line-height: 1.3; cursor: pointer; }
+.count-row input { width: 18px; height: 18px; margin: 0; }
+.cr-name { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; overflow-wrap: anywhere; } .cr-name .tag { margin: 0; }
+.cr-amt { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+
+/* a row that was just moved in New money: the moved row glows green, the rows it pushed are shaded amber, then it all fades after a few seconds */
+@keyframes moved-fade { 0% { background-color: var(--mv, #d6f0e0); } 70% { background-color: var(--mv, #d6f0e0); } 100% { background-color: transparent; } }
+tr.moved td, .mrow.moved { animation: moved-fade 4s ease-out forwards; } tr.moved-main { --mv: color-mix(in srgb, var(--pos) 28%, var(--surface)); } tr.moved-up, tr.moved-down { --mv: color-mix(in srgb, var(--s4) 26%, var(--surface)); }
+tr.moved-main td:first-child { box-shadow: inset 4px 0 0 var(--pos); } tr.moved-up td:first-child, tr.moved-down td:first-child { box-shadow: inset 4px 0 0 var(--s4); }
+@media (prefers-reduced-motion: reduce) { tr.moved td { animation: none; } }
+.form .field.half { min-width: 0; } .form .field.half select, .form .field.half input { width: 100%; min-width: 0; text-overflow: ellipsis; }
+.count-list { width: 100%; box-sizing: border-box; }
