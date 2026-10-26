@@ -131,15 +131,15 @@ function investForm(st, l) {
     title: isNew ? 'Add a monthly investment' : 'Edit ' + l.name, saveLabel: isNew ? 'Add' : 'Save', deleteMessage: 'Remove this investment from the plan?',
     value: l ? { name: l.name, cls: l.cls, monthly: l.monthly, mode: l.mode === 'amt' ? 'amt' : 'pct', priority: l.priority || '', from: l.from || '', to: l.to || '', outlook: l.outlook || '', rate: l.rate == null ? '' : pctIn(l.rate) } : { cls: 'bonds', mode: 'pct', priority: '', from: '', to: '', outlook: '', rate: '' },
     fields: [
-      { key: 'name', label: 'Name', required: true, hint: 'For example Navi bond, Index fund SIP, Gold coins.' },
-      { key: 'cls', label: 'Goes into', type: 'select', options: classes.map((c) => ({ value: c.key, label: c.label + (c.kind === 'market' ? ' (market-linked)' : '') })) },
-      { key: 'mode', label: 'How much goes in', type: 'select', half: true, options: [{ value: 'pct', label: 'Share of the month’s money (default)' }, { value: 'amt', label: 'Fixed amount' }], hint: 'A share line takes its calculated percentage of what is really available that month. A fixed line takes the amount below, or what is left if the month falls short.' },
-      { key: 'priority', label: 'Priority (1 is filled first)', type: 'number', half: true, hint: 'Lines are filled in this order. Empty means after the numbered ones, in the order listed. Money left after every line goes to the last one.' },
-      { key: 'monthly', label: 'Amount each month (₹)', type: 'number', required: true, hint: 'Fixed: the amount set aside each month. Share: only its share among the share lines matters (an illustrative amount).' },
-      { key: 'from', label: 'Starting month (empty = whole year)', type: 'select', options: [{ value: '', label: 'Whole year' }, ...months.map((m) => ({ value: m, label: monthLabel(m) }))], half: true },
-      { key: 'to', label: 'Last month (empty = until December)', type: 'select', options: [{ value: '', label: 'Until December' }, ...months.map((m) => ({ value: m, label: monthLabel(m) }))], half: true },
-      { key: 'outlook', label: 'Outlook for this money (market-linked only)', type: 'select', showIf: (v) => P.isMarket(v.cls), options: [{ value: '', label: 'Same as the class outlook' }, ...outlooks().map((o) => ({ value: o.id, label: `${o.name} (${pc(o.rate, 0)} a year)` }))], hint: 'Lets you plan fresh market money more or less boldly than what you already hold.' },
-      { key: 'rate', label: 'Yearly return for this money (%), if different', type: 'number', showIf: (v) => !P.isMarket(v.cls), hint: 'Leave empty to use the class rate. For a bond, enter its interest rate.' },
+      { key: 'name', label: 'Name', required: true, half: true, hint: 'For example Navi bond, Gold coins.' },
+      { key: 'cls', label: 'Goes into', type: 'select', half: true, options: classes.map((c) => ({ value: c.key, label: c.label + (c.kind === 'market' ? ' (market-linked)' : '') })) },
+      { key: 'mode', label: 'How much goes in', type: 'select', half: true, options: [{ value: 'pct', label: 'Share of the month (default)' }, { value: 'amt', label: 'Fixed amount' }], hint: 'Share: its percentage of the month’s money. Fixed: the amount, or what is left.' },
+      { key: 'monthly', label: 'Amount each month (₹)', type: 'number', required: true, half: true, hint: 'Share lines: only the proportion matters.' },
+      { key: 'priority', label: 'Priority (1 = first)', type: 'number', half: true, hint: 'Empty = after numbered lines. Or reorder in the table.' },
+      { key: 'outlook', label: 'Outlook for this money', type: 'select', half: true, showIf: (v) => P.isMarket(v.cls), options: [{ value: '', label: 'Same as the class outlook' }, ...outlooks().map((o) => ({ value: o.id, label: `${o.name} (${pc(o.rate, 0)} a year)` }))] },
+      { key: 'rate', label: 'Yearly return (%), if different', type: 'number', half: true, showIf: (v) => !P.isMarket(v.cls), hint: 'Empty = class rate. For a bond, its rate.' },
+      { key: 'from', label: 'Starting month', type: 'select', options: [{ value: '', label: 'Whole year' }, ...months.map((m) => ({ value: m, label: monthLabel(m) }))], half: true },
+      { key: 'to', label: 'Last month', type: 'select', options: [{ value: '', label: 'Until December' }, ...months.map((m) => ({ value: m, label: monthLabel(m) }))], half: true },
     ],
     onSave: (v) => upd(st, (p) => {
       p.a.invest = p.a.invest || [];
@@ -331,6 +331,7 @@ function dragRows(wrap, onMove) {
   });
   return wrap;
 }
+let flashMoved = null, flashId = null, flashTimer = null;   // rows whose place changed in the last move, shown shaded for a few seconds
 function newMoneyCard(st, ed, path) {
   const w = PL.effective(st, 'working'), a = w.a, inv = a.invest || [], invTotal = inv.reduce((s, l) => s + (l.monthly || 0), 0);
   const r0m = path[0];
@@ -338,7 +339,9 @@ function newMoneyCard(st, ed, path) {
   const yearOnce = (a.oneOffs || []).filter((o) => o.kind !== 'income' && (o.month.length === 2 || o.month.startsWith(String(st.year)))).reduce((x, o) => x + (o.amount || 0), 0);
   const oneMonthly = yearOnce / 12, avail = inc - spend;   // yearly one-time bills are not taken off here: the projection pays them in their own month
   const sortedInv = AL.orderOf(inv).map((i) => inv[i]);   // shown in the order they are filled: priority 1 first
-  const move = (id, to) => { const ids = sortedInv.map((x) => x.id), from = ids.indexOf(id); if (from < 0 || to < 0 || to >= ids.length || to === from) return; ids.splice(to, 0, ids.splice(from, 1)[0]); upd(st, (p) => { ids.forEach((x, k) => { const l = p.a.invest.find((y) => y.id === x); if (l) l.priority = k + 1; }); }); };
+  const move = (id, to) => { const before = sortedInv.map((x) => x.id), ids = before.slice(), from = ids.indexOf(id); if (from < 0 || to < 0 || to >= ids.length || to === from) return; ids.splice(to, 0, ids.splice(from, 1)[0]);
+    flashMoved = Object.fromEntries(ids.map((x, k) => [x, k === before.indexOf(x) ? 0 : k < before.indexOf(x) ? -1 : 1]).filter(([, d]) => d !== 0)); flashId = id; clearTimeout(flashTimer); flashTimer = setTimeout(() => { flashMoved = null; flashId = null; }, 4200);   // set first: the page redraws as soon as the plan changes
+    upd(st, (p) => { ids.forEach((x, k) => { const l = p.a.invest.find((y) => y.id === x); if (l) l.priority = k + 1; }); }); };
   const ps = AL.plannedShares(inv), shareOfLine = new Map(ps.rows.map((r) => [r.id, r]));   // the split when every line gets what it asks for
   const shareOf = (l) => { const r = shareOfLine.get(l.id); return r && ps.total > 0 ? pct(r.share, 0) : '–'; };
   return section('New money going in each month', h('div', null,
@@ -357,7 +360,7 @@ function newMoneyCard(st, ed, path) {
       { label: 'Amount', cls: 'r', render: (l) => h('span', { class: 'inv' }, money(l.monthly)), total: () => h('span', { class: 'inv' }, money(invTotal)) },
       { label: 'Return', mob: 'under', mlabel: 'return ', cls: 'r', get: (l) => (P.isMarket(l.cls) ? (l.outlook ? (outlooks().find((o) => o.id === l.outlook) || {}).name : 'class outlook') : pc(l.rate != null ? l.rate : (a.rates || {})[l.cls] || 0)) },
       { label: 'Period', mob: 'hide', get: (l) => (l.from || l.to ? `${l.from ? monthLabel(l.from) : 'January'} to ${l.to ? monthLabel(l.to) : 'Dec'}` : 'whole year') },
-    ], sortedInv, { footer: { label: 'Total' }, m: { key: 'plan-invest', head: 'Investment', sub: ['Goes into'], views: [['Priority', 'Basis'], ['Share of new money', 'Amount'], ['Return', 'Period']] }, onRow: ed ? (l) => investForm(st, inv.find((x) => x.id === l.id)) : null, empty: 'No new investments planned. Add where your savings will go.' }), ed ? (from, to) => move(sortedInv[from].id, to) : null),
+    ], sortedInv, { footer: { label: 'Total' }, rowClass: (l) => (flashMoved && flashMoved[l.id] ? (flashId === l.id ? 'moved moved-main' : 'moved moved-' + (flashMoved[l.id] > 0 ? 'down' : 'up')) : ''), m: { key: 'plan-invest', head: 'Investment', sub: ['Goes into'], views: [['Priority', 'Basis'], ['Share of new money', 'Amount'], ['Return', 'Period']] }, onRow: ed ? (l) => investForm(st, inv.find((x) => x.id === l.id)) : null, empty: 'No new investments planned. Add where your savings will go.' }), ed ? (from, to) => move(sortedInv[from].id, to) : null),
     ed && inv.length > 1 ? h('p', { class: 'note' }, 'Change the order with the arrows (or drag a row on a computer). The order is the priority: the first line is filled first.') : null,
     h('p', { class: 'note' }, 'EPF is added automatically from “Expected EPF” on the Income card (it goes into EPF/PPF), so do not add it here. A line here is for new money you choose to invest.'),
     h('p', { class: 'note' }, 'Each month, whatever is really left after spending, EMI and one-time bills is invested line by line in priority order, so a month with tax or fees invests less and a quiet month more. A fixed line takes its amount (or what is left if the month is short); a share line takes its percentage of that month’s money, worked out from the amounts of the share lines. A short month fills the first priorities and leaves the later ones empty. Money left after every line has had its turn goes into the last line, even beyond its amount. Lines with no priority come after the numbered ones, in the order listed. Fixed-income money earns the rate shown; market-linked money follows its outlook.'),
