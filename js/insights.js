@@ -67,9 +67,9 @@ export function holdingMonths(data, all, row, from, end) {
   const b = row.ref, out = [], tds = data.settings.tdsRate ?? 0.1, asOf = all.asOf;
   if (!b || row.kind !== 'Bonds') return out;
   for (let m = from.slice(0, 7); m <= end.slice(0, 7); m = C.addMonths(m + '-01', 1).slice(0, 7)) {
-    // whole months only, not pro-rated by day: interest is counted to the end of last month, and this month's only once its payment is due. Later months are not counted.
-    const cur = C.monthKey(asOf), thisDue = m === cur && C.bondPaysIn(b, m) && C.bondDueDate(b, m) <= asOf;
-    const days = m < cur || thisDue ? C.bondDaysIn(b, m) : 0, gross = (b.principal * b.rate * days) / 365;
+    // each payment covers the days since the previous payment day up to its due date (C.bondPeriod); counted only once that due date has come
+    const paid = C.bondDueDate(b, m) <= asOf;
+    const days = paid ? C.bondDaysIn(b, m) : 0, gross = paid ? C.bondGrossIn(b, m) : 0;
     // the payment is counted only once its due date has come, so it can be set against the bank
     const due = C.bondDueDate(b, m) <= asOf ? C.bondDueAmount(b, m, tds) : 0;
     const cf = C.monthCashflow(data, all, m).income[0];
@@ -94,20 +94,19 @@ export function taxSummary(data, all, y, who = 'all', opts = {}) {
   };
   const compound = (it, date) => { const cap = it.maturityDate && it.maturityDate < date ? it.maturityDate : date; return C.calcDeposit({ ...it, accruedOverride: undefined }, cap).accrued; };
   const interest = [];
-  // Bonds: interest to the end of last month, plus this month's only once its payment is due (not pro-rated by day). A full-year view counts everything.
-  const cutoff = (b) => {
-    if (opts.full || to < all.asOf) return to;
-    const cur = C.monthKey(all.asOf), thisDue = C.bondPaysIn(b, cur) && C.bondDueDate(b, cur) <= all.asOf;
-    const last = C.addMonths(cur + '-01', thisDue ? 1 : 0), prevDay = new Date(C.toMs(last) - DAY).toISOString().slice(0, 10);
-    return prevDay < to ? prevDay : to;
-  };
-  const bondSpan = (b) => {
-    if (!b.depositDate) return null;
-    const a = b.depositDate > from ? b.depositDate : from, stop = b.closed ? b.closed.date : b.maturityDate, c = cutoff(b);
-    const e = stop && stop < c ? stop : c;
-    return a <= e ? { a, b: e, days: incl(a, e) } : null;
-  };
-  for (const b of data.bonds || []) { const s = bondSpan(b); if (!s || !mine(itemOwner(b))) continue; const gross = (b.principal * b.rate * s.days) / 365; interest.push({ kind: 'Bonds', name: b.name, holder: itemOwner(b) || NO_OWNER, gross, tds: gross * tdsRate, ref: b, closedOn: b.closed ? b.closed.date || 'closed' : '' }); }
+  // Bonds: each payment covers the days since the previous payment day up to its due date (C.bondPeriod), and counts in the year its due date falls in,
+  // once that date has come (a full-year view counts every payment of the year). So the figure matches what the bank is credited.
+  for (const b of data.bonds || []) {
+    if (!mine(itemOwner(b))) continue;
+    let gross = 0, days = 0;
+    for (let m = from.slice(0, 7); m <= to.slice(0, 7); m = C.addMonths(m + '-01', 1).slice(0, 7)) {
+      const d = C.bondDueDate(b, m);
+      if (d < from || d > end) continue;
+      gross += C.bondGrossIn(b, m); days += C.bondDaysIn(b, m);
+    }
+    if (!(gross > 0)) continue;
+    interest.push({ kind: 'Bonds', name: b.name, holder: itemOwner(b) || NO_OWNER, gross, tds: gross * tdsRate, days, ref: b, closedOn: b.closed ? b.closed.date || 'closed' : '' });
+  }
   for (const [list, kind] of [[data.fds || [], 'Fixed deposits'], [data.lending || [], 'Private lending']]) {
     for (const it of list) {
       const s = span(it); if (!s || !mine(itemOwner(it))) continue;

@@ -1,4 +1,4 @@
-import { matchBondCredits, bondPaysIn, bondDaysIn, bondNetIn, bondDueAmount, bondDueDate, daysInMonthOf, monthCashflow, incomeWindow, dueInMonth } from '../js/calc.js';
+import { bondPeriod, bondGrossIn, matchBondCredits, bondPaysIn, bondDaysIn, bondNetIn, bondDueAmount, bondDueDate, daysInMonthOf, monthCashflow, incomeWindow, dueInMonth } from '../js/calc.js';
 let bad = 0; const ok = (c, m) => { if (!c) { bad++; console.log('FAIL', m); } };
 const near = (a, b) => Math.abs(a - b) < 0.01;
 const b = { principal: 100000, rate: 0.1, depositDate: '2026-02-10', maturityDate: '2027-02-10', credit: 'Monthly' };
@@ -35,9 +35,9 @@ ok(bondDueDate({ dueRule: 'first' }, '2026-02') === '2026-02-01' && bondDueDate(
 // a payment cannot fall due before the money went in: bought on the 12th, pays on the 9th -> first pays next month, with the days since it was bought
 const late = { principal: 200000, rate: 0.1, depositDate: '2026-10-12', maturityDate: '2029-01-31', credit: 'Monthly', dueRule: 'day', dueDay: 9 };
 ok(bondDueAmount(late, '2026-10') === 0, 'nothing due in October, the 9th was before the purchase');
-ok(near(bondDueAmount(late, '2026-11'), 200000 * 0.1 / 365 * (20 + 30) * 0.9), 'November pays the 20 days of October and the 30 of November');
+ok(near(bondDueAmount(late, '2026-11'), 200000 * 0.1 / 365 * 29 * 0.9), 'November pays 12 Oct to 9 Nov = 29 days');
 const ahead = { ...late, dueDay: 20 };
-ok(near(bondDueAmount(ahead, '2026-10'), 200000 * 0.1 / 365 * 20 * 0.9) && near(bondDueAmount(ahead, '2026-11'), 200000 * 0.1 / 365 * 30 * 0.9), 'due after the purchase: pays in the month it was bought');
+ok(near(bondDueAmount(ahead, '2026-10'), 200000 * 0.1 / 365 * 9 * 0.9) && near(bondDueAmount(ahead, '2026-11'), 200000 * 0.1 / 365 * 31 * 0.9), 'due after the purchase: 12 to 20 Oct = 9 days, then 21 Oct to 20 Nov = 31');
 // two bonds with almost the same interest: each credit goes to the nearest bond, not the first one that fits
 const per4 = [{ name: 'A', due: '2026-10-13', expected: 1590 }, { name: 'B', due: '2026-10-13', expected: 1643 }, { name: 'C', due: '2026-10-15', expected: 1643 }, { name: 'D', due: '2026-10-18', expected: 1605 }];
 matchBondCredits([{ credit: 1643, date: '2026-10-15', desc: 'x' }, { credit: 1605, date: '2026-10-18', desc: 'x' }, { credit: 1590, date: '2026-10-13', desc: 'x' }, { credit: 1643, date: '2026-10-13', desc: 'x' }], per4);
@@ -90,4 +90,23 @@ ok(jan.expected === 5040 && jan.received === 5000 && jan.expected - jan.received
 // Budget (expected) must never be below what actually came in: the total has to add up from its lines.
 const ex = monthCashflow({ ...lat, ledger: [{ id: 1, acct: 'a', date: '2026-01-06', desc: 'lathish', category: 'Income Lending', credit: 6250, debit: 0 }] }, pa, '2026-01');
 ok(ex.income.every((x) => x.expected >= x.received) && ex.totalExpected >= ex.totalReceived && Math.abs(ex.totalExpected - ex.income.reduce((a, x) => a + x.expected, 0)) < 0.01, 'expected is never below received, and the total adds up');
+
+
+// the rule: days from the day after the previous payment day through the due day
+const r = (extra) => ({ principal: 100000, rate: 0.1, depositDate: '2025-01-01', maturityDate: '2030-01-01', credit: 'Monthly', dueRule: 'day', ...extra });
+const d13 = r({ dueDay: 13 });
+ok(bondDaysIn(d13, '2026-10') === 30 && bondPeriod(d13, '2026-10').from === '2026-09-14', 'due Oct 13: 14 Sep to 13 Oct = 30 days');
+ok(bondDaysIn(d13, '2026-11') === 31 && bondPeriod(d13, '2026-11').from === '2026-10-14', 'due Nov 13: 14 Oct to 13 Nov = 31 days');
+const d31 = r({ dueDay: 31 });
+ok(bondDaysIn(d31, '2026-10') === 31 && bondPeriod(d31, '2026-10').from === '2026-10-01', 'due the 31st, previous 30 Sep: 31 days');
+ok(bondDaysIn(d31, '2026-03') === 31 && bondDaysIn(d31, '2026-02') === 28 && bondDaysIn(d31, '2028-02') === 29, 'February runs 1 to 28/29, March from 1 Mar');
+ok(bondDaysIn(d13, '2026-02') === 31 && bondDaysIn(d13, '2026-03') === 28, 'due 13th: Feb covers 14 Jan to 13 Feb (31), March 14 Feb to 13 Mar (28)');
+const q13 = r({ dueDay: 13, credit: 'Quarterly' });
+ok(bondDaysIn(q13, '2026-10') === 92 && bondPeriod(q13, '2026-10').from === '2026-07-14', 'quarterly due Oct 13: 14 Jul to 13 Oct = 92 days');
+ok(bondDaysIn(q13, '2026-01') === 92 && bondDaysIn(q13, '2026-04') === 90 && bondDaysIn(q13, '2026-11') === 0, 'quarterly: Jan 92, Apr 90, nothing in other months');
+ok(near(bondGrossIn(d13, '2026-10'), 100000 * 0.1 / 365 * 30) && near(bondNetIn(d13, '2026-10', 0.1), 100000 * 0.1 / 365 * 30 * 0.9), 'gross and net follow the same days');
+const first = r({ dueDay: 13, depositDate: '2026-09-20' });
+ok(bondDaysIn(first, '2026-09') === 0 && bondDaysIn(first, '2026-10') === 24, 'first payment starts the day it was bought: 20 Sep to 13 Oct = 24');
+const last = r({ dueDay: 13, maturityDate: '2026-12-05' });
+ok(bondDaysIn(last, '2026-12') === 21 && bondDaysIn(last, '2027-01') === 0, 'last payment ends the day before maturity: 14 Nov to 4 Dec = 21 days');
 console.log(bad ? 'FAILED' : 'all passed'); process.exit(bad ? 1 : 0);
