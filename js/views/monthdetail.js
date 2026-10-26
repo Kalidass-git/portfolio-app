@@ -3,7 +3,7 @@ import { S } from '../store.js';
 import * as C from '../calc.js';
 import { h, money, compact, pct, monthLabel, section, stat, table, dialog, setOptions, monthGroups, rowList, canEdit } from '../ui.js';
 import { hbars, barChart, donut, legend } from '../charts.js';
-import { LEVELS, periodMonths, monthRow, periodTotal, mixOf } from '../monthdetail.js';
+import { LEVELS, HEAT_MAX, heat, heatGradient, periodMonths, monthRow, periodTotal, mixOf } from '../monthdetail.js';
 
 let period = 'this', ledgerOpen = false;
 const rerender = () => window.dispatchEvent(new Event('rerender'));
@@ -19,8 +19,14 @@ const short = (m) => monthLabel(m).slice(0, 3);
 const pill = (st) => (st ? h('span', { class: 'lvl lvl-' + st.level.id, title: st.level.hint }, st.level.label) : h('span', { class: 'muted' }, '–'));
 const usedText = (st) => (st && st.used != null ? pct(st.used, 0) + ' used' : '');
 
+/** The colour key: one smooth bar from 0% of the limit (deep green) through the limit (pale) to well beyond it (deep red). */
 function legendRow() {
-  return h('ul', { class: 'lvl-legend', 'aria-label': 'Colour key' }, LEVELS.map((l) => h('li', null, h('span', { class: 'lvl lvl-' + l.id }, l.label), h('small', null, l.hint))));
+  const pos = (u) => ((u / HEAT_MAX) * 100).toFixed(1) + '%';
+  const ticks = [[0, '0%', 'nothing spent'], [0.75, '75%', 'well within'], [1, '100%', 'the limit'], [1.2, '120%', 'over'], [HEAT_MAX, '160%+', 'well beyond']];
+  return h('div', { class: 'heat-legend', role: 'img', 'aria-label': 'Colour key: deep green when spending is far under the limit, pale at the limit, deep red when far over it' },
+    h('div', { class: 'heat-bar', style: { background: heatGradient() } }, h('i', { class: 'heat-limit', style: { left: pos(1) }, title: 'The limit (100%)' })),
+    h('div', { class: 'heat-ticks' }, ticks.map(([u, a, b], i) => h('span', { class: 'heat-tick' + (i === 0 ? ' first' : i === ticks.length - 1 ? ' last' : '') + (i === 1 || i === 3 ? ' opt' : ''), style: { left: pos(u) } }, h('b', null, a), h('small', null, b)))),
+    h('p', { class: 'note heat-note' }, 'The deeper the green, the less of the limit was used. The deeper the red, the further over it went.'));
 }
 
 /** Choose which lines count as spending. One-time payments (tax, EMI, rent, other) can be left out. */
@@ -46,8 +52,9 @@ function monthMap(year, rowsByMonth, sel) {
   const cur = C.monthKey(S.all.asOf);
   return h('div', { class: 'mmap', role: 'group', 'aria-label': 'Months of ' + year }, Array.from({ length: 12 }, (_, i) => {
     const m = `${year}-${String(i + 1).padStart(2, '0')}`, r = rowsByMonth.get(m), st = r && r.status;
-    const on = sel.includes(m);
-    return h('button', { type: 'button', class: 'mm lvl-' + (st ? st.level.id : 'none') + (on ? ' on' : ''), disabled: !r, title: r ? `${monthLabel(m, true)}: ${st ? st.level.label : 'nothing to judge'}${st && st.used != null ? ', ' + pct(st.used, 0) + ' of the limit' : ''}` : 'No data', onclick: () => { period = m; rerender(); } },
+    const on = sel.includes(m), one = sel.length === 1;
+    const hc = st && st.used != null ? heat(st.used) : null;
+    return h('button', { type: 'button', class: 'mm lvl-' + (st ? st.level.id : 'none') + (hc ? ' heat' : '') + (on ? (one ? ' on' : ' on-some') : ''), style: hc ? { '--hb': hc.bg, '--hf': hc.fg, '--hd': hc.bd } : null, disabled: !r, 'aria-pressed': on ? 'true' : 'false', title: r ? `${monthLabel(m, true)}: ${st ? st.level.label : 'nothing to judge'}${st && st.used != null ? ', ' + pct(st.used, 0) + ' of the limit' : ''}` : 'No data', onclick: () => { period = m; rerender(); } },
       h('b', null, short(m)), h('small', null, r ? (st && st.used != null ? pct(st.used, 0) : '–') : ''), m === cur ? h('i', { class: 'mm-now' }, 'now') : null);
   }));
 }

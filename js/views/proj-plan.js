@@ -4,6 +4,7 @@
 import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
 import * as P from '../projector.js';
+import * as AL from '../allocation.js';
 import * as PL from '../planner.js';
 import { monthActual as monthActualOf } from '../yearplan.js';
 import { h, money, pct, monthLabel, dateStr, section, stat, table, btn, formDialog, dialog, confirmDialog, canEdit, toast } from '../ui.js';
@@ -128,11 +129,13 @@ function investForm(st, l) {
   const isNew = !l, months = monthRange(`${st.year}-01`, `${st.year}-12`), classes = P.CLASSES.filter((c) => c.key !== 'cash');
   formDialog({
     title: isNew ? 'Add a monthly investment' : 'Edit ' + l.name, saveLabel: isNew ? 'Add' : 'Save', deleteMessage: 'Remove this investment from the plan?',
-    value: l ? { name: l.name, cls: l.cls, monthly: l.monthly, from: l.from || '', to: l.to || '', outlook: l.outlook || '', rate: l.rate == null ? '' : pctIn(l.rate) } : { cls: 'bonds', from: '', to: '', outlook: '', rate: '' },
+    value: l ? { name: l.name, cls: l.cls, monthly: l.monthly, mode: l.mode === 'amt' ? 'amt' : 'pct', priority: l.priority || '', from: l.from || '', to: l.to || '', outlook: l.outlook || '', rate: l.rate == null ? '' : pctIn(l.rate) } : { cls: 'bonds', mode: 'pct', priority: '', from: '', to: '', outlook: '', rate: '' },
     fields: [
       { key: 'name', label: 'Name', required: true, hint: 'For example Navi bond, Index fund SIP, Gold coins.' },
       { key: 'cls', label: 'Goes into', type: 'select', options: classes.map((c) => ({ value: c.key, label: c.label + (c.kind === 'market' ? ' (market-linked)' : '') })) },
-      { key: 'monthly', label: 'Illustrative amount each month (₹)', type: 'number', required: true, hint: 'Only its share of all the lines matters: each month the projection invests what is really left, split by these shares.' },
+      { key: 'mode', label: 'How much goes in', type: 'select', half: true, options: [{ value: 'pct', label: 'Share of the month’s money (default)' }, { value: 'amt', label: 'Fixed amount' }], hint: 'A share line takes its calculated percentage of what is really available that month. A fixed line takes the amount below, or what is left if the month falls short.' },
+      { key: 'priority', label: 'Priority (1 is filled first)', type: 'number', half: true, hint: 'Lines are filled in this order. Empty means after the numbered ones, in the order listed. Money left after every line goes to the last one.' },
+      { key: 'monthly', label: 'Amount each month (₹)', type: 'number', required: true, hint: 'Fixed: the amount set aside each month. Share: only its share among the share lines matters (an illustrative amount).' },
       { key: 'from', label: 'Starting month (empty = whole year)', type: 'select', options: [{ value: '', label: 'Whole year' }, ...months.map((m) => ({ value: m, label: monthLabel(m) }))], half: true },
       { key: 'to', label: 'Last month (empty = until December)', type: 'select', options: [{ value: '', label: 'Until December' }, ...months.map((m) => ({ value: m, label: monthLabel(m) }))], half: true },
       { key: 'outlook', label: 'Outlook for this money (market-linked only)', type: 'select', showIf: (v) => P.isMarket(v.cls), options: [{ value: '', label: 'Same as the class outlook' }, ...outlooks().map((o) => ({ value: o.id, label: `${o.name} (${pc(o.rate, 0)} a year)` }))], hint: 'Lets you plan fresh market money more or less boldly than what you already hold.' },
@@ -140,7 +143,7 @@ function investForm(st, l) {
     ],
     onSave: (v) => upd(st, (p) => {
       p.a.invest = p.a.invest || [];
-      const rec = { name: v.name, cls: v.cls, monthly: v.monthly, from: v.from || '', to: v.to || '' };
+      const rec = { name: v.name, cls: v.cls, monthly: v.monthly, mode: v.mode === 'amt' ? 'amt' : 'pct', priority: Number(v.priority) >= 1 ? Math.round(Number(v.priority)) : null, from: v.from || '', to: v.to || '' };
       if (P.isMarket(v.cls)) { rec.outlook = v.outlook || ''; rec.rate = null; } else { rec.outlook = ''; rec.rate = v.rate === '' || v.rate == null ? null : frac(v.rate); }
       if (isNew) p.a.invest.push({ id: PL.nextId(p.a.invest, 'i'), ...rec }); else Object.assign(p.a.invest.find((x) => x.id === l.id), rec);
     }),
@@ -320,24 +323,28 @@ function newMoneyCard(st, ed, path) {
   const inc = r0m ? r0m.salary + r0m.other + r0m.interest : 0, spend = r0m ? r0m.expenses + r0m.emi : 0;
   const yearOnce = (a.oneOffs || []).filter((o) => o.kind !== 'income' && (o.month.length === 2 || o.month.startsWith(String(st.year)))).reduce((x, o) => x + (o.amount || 0), 0);
   const oneMonthly = yearOnce / 12, avail = inc - spend;   // yearly one-time bills are not taken off here: the projection pays them in their own month
-  const shareOf = (v) => (invTotal > 0 ? pct(v / invTotal, 0) : '–');
+  const ps = AL.plannedShares(inv), shareOfLine = new Map(ps.rows.map((r) => [r.id, r]));   // the split when every line gets what it asks for
+  const shareOf = (l) => { const r = shareOfLine.get(l.id); return r && ps.total > 0 ? pct(r.share, 0) : '–'; };
   return section('New money going in each month', h('div', null,
     h('div', { class: 'stats' },
       stat('Available to invest', h('span', { class: tone(avail) }, money(avail)), `each month · ${money(inc)} in, ${money(spend)} out`),
-      stat('New money is split', `${inv.length} ${inv.length === 1 ? 'line' : 'lines'}`, 'each month invests what is left, by the shares below')),
+      stat('New money is split', `${inv.length} ${inv.length === 1 ? 'line' : 'lines'}`, AL.hasRules(inv) ? 'each month fills the lines in priority order' : 'each month invests what is left, by the shares below')),
     (a.pfAdd || 0) > 0 ? h('p', { class: 'note' }, `Your EPF (${money(a.pfAdd)} a month, yours and the employer’s) goes in before salary reaches the bank, so it is already saved and is not part of the available amount.`) : null,
     availExplain(st, a, { inc, salary: r0m ? r0m.salary : 0, other: r0m ? r0m.other : 0, interest: r0m ? r0m.interest : 0, oneMonthly, yearOnce, avail }),
     oneMonthly > 1 ? h('p', { class: 'note' }, `Yearly one-time bills (${money(yearOnce)} in ${st.year}, about ${money(oneMonthly)} a month) are not taken off this figure. They come out in the month they fall due, so that month invests less. With them spread over the year it would be ${money(avail - oneMonthly)} a month.`) : null,
     avail <= 0 ? h('p', { class: 'form-error' }, 'Nothing is left in an average month after expenses and EMI, so little or nothing would be invested.') : null,
     table([
       { label: 'Investment', host: true, get: (l) => l.name }, { label: 'Goes into', mob: 'under', get: (l) => P.classOf(l.cls).label },
-      { label: 'Share of new money', mob: 'under', mlabel: 'share ', cls: 'r', render: (l) => h('b', null, shareOf(l.monthly)), total: () => shareOf(invTotal) },
-      { label: 'Illustrative amount', cls: 'r', render: (l) => h('span', { class: 'inv' }, money(l.monthly)), total: () => h('span', { class: 'inv' }, money(invTotal)) },
+      { label: 'Priority', mob: 'under', mlabel: 'priority ', cls: 'r', render: (l) => h('b', null, AL.priorityOf(l) != null ? 'P' + AL.priorityOf(l) : '–') },
+      { label: 'Basis', mob: 'under', mlabel: '', get: (l) => (AL.modeOf(l) === 'amt' ? 'Fixed amount' : 'Share') },
+      { label: 'Share of new money', mob: 'under', mlabel: 'share ', cls: 'r', render: (l) => h('b', null, shareOf(l)), total: () => (ps.total > 0 ? '100%' : '–') },
+      { label: 'Amount', cls: 'r', render: (l) => h('span', { class: 'inv' }, money(l.monthly)), total: () => h('span', { class: 'inv' }, money(invTotal)) },
       { label: 'Return', mob: 'under', mlabel: 'return ', cls: 'r', get: (l) => (P.isMarket(l.cls) ? (l.outlook ? (outlooks().find((o) => o.id === l.outlook) || {}).name : 'class outlook') : pc(l.rate != null ? l.rate : (a.rates || {})[l.cls] || 0)) },
       { label: 'Period', mob: 'hide', get: (l) => (l.from || l.to ? `${l.from ? monthLabel(l.from) : 'January'} to ${l.to ? monthLabel(l.to) : 'Dec'}` : 'whole year') },
-    ], inv, { footer: { label: 'Total' }, m: { key: 'plan-invest', head: 'Investment', sub: ['Goes into'], views: [['Share of new money', 'Illustrative amount'], ['Return', 'Period']] }, onRow: ed ? (l) => investForm(st, inv.find((x) => x.id === l.id)) : null, empty: 'No new investments planned. Add where your savings will go.' }),
+    ], inv, { footer: { label: 'Total' }, m: { key: 'plan-invest', head: 'Investment', sub: ['Goes into'], views: [['Priority', 'Basis'], ['Share of new money', 'Amount'], ['Return', 'Period']] }, onRow: ed ? (l) => investForm(st, inv.find((x) => x.id === l.id)) : null, empty: 'No new investments planned. Add where your savings will go.' }),
     h('p', { class: 'note' }, 'EPF is added automatically from “Expected EPF” on the Income card (it goes into EPF/PPF), so do not add it here. A line here is for new money you choose to invest.'),
-    h('p', { class: 'note' }, 'The amounts are only to show the split. In the projection each month, whatever is really left after spending, EMI and one-time bills is invested by these shares (percentages), so a month with tax or fees invests less and a quiet month more. Fixed-income money earns the rate shown; market-linked money follows its outlook.'),
+    h('p', { class: 'note' }, 'Each month, whatever is really left after spending, EMI and one-time bills is invested line by line in priority order, so a month with tax or fees invests less and a quiet month more. A fixed line takes its amount (or what is left if the month is short); a share line takes its percentage of that month’s money, worked out from the amounts of the share lines. A short month fills the first priorities and leaves the later ones empty. Money left after every line has had its turn goes into the last line, even beyond its amount. Lines with no priority come after the numbered ones, in the order listed. Fixed-income money earns the rate shown; market-linked money follows its outlook.'),
+    AL.hasRules(inv) ? h('p', { class: 'note' }, 'The same rules are used on This year, Years ahead and on Home (Investable balance and Investing this month).') : null,
     ed ? h('div', { class: 'row-actions' }, btn('Add investment', () => investForm(st), '', { keep: true })) : null));
 }
 

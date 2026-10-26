@@ -12,6 +12,7 @@
 //   ahead:     { horizon, ... }                           the long-range setup
 // }
 import { monthActual } from './yearplan.js';
+import { allocate } from './allocation.js';
 import { oneTimeSet } from './categories.js';
 import { ledgerMonths, monthKey, addMonths, monthStart, monthLedger as monthLedgerOf } from './calc.js';
 
@@ -167,12 +168,15 @@ export function simulate(start, a, outlooks, months) {
     // the others leave more. After a short month, the cash cushion is rebuilt first. What remains is split by the shares of the plan lines.
     const left = income - out;
     const live = linePots.filter((p) => !(p.line.from && month < p.line.from) && !(p.line.to && month > p.line.to));
-    const weight = live.reduce((t, p) => t + Math.max(0, p.line.monthly || 0), 0);
+    const hasLines = live.some((p) => (Number(p.line.monthly) || 0) > 0);
     const refill = a.refillCash === false || !cashPot ? 0 : Math.max(0, cushion - cashPot.value);
-    const avail = weight > 0 ? Math.max(0, left - refill) : 0;
+    const avail = hasLines ? Math.max(0, left - refill) : 0;
+    // The lines are filled in priority order: a fixed line takes its amount, a share line its share of what is available, and what is left
+    // after every line goes to the last one (js/allocation.js).
+    const al = allocate(avail, live.map((p) => p.line));
     let invested = 0;
     const investedBy = {}, investedLines = [];
-    for (const p of live) { const amt = weight > 0 ? avail * Math.max(0, p.line.monthly || 0) / weight : 0; p.value += amt; invested += amt; if (amt > 0) { investedBy[p.cls] = (investedBy[p.cls] || 0) + amt; investedLines.push({ name: p.line.name || classOf(p.cls).label, cls: p.cls, amount: amt }); } }
+    live.forEach((p, k) => { const amt = al.amounts[k]; p.value += amt; invested += amt; if (amt > 0) { investedBy[p.cls] = (investedBy[p.cls] || 0) + amt; investedLines.push({ name: p.line.name || classOf(p.cls).label, cls: p.cls, amount: amt }); } });
     const surplus = left - invested;
     cashPot.value += surplus;
     const values = {};

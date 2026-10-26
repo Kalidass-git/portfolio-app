@@ -10,26 +10,28 @@ import { investedByMonth, actualOf } from './actuals.js';
 import { simulate, classOf, baseline } from './projector.js';
 import { livePlan, fallbackA } from './planner.js';
 import { monthKey, addMonths } from './calc.js';
+import { allocate, hasRules, modeOf, priorityOf } from './allocation.js';
 
 const sum = (a, f = (x) => x) => a.reduce((s, x) => s + (Number(f(x)) || 0), 0);
 
 /**
  * The arithmetic, with plain numbers.
- * in: { actualIn, planIn, actualOut, planOut, bank, lines:[{id,name,cls,monthly}], doneByClass:{cls:₹} }
+ * in: { actualIn, planIn, actualOut, planOut, bank, lines:[{id,name,cls,monthly,mode,priority}], doneByClass:{cls:₹} }
  */
 export function splitMonth({ actualIn, planIn, actualOut, planOut, bank, lines, doneByClass }) {
   const income = Math.max(actualIn, planIn), spend = Math.max(actualOut, planOut);
   const moreSpend = Math.max(0, spend - actualOut);           // still expected before month end
   const investable = Math.max(0, income - spend);
-  const weight = sum(lines, (l) => Math.max(0, l.monthly));
+  // Each line's target comes from the allocation rules (fixed amounts and priorities, else plain shares): see js/allocation.js
+  const al = allocate(investable, lines);
+  const targetOf = new Map(al.rows.map((r) => [r.i, r]));
   // what each class already received is shared among its lines by their weights
   const classW = {}; for (const l of lines) classW[l.cls] = (classW[l.cls] || 0) + Math.max(0, l.monthly);
-  const rows = lines.map((l) => {
-    const share = weight > 0 ? Math.max(0, l.monthly) / weight : 0;
-    const target = investable * share;
+  const rows = al.rows.map((a) => {
+    const l = lines[a.i], target = a.amount;
     const done = classW[l.cls] > 0 ? (doneByClass[l.cls] || 0) * Math.max(0, l.monthly) / classW[l.cls] : 0;
-    return { ...l, share, target, done, left: Math.max(0, target - done), over: Math.max(0, done - target) };
-  });
+    return { ...l, share: investable > 0 ? target / investable : 0, target, done, left: Math.max(0, target - done), over: Math.max(0, done - target), order: a.order, priority: priorityOf(l), fixed: modeOf(l) === 'amt', capped: a.capped };
+  }).concat(lines.map((l, i) => ({ l, i })).filter((x) => !targetOf.has(x.i)).map(({ l }) => ({ ...l, share: 0, target: 0, done: 0, left: 0, over: 0, order: 0, priority: priorityOf(l), fixed: modeOf(l) === 'amt', capped: false })));
   // money that went into classes the plan has no line for
   const unplanned = Object.entries(doneByClass).filter(([c, v]) => v > 0 && !classW[c]).map(([cls, done]) => ({ cls, done }));
   const done = sum(Object.values(doneByClass));
@@ -52,7 +54,7 @@ export function monthInvest(data, all, outlooks) {
   const by = investedByMonth(data);
   const classes = Object.keys(by[cur] || {}).filter((k) => k !== 'pf' && classOf(k));
   const doneByClass = Object.fromEntries(classes.map((k) => [k, actualOf(by, cur, k)]));
-  const lines = (a.invest || []).filter((l) => (!l.from || cur >= l.from) && (!l.to || cur <= l.to) && l.cls !== 'pf' && classOf(l.cls)).map((l) => ({ id: l.id, name: l.name, cls: l.cls, monthly: l.monthly || 0 }));
+  const lines = (a.invest || []).filter((l) => (!l.from || cur >= l.from) && (!l.to || cur <= l.to) && l.cls !== 'pf' && classOf(l.cls)).map((l) => ({ id: l.id, name: l.name, cls: l.cls, monthly: l.monthly || 0, mode: l.mode, priority: l.priority }));
   const r = splitMonth({
     actualIn: act.income, planIn: row.salary + row.other + row.interest + row.oneIn,
     actualOut: act.expenses + act.emi + act.tax, planOut: row.expenses + row.emi + row.oneOut,
@@ -80,6 +82,24 @@ export function chitMonths(c, kind, goldDefault = GOLD_CHIT_MONTHS) {
   const a = c.startDate || c.depositDate;
   if (a && c.maturityDate) return Math.max(1, monthsBetween(a.slice(0, 7), c.maturityDate.slice(0, 7)) + 1);
   return Number(c.chitMonths) > 0 ? Number(c.chitMonths) : 0;
+}
+/**
+ * A running gold chit if the instalments still to pay are all paid at one gold rate (today's, or the rate the owner tried).
+ * Remaining = the chit's length less the months already paid; each remaining instalment is what was paid last (else the chit's monthly amount).
+ * `byValue` is the gold the whole money paid would buy at that rate; `byGold` adds the remaining instalments' grams to the grams already saved (only when every payment has a rate).
+ * Returns null when nothing is left to pay or no instalment amount is known.
+ */
+export function chitProjection(data, c, rate) {
+  if (!c || c.closed || !(rate > 0)) return null;
+  const entries = (c.entries || []).filter((e) => e.amount > 0 && e.date).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
+  const dur = chitMonths(c, 'gold', goldChitMonths(data)), count = new Set(entries.map((e) => e.date.slice(0, 7))).size;
+  const remaining = Math.max(0, dur - count);
+  const instalment = entries.length ? entries[entries.length - 1].amount : Number(c.monthly) > 0 ? Number(c.monthly) : 0;
+  if (!(remaining > 0) || !(instalment > 0)) return null;
+  const paid = sum(entries, (e) => e.amount), toPay = remaining * instalment, total = paid + toPay;
+  const rated = entries.filter((e) => e.rate > 0), complete = entries.length > 0 && rated.length === entries.length;
+  const savedGrams = sum(rated, (e) => e.amount / e.rate);
+  return { remaining, instalment, toPay, paid, total, dur, rate, byValue: total / rate, byGold: complete ? savedGrams + toPay / rate : null, newGrams: toPay / rate };
 }
 /**
  * Chit and gold chit payments for this month. Every running chit (gold schemes such as GRT Savings Account included) is either paid, if anything was paid into it this month
@@ -174,13 +194,31 @@ export function monthPlan(data, all, outlooks) {
   // interest still to come this month (bonds and lending not received yet); expenses still to come are a projection
   const interest = Math.max(0, pendingToReceive(data, all, mc).total);
   const current = bank + cash + interest - mandatory.total - proj.total;
-  // gold comes from actuals: last month's gold buying less what is already bought this month and what the gold chits will take
   const by = investedByMonth(data);
-  const goldWanted = Math.max(0, actualOf(by, prev, 'gold') - actualOf(by, cur, 'gold') - mandatory.gold);
-  const free = Math.max(0, current - goldWanted);
-  const skip = new Set(['gold', 'chits', 'pf', 'cash']);
-  const lines = base.rows.filter((r) => !skip.has(r.cls));
-  const weight = sum(lines, (r) => Math.max(0, r.monthly));
-  const alloc = lines.map((r) => ({ name: r.name, cls: r.cls, share: weight > 0 ? Math.max(0, r.monthly) / weight : 0, amount: weight > 0 ? (free * Math.max(0, r.monthly)) / weight : 0 }));
-  return { ...base, mandatory, mc, proj, bank, banks, wallets, cash, interest, current, goldWanted, free, alloc, hasLines: lines.length > 0 };
+  const goneByRules = hasRules(base.rows);   // a fixed amount or a priority is set in the plan: the allocation rules decide, gold and chits included
+  let goldWanted = 0, free = current, alloc;
+  if (!goneByRules) {
+    // no rules set: gold comes from actuals (last month's gold buying less what is already bought this month and what the gold chits will take), the rest is split by plan shares
+    goldWanted = Math.max(0, actualOf(by, prev, 'gold') - actualOf(by, cur, 'gold') - mandatory.gold);
+    free = Math.max(0, current - goldWanted);
+    const skip = new Set(['gold', 'chits', 'pf', 'cash']);
+    const lines = base.rows.filter((r) => !skip.has(r.cls));
+    const al = allocate(free, lines);
+    alloc = lines.map((r, i) => ({ name: r.name, cls: r.cls, share: free > 0 ? al.amounts[i] / free : 0, amount: al.amounts[i], rules: false }));
+  } else {
+    // The month's investable income was shared out by priority in `base.rows` (what each line needs, less what is already invested).
+    // The money available now fills what is still needed, in the same priority order; what is left after every line goes to the last one.
+    // Chits and gold chits already set aside (pending mandatory) count against their lines.
+    const set = { chits: mandatory.chits, gold: mandatory.gold };
+    const open = base.rows.filter((r) => r.order > 0 && r.cls !== 'pf' && r.cls !== 'cash').map((r) => {
+      const took = Math.min(r.left, set[r.cls] || 0); if (set[r.cls]) set[r.cls] -= took;
+      return { ...r, need: Math.max(0, r.left - took) };
+    });
+    let rest = Math.max(0, current);
+    alloc = open.map((r) => { const got = Math.min(r.need, rest); rest -= got; return { name: r.name, cls: r.cls, priority: r.priority, fixed: r.fixed, need: r.need, amount: got, extra: 0, rules: true }; });
+    if (alloc.length && rest > 0.5) { const last = alloc[alloc.length - 1]; last.amount += rest; last.extra = rest; }
+    for (const r of alloc) r.share = current > 0 ? r.amount / current : 0;
+    free = Math.max(0, current);
+  }
+  return { ...base, mandatory, mc, proj, bank, banks, wallets, cash, interest, current, goldWanted, free, alloc, rules: goneByRules, hasLines: alloc.length > 0 };
 }

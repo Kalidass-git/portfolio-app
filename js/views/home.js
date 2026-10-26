@@ -145,7 +145,7 @@ function investableBody(m) {
 function investedBody(m) {
   const cls = (c) => { try { return P.classOf(c).label; } catch (e) { return c; } };
   const rows = m.rows.map((r) => ({
-    title: r.name, sub: `${cls(r.cls)} · ${Math.round(r.share * 100)}% of the plan · needed ${money(r.target)}`,
+    title: r.name, sub: `${cls(r.cls)} · ${r.priority != null ? 'P' + r.priority + ' · ' : ''}${r.fixed ? 'fixed' : Math.round(r.share * 100) + '% of the month'} · needed ${money(r.target)}`,
     value: h('span', { class: r.done > 0.5 ? 'pos' : '' }, money(r.done)),
     valueSub: r.over > 0.5 ? h('span', { class: 'warn' }, `${money(r.over)} over`) : r.left > 0.5 ? h('span', { class: 'neg' }, `${money(r.left)} to go`) : '✓ done',
   })).concat(m.unplanned.map((u) => ({ title: cls(u.cls), sub: 'not in your plan', value: h('span', { class: 'pos' }, money(u.done)) })));
@@ -156,7 +156,7 @@ function investedBody(m) {
       h('div', null, h('span', { class: 'mini-title' }, 'Plan needs'), h('b', null, money(needed))),
       h('div', null, h('span', { class: 'mini-title' }, 'Still to go'), h('b', { class: m.stillToInvest > 0.5 ? 'neg' : 'pos' }, money(m.stillToInvest)))),
     m.rows.length || m.unplanned.length ? rowList(rows) : h('p', { class: 'empty' }, 'Nothing invested yet this month, and no plan lines to compare with.'),
-    h('p', { class: 'note' }, `Invested comes from bank entries and asset records of ${monthLabel(m.month, true)}. “Needed” is the month’s income less its spending (${money(m.investable)}), shared by the weights of your Wealth outlook plan lines${m.hasPlan ? '' : ' (no live plan yet, so standard assumptions are used)'}.`));
+    h('p', { class: 'note' }, `Invested comes from bank entries and asset records of ${monthLabel(m.month, true)}. “Needed” is the month’s income less its spending (${money(m.investable)}), shared out by the priority, fixed amount or share set on each Wealth outlook plan line${m.hasPlan ? '' : ' (no live plan yet, so standard assumptions are used)'}.`));
 }
 /** Both Investable balance cards open this: how it is worked out (first), and what was invested this month by asset class. */
 function showInvestable(m, start = 'calc') {
@@ -173,6 +173,45 @@ const investSub = (m) => h('span', null, `invested so far ${money(m.done)} this 
 /** The remaining amount uses projected expenses, so it is shown in italics. */
 const blueTile = (el) => { el.classList.add('blue'); el.setAttribute('role', 'button'); return el; };
 const italicValue = (el) => { const v = el.querySelector('.kpi-value'); if (v) v.style.fontStyle = 'italic'; return el; };
+
+// ----- the four summary cards: icon + label, a large amount, a quiet line, and one small extra per card (trend, progress or a hint) -----
+const SVGNS = 'http://www.w3.org/2000/svg';
+const sv = (tag, attrs = {}, ...kids) => { const e = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); e.append(...kids); return e; };
+const ICONS = {
+  db: ['M3 5c0 1.66 4.03 3 9 3s9-1.34 9-3-4.03-3-9-3-9 1.34-9 3z', 'M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5', 'M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3'],
+  up: ['M22 7l-8.5 8.5-5-5L2 17', 'M16 7h6v6'],
+  down: ['M22 17l-8.5-8.5-5 5L2 7', 'M16 17h6v-6'],
+  wallet: ['M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1', 'M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4'],
+};
+const icon = (k) => sv('svg', { viewBox: '0 0 24 24', class: 'kt-svg', 'aria-hidden': 'true', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, ...ICONS[k].map((d) => sv('path', { d })));
+// A small decorative trend line (it shows direction only; it is not drawn from data).
+const TREND = { up: 'M2,28 L12,22 L20,25 L30,15 L38,19 L48,10 L58,14 L68,6 L78,9 L88,3', down: 'M2,6 L10,10 L18,8 L26,14 L34,12 L44,20 L54,18 L64,25 L72,22 L88,30' };
+let trendId = 0;
+function trend(dir) {
+  const id = 'kt-g' + (++trendId), d = TREND[dir];
+  const end = d.split(' ').pop().slice(1).split(',').map(Number);
+  return sv('svg', { viewBox: '0 0 92 34', class: 'kt-spark kt-' + dir, 'aria-hidden': 'true', width: '92', height: '34' },
+    sv('defs', {}, sv('linearGradient', { id, x1: '0', y1: '0', x2: '0', y2: '1' }, sv('stop', { offset: '0', 'stop-color': 'currentColor', 'stop-opacity': '.22' }), sv('stop', { offset: '1', 'stop-color': 'currentColor', 'stop-opacity': '0' }))),
+    sv('path', { d: d + ' L88,34 L2,34 Z', fill: `url(#${id})`, stroke: 'none' }),
+    sv('path', { d, fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }),
+    sv('path', { d: dir === 'up' ? `M${end[0] - 7},${end[1] - 0.5} L${end[0]},${end[1]} L${end[0] - 0.5},${end[1] + 7}` : `M${end[0] - 7},${end[1] + 0.5} L${end[0]},${end[1]} L${end[0] - 0.5},${end[1] - 7}`, fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
+}
+/** Give a summary tile the card layout: icon and label on top, the amount (with an optional trend line beside it), then what the card adds. Data, handlers and pop-ups are the tile's own. */
+function dress(el, { kind, ico, trendDir = null, extra = [], foot = [] }) {
+  const label = el.querySelector('.kpi-label'), value = el.querySelector('.kpi-value'), sub = el.querySelector('.kpi-sub');
+  el.classList.add('kt', 'kt-' + kind);
+  const head = h('div', { class: 'kt-head' }, h('span', { class: 'kt-ico' }, icon(ico)));
+  el.insertBefore(head, label); head.append(label);
+  const row = h('div', { class: 'kt-row' });
+  el.insertBefore(row, value); row.append(value);
+  if (trendDir) row.append(h('span', { class: 'kt-trend' }, trend(trendDir)));
+  let at = row;
+  for (const x of extra) { if (!x) continue; at.after(x); at = x; }   // between the amount and the quiet line (the budget bar)
+  if (sub) { at.after(sub); at = sub; }
+  for (const x of foot) { if (!x) continue; at.after(x); at = x; }    // after it (the "tap" hint)
+  return el;
+}
+
 function tiles(all, data, mc, plan) {
   const mk = marketGroups(all), gd = all.gold.day;
   const dayAll = mk.total.day + (gd ? gd.total : 0);
@@ -180,12 +219,16 @@ function tiles(all, data, mc, plan) {
   const baseAll = (mk.total.dayPct ? mk.total.day / mk.total.dayPct : 0) + (gd ? all.gold.value - gd.total : 0);
   const dayPctAll = baseAll ? dayAll / baseAll : 0;
   const spent = mc.totalSpent + mc.lifestyle.amount;
-  return h('div', { class: 'kpis span-12' },
-    plan ? blueTile(italicValue(tile('Investable balance', money(plan.current), investSub(plan), { tone: plan.current >= 0 ? 'inv' : 'neg', sheet: () => showInvestable(plan) })))
-      : tile('Net monthly inflow', money(all.netMonthly), h('span', null, `${money(all.cfTotal.perMonth)} earned `, all.loans.monthlyInterest > 0 ? h('span', { class: 'neg' }, `− ${money(all.loans.monthlyInterest)} loan interest`) : '− ₹ 0 loan interest'), { tone: tone(all.netMonthly), href: '#/fixed/loans' }),
-    tile('Earning every day', money(all.cfTotal.perDay), h('span', null, `${money(all.cfTotal.perDay - all.loans.monthlyInterest / 30)} after `, h('span', { class: 'neg' }, `${money(all.loans.monthlyInterest / 30)} loan interest`)), { href: '#/fixed', pop: h('div', null, earningBody(all, false), h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income'))), sheet: () => openInfo('Earning every day', h('div', null, earningBody(all, true), h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income')))) }),
-    tile('Markets today', anyDay ? sgn(dayAll) : '–', anyDay ? `${sgp(dayPctAll)} · shares, funds, ETFs, gold` : 'refresh prices to see', { tone: anyDay ? tone(dayAll) : '', href: '#/equity', pop: h('div', null, todayBody(all), h('p', null, h('a', { href: '#/equity' }, 'Open Shares & funds'))), sheet: () => openInfo('Markets today', h('div', null, todayBody(all), h('p', null, h('a', { href: '#/equity' }, 'Open Shares & funds')))) }),
-    tile('Spent this month', money(spent), (mc.totalExpected ? `${pct(spent / mc.totalExpected, 0)} of ${money(mc.totalExpected)} budget` : 'no budget income yet') + (mc.notCounted > 0 ? ` · ${compact(mc.notCounted)} not counted` : ''), { tone: mc.totalExpected && spent > mc.totalReceived ? 'neg' : '', href: '#/flow', pop: spentBody(mc, spent), right: true }));
+  const budget = mc.totalExpected, used = budget ? spent / budget : 0;
+  const bar = budget ? h('div', { class: 'kt-barrow' }, h('div', { class: 'kt-bar', role: 'img', 'aria-label': `${pct(used, 0)} of the budget spent` }, h('i', { style: { width: Math.min(100, Math.max(2, used * 100)).toFixed(1) + '%' } })), h('b', { class: 'kt-pctl' }, pct(used, 0))) : null;
+  const spentSub = h('span', { class: 'kt-lines' }, h('span', null, budget ? `${pct(used, 0)} of ${money(budget)} budget` : 'no budget income yet'), mc.notCounted > 0 ? h('small', null, `${money(mc.notCounted)} not counted`) : null);
+  const earnPerDay = all.cfTotal.perDay;
+  return h('div', { class: 'kpis kpis-home span-12' },
+    plan ? blueTile(italicValue(dress(tile('Investable balance', money(plan.current), h('span', null, `Invested so far ${money(plan.done)} this month`), { tone: plan.current >= 0 ? 'inv' : 'neg', sheet: () => showInvestable(plan) }), { kind: 'invest', ico: 'db', foot: [h('div', { class: 'kt-more' }, h('span', { 'aria-hidden': 'true' }, '›'), ' Tap to view details')] })))
+      : dress(tile('Net monthly inflow', money(all.netMonthly), h('span', null, `${money(all.cfTotal.perMonth)} earned `, all.loans.monthlyInterest > 0 ? h('span', { class: 'neg' }, `− ${money(all.loans.monthlyInterest)} loan interest`) : '− ₹ 0 loan interest'), { tone: tone(all.netMonthly), href: '#/fixed/loans' }), { kind: 'invest', ico: 'db' }),
+    dress(tile('Earning every day', money(earnPerDay), h('span', null, `${money(earnPerDay - all.loans.monthlyInterest / 30)} after `, h('span', { class: 'neg' }, `${money(all.loans.monthlyInterest / 30)} loan interest`)), { tone: 'pos', href: '#/fixed', pop: h('div', null, earningBody(all, false), h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income'))), sheet: () => openInfo('Earning every day', h('div', null, earningBody(all, true), h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income')))) }), { kind: 'earn', ico: 'up', trendDir: earnPerDay > 0 ? 'up' : null }),
+    dress(tile('Markets today', anyDay ? sgn(dayAll) : '–', anyDay ? `${sgp(dayPctAll)} · shares, funds, ETFs, gold` : 'refresh prices to see', { tone: anyDay ? tone(dayAll) : '', href: '#/equity', pop: h('div', null, todayBody(all), h('p', null, h('a', { href: '#/equity' }, 'Open Shares & funds'))), sheet: () => openInfo('Markets today', h('div', null, todayBody(all), h('p', null, h('a', { href: '#/equity' }, 'Open Shares & funds')))) }), { kind: anyDay ? (dayAll < 0 ? 'down' : 'up') : 'flat', ico: anyDay && dayAll < 0 ? 'down' : 'up', trendDir: anyDay && Math.abs(dayAll) > 0 ? (dayAll < 0 ? 'down' : 'up') : null }),
+    dress(tile('Spent this month', money(spent), spentSub, { tone: budget && spent > mc.totalReceived ? 'neg' : '', href: '#/flow', pop: spentBody(mc, spent), right: true }), { kind: 'spent', ico: 'wallet', extra: [bar] }));
 }
 
 /** Short expense summary for the drop-down. */
@@ -298,10 +341,10 @@ function investCard(data, all, planIn) {
       mand.chits > 0.5 ? { title: 'Chits', sub: 'already set aside, from last month', value: money(mand.chits) } : null,
       mand.gold > 0.5 ? { title: 'Gold chits', sub: 'already set aside, from last month', value: money(mand.gold) } : null,
       m.goldWanted > 0.5 ? { title: 'Gold', sub: 'what you bought last month, less this month so far', value: money(m.goldWanted) } : null,
-      ...m.alloc.filter((r) => r.amount > 0.5).map((r) => ({ title: r.name, sub: `${P.classOf(r.cls).label} · ${Math.round(r.share * 100)}% of the rest, by your plan`, value: h('span', { class: 'inv' }, money(r.amount)) })),
+      ...m.alloc.filter((r) => r.amount > 0.5).map((r) => ({ title: r.name, sub: m.rules ? `${P.classOf(r.cls).label} · ${r.priority != null ? 'priority ' + r.priority : 'no priority'}${r.fixed ? ' · fixed amount' : ''}${r.extra > 0.5 ? ' · includes ' + money(r.extra) + ' left over' : ''}` : `${P.classOf(r.cls).label} · ${Math.round(r.share * 100)}% of the rest, by your plan`, value: h('span', { class: 'inv' }, money(r.amount)) })),
     ].filter(Boolean)) : h('p', { class: 'empty' }, 'Nothing is free to invest right now.'),
     m.current > 0.5 && !m.hasLines ? h('p', { class: 'note' }, 'Make a plan under Wealth outlook to split the rest.') : null,
-    h('p', { class: 'note' }, 'Gold and chits come from what actually happened. The rest of the amount is split by the shares of your plan lines. Figures are approximate.'),
+    h('p', { class: 'note' }, m.rules ? 'The amount is shared out by the priority, fixed amount or share set on each plan line (Wealth outlook), after chits already set aside. Money left over after every line goes to the last one. Figures are approximate.' : 'Gold and chits come from what actually happened. The rest of the amount is split by the shares of your plan lines. Figures are approximate.'),
     h('p', null, h('a', { href: '#/projector' }, 'Open Wealth outlook'))));
 }
 

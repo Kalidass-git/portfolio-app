@@ -1,5 +1,6 @@
 // Wealth outlook: pieces shared by its tabs (which plan is shown, the market-outlook what-if, the read-only plan settings, the "not committed" notice).
 // Planning itself happens on the Planner tab (proj-plan.js). The other tabs only read the plan that has been made live.
+import * as AL from '../allocation.js';
 import { S } from '../store.js';
 import * as C from '../calc.js';
 import * as P from '../projector.js';
@@ -134,7 +135,7 @@ export function planSettingsCard(plan) {
       group('Expenses', row('Expected expenses', money(a.expenses || 0), 'a month'), row('Expenses rise', pc(g.expenses || 0, 1), 'each year'), row('Loan EMI', money(a.emi || 0), 'fixed')),
       group('One-time items', ...(ones.length ? ones.map((o) => row(o.name + (o.kind === 'income' ? ' (income)' : ''), (o.kind === 'income' ? '+' : '−') + money(o.amount), (o.month.length === 2 ? `every ${PL.MONTH_NAMES[Number(o.month) - 1]}` : monthLabel(o.month, true)) + (o.rise != null && o.rise !== '' ? `, rises ${pc(o.rise, 1)} a year` : ''))) : [h('small', { class: 'muted' }, 'None')])),
       group('Market outlook', row('Outlook', common ? outlookName(ids[0]) : P.MARKET.map((k, i) => `${P.classOf(k).label} ${outlookName(ids[i])}`).join(', ')), rates ? h('small', { class: 'muted' }, 'Fixed income: ' + rates) : null),
-      group('New money', ...(inv.length ? inv.map((l) => row(l.name, tot > 0 ? pct((l.monthly || 0) / tot, 0) : '–', P.labelOf(l.cls))) : [h('small', { class: 'muted' }, 'None')]))),
+      group('New money', ...(inv.length ? AL.plannedShares(inv).rows.map((l) => row(l.name, tot > 0 ? (AL.priorityOf(l) != null ? 'P' + AL.priorityOf(l) + ' · ' : '') + (AL.modeOf(l) === 'amt' ? money(l.monthly || 0) + ' fixed' : pct(l.share, 0)) : '–', P.labelOf(l.cls))) : [h('small', { class: 'muted' }, 'None')]))),
     h('p', { class: 'note' }, h('a', { href: '#/projector/planner' }, 'Change these on the Planner tab'), ', then commit the plan to make the new figures live.')));
 }
 export { datalistId } from '../ui.js';
