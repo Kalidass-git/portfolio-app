@@ -317,12 +317,28 @@ function availExplain(st, a, f) {
     hist.length ? h('p', { class: Math.abs(diff) > Math.max(5000, 0.2 * Math.abs(kept)) ? 'form-error' : 'note' }, `Check against the bank: in the last ${hist.length} months you actually kept about ${money(kept)} a month after all spending, tax and one-time bills, before investing. This plan says ${money(f.avail - f.oneMonthly)} once yearly one-time bills are spread over the year. ${Math.abs(diff) > Math.max(5000, 0.2 * Math.abs(kept)) ? (diff > 0 ? 'The plan is more hopeful than your history. Check that the salary and expense figures are realistic.' : 'The plan is more cautious than your history. It may be assuming more spending or less income than you have seen.') : 'They are close, so the plan matches how you have really been living.'}`) : h('p', { class: 'note' }, 'There is not enough bank history to check this against.'),
     h('p', { class: 'note' }, `Not in this figure: EPF (${money(a.pfAdd || 0)} a month goes in before the salary reaches the bank) and the new investments themselves.`));
 }
+/** Let the rows of a table be dragged into a new order (computers). `onMove(from, to)` gets the row positions. Phones use the arrows. */
+function dragRows(wrap, onMove) {
+  if (!onMove || !wrap.querySelectorAll) return wrap;
+  const rows = [...wrap.querySelectorAll('table.tbl tbody tr')];
+  let from = -1;
+  rows.forEach((tr, i) => {
+    tr.draggable = true; tr.classList.add('dragrow');
+    tr.addEventListener('dragstart', (e) => { from = i; tr.classList.add('dragging'); if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(i)); } });
+    tr.addEventListener('dragend', () => { tr.classList.remove('dragging'); rows.forEach((x) => x.classList.remove('dragover')); });
+    tr.addEventListener('dragover', (e) => { if (from < 0) return; e.preventDefault(); rows.forEach((x) => x.classList.toggle('dragover', x === tr && i !== from)); });
+    tr.addEventListener('drop', (e) => { e.preventDefault(); const f = from; from = -1; if (f >= 0 && f !== i) onMove(f, i); });
+  });
+  return wrap;
+}
 function newMoneyCard(st, ed, path) {
   const w = PL.effective(st, 'working'), a = w.a, inv = a.invest || [], invTotal = inv.reduce((s, l) => s + (l.monthly || 0), 0);
   const r0m = path[0];
   const inc = r0m ? r0m.salary + r0m.other + r0m.interest : 0, spend = r0m ? r0m.expenses + r0m.emi : 0;
   const yearOnce = (a.oneOffs || []).filter((o) => o.kind !== 'income' && (o.month.length === 2 || o.month.startsWith(String(st.year)))).reduce((x, o) => x + (o.amount || 0), 0);
   const oneMonthly = yearOnce / 12, avail = inc - spend;   // yearly one-time bills are not taken off here: the projection pays them in their own month
+  const sortedInv = AL.orderOf(inv).map((i) => inv[i]);   // shown in the order they are filled: priority 1 first
+  const move = (id, to) => { const ids = sortedInv.map((x) => x.id), from = ids.indexOf(id); if (from < 0 || to < 0 || to >= ids.length || to === from) return; ids.splice(to, 0, ids.splice(from, 1)[0]); upd(st, (p) => { ids.forEach((x, k) => { const l = p.a.invest.find((y) => y.id === x); if (l) l.priority = k + 1; }); }); };
   const ps = AL.plannedShares(inv), shareOfLine = new Map(ps.rows.map((r) => [r.id, r]));   // the split when every line gets what it asks for
   const shareOf = (l) => { const r = shareOfLine.get(l.id); return r && ps.total > 0 ? pct(r.share, 0) : '–'; };
   return section('New money going in each month', h('div', null,
@@ -333,15 +349,16 @@ function newMoneyCard(st, ed, path) {
     availExplain(st, a, { inc, salary: r0m ? r0m.salary : 0, other: r0m ? r0m.other : 0, interest: r0m ? r0m.interest : 0, oneMonthly, yearOnce, avail }),
     oneMonthly > 1 ? h('p', { class: 'note' }, `Yearly one-time bills (${money(yearOnce)} in ${st.year}, about ${money(oneMonthly)} a month) are not taken off this figure. They come out in the month they fall due, so that month invests less. With them spread over the year it would be ${money(avail - oneMonthly)} a month.`) : null,
     avail <= 0 ? h('p', { class: 'form-error' }, 'Nothing is left in an average month after expenses and EMI, so little or nothing would be invested.') : null,
-    table([
+    dragRows(table([
       { label: 'Investment', host: true, get: (l) => l.name }, { label: 'Goes into', mob: 'under', get: (l) => P.classOf(l.cls).label },
-      { label: 'Priority', mob: 'under', mlabel: 'priority ', cls: 'r', render: (l) => h('b', null, AL.priorityOf(l) != null ? 'P' + AL.priorityOf(l) : '–') },
+      { label: 'Priority', mob: 'under', mlabel: 'priority ', cls: 'r', render: (l) => { const k = sortedInv.findIndex((x) => x.id === l.id); const arrow = (txt, to, label) => h('button', { type: 'button', class: 'mv-btn', 'aria-label': label + ' ' + l.name, disabled: !ed || to < 0 || to >= sortedInv.length, onclick: (e) => { e.stopPropagation(); move(l.id, to); } }, txt); return h('span', { class: 'mv' }, h('b', null, 'P' + (k + 1)), ed ? [arrow('▲', k - 1, 'Move up'), arrow('▼', k + 1, 'Move down')] : null); } },
       { label: 'Basis', mob: 'under', mlabel: '', get: (l) => (AL.modeOf(l) === 'amt' ? 'Fixed amount' : 'Share') },
       { label: 'Share of new money', mob: 'under', mlabel: 'share ', cls: 'r', render: (l) => h('b', null, shareOf(l)), total: () => (ps.total > 0 ? '100%' : '–') },
       { label: 'Amount', cls: 'r', render: (l) => h('span', { class: 'inv' }, money(l.monthly)), total: () => h('span', { class: 'inv' }, money(invTotal)) },
       { label: 'Return', mob: 'under', mlabel: 'return ', cls: 'r', get: (l) => (P.isMarket(l.cls) ? (l.outlook ? (outlooks().find((o) => o.id === l.outlook) || {}).name : 'class outlook') : pc(l.rate != null ? l.rate : (a.rates || {})[l.cls] || 0)) },
       { label: 'Period', mob: 'hide', get: (l) => (l.from || l.to ? `${l.from ? monthLabel(l.from) : 'January'} to ${l.to ? monthLabel(l.to) : 'Dec'}` : 'whole year') },
-    ], inv, { footer: { label: 'Total' }, m: { key: 'plan-invest', head: 'Investment', sub: ['Goes into'], views: [['Priority', 'Basis'], ['Share of new money', 'Amount'], ['Return', 'Period']] }, onRow: ed ? (l) => investForm(st, inv.find((x) => x.id === l.id)) : null, empty: 'No new investments planned. Add where your savings will go.' }),
+    ], sortedInv, { footer: { label: 'Total' }, m: { key: 'plan-invest', head: 'Investment', sub: ['Goes into'], views: [['Priority', 'Basis'], ['Share of new money', 'Amount'], ['Return', 'Period']] }, onRow: ed ? (l) => investForm(st, inv.find((x) => x.id === l.id)) : null, empty: 'No new investments planned. Add where your savings will go.' }), ed ? (from, to) => move(sortedInv[from].id, to) : null),
+    ed && inv.length > 1 ? h('p', { class: 'note' }, 'Change the order with the arrows (or drag a row on a computer). The order is the priority: the first line is filled first.') : null,
     h('p', { class: 'note' }, 'EPF is added automatically from “Expected EPF” on the Income card (it goes into EPF/PPF), so do not add it here. A line here is for new money you choose to invest.'),
     h('p', { class: 'note' }, 'Each month, whatever is really left after spending, EMI and one-time bills is invested line by line in priority order, so a month with tax or fees invests less and a quiet month more. A fixed line takes its amount (or what is left if the month is short); a share line takes its percentage of that month’s money, worked out from the amounts of the share lines. A short month fills the first priorities and leaves the later ones empty. Money left after every line has had its turn goes into the last line, even beyond its amount. Lines with no priority come after the numbered ones, in the order listed. Fixed-income money earns the rate shown; market-linked money follows its outlook.'),
     AL.hasRules(inv) ? h('p', { class: 'note' }, 'The same rules are used on This year, Years ahead and on Home (Investable balance and Investing this month).') : null,

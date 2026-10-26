@@ -4,7 +4,7 @@ import { S, mutate, nextId } from '../store.js';
 import * as C from '../calc.js';
 import { h, money, dec, dateStr, gainText, section, table, btn, formDialog, canEdit, toast, stat, num, segTabs, subTab, pct, posNeg, dialog, confirmDialog, mobileFrom, icon } from '../ui.js';
 import { reopen } from './closing.js';
-import { goldChitMonths, GOLD_CHIT_MONTHS, chitProjection } from '../monthinvest.js';
+import { goldChitMonths, GOLD_CHIT_MONTHS, chitProjection, chitMonths } from '../monthinvest.js';
 
 const rerender = () => window.dispatchEvent(new Event('rerender'));
 
@@ -129,12 +129,16 @@ function schemeAsChit(x) {
 }
 /** A quiet, italic projection: the gold estimated if the instalments still to pay are all paid at today's rate (or the rate being tried). Not shown for gold savings schemes, which have no fixed length. */
 function projectionCard(c, rate, mocked, scheme) {
-  // the stored chit, not the computed copy: that one carries `months` = payments made, while the stored one may hold the chit's own length
-  const raw = scheme ? null : (S.data.gold.chits || []).find((x) => x.id === c.id) || c;
-  const p = scheme ? null : chitProjection(S.data, raw, rate);
-  if (!p) return null;
+  // a stored chit carries its own length; a monthly gold scheme is shaped like a chit and uses the usual gold chit length
+  const raw = scheme ? c : (S.data.gold.chits || []).find((x) => x.id === c.id) || c;
+  const p = chitProjection(S.data, raw, rate);
+  const quiet = (...kids) => h('div', { class: 'proj-card', 'aria-label': 'Projection' }, ...kids);
+  if (!p) {
+    const dur = chitMonths(raw, 'gold', goldChitMonths(S.data)), paid = new Set((raw.entries || []).filter((e) => e.amount > 0 && e.date).map((e) => e.date.slice(0, 7))).size;
+    return paid > 0 && paid >= dur ? quiet(h('span', { class: 'proj-title' }, 'Projection'), h('span', { class: 'proj-note' }, `All ${dur} instalments are paid, so there is nothing left to project. The chit length is set under “Gold chit length”.`)) : null;
+  }
   const line = (a, b) => h('span', { class: 'proj-line' }, h('span', null, a), h('b', null, b));
-  return h('div', { class: 'proj-card', 'aria-label': 'Projection' },
+  return quiet(
     h('span', { class: 'proj-title' }, 'Projection · if the rest is paid at ' + (mocked ? 'the rate above' : 'today’s rate') + ' (' + money(rate) + ' / g)'),
     line(`${p.remaining} instalment${p.remaining === 1 ? '' : 's'} left × ${money(p.instalment)} = ${money(p.toPay)}`, `≈ ${dec(p.newGrams, 2)} g more`),
     line(`Gold at the end, by value (${money(p.total)} paid in all)`, `≈ ${dec(p.byValue, 2)} g`),
