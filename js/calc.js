@@ -628,9 +628,10 @@ export function monthCashflow(data, all, month) {
   // A bond counts as received once its due date has come (today included), and as pending until then.
   for (const x of per) { x.credited = x.received; x.received = x.due <= all.asOf ? x.expected : 0; x.pending = x.expected - x.received; }
   const bondsReceived = sum(per, (x) => x.received);
-  const bankCredit = sum(rows.filter((e) => (e.category || '').toLowerCase() === 'income bond' && e.credit > 0), (e) => e.credit);
+  const bankRows = rows.filter((e) => (e.category || '').toLowerCase() === 'income bond' && e.credit > 0);
+  const bankCredit = sum(bankRows, (e) => e.credit);
   const income = [
-    { name: 'Income Bond', expected: bondsExpected, received: bondsReceived, bonds: per, bankCredit },
+    { name: 'Income Bond', expected: bondsExpected, received: bondsReceived, bonds: per, bankCredit, bankRows: bankRows.map((e) => ({ date: e.date, desc: e.desc, amount: e.credit })) },
   ];
   const mStart = month + '-01', mEnd = `${month}-${String(daysInMonthOf(mStart)).padStart(2, '0')}`;
   for (const m of data.manualMonthlyIncome || []) {
@@ -1180,21 +1181,19 @@ export function loanDues(data, asOf) {
 /** A difference smaller than this (₹) between what bonds should have paid and what the bank shows is ignored. */
 export const BANK_TOLERANCE = 300;
 /**
- * Current month only: bond interest whose due date has passed counts as received on Home, whatever the bank says. This checks each such bond against the bank's "Income Bond" credits.
- * A credit is set against a bond the way matchBondCredits does (same amount, or the bond's name in the description, never before its due date). A bond is "not seen in the bank"
- * when it is short by BANK_TOLERANCE or more. Judging bond by bond (not by the month's total) means one bond's missing credit cannot be hidden by another credit that is larger than expected.
- * Returns null when the month is not the current one, when nothing is due yet, or when no bond is short by that much.
- * Otherwise { due, credited, gap, bonds }: `gap` is the sum of the short bonds' shortfalls, `bonds` lists them ({ name, holder, due, expected, short }), `credited` is what the bank shows against the due bonds.
+ * Current month only: bond interest whose due date has passed counts as received on Home, whatever the bank says. This checks it against the bank in total:
+ * everything due so far this month against everything the bank has credited under "Income Bond" this month. No credit is matched to a bond by amount, date or description,
+ * since those vary. When the bank shows BANK_TOLERANCE (300) or more less than what is due, `short` is true: the difference is not credited yet, or its bank entry is missing.
+ * Returns null when the month is not the current one or nothing is due yet. Otherwise { due, credited, gap, short, dueBonds, credits }:
+ * `gap` is due minus credited (it can be negative when the bank has more), `dueBonds` the bonds whose date has passed, `credits` the month's Income Bond bank entries.
  */
 export function bondBankGap(mc, month, asOf) {
   if (month !== monthKey(asOf)) return null;
   const line = (mc.income || []).find((x) => x.bonds);
   if (!line) return null;
-  const dueBonds = line.bonds.filter((b) => b.received > 0.5);
-  const due = sum(dueBonds, (b) => b.received);
+  const dueBonds = line.bonds.filter((b) => b.received > 0.5).map((b) => ({ name: b.name, holder: b.holder, due: b.due, expected: b.expected })).sort((a, b) => (a.due < b.due ? -1 : 1));
+  const due = sum(dueBonds, (b) => b.expected);
   if (!(due > 0.5)) return null;
-  const bonds = dueBonds.map((b) => ({ name: b.name, holder: b.holder, due: b.due, expected: b.expected, short: b.expected - Math.min(b.expected, b.credited || 0) })).filter((b) => b.short >= BANK_TOLERANCE);
-  if (!bonds.length) return null;
-  const gap = sum(bonds, (b) => b.short);
-  return { due, credited: due - gap, gap, bonds };
+  const credited = line.bankCredit || 0, gap = due - credited;
+  return { due, credited, gap, short: gap >= BANK_TOLERANCE, dueBonds, credits: line.bankRows || [] };
 }

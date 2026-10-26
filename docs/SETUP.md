@@ -154,6 +154,11 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.15.2 – Income Bond bank check by monthly total
+
+- **Home → Money to receive: the Income Bond bank check now compares totals only.** Nothing is matched to a bond by amount, date or description. It takes all bond interest whose due date has passed this month and all the bank credited under "Income Bond" this month. If the bank shows ₹300 or more less, the line "Income Bond · not in the bank yet" shows the difference. Tap it to see the two totals, the bonds due so far and the month's Income Bond bank entries. When the totals agree, a quiet line "Bank check: ₹X due so far, ₹Y credited" shows instead, so you can always see the numbers. Current month only. Not added to Waiting for or the Investable balance.
+- This replaces the bond-by-bond check of 8.15.1 (the Markets today refresh of 8.15.1 is unchanged).
+
 ## Release 8.15.1 – Markets today refresh, bond bank check judged bond by bond
 
 - **Home → Markets today (drop-down and phone sheet):** shows when prices were last fetched ("Prices updated 5 min ago", amber with a warning when older than a day or never fetched) and a **Refresh** button. It is the same refresh as Shares & funds: shares, ETFs, funds and gold, plus P/E and 52-week data.
