@@ -97,8 +97,8 @@ function receivableForm(r) {
 
 import * as loans from './loans.js';
 const TABS = [['bonds', 'Bonds'], ['fds', 'FDs'], ['lending', 'Lendings'], ['loans', 'Loans'], ['closed', 'Closed']];
-/** Interest that has reached you so far, after TDS unless the bond has a fixed payout amount. */
-const bondReceived = (b) => { const r = C.interestReceived(b, S.all.asOf); return b.payoutAmount > 0 ? r : r * (1 - (S.data.settings.tdsRate ?? 0.1)); };
+/** Interest paid so far, after TDS: each payment whose due date has come, counted by days since the previous payment day. */
+const bondReceived = (b) => C.bondPaidSoFar(b, S.all.asOf, S.data.settings.tdsRate ?? 0.1);
 const shortD = (d) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 const flt = { bonds: { holder: 'all', via: 'all', sort: 'none', dir: 'asc' }, fds: { holder: 'all', via: 'all' }, lending: { holder: 'all', via: 'all' } };
 const rerenderFixed = () => window.dispatchEvent(new Event('rerender'));
@@ -179,6 +179,7 @@ export function render() {
         { label: 'Received · Matures', main: (b) => green(money(bondReceived(b))), sub: (b) => (b.maturityDate ? 'matures ' + dateStr(b.maturityDate) : null), total: (rs) => ({ main: green(money(rs.reduce((a, b) => a + bondReceived(b), 0))) }) },
       ] }, onRow: canEdit() ? (b) => bondForm(data.bonds.find((x) => x.id === b.id)) : null })),
     canEdit() ? [btn('Add bond', () => bondForm(), 'primary')] : null));
+  if (tab === 'bonds' && (all.bonds.length || (all.closed && all.closed.bonds && all.closed.bonds.length))) root.append(holderPie(all, data));
 
   const depCols = [
     { label: 'Name', host: true, get: (x) => x.name }, { label: 'Holder / type', mob: 'under', get: (x) => x.account },
@@ -241,6 +242,50 @@ export function render() {
 }
 
 /** Who holds the bonds, which companies they are with, and when you want to be told about interest. */
+const pieSel = { range: 'month', holder: '' };
+/**
+ * Bond interest that reached the bank, by account holder: a pie, and under it the bonds of the tapped holder with what was due and what the bank
+ * credited, for this month, last month or the financial year to date. "Credited" is the bank's Income Bond entries matched to each bond (the same
+ * matching as Home); "due" is what the bond should pay by the period rule.
+ */
+function holderPie(all, data) {
+  const tds = data.settings.tdsRate ?? 0.1, cur = C.monthKey(all.asOf);
+  const prev = C.addMonths(cur + '-01', -1).slice(0, 7);
+  const fy = Number(cur.slice(5, 7)) >= 4 ? cur.slice(0, 4) : String(Number(cur.slice(0, 4)) - 1);
+  const ranges = { month: ['This month', [cur]], prev: ['Last month', [prev]], ytd: ['Year to date', []] };
+  for (let m = fy + '-04'; m <= cur; m = C.addMonths(m + '-01', 1).slice(0, 7)) ranges.ytd[1].push(m);
+  const months = ranges[pieSel.range][1];
+  // one row per bond per payment month
+  const byBond = new Map();
+  for (const m of months) {
+    const mc = C.monthCashflow(data, all, m);
+    for (const x of mc.income[0].bonds || []) {
+      const k = x.name, r = byBond.get(k) || { name: x.name, company: x.company, holder: String(x.holder || '').trim() || 'Not set', due: 0, credited: 0, pays: 0, last: '' };
+      r.due += x.due <= all.asOf ? x.expected : 0; r.credited += x.credited || 0; r.pays += x.due <= all.asOf ? 1 : 0; if (x.due <= all.asOf && x.due > r.last) r.last = x.due;
+      byBond.set(k, r);
+    }
+  }
+  const rows = [...byBond.values()].filter((r) => r.due > 0.5 || r.credited > 0.5);
+  const holders = new Map();
+  for (const r of rows) { const g = holders.get(r.holder) || { label: r.holder, value: 0, due: 0, rows: [] }; g.value += r.credited; g.due += r.due; g.rows.push(r); holders.set(r.holder, g); }
+  const items = [...holders.values()].sort((a, b) => b.value - a.value || b.due - a.due);
+  const sel = items.find((g) => g.label === pieSel.holder) || null;
+  const pick = (label) => { pieSel.holder = pieSel.holder === label ? '' : label; rerender(); };
+  const total = items.reduce((t, g) => t + g.value, 0), noBank = total < 1, slice = (g) => (noBank ? g.due : g.value), totalDue = items.reduce((t, g) => t + g.due, 0);
+  const tabs = h('div', { class: 'seg', role: 'tablist', 'aria-label': 'Period' }, Object.entries(ranges).map(([k, v]) => h('a', { role: 'tab', href: 'javascript:void(0)', class: k === pieSel.range ? 'on' : '', 'aria-selected': k === pieSel.range ? 'true' : 'false', onclick: (e) => { e.preventDefault(); pieSel.range = k; rerender(); } }, v[0])));
+  const body = !items.length ? h('p', { class: 'empty' }, 'No bond interest is due in this period yet.') : h('div', null,
+    h('div', { class: 'alloc-main' },
+      donut(items.map((g, i) => ({ label: g.label, value: Math.max(0, slice(g)), color: `var(--s${(i % 8) + 1})` })), { fmt: money, center: money(noBank ? totalDue : total), sub: noBank ? 'due' : 'credited', size: 220, onSelect: (it) => pick(it.label) }),
+      legend(items.map((g, i) => ({ label: g.label, value: slice(g), color: `var(--s${(i % 8) + 1})` })), { fmt: money, onSelect: (it) => pick(it.label) })),
+    h('p', { class: 'note' }, (noBank ? 'No matching bank credits yet, so the pie shows what is due. ' : '') + `Credited by the bank ${money(total)} of ${money(totalDue)} due (${ranges[pieSel.range][0].toLowerCase()}${pieSel.range === 'ytd' ? ', from 1 April' : ''}). Tap a holder to see its bonds.`),
+    sel ? section(sel.label + ' · ' + ranges[pieSel.range][0], table([
+      { label: 'Bond', host: true, render: (r) => h('span', null, h('span', null, r.name), h('small', { class: 'muted', style: { display: 'block', fontWeight: 400, opacity: 0.75 } }, [r.company, r.pays > 1 ? r.pays + ' payments' : r.last ? 'due ' + dateStr(r.last) : ''].filter(Boolean).join(' · '))) },
+      { label: 'Due', cls: 'r', get: (r) => money(r.due), total: (rs) => money(rs.reduce((a, r) => a + r.due, 0)) },
+      { label: 'Credited', key: true, cls: 'r', render: (r) => h('span', { class: Math.abs(r.credited - r.due) <= 300 ? 'pos' : 'warn' }, money(r.credited)), total: (rs) => money(rs.reduce((a, r) => a + r.credited, 0)) },
+      { label: 'Difference', cls: 'r', mob: 'under', mlabel: 'diff ', get: (r) => (Math.abs(r.credited - r.due) < 1 ? '–' : money(r.credited - r.due)), total: (rs) => money(rs.reduce((a, r) => a + r.credited - r.due, 0)) },
+    ], sel.rows.sort((a, b) => b.credited - a.credited || a.name.localeCompare(b.name)), { footer: { label: 'Total' } })) : null);
+  return section('Interest credited by holder', h('div', { class: 'hp' }, tabs, body));
+}
 function bondInsights(all, data) {
   const group = (key) => { const m = new Map(); for (const b of all.bonds) { const k = String(b[key] || '').trim() || 'Not set'; m.set(k, (m.get(k) || 0) + b.principal); } return [...m.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value); };
   const owners = group('holder'), firms = group('company'), total = all.bonds.reduce((a, b) => a + b.principal, 0);

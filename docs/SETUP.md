@@ -154,6 +154,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.16.0 – Bond interest by payment period, interest by holder
+
+- **One rule for bond interest** (`bondPeriod()` in `js/calc.js`): a payment covers the days from the day after the previous payment day up to and including the due day. Due 13 Oct: 14 Sep to 13 Oct = 30 days; due 13 Nov: 14 Oct to 13 Nov = 31 days; due the 31st: previous payment day 30 Sep, so October is 1 to 31 = 31 days; February and leap years follow the real previous payment day. Quarterly bonds work the same from their previous payout day (about 91 to 92 days). The first period starts the day the bond was bought; the last one ends the day before it matures or is closed.
+- Used everywhere interest or a due amount is worked out: `bondDaysIn`, `bondGrossIn`, `bondNetIn`, `bondDueAmount` (so Home's money to receive and bank check, Wealth outlook month cash flow, upcoming interest), the Tax summary (bond interest now counts in the year of each payment's due date, once that date has come) and its month-by-month bond dialog, the bank-vs-holdings check, and the Bonds page "Paid so far" (`bondPaidSoFar()`).
+- **Bonds page, bottom: "Interest credited by holder"** pie with This month / Last month / Year to date (financial year from 1 April). Tap a holder (slice or legend) for its bonds with due, credited by the bank and the difference. Credited = Income Bond bank entries matched to each bond (same matching as Home); with no matches the pie shows what is due.
+
 ## Release 8.15.2 – Income Bond bank check by monthly total
 
 - **Home → Money to receive: the Income Bond bank check now compares totals only.** Nothing is matched to a bond by amount, date or description. It takes all bond interest whose due date has passed this month and all the bank credited under "Income Bond" this month. If the bank shows ₹300 or more less, the line "Income Bond · not in the bank yet" shows the difference. Tap it to see the two totals, the bonds due so far and the month's Income Bond bank entries. When the totals agree, a quiet line "Bank check: ₹X due so far, ₹Y credited" shows instead, so you can always see the numbers. Current month only. Not added to Waiting for or the Investable balance.

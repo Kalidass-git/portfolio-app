@@ -1,4 +1,4 @@
-import { computeAll } from '../js/calc.js';
+import { computeAll, bondNetIn } from '../js/calc.js';
 import * as I from '../js/insights.js';
 let bad = 0; const ok = (c, m) => { if (!c) { bad++; console.log('FAIL', m); } };
 const near = (a, b, t = 0.01) => Math.abs(a - b) < t;
@@ -10,7 +10,7 @@ const data = {
   accounts: [{ id: 'a1', name: 'Bank', holder: 'H', type: 'Savings', openingBalance: 0 }], categories: [], categoryList: [{ name: 'Income Bond', kind: 'income', budget: 0 }],
   ledger: [], savings: [], bonds, fds: [], lending: [], receivables: [], stocks: [], mutualFunds: [], sipPlans: [], gold: { chits: [], schemes: [], purchases: [], jewellery: [], others: [] }, liabilities: [], targets: [], proj: { months: [] }, incomeSources: [], manualMonthlyIncome: [], reportNotes: [],
 };
-const per = (b, m) => (b.principal * b.rate / 365) * new Date(Date.UTC(Number(m.slice(0, 4)), Number(m.slice(5, 7)), 0)).getUTCDate() * 0.9;
+const per = (b, m) => bondNetIn(b, m, 0.1);   // each payment covers the days since the previous payment day up to its due date
 // credits for every payment that is due, on its due date (April to October, Alpha; April to September, Beta)
 const months = ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10'];
 for (const m of months) data.ledger.push({ id: data.ledger.length + 1, acct: 'a1', date: m + '-05', desc: 'Alpha', category: 'Income Bond', credit: per(bonds[0], m), debit: 0 });
@@ -20,15 +20,15 @@ const row = (b) => ({ kind: 'Bonds', name: b.name, ref: b });
 const beta = I.holdingMonths(data, all, row(bonds[1]), '2026-04-01', '2026-10-21');
 const oct = beta.find((x) => x.month === '2026-10'), sep = beta.find((x) => x.month === '2026-09');
 ok(!oct, 'Beta (due the 24th): October is not counted at all until its payment is due, and it is not pro-rated to today');
-ok(sep && sep.days === 30 && near(sep.due, per(bonds[1], '2026-09')) && near(sep.received, sep.due, 0.05), 'September is whole, due and found in the bank');
+ok(sep && sep.days === 31 /* 25 Aug to 24 Sep */ && near(sep.due, per(bonds[1], '2026-09')) && near(sep.received, sep.due, 0.05), 'September is whole, due and found in the bank');
 const alpha = I.holdingMonths(data, all, row(bonds[0]), '2026-04-01', '2026-10-21');
 const aOct = alpha.find((x) => x.month === '2026-10');
-ok(aOct.days === 31 && near(aOct.due, per(bonds[0], '2026-10')) && near(aOct.received, aOct.due, 0.05), 'Alpha (due the 5th) has been paid: the whole of October counts (31 days), matched to the bank');
+ok(aOct.days === 30 /* 6 Sep to 5 Oct */ && near(aOct.due, per(bonds[0], '2026-10')) && near(aOct.received, aOct.due, 0.05), 'Alpha (due the 5th) has been paid: its payment (6 Sep to 5 Oct, 30 days) counts, matched to the bank');
 const sumGross = (res) => res.interestBy.find((g) => g.kind === 'Bonds').rows.filter((r) => r.name === 'Beta').reduce((t, r) => t + r.gross, 0);
 const ts = I.taxSummary(data, all, 2026, 'all'), ts25 = I.taxSummary(data, computeAll(data, { asOf: '2026-10-25' }), 2026, 'all');
 const day = bonds[1].principal * bonds[1].rate / 365;
-ok(near(sumGross(ts), day * (30 + 31 + 30 + 31 + 31 + 30), 0.5), 'tax holdings, Beta on 21 Oct: April to September in full, nothing for October');
-ok(near(sumGross(ts25), day * (30 + 31 + 30 + 31 + 31 + 30 + 31), 0.5), 'on the 25th Beta has paid, so all of October counts');
+ok(near(sumGross(ts), day * 184, 0.5), 'tax holdings, Beta on 21 Oct: payments up to 24 Sep (25 Mar to 24 Sep = 184 days), nothing for October');
+ok(near(sumGross(ts25), day * (184 + 30), 0.5), 'on the 25th Beta has paid 25 Sep to 24 Oct (30 days)');
 // Bank against holdings: payments whose due date has passed against the bank credits, so a bond not yet due does not make the bank look short
 const p = I.taxProjection(data, all, 2026, 'all', {});
 const expected = months.reduce((t, m) => t + per(bonds[0], m), 0) + months.slice(0, 6).reduce((t, m) => t + per(bonds[1], m), 0);

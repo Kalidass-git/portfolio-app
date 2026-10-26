@@ -50,26 +50,41 @@ export function calcBond(b, asOf, s) {
 }
 
 /**
- * Days a bond earned interest in a calendar month ('YYYY-MM'): from the day it was bought up to the day before it matured or was closed.
- * A bond bought after the month, or closed before it, earns nothing in that month.
+ * THE one rule for bond interest. A payment covers the days since the previous payment day, counting the due day itself:
+ * due on the 13th of October, last paid on 13 September, so it covers 14 Sep to 13 Oct = 30 days; the next one 14 Oct to 13 Nov = 31 days.
+ * Due on the 31st: the previous payment day was 30 September (a short month gives its last day), so October covers 1 to 31 = 31 days.
+ * A quarterly bond works the same way from its previous payout day (about 91 to 92 days). The first period starts the day the bond was bought and
+ * the last one ends the day before it matured or was closed. Returns null when the bond pays nothing in `month`.
+ *   { from, to (last day counted), due (the due date), days, full (an unbroken period) }
  */
-export function bondDaysIn(b, month) {
-  const start = month + '-01', next = addMonths(start, 1);
+export function bondPeriod(b, month) {
+  if (!bondPaysIn(b, month)) return null;
+  const end = b.closed && b.closed.date ? b.closed.date : b.maturityDate;
+  if (end && end.slice(0, 7) < month) return null;
+  const due = bondDueDate(b, month);
+  if (b.depositDate && b.depositDate > due) return null;   // not yet bought when the payment falls due: it is paid with the next one
+  let pm = addMonths(month + '-01', -1).slice(0, 7);
+  if (b.credit === 'Quarterly') for (let i = 0; i < 2 && !isPayMonth(b, pm); i++) pm = addMonths(pm + '-01', -1).slice(0, 7);
+  const start = iso(toMs(bondDueDate(b, pm)) + DAY);
   const from = b.depositDate && b.depositDate > start ? b.depositDate : start;
-  const stop = b.closed && b.closed.date ? b.closed.date : b.maturityDate;
-  const to = stop && stop < next ? stop : next;
-  return Math.max(0, Math.round((toMs(to) - toMs(from)) / DAY));
+  const dayBefore = (d) => iso(toMs(d) - DAY);
+  const to = end && end.slice(0, 7) === month ? dayBefore(end) : due;
+  if (to < from) return null;
+  return { from, to, due, days: Math.round((toMs(to) - toMs(from)) / DAY) + 1, full: from === start && to === due };
 }
+/** Days of interest in the payment `month` pays (see bondPeriod); 0 when nothing is paid. */
+export const bondDaysIn = (b, month) => { const p = bondPeriod(b, month); return p ? p.days : 0; };
+/** Interest before TDS in the payment `month` pays. */
+export function bondGrossIn(b, month) { const d = bondDaysIn(b, month); return d ? ((b.principal * b.rate) / 365) * d : 0; }
 /**
- * Interest a bond pays for one calendar month, after TDS: the daily interest times the days it was really held in that month
- * (28, 30 or 31, fewer in the month it was bought or closed). An amount entered on the bond as "what reaches me" wins for a full month.
+ * Interest a bond pays in `month` after TDS: the daily interest times the days of its payment period (bondPeriod).
+ * An amount entered on the bond as "what reaches me" wins for an unbroken period.
  */
 export function bondNetIn(b, month, tdsRate = 0.1) {
-  const days = bondDaysIn(b, month);
-  if (!days) return 0;
-  const full = days === daysInMonthOf(month + '-01');
-  if (b.payoutAmount > 0 && full) return b.payoutAmount / (b.credit === 'Quarterly' ? 3 : 1);
-  return ((b.principal * b.rate) / 365) * days * (1 - tdsRate);
+  const p = bondPeriod(b, month);
+  if (!p) return 0;
+  if (b.payoutAmount > 0 && p.full) return b.payoutAmount;
+  return ((b.principal * b.rate) / 365) * p.days * (1 - tdsRate);
 }
 /**
  * Quarterly bonds: which months of the year the interest is paid in. 0 = Jan, Apr, Jul, Oct (the default), 1 = Feb, May, Aug, Nov, 2 = Mar, Jun, Sep, Dec.
@@ -85,18 +100,14 @@ export function bondPaysIn(b, month) {
   const end = b.closed && b.closed.date ? b.closed.date : b.maturityDate;
   return !!end && end.slice(0, 7) === month;
 }
-/** What a bond pays in `month` as a cash credit: every month for Monthly, the months since the last payout for Quarterly. */
-export function bondDueAmount(b, month, tdsRate = 0.1) {
-  if (b.credit !== 'Quarterly') {
-    // A payment cannot fall due before the money went in: a bond bought on the 12th that pays on the 9th first pays next month, and that payment also covers the days since it was bought.
-    const early = (m) => !!b.depositDate && m === b.depositDate.slice(0, 7) && bondDueDate(b, m) < b.depositDate;
-    if (early(month)) return 0;
-    const prev = addMonths(month + '-01', -1).slice(0, 7);
-    return bondNetIn(b, month, tdsRate) + (early(prev) ? bondNetIn(b, prev, tdsRate) : 0);
-  }
-  if (!bondPaysIn(b, month)) return 0;
+/** What a bond pays in `month` as a cash credit: the interest of its payment period (monthly or quarterly), 0 in a month it pays nothing. */
+export const bondDueAmount = (b, month, tdsRate = 0.1) => bondNetIn(b, month, tdsRate);
+
+/** What a bond has paid out so far (after TDS): every payment whose due date has come, each by the period rule (bondPeriod). */
+export function bondPaidSoFar(b, asOf, tdsRate = 0.1) {
+  if (!b.depositDate) return 0;
   let t = 0;
-  for (let i = 0; i < 3; i++) { const m = addMonths(month + '-01', -i).slice(0, 7); if (i > 0 && isPayMonth(b, m)) break; t += bondNetIn(b, m, tdsRate); }
+  for (let m = b.depositDate.slice(0, 7); m <= asOf.slice(0, 7); m = addMonths(m + '-01', 1).slice(0, 7)) if (bondDueDate(b, m) <= asOf) t += bondNetIn(b, m, tdsRate);
   return t;
 }
 
