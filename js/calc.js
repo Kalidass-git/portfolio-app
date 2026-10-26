@@ -1180,19 +1180,21 @@ export function loanDues(data, asOf) {
 /** A difference smaller than this (₹) between what bonds should have paid and what the bank shows is ignored. */
 export const BANK_TOLERANCE = 300;
 /**
- * Current month only: bond interest whose due date has passed counts as received on Home, whatever the bank says. This checks it against the bank's "Income Bond" credits.
- * Returns null when the month is not the current one, when nothing is due yet, or when the gap is under BANK_TOLERANCE.
- * Otherwise { due, credited, gap, bonds } where gap is the amount not yet seen in the bank (not credited yet, or the bank entry is missing)
- * and bonds lists the bonds that are due but have no matching credit, with what each is short.
+ * Current month only: bond interest whose due date has passed counts as received on Home, whatever the bank says. This checks each such bond against the bank's "Income Bond" credits.
+ * A credit is set against a bond the way matchBondCredits does (same amount, or the bond's name in the description, never before its due date). A bond is "not seen in the bank"
+ * when it is short by BANK_TOLERANCE or more. Judging bond by bond (not by the month's total) means one bond's missing credit cannot be hidden by another credit that is larger than expected.
+ * Returns null when the month is not the current one, when nothing is due yet, or when no bond is short by that much.
+ * Otherwise { due, credited, gap, bonds }: `gap` is the sum of the short bonds' shortfalls, `bonds` lists them ({ name, holder, due, expected, short }), `credited` is what the bank shows against the due bonds.
  */
 export function bondBankGap(mc, month, asOf) {
   if (month !== monthKey(asOf)) return null;
   const line = (mc.income || []).find((x) => x.bonds);
   if (!line) return null;
-  const due = sum(line.bonds, (b) => b.received);
+  const dueBonds = line.bonds.filter((b) => b.received > 0.5);
+  const due = sum(dueBonds, (b) => b.received);
   if (!(due > 0.5)) return null;
-  const credited = line.bankCredit || 0, gap = due - credited;
-  if (gap < BANK_TOLERANCE) return null;
-  const short = line.bonds.filter((b) => b.received > 0.5 && (b.credited || 0) < b.expected - 1).map((b) => ({ name: b.name, holder: b.holder, due: b.due, expected: b.expected, short: b.expected - (b.credited || 0) }));
-  return { due, credited, gap, bonds: short };
+  const bonds = dueBonds.map((b) => ({ name: b.name, holder: b.holder, due: b.due, expected: b.expected, short: b.expected - Math.min(b.expected, b.credited || 0) })).filter((b) => b.short >= BANK_TOLERANCE);
+  if (!bonds.length) return null;
+  const gap = sum(bonds, (b) => b.short);
+  return { due, credited: due - gap, gap, bonds };
 }

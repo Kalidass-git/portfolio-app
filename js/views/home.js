@@ -2,7 +2,7 @@
 import { evalAlerts } from '../watch.js';
 import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
-import { h, money, compact, pct, dateStr, monthLabel, section, stat, monthPicker, rowList, kpi, dateChip, btn, canEdit, dec, toast, dialog } from '../ui.js';
+import { h, money, compact, pct, dateStr, monthLabel, section, stat, monthPicker, rowList, kpi, dateChip, btn, canEdit, dec, toast, dialog, icon as uiIcon } from '../ui.js';
 import { strip, legend, hbars, lineChart, donut, spark, color, riskColor } from '../charts.js';
 import * as R from '../risk.js';
 import { rateHistory, ageText } from './gold.js';
@@ -10,6 +10,7 @@ import { GROUPS } from './groupmix.js';
 import { allocationBody } from './allocview.js';
 import { monthPlan, pendingToReceive } from '../monthinvest.js';
 import { openInfo } from '../mobilebar.js';
+import { refresh as refreshPrices, agoText } from './equity.js';
 import * as P from '../projector.js';
 
 let selMonth = null;
@@ -278,9 +279,9 @@ const pendingText = (bonds) => bonds.filter((b) => b.pending > 0.5).map((b) => `
 function bankGapDialog(g) {
   const rows = g.bonds.map((b) => ({ title: b.name, sub: `${b.holder ? b.holder + ' · ' : ''}due ${shortDate(b.due)} · expected ${money(b.expected)}`, value: h('span', { class: 'warn' }, money(b.short)), valueSub: 'not seen in bank' }));
   dialog('Bond interest not seen in the bank', h('div', null,
-    h('div', { class: 'trio' }, h('div', null, h('span', { class: 'mini-title' }, 'Due so far'), h('b', null, money(g.due))), h('div', null, h('span', { class: 'mini-title' }, 'Bank credits'), h('b', null, money(g.credited))), h('div', null, h('span', { class: 'mini-title' }, 'Not seen'), h('b', { class: 'warn' }, money(g.gap)))),
-    rows.length ? rowList(rows) : h('p', { class: 'empty' }, 'No single bond stands out; the bank total is simply lower than what is due.'),
-    h('p', { class: 'note' }, 'Home counts a bond as received once its due date has passed. This is a cross-check against the bank\'s “Income Bond” credits for this month only. Either the money has not been credited yet, or the bank entry has not been made. Differences under ₹' + C.BANK_TOLERANCE + ' are ignored. It is not added to the totals above.')),
+    h('div', { class: 'trio' }, h('div', null, h('span', { class: 'mini-title' }, 'Due so far'), h('b', null, money(g.due))), h('div', null, h('span', { class: 'mini-title' }, 'Seen in bank'), h('b', null, money(g.credited))), h('div', null, h('span', { class: 'mini-title' }, 'Not seen'), h('b', { class: 'warn' }, money(g.gap)))),
+    rowList(rows),
+    h('p', { class: 'note' }, 'Home counts a bond as received once its due date has passed. This checks each bond against the bank\'s “Income Bond” credits for this month only (by amount, or the bond\'s name in the description, and never before its due date). Either the money has not been credited yet, or the bank entry has not been made. Differences under ₹' + C.BANK_TOLERANCE + ' are ignored. It is not added to the totals above.')),
   [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
 }
 function toReceiveCard(data, all) {
@@ -297,7 +298,7 @@ function toReceiveCard(data, all) {
       lead: dateChip(r.due), title: r.name, sub: r.overdue ? h('span', { class: 'neg' }, 'Overdue since ' + shortDate(r.due)) : r.dueToday ? h('span', { class: 'warn' }, 'Due today') : 'Due ' + shortDate(r.due),
       value: money(r.dueAmount ?? r.expected ?? 0), tone: r.overdue ? 'neg' : r.dueToday ? 'warn' : '',
     }))) : h('p', { class: 'empty' }, 'Everything due this month has been received.'),
-    bankGap ? h('div', { class: 'bank-gap' }, rowList([{ title: 'Income Bond · not in the bank yet', sub: `bond interest due so far ${money(bankGap.due)}, bank credits ${money(bankGap.credited)} · tap for the bonds`, onClick: () => bankGapDialog(bankGap), value: h('span', { class: 'warn' }, money(bankGap.gap)), valueSub: h('span', { class: 'warn' }, 'to check') }])) : null,
+    bankGap ? h('div', { class: 'bank-gap' }, rowList([{ title: 'Income Bond · not in the bank yet', sub: `${bankGap.bonds.map((b) => b.name).join(', ')} · tap for details`, onClick: () => bankGapDialog(bankGap), value: h('span', { class: 'warn' }, money(bankGap.gap)), valueSub: h('span', { class: 'warn' }, 'to check') }])) : null,
     all2.length ? h('p', { class: 'summary-line' }, `Waiting for ${money(total)}`, over.length ? h('span', { class: 'neg' }, ` · ${over.length} overdue`) : null, rows.some((r) => r.dueToday) ? h('span', { class: 'warn' }, ` · ${rows.filter((r) => r.dueToday).length} due today`) : null) : null,
     h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income'))));
 }
@@ -359,13 +360,21 @@ function investCard(data, all, planIn) {
     h('p', null, h('a', { href: '#/projector' }, 'Open Wealth outlook'))));
 }
 
+/** When prices were last fetched, and a button that fetches shares, ETFs, funds and gold again (the same refresh as Shares & funds). */
+function refreshBar() {
+  const upd = S.data.settings.pricesUpdatedAt, ms = upd ? Date.now() - new Date(upd).getTime() : null, stale = ms == null || ms > 864e5;
+  return h('div', { class: 'price-bar inline mk-refresh' },
+    h('span', { class: 'stamp' + (stale ? ' warn' : ''), title: upd ? 'Prices ' + new Date(upd).toLocaleString('en-IN') : '' }, stale ? '⚠ ' : '', ms == null ? 'Prices not fetched yet' : 'Prices updated ' + agoText(ms)),
+    h('button', { class: 'refresh-btn small', type: 'button', title: 'Fetch the latest prices of shares, ETFs, funds and gold', 'aria-label': 'Refresh all market prices', onclick: (e) => { e.stopPropagation(); refreshPrices(e.currentTarget); } }, h('span', { class: 'ic' }, uiIcon('refresh')), h('span', { class: 'lb' }, 'Refresh')));
+}
 function todayBody(all) {
   const mk = marketGroups(all), gd = all.gold.day;
   const rows = mk.rows.filter((r) => r.hasDay).map((r) => ({ title: r.name, sub: sgp(r.dayPct), value: h('span', { class: tone(r.day) }, sgn(r.day)) }));
   if (gd) rows.push({ title: 'Gold', sub: `${sgp(gd.pct)} · ${money(all.gold.rate)}/g (${sgn(gd.perGram)})`, value: h('span', { class: tone(gd.total) }, sgn(gd.total)) });
   const total = rows.length ? mk.total.day + (gd ? gd.total : 0) : null;
   return h('div', null,
-    rows.length ? rowList(rows) : h('p', { class: 'empty' }, 'Press Refresh prices on Shares & funds to see today’s change.'),
+    refreshBar(),
+    rows.length ? rowList(rows) : h('p', { class: 'empty' }, 'Press Refresh to see today’s change.'),
     total != null ? h('p', { class: 'summary-line' }, 'All together ', h('b', { class: tone(total) }, sgn(total)), (() => { const b = (mk.total.dayPct ? mk.total.day / mk.total.dayPct : 0) + (gd ? all.gold.value - gd.total : 0); return b ? h('span', { class: tone(total) }, ' (' + sgp(total / b) + ')') : null; })()) : null,
     gd ? null : h('p', { class: 'note' }, 'Gold today appears after a price refresh.'));
 }

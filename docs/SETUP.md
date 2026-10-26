@@ -154,6 +154,11 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.15.1 – Markets today refresh, bond bank check judged bond by bond
+
+- **Home → Markets today (drop-down and phone sheet):** shows when prices were last fetched ("Prices updated 5 min ago", amber with a warning when older than a day or never fetched) and a **Refresh** button. It is the same refresh as Shares & funds: shares, ETFs, funds and gold, plus P/E and 52-week data.
+- **Home → Money to receive: "Income Bond · not in the bank yet" now works bond by bond.** 8.15.0 compared the month's total of bank credits with the total due, so a credit larger than expected for one bond (or any extra credit) could hide another bond whose interest had not arrived. Now each bond whose due date has passed is set against the bank's "Income Bond" credits (same amount, or its name in the description, never before its due date). A bond short by ₹300 or more is listed, and the line shows the sum of those shortfalls. Tap it for each bond, its due date and what is missing.
+
 ## Release 8.15.0 – Bond bank check, orderable New money highlight, Allocation goal plan, spending popup
 
 - **Home → Money to receive this month: bank cross-check (current month only).** Bond interest still counts as received once its due date passes. A second check compares the bond interest due so far with the bank's "Income Bond" credits this month. If the bank shows at least ₹300 less, a separate line "Income Bond · not in the bank yet" appears with the amount. Tap it for the bonds with no matching credit. It means either the money has not arrived or the bank entry is missing. A gap under ₹300 shows nothing. It is not added to the totals, Waiting for, or the Investable balance.
