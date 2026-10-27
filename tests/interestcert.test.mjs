@@ -26,4 +26,24 @@ ok(allr.kinds.length === 2 && allr.byKind.length === 2 && near(allr.totals.gross
 ok(near(allr.byMonth.reduce((t, m) => t + m.parts.reduce((a, x) => a + x.gross, 0), 0), allr.totals.gross), 'monthly chart adds up to the total');
 const none = IC.certificate(data, all, get('py'), 'all');
 ok(none.rows.length === 0, 'nothing last year');
+// EPF / PPF / chits
+const ent = (n, a, start) => Array.from({ length: n }, (_, i) => ({ date: new Date(Date.UTC(start, i, 5)).toISOString().slice(0, 10), amount: a }));
+data.savings = [
+  { id: 's1', name: 'My EPF', type: 'EPF', holder: 'H', rate: 0.0825, entries: Array.from({ length: 9 }, (_, i) => ({ date: `2026-0${i + 1}-05`, employee: 3000, employer: 2000, kind: 'Deposit' })) },
+  { id: 's2', name: 'My PPF', type: 'PPF', holder: 'H', rate: 0.071, entries: [{ date: '2026-01-05', amount: 120000 }] },
+  { id: 's3', name: 'Open chit', type: 'Chit', holder: 'H', maturityDate: '2026-12-05', payout: 130000, entries: ent(10, 10000, 2026) },
+  { id: 's4', name: 'Closed chit', type: 'Chit', holder: 'H', entries: ent(6, 10000, 2026), closed: { date: '2026-08-20', amount: 66000 } },
+];
+const all2 = computeAll(data, { asOf: '2026-10-25' });
+const e = IC.certificate(data, all2, get('cy'), ['EPF', 'PPF']);
+const epf = e.rows.find((r) => r.kind === 'EPF'), ppf = e.rows.find((r) => r.kind === 'PPF');
+ok(epf && epf.count === 9 && ppf.count === 9 && ppf.gross > 6390 && ppf.gross < 6500, 'PPF earns monthly on 1.2 lakh (plus March compounding) for 9 completed months: ' + ppf.gross);
+ok(e.kinds.join() === 'EPF,PPF' && near(e.totals.gross, epf.gross + ppf.gross), 'two types selected');
+const ch = IC.certificate(data, all2, get('cy'), ['Chits']);
+const open = ch.rows.find((r) => r.name === 'Open chit'), closed = ch.rows.find((r) => r.name === 'Closed chit');
+ok(near(open.gross, 130000 - 120000, 0.5) && open.projected === true && open.coming > 0 && open.received === 0, 'open chit: projection of 10,000 = payout less 12 instalments: ' + open.gross);
+ok(near(closed.gross, 6000, 0.5) && !closed.projected && closed.closedOn === '2026-08-20' && closed.received > 0, 'closed chit uses the amount received: ' + closed.gross);
+ok(ch.totals.projected > 0 && near(ch.totals.projected, open.net), 'projected total');
+const both = IC.certificate(data, all2, get('cy'), ['Chits', 'Bonds']);
+ok(both.kinds.join() === 'Bonds,Chits', 'multi-select order: ' + both.kinds.join());
 console.log(bad ? 'FAILED' : 'all passed'); process.exit(bad ? 1 : 0);

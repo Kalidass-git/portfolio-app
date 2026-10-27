@@ -154,6 +154,14 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.19.0 – Interest certificate: EPF, PPF, chits and multi-select types
+
+- **Types are now chips you can combine** (All, Bonds, Fixed deposits, Private lending, EPF, PPF, Chits). With one type selected every holding is shown open; with several, tap a type to open it.
+- **EPF and PPF**: interest earned each completed month on the balance at the declared yearly rate (`monthlyInterest()` in `js/epf.js`, same model as the balance estimate). The passbook credits it in March, but it is earned monthly.
+- **Chits**: the gain is what the chit pays at the end less the instalments paid in, spread over its life in proportion to the money held each month. A closed chit uses the amount you entered when you closed it (marked Closed). A chit still running is a **projection** (italics, a Projection tag and a Projected card) from its expected payout or yearly rate and the instalments still to come; it counts as "still to come" until its end date. A chit with no expected payout or rate shows nothing.
+- Closed holdings of every type carry a Closed tag; CSV has a Status column (Projected, Closed).
+- Not included: recurring deposits, insurance and other small savings.
+
 ## Release 8.18.0 – Interest certificate report
 
 - **Insights > Interest certificate** (new tab; logic in `js/interestcert.js`, view `certView()` in `js/views/insights.js`): the interest every fixed-income holding pays or adds in a period.
