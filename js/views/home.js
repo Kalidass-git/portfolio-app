@@ -365,27 +365,23 @@ const DISMISS = 'fw.dismissed';
 const dismissed = () => { try { const o = JSON.parse(localStorage.getItem(DISMISS) || '{}'), t = C.todayISO(); return Object.fromEntries(Object.entries(o).filter(([, d]) => d === t)); } catch (e) { return {}; } };
 const setDismissed = (o) => { try { localStorage.setItem(DISMISS, JSON.stringify(o)); } catch (e) { /* private window */ } rerender(); };
 /** Things that need a look: overdue money, old prices, loans, behind plan. Each can be hidden for the rest of today (this device only). */
-/** One part of the combined "Needs a look and coming up" card. */
-const block = (title, body) => h('div', { class: 'blk', style: { marginBottom: '10px' } }, h('h4', { style: { margin: '2px 0 6px' } }, title), body);
-function watchCard(data, all) {
-  return section('Needs a look and coming up', h('div', null, attention(data, all), comingUp(data, all)));
-}
-function attention(data, all) {
-  const out = [];
-  const soon = C.upcoming(data, all, 30).filter((u) => u.kind !== 'Loan EMI' && u.kind !== 'Bond interest'), overdue = soon.filter((u) => u.days < 0);
-  const emis = C.loanDues(data, all.asOf).filter((d) => !d.paid && d.days <= 7);
-  const emiLate = emis.filter((d) => d.status === 'overdue'), emiSoon = emis.filter((d) => d.status !== 'overdue');
-  if (emiLate.length) out.push({ title: `${emiLate.length} loan EMI${emiLate.length === 1 ? '' : 's'} overdue`, sub: emiLate.map((d) => `${d.name} (was due ${dateStr(d.date)})`).join(', '), value: money(emiLate.reduce((a, d) => a + d.emi, 0)), tone: 'neg', href: '#/fixed/loans' });
-  if (emiSoon.length) out.push({ title: emiSoon.length === 1 ? `${emiSoon[0].name} EMI: ${emiSoon[0].days === 0 ? 'due today' : emiSoon[0].days === 1 ? 'due tomorrow' : 'due in ' + emiSoon[0].days + ' days'}` : `${emiSoon.length} loan EMIs due within a week`, sub: emiSoon.map((d) => `${d.name} · ${d.days === 0 ? 'today' : dateStr(d.date).replace(/ \d{4}$/, '')}`).join(', '), value: money(emiSoon.reduce((a, d) => a + d.emi, 0)), tone: 'warn', href: '#/fixed/loans' });
-  if (overdue.length) out.push({ title: `${overdue.length} payment${overdue.length === 1 ? '' : 's'} overdue`, sub: overdue.slice(0, 2).map((u) => u.title).join(', '), value: money(overdue.reduce((a, u) => a + u.amount, 0)), tone: 'neg', href: '#/fixed/lending' });
-  const due = soon.filter((u) => u.days >= 0 && u.days <= 14);
-  const when = (u) => (u.days === 0 ? 'today' : u.days === 1 ? 'tomorrow' : dateStr(u.date).replace(/ \d{4}$/, ''));
-  if (due.length) out.push({ title: due.length === 1 ? `${due[0].title}: due ${when(due[0])}` : `${due.length} falling due in 14 days`, sub: due.slice(0, 3).map((u) => `${u.title} · ${when(u)}`).join(', ') + (due.length > 3 ? ` and ${due.length - 3} more` : ''), value: money(due.reduce((a, u) => a + u.amount, 0)), tone: due.some((u) => u.days === 0) ? 'warn' : '', href: due.every((u) => u.kind === 'Money to receive') ? '#/fixed/lending' : '#/home' });
-  const bn = C.bondNotify(data), bd = bn.on ? C.bondsDueSoon(all, all.asOf, bn.days) : [];
-  if (bd.length) {
-    const when = (d) => (d.days === 0 ? 'today' : d.days === 1 ? 'tomorrow' : 'in ' + d.days + ' days');
-    out.push({ title: bd.length === 1 ? `${bd[0].b.name}: interest due ${when(bd[0])}` : `${bd.length} bond interests due${bd.every((d) => d.days === 0) ? ' today' : ' soon'}`, sub: bd.slice(0, 3).map((d) => `${d.b.name} · ${when(d)}`).join(', ') + (bd.length > 3 ? ` and ${bd.length - 3} more` : ''), value: money(bd.reduce((a, d) => a + (d.b.credit === 'Quarterly' ? 3 : 1) * (d.b.monthNet || 0), 0)), tone: 'warn', href: '#/fixed/bonds' });
+// ---------- Action centre: everything dated that needs you, and the notices, in one card ----------
+const ACTION_KIND = { 'Money to receive': { href: '#/fixed/lending', dir: 'in' }, 'Bond interest': { href: '#/fixed/bonds', dir: 'in' }, Bond: { href: '#/fixed/bonds', dir: 'in' }, 'Fixed deposit': { href: '#/fixed/fds', dir: 'in' }, Lending: { href: '#/fixed/lending', dir: 'in' }, 'Loan EMI': { href: '#/fixed/loans', dir: 'out' } };
+const acState = { tab: 'all', more: {} };
+/** One dated list from the single source (C.upcoming, 60 days: maturities, interest, money to receive, EMIs), plus bond interest due today, each item once. */
+function agenda(data, all) {
+  const items = C.upcoming(data, all, 60).map((u) => ({ ...u, key: u.date + '|' + u.title }));
+  const seen = new Set(items.map((u) => u.key));
+  const bn = C.bondNotify(data);
+  if (bn.on) for (const d of C.bondsDueSoon(all, all.asOf, 0)) {
+    const u = { date: d.date, title: d.b.name + ' interest due', amount: C.bondDueAmount(d.b, d.date.slice(0, 7), data.settings.tdsRate ?? 0.1), kind: 'Bond interest', days: 0 };
+    u.key = u.date + '|' + u.title; if (!seen.has(u.key)) { seen.add(u.key); items.push(u); }
   }
+  return items.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+/** Notices that have no date: price alerts, old prices, loan interest higher than what you earn. Each can be hidden until tomorrow. */
+function notices(data, all) {
+  const out = [];
   const al = evalAlerts(data).hit;
   if (al.length) out.push({ title: al.length === 1 ? `Price alert: ${al[0].alert.name}` : `${al.length} price alerts triggered`, sub: al.slice(0, 2).map((x) => x.text).join(' · '), value: '', tone: 'warn', href: '#/equity/overview' });
   const at = data.settings.pricesUpdatedAt;
@@ -393,13 +389,50 @@ function attention(data, all) {
   if (age == null || age >= 3) out.push({ title: 'Share and fund prices are ' + (age == null ? 'not fetched yet' : age + ' days old'), sub: 'Refresh on Shares & funds', value: '', tone: 'warn', href: '#/equity' });
   if (all.loans.monthlyInterest > all.cfTotal.perMonth) out.push({ title: 'Loan interest is more than the interest you earn', sub: `${money(all.loans.monthlyInterest)} out, ${money(all.cfTotal.perMonth)} in each month`, value: '', tone: 'neg', href: '#/fixed/loans' });
   const hid = dismissed();
-  const keyOf = (o) => o.title;
-  const shown = out.filter((o) => !hid[keyOf(o)]), nHid = out.length - shown.length;
-  if (!shown.length) return null;
-  const today = C.todayISO();
-  return block('Needs a look', h('div', null, rowList(shown.map((o) => ({ title: o.title, sub: o.sub, value: o.value, tone: o.tone, onClick: () => { location.hash = o.href; },
-    extra: h('button', { type: 'button', class: 'small dismiss', title: 'Hide this until tomorrow', 'aria-label': 'Hide until tomorrow: ' + o.title, onclick: (e) => { e.stopPropagation(); setDismissed({ ...hid, [keyOf(o)]: today }); } }, 'Dismiss') }))),
-    nHid ? h('p', { class: 'note' }, `${nHid} hidden until tomorrow. `, h('a', { href: '#', onclick: (e) => { e.preventDefault(); setDismissed({}); } }, 'Show again')) : null));
+  return { shown: out.filter((o) => !hid[o.title]), hidden: out.filter((o) => hid[o.title]).length, hid };
+}
+function actionCentre(data, all) {
+  const items = agenda(data, all), nt = notices(data, all), today = C.todayISO();
+  const groups = [
+    { id: 'overdue', label: 'Overdue', tone: 'neg', list: items.filter((u) => u.days < 0) },
+    { id: 'today', label: 'Today', tone: 'warn', list: items.filter((u) => u.days === 0) },
+    { id: 'week', label: 'Next 7 days', tone: '', list: items.filter((u) => u.days >= 1 && u.days <= 7) },
+    { id: 'later', label: 'Later (to 60 days)', tone: '', list: items.filter((u) => u.days > 7) },
+  ];
+  const sumOf = (l) => l.reduce((a, u) => a + (u.amount || 0), 0);
+  const od = groups[0].list, week = groups[1].list.concat(groups[2].list);
+  const tabs = [['all', 'All', items.length + nt.shown.length], ['overdue', 'Overdue', od.length], ['week', 'This week', week.length], ['later', 'Later', groups[3].list.length], ['alerts', 'Alerts', nt.shown.length]];
+  if (!tabs.some((t) => t[0] === acState.tab)) acState.tab = 'all';
+  const dir = (u) => (ACTION_KIND[u.kind] || {}).dir;
+  const line = (u, g) => h('li', { class: 'ac-row ' + (g.tone || ''), tabindex: 0, onclick: () => { location.hash = (ACTION_KIND[u.kind] || {}).href || '#/savings'; } },
+    dateChip(u.date),
+    h('div', { class: 'ac-main' }, h('b', null, u.title.replace(/\s*\((overdue|due today)\)$/, '')), h('span', { class: 'ac-meta' }, u.kind, ' · ', g.id === 'overdue' ? h('span', { class: 'neg' }, `${-u.days} day${u.days === -1 ? '' : 's'} late`) : u.days === 0 ? h('span', { class: 'warn' }, 'today') : `in ${u.days} day${u.days === 1 ? '' : 's'}`)),
+    h('div', { class: 'ac-amt' }, h('b', { class: g.id === 'overdue' ? 'neg' : dir(u) === 'in' ? 'pos' : '' }, (dir(u) === 'in' ? '+' : dir(u) === 'out' ? '−' : '') + money(u.amount))));
+  const block = (g) => {
+    if (!g.list.length) return null;
+    const open = acState.more[g.id], cap = g.id === 'later' ? 5 : 8, shown = open ? g.list : g.list.slice(0, cap);
+    return h('div', { class: 'ac-group' },
+      h('div', { class: 'ac-head ' + (g.tone || '') }, h('span', null, g.label, h('em', null, ' · ' + g.list.length)), h('span', { class: 'ac-sum' }, money(sumOf(g.list)))),
+      h('ul', { class: 'ac-list' }, shown.map((u) => line(u, g))),
+      g.list.length > cap ? h('button', { type: 'button', class: 'ac-more', onclick: () => { acState.more[g.id] = !open; rerender(); } }, open ? 'Show less' : `Show all ${g.list.length}`) : null);
+  };
+  const alerts = nt.shown.length ? h('div', { class: 'ac-group' },
+    h('div', { class: 'ac-head' }, h('span', null, 'Alerts', h('em', null, ' · ' + nt.shown.length))),
+    h('ul', { class: 'ac-list' }, nt.shown.map((o) => h('li', { class: 'ac-row ac-alert ' + (o.tone || ''), tabindex: 0, onclick: () => { location.hash = o.href; } },
+      h('i', { class: 'ac-dot ' + (o.tone || ''), 'aria-hidden': 'true' }),
+      h('div', { class: 'ac-main' }, h('b', null, o.title), o.sub ? h('span', { class: 'ac-meta' }, o.sub) : null),
+      h('div', { class: 'ac-amt' }, o.value ? h('b', { class: o.tone === 'neg' ? 'neg' : '' }, o.value) : null, h('button', { type: 'button', class: 'small dismiss', title: 'Hide this until tomorrow', 'aria-label': 'Hide until tomorrow: ' + o.title, onclick: (e) => { e.stopPropagation(); setDismissed({ ...nt.hid, [o.title]: today }); } }, 'Dismiss')))))) : null;
+  const pickGroups = acState.tab === 'overdue' ? [groups[0]] : acState.tab === 'week' ? [groups[1], groups[2]] : acState.tab === 'later' ? [groups[3]] : acState.tab === 'alerts' ? [] : groups;
+  const body = [...pickGroups.map(block), acState.tab === 'all' || acState.tab === 'alerts' ? alerts : null].filter(Boolean);
+  return h('section', { class: 'card ac' },
+    h('div', { class: 'ac-top' }, h('div', null, h('h2', null, 'Action centre'), h('p', { class: 'ac-sub' }, 'What needs you now, and what is coming')),
+      h('div', { class: 'ac-kpis' },
+        h('div', { class: 'ac-kpi' + (od.length ? ' bad' : '') }, h('span', null, 'Overdue'), h('b', null, od.length ? money(sumOf(od)) : '–')),
+        h('div', { class: 'ac-kpi' }, h('span', null, 'Next 7 days'), h('b', null, week.length ? money(sumOf(week)) : '–')),
+        h('div', { class: 'ac-kpi' }, h('span', null, 'Next 60 days'), h('b', null, items.length ? money(sumOf(items.filter((u) => u.days >= 0))) : '–')))),
+    h('nav', { class: 'seg ac-tabs', role: 'tablist', 'aria-label': 'Action centre' }, tabs.map(([k, l, n]) => h('a', { href: 'javascript:void 0', role: 'tab', class: acState.tab === k ? 'on' : '', 'aria-selected': String(acState.tab === k), onclick: (e) => { e.preventDefault(); acState.tab = k; rerender(); } }, l, n ? h('span', { class: 'ac-n' }, n) : null))),
+    body.length ? h('div', null, body) : h('p', { class: 'empty' }, acState.tab === 'all' ? 'All clear: nothing overdue and nothing falls due in the next 60 days.' : 'Nothing here.'),
+    nt.hidden ? h('p', { class: 'note' }, `${nt.hidden} alert${nt.hidden === 1 ? '' : 's'} hidden until tomorrow. `, h('a', { href: '#', onclick: (e) => { e.preventDefault(); setDismissed({}); } }, 'Show again')) : null);
 }
 
 function riskState(all) {
@@ -450,6 +483,7 @@ function earningBody(all, fold) {
     h('p', { class: 'note' }, 'Covers EPF, PPF, chits, RD and LIC, bonds, fixed deposits and private lending. Shares, funds and gold pay no fixed interest, so they are not counted.'));
 }
 
+
 function returnsCard(data, all, rets, cov) {
   const groupOf = (r) => (r.name === 'Gold' ? 'gold' : /^(Stocks|Mutual)/.test(r.name) ? 'equity' : /^(Bonds|FDs|Private lending|EPF|Chits|Insurance)/.test(r.name) ? 'debt' : 'other');
   const showRet = (r) => !(r.ret == null || r.name.includes('lending') || r.name === 'Bonds');
@@ -473,18 +507,6 @@ function returnsCard(data, all, rets, cov) {
     }))))));
   return section('How your investments did', h('div', null, tbl,
     h('p', { class: 'note' }, '“Return” is the plain gain on the money put in; XIRR is the yearly return that accounts for when each rupee went in, so the two are different numbers. It needs dated cash flows, so shares and funds show plain return until buy dates are added. XIRR rows cover ' + pct(cov.coverage, 0) + ' of your assets.' + (cov.xirr != null ? ' Overall XIRR across everything with dates is ' + pct(cov.xirr, 1) + (cov.xirrNoPf != null ? ' (' + pct(cov.xirrNoPf, 1) + ' without EPF and PPF)' : '') + '. It is money-weighted: long-held money, such as EPF at a steady rate, counts for more than newer money.' : '') + ' Bond and lending XIRR assume coupons arrive on schedule. “≈” marks an estimate from an assumed rate (chits and savings); it is left out of the overall figure until the chit is closed with the real amount. A group’s XIRR is worked out from all its rows’ dated cash flows together; * means some rows are left out because they have no dates or are only estimates. Tap a group to see its rows.')));
-}
-
-function comingUp(data, all) {
-  const soon = C.upcoming(data, all, 60);
-  const overdue = soon.filter((u) => u.days < 0).length;
-  return block('Coming up', h('div', null,
-    rowList(soon.slice(0, 8).map((u) => ({
-      lead: dateChip(u.date), title: u.title, sub: h('span', { class: u.days === 0 ? 'warn' : '' }, `${u.kind} · ${u.days < 0 ? 'overdue' : u.days === 0 ? 'due today' : `in ${u.days} day${u.days === 1 ? '' : 's'}`}`),
-      value: money(u.amount), tone: u.days < 0 ? 'neg' : u.days === 0 ? 'warn' : '',
-    })), { empty: 'Nothing falls due in the next 60 days.' }),
-    soon.length > 8 ? h('p', { class: 'note' }, `${soon.length - 8} more in the next 60 days.`) : null,
-    soon.filter((u) => u.kind === 'Money to receive' && u.days < 0).length ? null : (data.receivables.length ? h('p', { class: 'note' }, 'No money to receive is overdue.') : null)));
 }
 
 /**
@@ -584,7 +606,7 @@ export function render() {
   const root = h('div', { class: 'page dash' });
   const parts = [
     hero(all, series, ox), tiles(all, data, C.monthCashflow(data, all, C.monthKey(all.asOf)), plan),
-    place(watchCard(data, all), 'span-12'),
+    place(actionCentre(data, all), 'span-12'),
     place(thisMonth(data, all, months), 'span-12'),
     place(investCard(data, all, plan), 'span-12'),
     place(allocation(all), 'span-7'), place(riskAlerts(all), 'span-5'),
