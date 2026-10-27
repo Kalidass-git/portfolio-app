@@ -154,6 +154,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.21.0 – Home: fewer cards; certificate shows what is due later this month
+
+- **Home: "Money to receive this month" is gone.** Its two unique parts now sit under Income in **This month in detail** (current month only): the money due to you that has not arrived (overdue and due today, with the total waiting), and the bank check on bond interest ("Income Bond · not in the bank yet", or the quiet "Bank check" line). Tapping a pending income line still opens the bond list or lets you mark it received.
+- **Home: "Needs a look" and "Coming up" are one card**, "Needs a look and coming up": the alerts first (each can still be dismissed until tomorrow), then what falls due in the next 60 days.
+- **Interest certificate, "This month"**: with projections off, a payment dated later this month (for example a lending payout on the 30th when today is the 27th) is not counted yet, so it looked missing. It is now listed above the table as "Due later this month, not counted yet" with its date and amount; switch projections on to count it.
+
 ## Release 8.20.0 – Interest certificate: projections switch
 
 - A switch **"Include projections and future payments"** (off by default) on the Interest certificate.

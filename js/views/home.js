@@ -273,8 +273,6 @@ function pendingBonds(bonds, month) {
   draw();
   dialog('Bond interest, ' + monthLabel(month, true), body, [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
 }
-/** Which bonds still have interest to come this month, with the amount and day each is due (shown on hover). */
-const pendingText = (bonds) => bonds.filter((b) => b.pending > 0.5).map((b) => `${b.name}: ${money(b.pending)} due ${shortDate(b.due)}`).join('\n') || 'Nothing pending';
 /** Current month: bond interest due so far against what the bank has credited under Income Bond, in total (nothing is matched bond by bond). */
 function bankGapDialog(g) {
   const dueRows = g.dueBonds.map((b) => ({ title: b.name, sub: `${b.holder ? b.holder + ' · ' : ''}due ${shortDate(b.due)}`, value: money(b.expected) }));
@@ -287,27 +285,6 @@ function bankGapDialog(g) {
     h('p', { class: 'note' }, 'Home counts a bond as received once its due date has passed. This is a cross-check of the totals for this month only: what is due so far against everything the bank credited as Income Bond. No credit is tied to a particular bond. ' + (g.short ? 'The difference is either not credited yet, or its bank entry has not been made. ' : 'The difference is small, so nothing is flagged. ') + 'A difference under ₹' + C.BANK_TOLERANCE + ' is ignored. It is not added to the totals above.')),
   [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
 }
-function toReceiveCard(data, all) {
-  const month = C.monthKey(all.asOf);
-  const mc = C.monthCashflow(data, all, month);
-  const { rows } = pendingToReceive(data, all, mc); // the same rule feeds the Investable balance
-  // bonds are one combined line (tap it to see each bond); other monthly income is a line of its own
-  const pend = mc.income.filter((x) => x.expected - x.received > 1).map((x) => ({ due: null, name: x.name, expected: x.expected - x.received, income: true, bonds: x.bonds, sub: `expected ${money(x.expected)}, received ${money(x.received)}${x.bonds ? ' · tap to see which bonds' : canEdit() ? ' · tap to fix' : ''}` }));
-  const total = rows.reduce((a, r) => a + (r.dueAmount ?? r.expected ?? 0), 0) + pend.reduce((a, r) => a + r.expected, 0), over = rows.filter((r) => r.overdue);
-  const all2 = rows.concat(pend);
-  const bankGap = C.bondBankGap(mc, month, all.asOf);   // current month only: due bond interest against the bank's Income Bond credits (under ₹300 is ignored)
-  return section('Money to receive this month', h('div', null,
-    all2.length ? rowList(all2.map((r) => r.income ? { title: r.name, sub: r.sub, onClick: r.bonds ? () => pendingBonds(r.bonds, month) : canEdit() ? () => fixIncome(r.name, month) : null, value: money(r.expected), valueSub: h('span', { class: 'warn', title: r.bonds ? pendingText(r.bonds) : 'pending' }, 'pending') } : ({
-      lead: dateChip(r.due), title: r.name, sub: r.overdue ? h('span', { class: 'neg' }, 'Overdue since ' + shortDate(r.due)) : r.dueToday ? h('span', { class: 'warn' }, 'Due today') : 'Due ' + shortDate(r.due),
-      value: money(r.dueAmount ?? r.expected ?? 0), tone: r.overdue ? 'neg' : r.dueToday ? 'warn' : '',
-    }))) : h('p', { class: 'empty' }, 'Everything due this month has been received.'),
-    bankGap ? (bankGap.short
-      ? h('div', { class: 'bank-gap' }, rowList([{ title: 'Income Bond · not in the bank yet', sub: `due so far ${money(bankGap.due)}, bank shows ${money(bankGap.credited)} · tap for details`, onClick: () => bankGapDialog(bankGap), value: h('span', { class: 'warn' }, money(bankGap.gap)), valueSub: h('span', { class: 'warn' }, 'to check') }]))
-      : h('p', { class: 'note bank-ok' }, '✓ Bank check: ', money(bankGap.due), ' of bond interest due so far, ', money(bankGap.credited), ' credited. ', h('a', { href: 'javascript:void 0', onclick: (e) => { e.preventDefault(); bankGapDialog(bankGap); } }, 'Details'))) : null,
-    all2.length ? h('p', { class: 'summary-line' }, `Waiting for ${money(total)}`, over.length ? h('span', { class: 'neg' }, ` · ${over.length} overdue`) : null, rows.some((r) => r.dueToday) ? h('span', { class: 'warn' }, ` · ${rows.filter((r) => r.dueToday).length} due today`) : null) : null,
-    h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income'))));
-}
-
 /** A card the person can tap for the working behind a figure. */
 const tapStat = (label, val, sub, cls, onClick) => h('div', { class: 'stat tappable', role: 'button', tabindex: '0', onclick: onClick, onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } },
   h('div', { class: 'stat-label' }, label), h('div', { class: 'stat-value ' + (cls || '') }, val), h('div', { class: 'stat-sub' }, sub));
@@ -388,6 +365,11 @@ const DISMISS = 'fw.dismissed';
 const dismissed = () => { try { const o = JSON.parse(localStorage.getItem(DISMISS) || '{}'), t = C.todayISO(); return Object.fromEntries(Object.entries(o).filter(([, d]) => d === t)); } catch (e) { return {}; } };
 const setDismissed = (o) => { try { localStorage.setItem(DISMISS, JSON.stringify(o)); } catch (e) { /* private window */ } rerender(); };
 /** Things that need a look: overdue money, old prices, loans, behind plan. Each can be hidden for the rest of today (this device only). */
+/** One part of the combined "Needs a look and coming up" card. */
+const block = (title, body) => h('div', { class: 'blk', style: { marginBottom: '10px' } }, h('h4', { style: { margin: '2px 0 6px' } }, title), body);
+function watchCard(data, all) {
+  return section('Needs a look and coming up', h('div', null, attention(data, all), comingUp(data, all)));
+}
 function attention(data, all) {
   const out = [];
   const soon = C.upcoming(data, all, 30).filter((u) => u.kind !== 'Loan EMI' && u.kind !== 'Bond interest'), overdue = soon.filter((u) => u.days < 0);
@@ -415,7 +397,7 @@ function attention(data, all) {
   const shown = out.filter((o) => !hid[keyOf(o)]), nHid = out.length - shown.length;
   if (!shown.length) return null;
   const today = C.todayISO();
-  return section('Needs a look', h('div', null, rowList(shown.map((o) => ({ title: o.title, sub: o.sub, value: o.value, tone: o.tone, onClick: () => { location.hash = o.href; },
+  return block('Needs a look', h('div', null, rowList(shown.map((o) => ({ title: o.title, sub: o.sub, value: o.value, tone: o.tone, onClick: () => { location.hash = o.href; },
     extra: h('button', { type: 'button', class: 'small dismiss', title: 'Hide this until tomorrow', 'aria-label': 'Hide until tomorrow: ' + o.title, onclick: (e) => { e.stopPropagation(); setDismissed({ ...hid, [keyOf(o)]: today }); } }, 'Dismiss') }))),
     nHid ? h('p', { class: 'note' }, `${nHid} hidden until tomorrow. `, h('a', { href: '#', onclick: (e) => { e.preventDefault(); setDismissed({}); } }, 'Show again')) : null));
 }
@@ -496,7 +478,7 @@ function returnsCard(data, all, rets, cov) {
 function comingUp(data, all) {
   const soon = C.upcoming(data, all, 60);
   const overdue = soon.filter((u) => u.days < 0).length;
-  return section('Coming up', h('div', null,
+  return block('Coming up', h('div', null,
     rowList(soon.slice(0, 8).map((u) => ({
       lead: dateChip(u.date), title: u.title, sub: h('span', { class: u.days === 0 ? 'warn' : '' }, `${u.kind} · ${u.days < 0 ? 'overdue' : u.days === 0 ? 'due today' : `in ${u.days} day${u.days === 1 ? '' : 's'}`}`),
       value: money(u.amount), tone: u.days < 0 ? 'neg' : u.days === 0 ? 'warn' : '',
@@ -523,6 +505,24 @@ function expenseDrill(month, label, cats) {
   else { const d = dialog(label, body, [{ label: 'Done', class: 'primary', onclick: (c) => c() }]); d.el.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('a[href]')) d.close(); }); }
 }
 
+/**
+ * Current month only, under Income: money to receive that is due or overdue (loans and other dues), and the cross-check of this month's bond interest against the
+ * bank's Income Bond credits, in total (nothing is matched bond by bond; a difference under ₹300 is ignored).
+ */
+function toReceiveExtras(data, all, mc) {
+  const month = C.monthKey(all.asOf);
+  const { rows } = pendingToReceive(data, all, mc);
+  const bankGap = C.bondBankGap(mc, month, all.asOf);
+  const over = rows.filter((r) => r.overdue), today = rows.filter((r) => r.dueToday);
+  return h('div', { class: 'to-receive' },
+    rows.length ? h('div', null,
+      h('p', { class: 'mini-title', style: { marginTop: '10px' } }, 'Due to you, not received yet'),
+      rowList(rows.map((r) => ({ lead: dateChip(r.due), title: r.name, sub: r.overdue ? h('span', { class: 'neg' }, 'Overdue since ' + shortDate(r.due)) : r.dueToday ? h('span', { class: 'warn' }, 'Due today') : 'Due ' + shortDate(r.due), value: money(r.dueAmount ?? r.expected ?? 0), tone: r.overdue ? 'neg' : r.dueToday ? 'warn' : '' }))),
+      h('p', { class: 'summary-line' }, `Waiting for ${money(rows.reduce((a, r) => a + (r.dueAmount ?? r.expected ?? 0), 0))}`, over.length ? h('span', { class: 'neg' }, ` · ${over.length} overdue`) : null, today.length ? h('span', { class: 'warn' }, ` · ${today.length} due today`) : null)) : null,
+    bankGap ? (bankGap.short
+      ? h('div', { class: 'bank-gap' }, rowList([{ title: 'Income Bond · not in the bank yet', sub: `due so far ${money(bankGap.due)}, bank shows ${money(bankGap.credited)} · tap for details`, onClick: () => bankGapDialog(bankGap), value: h('span', { class: 'warn' }, money(bankGap.gap)), valueSub: h('span', { class: 'warn' }, 'to check') }]))
+      : h('p', { class: 'note bank-ok' }, '✓ Bank check: ', money(bankGap.due), ' of bond interest due so far, ', money(bankGap.credited), ' credited. ', h('a', { href: 'javascript:void 0', onclick: (e) => { e.preventDefault(); bankGapDialog(bankGap); } }, 'Details'))) : null);
+}
 function thisMonth(data, all, months) {
   const mc = C.monthCashflow(data, all, selMonth);
   const isCur = selMonth === C.monthKey(all.asOf);
@@ -559,9 +559,10 @@ function thisMonth(data, all, months) {
         bar(rec, exp, 'good'),
         rowList(mc.income.map((r) => ({
           title: r.name, sub: 'expected ' + money(r.expected) + (r.bonds ? ' · tap to see each bond' : r.since ? ' · lent ' + dateStr(r.since) : ''), value: money(r.received),
-          onClick: r.bonds ? () => pendingBonds(r.bonds, selMonth) : null,
+          onClick: r.bonds ? () => pendingBonds(r.bonds, selMonth) : isCur && canEdit() && r.expected - r.received > 1 ? () => fixIncome(r.name, selMonth) : null,
           valueSub: r.expected - r.received > 0 ? h('span', { class: 'warn' }, money(r.expected - r.received) + ' pending') : '✓ received',
-        })))),
+        }))),
+        isCur ? toReceiveExtras(data, all, mc) : null),
       h('div', null,
         h('p', { class: 'mini-title' }, 'Expenses'),
         h('p', { class: 'big-line' }, h('b', null, money(spent)), h('span', { class: 'muted' }, ' spent')),
@@ -583,8 +584,7 @@ export function render() {
   const root = h('div', { class: 'page dash' });
   const parts = [
     hero(all, series, ox), tiles(all, data, C.monthCashflow(data, all, C.monthKey(all.asOf)), plan),
-    place(attention(data, all), 'span-12'),
-    place(toReceiveCard(data, all), 'span-6'), place(comingUp(data, all), 'span-6'),
+    place(watchCard(data, all), 'span-12'),
     place(thisMonth(data, all, months), 'span-12'),
     place(investCard(data, all, plan), 'span-12'),
     place(allocation(all), 'span-7'), place(riskAlerts(all), 'span-5'),

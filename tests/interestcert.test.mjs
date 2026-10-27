@@ -70,4 +70,13 @@ const epfOff = IC.certificate(data, all2, IC.periods('2026-10-25').find((p) => p
 ok(epfOff.rows.length === 0, 'PPF off: nothing until the March credit');
 const ppfOff = IC.certificate(data, computeAll(data, { asOf: '2027-04-05' }), IC.periods('2027-04-05').find((p) => p.id === 'pfy'), ['PPF']);
 ok(ppfOff.rows.length === 1 && Object.keys(ppfOff.rows[0].months).join() === '2027-03', 'PPF off: the year counted in March');
+// payments later this month are not counted with the switch off, but are listed
+data.lending = [{ id: 'l9', name: 'To Alagu Pandi 14', account: 'Private', borrower: 'Alagu', principal: 100000, rate: 0.12, depositDate: '2026-03-30', maturityDate: '2027-03-30', tenure: 1, tenureType: 'Years', compound: 'Monthly', interestType: 'Payout', payoutAmount: 1000 }];
+const asL = computeAll(data, { asOf: '2026-10-27' });
+const l1 = IC.certificate(data, asL, IC.periods('2026-10-27').find((p) => p.id === 'cm'), ['Private lending']);
+ok(l1.rows.length === 0 && l1.later.length === 1 && l1.later[0].name === 'To Alagu Pandi 14' && l1.later[0].date === '2026-10-30' && near(l1.later[0].amount, 1000), 'lending due on the 30th is listed as later this month');
+const l2 = IC.certificate(data, asL, IC.periods('2026-10-27').find((p) => p.id === 'pm'), ['Private lending']);
+ok(l2.rows.length === 1 && l2.later.length === 0, 'last month shows it');
+const l3 = IC.certificate(data, asL, IC.periods('2026-10-27').find((p) => p.id === 'cm'), ['Private lending'], ON);
+ok(l3.rows.length === 1 && l3.rows[0].projected, 'switch on: counted as a projection');
 console.log(bad ? 'FAILED' : 'all passed'); process.exit(bad ? 1 : 0);
