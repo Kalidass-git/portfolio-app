@@ -2,7 +2,7 @@
 
 > **Starting a new session? Do this first.** 1) Read this file, then the top three entries of `docs/SETUP.md`. 2) Clone, branch `release-X.Y.Z` off `origin/main` (check which PRs the owner has merged: `git log origin/main`). 3) Say what you have read, list "Waiting for the owner" below, and ask what to build. 4) The owner works in short numbered requests; do them all in one release, test, bump, open one PR. He checks on his real data, which you never see: say how each rule works so he can check it.
 
-**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.20.0 (cache `family-wealth-v87`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
+**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.21.0 (cache `family-wealth-v88`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
 
 Read this first, then `docs/SETUP.md` (release notes, newest first) and `README.md`.
 
@@ -48,7 +48,12 @@ A no-build installable web app (PWA, vanilla ES modules) that mirrors the owner'
 ## Release process
 Branch off `origin/main` (`release-X.Y.Z`), change files, bump `js/version.js` and the cache name in `sw.js`, add notes at the top of the release list in `docs/SETUP.md`, push, and open a PR to `main` with `gh api` (GraphQL is blocked). The owner merges it. Always base on `origin/main` so stacked PRs do not leave main behind.
 
-## State after 8.20.0 (newest)
+## State after 8.21.0 (newest)
+
+- Home layout: hero, tiles, `watchCard` ("Needs a look and coming up", wraps `attention()` and `comingUp()` via `block()`), `thisMonth` (holds `toReceiveExtras()`: due-to-you rows and the bond bank check for the current month), invest card, allocation/risk, returns, net worth. `toReceiveCard` no longer exists.
+- Interest certificate returns `later[]` (payments after today but this month, switch off) and the view lists them.
+
+## State after 8.20.0
 
 - Interest certificate `certificate(data, all, period, kinds, { projections })`: off (default) = cash basis, only dates <= asOf (FD/lending compound at maturity/closing, chit gain in completion month, EPF/PPF in March, bonds/payouts per payment); on = accrual spread plus future payments. Each month entry has `{gross, tds, net, due, proj}`; rows get `projNet` and `projected`.
 

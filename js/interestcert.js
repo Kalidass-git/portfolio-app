@@ -43,7 +43,7 @@ export const monthsIn = (from, to) => { const out = []; for (let m = from.slice(
 const accruedAt = (it, date) => { if (!it.depositDate || date < it.depositDate) return 0; const stop = it.closed && it.closed.date ? it.closed.date : it.maturityDate; const cap = stop && stop < date ? stop : date; return C.calcDeposit({ ...it, accruedOverride: undefined }, cap).accrued; };
 
 /** Interest of one deposit or loan by month of [from, to]: { 'YYYY-MM': { gross, due, proj } }. See the notes at the top for the two ways of counting. */
-function depositMonths(it, from, to, asOf, projections) {
+function depositMonths(it, from, to, asOf, projections, later) {
   const out = {};
   if (!(it.principal > 0) || !it.depositDate) return out;
   const stop = it.closed && it.closed.date ? it.closed.date : it.maturityDate;
@@ -52,7 +52,8 @@ function depositMonths(it, from, to, asOf, projections) {
     for (let n = 1; n < 1200; n++) {
       const d = C.addMonths(it.depositDate, step * n);
       if (d > to || (stop && d > stop)) break;
-      if (d < from || (!projections && d > asOf)) continue;
+      if (d < from) continue;
+      if (!projections && d > asOf) { if (later && d <= to && d.slice(0, 7) === asOf.slice(0, 7)) later(d, amount); continue; }
       const m = d.slice(0, 7), o = out[m] || { gross: 0, due: d, proj: d > asOf };
       o.gross += amount; if (d > o.due) o.due = d; out[m] = o;
     }
@@ -61,6 +62,8 @@ function depositMonths(it, from, to, asOf, projections) {
       const e = lastDay(m), v = accruedAt(it, e) - accruedAt(it, prevDay(m + '-01'));
       if (v > 0.005) out[m] = { gross: v, due: e, proj: e > asOf };
     }
+  } else if (stop && stop > asOf && stop <= to && stop.slice(0, 7) === asOf.slice(0, 7) && later) {
+    later(stop, accruedAt(it, stop));
   } else if (stop && stop <= asOf && stop >= from && stop <= to) {
     const gross = it.closed && it.closed.date && Number(it.closed.amount) > 0 ? Number(it.closed.amount) - it.principal : accruedAt(it, stop);
     if (gross > 0.005) out[stop.slice(0, 7)] = { gross, due: stop, proj: false };
@@ -98,6 +101,7 @@ function chitMonths(sv) {
 
 /**
  * The certificate: one row per holding with its interest in every month of the period.
+ * `later` (switch off only): payments dated after today but still this month, left out of the figures and listed so none is missed.
  * kinds: a list of types from KINDS (empty or 'all' = every type). Returns { rows, months, totals, byKind, byMonth }.
  * A payment counts as `received` once its date has come (as of `asOf`); later ones are `coming`.
  * row: { kind, name, holder, party, principal, rate, closedOn, months: { m: { gross, tds, net, due } }, gross, tds, net, received, coming, count }
@@ -106,15 +110,16 @@ export function certificate(data, all, period, kinds = [], opts = {}) {
   const projections = !!opts.projections;
   const want = (k) => { const l = Array.isArray(kinds) ? kinds : kinds === 'all' ? [] : [kinds]; return !l.length || l.includes(k); };
   const { from, to } = period, asOf = all.asOf, tdsRate = data.settings.tdsRate ?? 0.1, months = monthsIn(from, to);
-  const rows = [];
+  const rows = [], laterList = [];
   const push = (r) => { r.gross = 0; r.tds = 0; r.net = 0; r.received = 0; r.coming = 0; r.count = 0; r.projNet = 0; for (const m of Object.values(r.months)) { r.gross += m.gross; r.tds += m.tds; r.net += m.net; if (m.due <= asOf) r.received += m.net; else r.coming += m.net; if (m.proj) r.projNet += m.net; r.count++; } r.projected = r.projNet > 0.005; if (r.count) rows.push(r); };
   if (want('Bonds')) {
     for (const b of data.bonds || []) {
       const r = { kind: 'Bonds', id: b.id, name: b.name, holder: b.holder || '', party: b.company || b.platform || '', principal: b.principal, rate: b.rate, closedOn: b.closed && b.closed.date ? b.closed.date : '', partOf: b.partOf || '', months: {} };
       for (const m of months) {
-        const due = C.bondDueDate(b, m); if (due < from || due > to || (!projections && due > asOf)) continue;
+        const due = C.bondDueDate(b, m); if (due < from || due > to) continue;
         const gross = C.bondGrossIn(b, m); if (!(gross > 0)) continue;
         const net = C.bondNetIn(b, m, tdsRate);
+        if (!projections && due > asOf) { if (due.slice(0, 7) === asOf.slice(0, 7)) laterList.push({ kind: 'Bonds', name: b.name, date: due, amount: net }); continue; }
         r.months[m] = { gross, tds: gross - net, net, due, proj: due > asOf };
       }
       push(r);
@@ -124,7 +129,7 @@ export function certificate(data, all, period, kinds = [], opts = {}) {
     if (!want(k)) continue;
     for (const it of list) {
       const r = { kind: k, id: it.id, name: it.name, holder: it.holder || it.account || '', party: it.issuer || it.borrower || '', principal: it.principal, rate: it.rate, closedOn: it.closed && it.closed.date ? it.closed.date : '', months: {} };
-      for (const [m, o] of Object.entries(depositMonths(it, from, to, asOf, projections))) r.months[m] = { gross: o.gross, tds: 0, net: o.gross, due: o.due, proj: o.proj };
+      for (const [m, o] of Object.entries(depositMonths(it, from, to, asOf, projections, (date, amount) => laterList.push({ kind: k, name: it.name, date, amount })))) r.months[m] = { gross: o.gross, tds: 0, net: o.gross, due: o.due, proj: o.proj };
       push(r);
     }
   }
@@ -146,6 +151,7 @@ export function certificate(data, all, period, kinds = [], opts = {}) {
       const r = { kind: 'Chits', id: sv.id, name: sv.name, holder: sv.holder || '', party: '', principal: c.paid, rate: sv.rate || 0, closedOn: c.closed ? c.end : '', months: {} };
       if (projections) { for (const [m, gross] of Object.entries(c.months)) if (m >= from.slice(0, 7) && m <= to.slice(0, 7)) r.months[m] = { gross, tds: 0, net: gross, due: c.end, proj: !c.closed }; }
       else if (c.end <= asOf && c.end >= from && c.end <= to) r.months[c.end.slice(0, 7)] = { gross: c.total, tds: 0, net: c.total, due: c.end, proj: !c.closed };
+      else if (c.end > asOf && c.end <= to && c.end.slice(0, 7) === asOf.slice(0, 7)) laterList.push({ kind: 'Chits', name: sv.name, date: c.end, amount: c.total });
       push(r);
     }
   }
@@ -154,5 +160,6 @@ export function certificate(data, all, period, kinds = [], opts = {}) {
   const kindsIn = KINDS.map((k) => k[0]).filter((k) => rows.some((r) => r.kind === k));
   const byKind = kindsIn.map((k) => { const rs = rows.filter((r) => r.kind === k); return { kind: k, rows: rs, gross: rs.reduce((t, r) => t + r.gross, 0), tds: rs.reduce((t, r) => t + r.tds, 0), net: rs.reduce((t, r) => t + r.net, 0), received: rs.reduce((t, r) => t + r.received, 0), coming: rs.reduce((t, r) => t + r.coming, 0), projected: rs.reduce((t, r) => t + r.projNet, 0), principal: rs.reduce((t, r) => t + (r.closedOn ? 0 : r.principal), 0) }; });
   const byMonth = months.map((m) => ({ month: m, projected: rows.some((r) => r.months[m] && r.months[m].proj), parts: kindsIn.map((k) => ({ kind: k, gross: rows.filter((r) => r.kind === k).reduce((t, r) => t + ((r.months[m] || {}).gross || 0), 0), net: rows.filter((r) => r.kind === k).reduce((t, r) => t + ((r.months[m] || {}).net || 0), 0) })) }));
-  return { rows, months, totals, kinds: kindsIn, byKind, byMonth };
+  laterList.sort((a, b) => (a.date < b.date ? -1 : 1));
+  return { rows, months, totals, kinds: kindsIn, byKind, byMonth, later: laterList };
 }

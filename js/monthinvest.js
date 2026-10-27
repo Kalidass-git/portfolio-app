@@ -168,7 +168,7 @@ export function expenseProjection(mc, asOf) {
 export const isWallet = (a) => a.wallet === true || /wallet|\bcash\b/i.test(a.name || '');
 
 /**
- * Interest still to come this month: exactly what Home's "Money to receive this month" card lists as waiting.
+ * Interest still to come this month: exactly what Home's "This month in detail" card lists as waiting.
  * Money to receive entries that are due this month and not received (overdue and due today included, part months at their part amount),
  * plus the income lines (bonds, monthly lending) that are expected but not yet received. One rule, used by that card and by the Investable balance.
  */
