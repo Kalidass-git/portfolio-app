@@ -148,7 +148,7 @@ export function barChart({ groups, names, fmt = (v) => v, height = 220, width, c
  * Grouped columns where every column is stacked by its parts. groups: [{label, title, bars:[[{name, value}]]}] (one list of parts per series),
  * names: the series names. Tap a column to select it: onSelect(groupIndex, seriesIndex). Parts get lighter the further down the list they are.
  */
-export function stackedBars({ groups, names, colors, fmt = (v) => v, height = 230, width, onSelect = null, selected = null }) {
+export function stackedBars({ groups, names, colors, partColors = null, fmt = (v) => v, height = 230, width, onSelect = null, selected = null }) {
   const col = (i) => color(colors ? colors[i] : i);
   const W = width || defaultWidth(), H = height, pad = { l: 44, r: 8, t: 12, b: 24 };
   const tot = (b) => b.reduce((a, x) => a + Math.max(0, x.value), 0);
@@ -167,7 +167,7 @@ export function stackedBars({ groups, names, colors, fmt = (v) => v, height = 23
       parts.forEach((pt, k) => {
         const v = Math.max(0, pt.value); if (v <= 0) return;
         const y1 = y(acc + v), y0 = y(acc); acc += v;
-        const r = svg('rect', { x: x0, y: y1, width: bw, height: Math.max(0.5, y0 - y1), fill: col(si), opacity: dim ? 0.25 : g.faded ? op(k) * 0.55 : op(k), stroke: 'var(--surface, #fff)', 'stroke-width': 0.8, 'stroke-dasharray': g.faded ? '3 2' : null });
+        const r = svg('rect', { x: x0, y: y1, width: bw, height: Math.max(0.5, y0 - y1), fill: partColors && partColors[pt.name] ? partColors[pt.name] : col(si), opacity: dim ? 0.25 : partColors ? (g.faded ? 0.5 : 1) : g.faded ? op(k) * 0.55 : op(k), stroke: 'var(--surface, #fff)', 'stroke-width': 0.8, 'stroke-dasharray': g.faded ? '3 2' : null });
         hover(r, () => [h('b', null, `${g.title || g.label} · ${names[si]}`), h('div', null, `${pt.name}: ${fmt(pt.value)}`), ...(pt.detail || []).map((d) => h('div', { class: 'muted' }, `· ${d.name}: ${fmt(d.amount)}`)), h('div', { class: 'muted' }, `Total: ${fmt(tot(parts))}`)]);
         root.append(r);
       });

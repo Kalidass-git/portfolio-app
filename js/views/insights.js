@@ -8,8 +8,9 @@ import { h, money, compact, pct, dateStr, monthLabel, section, stat, table, btn,
 import { barChart, lineChart, donut, color, stackedBars } from '../charts.js';
 import { plannedByMonth } from './networth.js';
 import { groupedTable } from './groupmix.js';
+import * as IC from '../interestcert.js';
 
-const TABS = [['tax', 'Tax summary'], ['calendar', 'Cash calendar'], ['review', 'Annual review'], ['anomalies', 'Spending anomalies'], ['allocation', 'Allocation goal']];
+const TABS = [['tax', 'Tax summary'], ['calendar', 'Cash calendar'], ['review', 'Annual review'], ['anomalies', 'Spending anomalies'], ['allocation', 'Allocation goal'], ['certificate', 'Interest certificate']];
 const rerender = () => window.dispatchEvent(new Event('rerender'));
 const st = { fy: null, months: 12, year: null, month: null, who: 'all' };
 const signed = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + money(Math.abs(n));
@@ -25,7 +26,7 @@ export function render() {
   const root = h('div', { class: 'page' });
   const tab = subTab(TABS.map((t) => t[0]));
   root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Insights')));
-  ({ tax, calendar, review, anomalies, allocation })[tab](root);
+  ({ tax, calendar, review, anomalies, allocation, certificate: certView })[tab](root);
   return root;
 }
 
@@ -525,4 +526,57 @@ function holdingDialog(data, all, t, r) {
       { label: 'In the bank', cls: 'r', render: (x) => (x.received > 0.5 ? h('span', { class: Math.abs(x.received - x.due) < 2 ? 'pos' : 'warn' }, money(x.received)) : '–'), total: () => money(tot('received')) },
     ], rows, { footer: { label: 'Total' }, m: { key: 'tax-holdmonths', head: 'Month', views: [['Interest', 'After TDS'], ['Should reach the bank', 'In the bank']] } }) : h('p', { class: 'empty' }, 'No interest in this year.')),
     [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
+}
+
+// ---------- 6. Interest certificate: interest of every fixed-income holding in a chosen period ----------
+const cert = { period: 'cfy', kind: 'all' };
+function certView(root) {
+  const { data, all } = S;
+  const periods = IC.periods(all.asOf), per = periods.find((p) => p.id === cert.period) || periods[7];
+  const res = IC.certificate(data, all, per, cert.kind), t = res.totals;
+  const kindLabel = (IC.KINDS.find((k) => k[0] === cert.kind) || [])[1];
+  root.append(h('div', { class: 'toolbar' },
+    select(periods.map((p) => ({ value: p.id, label: p.label })), per.id, 'Period', (v) => { cert.period = v; rerender(); }),
+    select(IC.KINDS.map((k) => ({ value: k[0], label: k[1] })), cert.kind, 'Type', (v) => { cert.kind = v; rerender(); }),
+    btn('Download CSV', () => {
+      const q = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+      const lines = [['Type', 'Name', 'Holder', 'Issuer / party', 'Invested', 'Rate', ...res.months, 'Interest', 'TDS', 'Net'].map(q).join(',')];
+      for (const r of res.rows) lines.push([r.kind, r.name, r.holder, r.party, Math.round(r.principal), (r.rate * 100).toFixed(2) + '%', ...res.months.map((m) => Math.round((r.months[m] || {}).gross || 0)), Math.round(r.gross), Math.round(r.tds), Math.round(r.net)].map(q).join(','));
+      download(`interest-certificate-${per.from}-${per.to}.csv`, lines.join('\n'));
+    }, 'small')));
+  root.append(note(`${per.label}: ${dateStr(per.from)} to ${dateStr(per.to)}. Each holding is worked out with its own settings: bonds by their payment periods and TDS (Settings), payout deposits and loans by the amount you receive each payout, compounding ones by the interest added to the balance each month.`));
+  if (!res.rows.length) { root.append(section('Interest certificate', h('p', { class: 'empty' }, 'No interest from these holdings in this period.'))); return; }
+  root.append(h('div', { class: 'stats' },
+    stat('Interest earned', h('span', { class: 'pos' }, money(t.gross)), `${t.items} ${t.items === 1 ? 'holding' : 'holdings'}${cert.kind === 'all' ? '' : ' · ' + kindLabel}`),
+    stat('TDS', money(t.tds), t.gross > 0 ? pct(t.tds / t.gross, 1) + ' of interest' : ''),
+    stat('Net to you', h('b', null, money(t.net)), 'after TDS'),
+    stat('Received so far', money(t.received), per.to > all.asOf ? 'payments already due' : 'all due'),
+    stat('Still to come', money(t.coming), t.coming > 0 ? 'payments not yet due' : 'nothing pending')));
+  const groups = res.byKind.map((g) => ({ id: g.kind, label: g.kind, color: color(IC.KINDS.findIndex((k) => k[0] === g.kind) + 1) }));
+  const byId = new Map(res.byKind.map((g) => [g.kind, g]));
+  const tot = (k) => (rows) => money(rows.reduce((a, r) => a + r[k], 0));
+  root.append(section('Interest by holding', h('div', null,
+    groupedTable({
+      rows: res.rows, groupOf: (r) => r.kind, groups, open: cert.kind !== 'all', footerLabel: 'Total',
+      cols: [
+        { label: 'Holding', parent: (items) => h('span', null, h('b', null, items[0].kind), h('small', { class: 'muted', style: { marginLeft: '6px' } }, `${items.length} ${items.length === 1 ? 'holding' : 'holdings'}`)), child: (r) => h('span', null, r.name, h('small', { class: 'muted', style: { display: 'block', fontWeight: 400 } }, [r.holder, r.party, r.closedOn ? 'closed ' + dateStr(r.closedOn) : ''].filter(Boolean).join(' · '))) },
+        { label: 'Invested', cls: 'r', hide: true, parent: (items) => money(byId.get(items[0].kind).principal), child: (r) => money(r.principal), total: (rows) => money(rows.filter((r) => !r.closedOn).reduce((a, r) => a + r.principal, 0)) },
+        { label: 'Rate', cls: 'r', hide: true, parent: () => '', child: (r) => pct(r.rate, 2) },
+        { label: 'Interest', cls: 'r', parent: (items) => money(byId.get(items[0].kind).gross), child: (r) => money(r.gross), total: tot('gross') },
+        { label: 'TDS', cls: 'r', hide: true, parent: (items) => money(byId.get(items[0].kind).tds), child: (r) => (r.tds > 0.5 ? money(r.tds) : '–'), total: tot('tds') },
+        { label: 'Net', cls: 'r', parent: (items) => h('b', null, money(byId.get(items[0].kind).net)), child: (r) => money(r.net), total: tot('net') },
+      ] }),
+    note('Tap a type to open or close its holdings. Interest is before TDS; Net is what reaches you. A closed holding is listed for the months it paid.'))));
+  const rowsM = res.byMonth;
+  const kinds = res.kinds, kidx = (k) => IC.KINDS.findIndex((x) => x[0] === k);
+  root.append(section('Monthly interest', h('div', null,
+    stackedBars({ names: ['Interest'], colors: [2], partColors: Object.fromEntries(kinds.map((k) => [k, color(kidx(k) + 1)])), fmt: money, height: 240,
+      groups: rowsM.map((r) => ({ label: monthLabel(r.month).slice(0, 3) + (res.months.length > 12 || per.from.slice(0, 4) !== per.to.slice(0, 4) ? ' ' + r.month.slice(2, 4) : ''), title: monthLabel(r.month, true), faded: r.month > all.asOf.slice(0, 7), bars: [r.parts.map((p) => ({ name: p.kind, value: p.gross }))] })) }),
+    h('div', { class: 'legend-row', style: { display: 'flex', gap: '14px', flexWrap: 'wrap', margin: '6px 0' } }, kinds.map((k) => h('span', null, h('i', { style: { display: 'inline-block', width: '10px', height: '10px', borderRadius: '2px', marginRight: '5px', background: color(kidx(k) + 1) } }), k)), h('span', { class: 'muted' }, 'Months still to come are paler.')),
+    table([
+      { label: 'Month', host: true, get: (r) => monthLabel(r.month, true) },
+      ...(window.innerWidth < 700 ? [] : kinds).map((k) => ({ label: k, cls: 'r', get: (r) => money((r.parts.find((p) => p.kind === k) || {}).gross || 0), total: () => money(rowsM.reduce((a, r) => a + ((r.parts.find((p) => p.kind === k) || {}).gross || 0), 0)) })),
+      { label: 'Interest', cls: 'r', key: true, get: (r) => money(r.parts.reduce((a, p) => a + p.gross, 0)), total: () => money(t.gross) },
+      { label: 'Net', cls: 'r', mob: 'under', mlabel: 'net ', get: (r) => money(r.parts.reduce((a, p) => a + p.net, 0)), total: () => money(t.net) },
+    ], rowsM, { footer: { label: 'Total' } }))));
 }
