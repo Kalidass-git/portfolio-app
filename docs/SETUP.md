@@ -154,6 +154,16 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.18.0 – Interest certificate report
+
+- **Insights > Interest certificate** (new tab; logic in `js/interestcert.js`, view `certView()` in `js/views/insights.js`): the interest every fixed-income holding pays or adds in a period.
+- **Period**: this month, last month, year to date (from 1 Jan), this year, last year, next year, financial year to date, this / last / next financial year. Future periods show expected payments.
+- **Type**: All, Bonds, Fixed deposits, Private lending. Each uses its own settings: bonds by their payment periods and the TDS rate in Settings (or the amount entered as "what reaches me"); payout deposits and loans by the amount received each payout (else the rate), from the start date every month, quarter or year; compounding ones by the interest added to the balance each month. No TDS is cut on deposits and loans here, as in the Tax summary.
+- **Summary cards**: interest earned, TDS, net to you, received so far, still to come.
+- **Table**: with All, grouped by type (tap a type to open its holdings); with one type, every holding is shown open. Download CSV has a column per month.
+- **Monthly chart** at the bottom: stacked by type, months still to come paler, with a table of the same figures.
+- `stackedBars` takes an optional `partColors` (colour by part name).
+
 ## Release 8.17.0 – Bond payout schedule, part-close, holder credits by account
 
 - **Navi mismatch fixed**: the Bonds page "Net per month" used the calendar month's days (31) while Home used the payment period (29 Sep to 28 Oct = 30 days): 1,758 against 1,701. `calcBond` now takes this month's payment by the period rule for monthly bonds (quarterly bonds show the monthly average), so both pages agree.
