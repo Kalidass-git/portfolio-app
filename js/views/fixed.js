@@ -2,8 +2,9 @@ import { S, mutate, nextId } from '../store.js';
 import * as C from '../calc.js';
 import { donut, legend, hbars } from '../charts.js';
 import { h, money, setOptions, dateStr, pct, section, table, btn, formDialog, canEdit, toast, stat, segTabs, subTab, dialog, confirmDialog, posNeg, datalistId, compact } from '../ui.js';
-import { closeForm, reopen } from './closing.js';
+import { closeForm, reopen, creditBank, bankOptions } from './closing.js';
 import { sortFilterBar } from '../mobilebar.js';
+import * as I from '../insights.js';
 
 const FREQ = ['Monthly', 'Quarterly', 'Yearly', 'Daily'];
 const rerender = () => window.dispatchEvent(new Event('rerender'));
@@ -18,6 +19,54 @@ function closeItem(key, kind, it, suggested, label) {
     title: 'Close ' + it.name, amount: suggested, desc: `${label} closed: ${it.name}`,
     hint: key === 'lending' && it.principal < 0 ? 'You borrowed this to lend onward. Enter what you paid back, as a positive amount.' : 'Suggested: the amount plus interest added so far. Change it to what you actually got back.',
     apply: (d, v, lid) => { const t = d[key].find((x) => x.id === it.id); t.closed = { date: v.date, amount: v.amount, acct: v.acct || '', ledgerId: lid, note: v.note || '' }; },
+  });
+}
+/** Every payout of a bond from the day it was bought to maturity (with part-closed amounts added together), in a popup. */
+function scheduleDialog(b) {
+  const { data, all } = S;
+  const sc = C.bondSchedule(data.bonds, b, all.asOf, data.settings.tdsRate ?? 0.1);
+  const root = b.partOf ? data.bonds.find((x) => x.id === b.partOf) || b : b;
+  const parts = data.bonds.filter((x) => x.partOf === root.id && x.closed).sort((a, c) => (a.closed.date < c.closed.date ? -1 : 1));
+  dialog('Payout schedule · ' + root.name, h('div', null,
+    h('p', { class: 'note' }, `${root.holder || ''} · ${money(root.principal)} now at ${pct(root.rate, 2)} · bought ${dateStr(root.depositDate)}, matures ${dateStr(root.maturityDate)}. Each payment covers the days since the previous payment day up to its due date.` + (parts.length ? ` Part-returned: ${parts.map((x) => money(x.principal) + ' on ' + dateStr(x.closed.date)).join(', ')}.` : '')),
+    sc.rows.length ? table([
+      { label: 'Due', host: true, render: (r) => h('span', { class: r.paid ? '' : 'muted' }, dateStr(r.due), h('small', { style: { display: 'block' } }, r.from ? `${shortD(r.from)} to ${shortD(r.to)} · ${r.days} days` : '')) },
+      { label: 'Interest', cls: 'r', mob: 'under', mlabel: 'gross ', get: (r) => money(r.gross), total: () => money(sc.totals.gross) },
+      { label: 'TDS', cls: 'r', mob: 'hide', get: (r) => money(r.tds), total: () => money(sc.totals.tds) },
+      { label: 'You receive', key: true, cls: 'r', render: (r) => h('span', { class: r.paid ? 'pos' : 'muted' }, money(r.net), r.paid ? '' : h('small', { style: { display: 'block' } }, 'upcoming')), total: () => money(sc.totals.net) },
+      { label: 'Principal back', cls: 'r', mob: 'under', mlabel: 'back ', get: (r) => (r.back > 0 ? money(r.back) : '–'), total: () => money(sc.totals.back) },
+    ], sc.rows, { footer: { label: 'Total' } }) : h('p', { class: 'empty' }, 'Nothing to show: check the bought and maturity dates.')),
+    [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
+}
+/**
+ * Part-close a bond: some of the money comes back, the rest runs on. The bond keeps the remaining amount; a separate closed entry (partOf = the bond,
+ * partKey = a unique key) holds the returned amount from the day the bond was bought to the day it came back, so interest already paid stays right.
+ */
+function partCloseForm(b) {
+  formDialog({
+    title: 'Part-close ' + b.name, saveLabel: 'Part-close', value: { date: C.todayISO(), amount: '', acct: S.data.accounts[0] ? S.data.accounts[0].id : '', note: '' },
+    fields: [
+      { key: 'date', label: 'Returned on', type: 'date', required: true },
+      { key: 'amount', label: 'Principal returned (₹)', type: 'number', required: true, hint: `Less than the ${money(b.principal)} invested. The rest keeps running till maturity.` },
+      { key: 'acct', label: 'Add the money to', type: 'select', options: bankOptions() },
+      { key: 'note', label: 'Note (optional)', type: 'text' },
+    ],
+    onSave: (v) => {
+      const amt = Number(v.amount) || 0;
+      if (!(amt > 0 && amt < b.principal)) { toast(`Enter an amount above 0 and below ${money(b.principal)}. To return all of it, use “Close it”.`, 'bad'); return false; }
+      if (v.date < b.depositDate) { toast('The date is before the bond was bought.', 'bad'); return false; }
+      mutate((d) => {
+        const t = d.bonds.find((x) => x.id === b.id), keep = (t.principal - amt) / t.principal, n = d.bonds.filter((x) => x.partOf === t.id).length + 1;
+        const lid = creditBank(d, { acct: v.acct, date: v.date, amount: amt, desc: `Bond part-closed: ${t.name}` });
+        const child = { ...t, id: nextId('b', d.bonds), name: `${t.name} (part ${n})`, principal: amt, partOf: t.id, partKey: `${t.id}-P${n}`, closed: { date: v.date, amount: amt, acct: v.acct || '', ledgerId: lid, note: v.note || '' } };
+        delete child.partials;
+        if (t.payoutAmount > 0) { child.payoutAmount = t.payoutAmount * (1 - keep); t.payoutAmount = t.payoutAmount * keep; }
+        t.principal = t.principal - amt;
+        t.partials = (t.partials || []).concat([{ key: child.partKey, id: child.id, date: v.date, amount: amt }]);
+        d.bonds.push(child);
+      });
+      toast('Part-closed. The returned amount is in the Closed list.');
+    },
   });
 }
 function bondForm(b) {
@@ -44,7 +93,7 @@ function bondForm(b) {
     },
     onDelete: isNew ? null : () => mutate((d) => { d.bonds = d.bonds.filter((x) => x.id !== b.id); }),
     deleteMessage: 'Delete this bond completely? Use “Close it” instead to keep a history.',
-    extraActions: isNew ? [] : [{ label: 'Close it', onclick: () => closeItem('bonds', 'b', b, b.principal, 'Bond') }],
+    extraActions: isNew ? [] : [{ label: 'Payout schedule', onclick: () => scheduleDialog(b) }, { label: 'Part-close', onclick: () => partCloseForm(b) }, { label: 'Close it', onclick: () => closeItem('bonds', 'b', b, b.principal, 'Bond') }],
   });
 }
 
@@ -168,6 +217,7 @@ export function render() {
       { label: 'Bond', host: true, render: (b) => h('span', null, h('span', null, b.name), h('small', { class: 'muted', style: { display: 'block', fontWeight: 400, opacity: 0.75 } }, [b.holder, b.platform].filter(Boolean).join(' · ') + (b.maturityDate ? ' · matures ' + dateStr(b.maturityDate) : ''))) },
       { label: 'Invested', cls: 'r', get: (b) => money(b.principal), total: (rs) => money(rs.reduce((a, b) => a + b.principal, 0)) },
       { label: 'Rate (paid)', key: true, cls: 'r', render: (b) => h('span', null, pct(b.rate, 2), h('span', { class: 'plain' }, ' (' + String(b.credit || 'Monthly').toLowerCase() + ')')) },
+      { label: 'Schedule', cls: 'r', mob: 'hide', render: (b) => h('span', { onclick: (e) => e.stopPropagation() }, btn('Schedule', () => scheduleDialog(b))) },
       { label: 'Next due', key: true, cls: 'r', render: (b) => { const d = C.bondNextDue(b, S.all.asOf); return d ? h('span', { class: 'due-next' }, shortD(d)) : h('span', { class: 'muted' }, '–'); } },
       { label: 'Net per month', key: true, cls: 'r', render: (b) => h('span', null, h('b', null, money(b.monthNet)), h('small', { style: { display: 'block' } }, green('received ' + money(bondReceived(b))))), total: (rs) => h('span', null, h('b', null, money(rs.reduce((a, b) => a + b.monthNet, 0))), h('small', { style: { display: 'block' } }, green('received ' + money(rs.reduce((a, b) => a + bondReceived(b), 0))))) },
     ], fb.rows, { footer: { label: 'Total' }, mobile: {
@@ -244,46 +294,57 @@ export function render() {
 /** Who holds the bonds, which companies they are with, and when you want to be told about interest. */
 const pieSel = { range: 'month', holder: '' };
 /**
- * Bond interest that reached the bank, by account holder: a pie, and under it the bonds of the tapped holder with what was due and what the bank
- * credited, for this month, last month or the financial year to date. "Credited" is the bank's Income Bond entries matched to each bond (the same
- * matching as Home); "due" is what the bond should pay by the period rule.
+ * Bond interest that reached the bank, by account holder: a pie, and under it the tapped holder's bonds (what each should have paid) next to the
+ * bank's own Income Bond entries in that holder's accounts. The bank is never matched bond by bond (credits come clubbed, on other dates, with any
+ * description): "credited" is simply the total of Income Bond credits in the holder's accounts in the period, set against the total due.
  */
 function holderPie(all, data) {
-  const tds = data.settings.tdsRate ?? 0.1, cur = C.monthKey(all.asOf);
-  const prev = C.addMonths(cur + '-01', -1).slice(0, 7);
+  const cur = C.monthKey(all.asOf), prev = C.addMonths(cur + '-01', -1).slice(0, 7);
   const fy = Number(cur.slice(5, 7)) >= 4 ? cur.slice(0, 4) : String(Number(cur.slice(0, 4)) - 1);
-  const ranges = { month: ['This month', [cur]], prev: ['Last month', [prev]], ytd: ['Year to date', []] };
-  for (let m = fy + '-04'; m <= cur; m = C.addMonths(m + '-01', 1).slice(0, 7)) ranges.ytd[1].push(m);
-  const months = ranges[pieSel.range][1];
-  // one row per bond per payment month
+  const ranges = { month: ['This month', cur + '-01', all.asOf], prev: ['Last month', prev + '-01', new Date(C.toMs(cur + '-01') - 86400000).toISOString().slice(0, 10)], ytd: ['Year to date', fy + '-04-01', all.asOf] };
+  const [rLabel, from, to] = ranges[pieSel.range];
+  const key = (n) => String(n || '').trim().toLowerCase() || 'not set';
+  const nice = new Map();
+  const holders = new Map();
+  const grp = (name) => { const k = key(name); if (!nice.has(k)) nice.set(k, String(name || '').trim() || 'Not set'); if (!holders.has(k)) holders.set(k, { label: nice.get(k), value: 0, due: 0, rows: [], bank: [] }); return holders.get(k); };
+  // what each bond should have paid: every payment whose due date has come in the period
   const byBond = new Map();
-  for (const m of months) {
-    const mc = C.monthCashflow(data, all, m);
-    for (const x of mc.income[0].bonds || []) {
-      const k = x.name, r = byBond.get(k) || { name: x.name, company: x.company, holder: String(x.holder || '').trim() || 'Not set', due: 0, credited: 0, pays: 0, last: '' };
-      r.due += x.due <= all.asOf ? x.expected : 0; r.credited += x.credited || 0; r.pays += x.due <= all.asOf ? 1 : 0; if (x.due <= all.asOf && x.due > r.last) r.last = x.due;
-      byBond.set(k, r);
+  for (let m = from.slice(0, 7); m <= to.slice(0, 7); m = C.addMonths(m + '-01', 1).slice(0, 7)) {
+    for (const x of C.monthCashflow(data, all, m).income[0].bonds || []) {
+      if (!(x.due >= from && x.due <= to)) continue;
+      const r = byBond.get(x.name) || { name: x.name, company: x.company, holder: x.holder, due: 0, pays: 0, last: '' };
+      r.due += x.expected; r.pays++; if (x.due > r.last) r.last = x.due; byBond.set(x.name, r);
     }
   }
-  const rows = [...byBond.values()].filter((r) => r.due > 0.5 || r.credited > 0.5);
-  const holders = new Map();
-  for (const r of rows) { const g = holders.get(r.holder) || { label: r.holder, value: 0, due: 0, rows: [] }; g.value += r.credited; g.due += r.due; g.rows.push(r); holders.set(r.holder, g); }
-  const items = [...holders.values()].sort((a, b) => b.value - a.value || b.due - a.due);
+  for (const r of byBond.values()) { const g = grp(r.holder); g.due += r.due; g.rows.push(r); }
+  // what the bank shows: Income Bond credits in the accounts of each holder
+  for (const e of data.ledger) {
+    if (String(e.category || '').toLowerCase() !== 'income bond' || !(e.credit > 0) || e.date < from || e.date > to) continue;
+    const g = grp(I.acctOwner(data, e.acct)); g.value += e.credit; g.bank.push(e);
+  }
+  const items = [...holders.values()].filter((g) => g.due > 0.5 || g.value > 0.5).sort((a, b) => b.value - a.value || b.due - a.due);
   const sel = items.find((g) => g.label === pieSel.holder) || null;
   const pick = (label) => { pieSel.holder = pieSel.holder === label ? '' : label; rerender(); };
-  const total = items.reduce((t, g) => t + g.value, 0), noBank = total < 1, slice = (g) => (noBank ? g.due : g.value), totalDue = items.reduce((t, g) => t + g.due, 0);
+  const total = items.reduce((t, g) => t + g.value, 0), totalDue = items.reduce((t, g) => t + g.due, 0);
+  const col = (i) => `var(--s${(i % 8) + 1})`;
   const tabs = h('div', { class: 'seg', role: 'tablist', 'aria-label': 'Period' }, Object.entries(ranges).map(([k, v]) => h('a', { role: 'tab', href: 'javascript:void(0)', class: k === pieSel.range ? 'on' : '', 'aria-selected': k === pieSel.range ? 'true' : 'false', onclick: (e) => { e.preventDefault(); pieSel.range = k; rerender(); } }, v[0])));
-  const body = !items.length ? h('p', { class: 'empty' }, 'No bond interest is due in this period yet.') : h('div', null,
+  const diff = (g) => g.value - g.due;
+  const body = !items.length ? h('p', { class: 'empty' }, 'No bond interest is due or credited in this period yet.') : h('div', null,
     h('div', { class: 'alloc-main' },
-      donut(items.map((g, i) => ({ label: g.label, value: Math.max(0, slice(g)), color: `var(--s${(i % 8) + 1})` })), { fmt: money, center: money(noBank ? totalDue : total), sub: noBank ? 'due' : 'credited', size: 220, onSelect: (it) => pick(it.label) }),
-      legend(items.map((g, i) => ({ label: g.label, value: slice(g), color: `var(--s${(i % 8) + 1})` })), { fmt: money, onSelect: (it) => pick(it.label) })),
-    h('p', { class: 'note' }, (noBank ? 'No matching bank credits yet, so the pie shows what is due. ' : '') + `Credited by the bank ${money(total)} of ${money(totalDue)} due (${ranges[pieSel.range][0].toLowerCase()}${pieSel.range === 'ytd' ? ', from 1 April' : ''}). Tap a holder to see its bonds.`),
-    sel ? section(sel.label + ' · ' + ranges[pieSel.range][0], table([
-      { label: 'Bond', host: true, render: (r) => h('span', null, h('span', null, r.name), h('small', { class: 'muted', style: { display: 'block', fontWeight: 400, opacity: 0.75 } }, [r.company, r.pays > 1 ? r.pays + ' payments' : r.last ? 'due ' + dateStr(r.last) : ''].filter(Boolean).join(' · '))) },
-      { label: 'Due', cls: 'r', get: (r) => money(r.due), total: (rs) => money(rs.reduce((a, r) => a + r.due, 0)) },
-      { label: 'Credited', key: true, cls: 'r', render: (r) => h('span', { class: Math.abs(r.credited - r.due) <= 300 ? 'pos' : 'warn' }, money(r.credited)), total: (rs) => money(rs.reduce((a, r) => a + r.credited, 0)) },
-      { label: 'Difference', cls: 'r', mob: 'under', mlabel: 'diff ', get: (r) => (Math.abs(r.credited - r.due) < 1 ? '–' : money(r.credited - r.due)), total: (rs) => money(rs.reduce((a, r) => a + r.credited - r.due, 0)) },
-    ], sel.rows.sort((a, b) => b.credited - a.credited || a.name.localeCompare(b.name)), { footer: { label: 'Total' } })) : null);
+      donut(items.map((g, i) => ({ label: g.label, value: Math.max(0, g.value), color: col(i) })), { fmt: money, center: money(total), sub: 'credited', size: 220, onSelect: (it) => pick(it.label) }),
+      legend(items.map((g, i) => ({ label: g.label, value: g.value, color: col(i) })), { fmt: money, onSelect: (it) => pick(it.label) })),
+    h('p', { class: 'note' }, `${rLabel}${pieSel.range === 'ytd' ? ' (from 1 April)' : ''}: the bank credited ${money(total)} as Income Bond into these holders' accounts; ${money(totalDue)} was due. Credits are counted by account holder and by total, not matched to single bonds. Tap a holder to see the details.`),
+    sel ? section(sel.label + ' · ' + rLabel, h('div', null,
+      h('p', { class: Math.abs(diff(sel)) <= 300 ? 'note pos' : 'note warn' }, `Bank credited ${money(sel.value)} · due ${money(sel.due)} · ${Math.abs(diff(sel)) <= 300 ? 'matches' : diff(sel) < 0 ? 'short by ' + money(-diff(sel)) : 'extra ' + money(diff(sel))}`),
+      table([
+        { label: 'Bond', host: true, render: (r) => h('span', null, h('span', null, r.name), h('small', { class: 'muted', style: { display: 'block', fontWeight: 400, opacity: 0.75 } }, [r.company, r.pays > 1 ? r.pays + ' payments' : 'due ' + dateStr(r.last)].filter(Boolean).join(' · '))) },
+        { label: 'Interest due', key: true, cls: 'r', get: (r) => money(r.due), total: (rs) => money(rs.reduce((a, r) => a + r.due, 0)) },
+        { label: 'Schedule', cls: 'r', mob: 'under', mlabel: '', render: (r) => { const b = data.bonds.find((x) => x.name === r.name); return b ? btn('Schedule', () => scheduleDialog(b)) : ''; } },
+      ], sel.rows.sort((a, b) => b.due - a.due || a.name.localeCompare(b.name)), { footer: { label: 'Total' } }),
+      sel.bank.length ? table([
+        { label: 'Bank entry', host: true, get: (e) => dateStr(e.date) }, { label: 'Description', mob: 'under', get: (e) => String(e.desc || '').slice(0, 60) },
+        { label: 'Credited', key: true, cls: 'r', get: (e) => money(e.credit), total: (rs) => money(rs.reduce((a, e) => a + e.credit, 0)) },
+      ], sel.bank.slice().sort((a, b) => (a.date < b.date ? -1 : 1)), { footer: { label: 'Total' } }) : h('p', { class: 'empty' }, 'No Income Bond credits in this holder\'s accounts in this period.'))) : null);
   return section('Interest credited by holder', h('div', { class: 'hp' }, tabs, body));
 }
 function bondInsights(all, data) {
@@ -373,7 +434,7 @@ function openClosedItem(key, x) {
   const body = h('p', { class: 'note' }, `Closed on ${dateStr(it.closed.date)}, ${money(it.closed.amount)} came back.${it.closed.note ? ' ' + it.closed.note : ''}`);
   dialog(it.name, body, canEdit() ? [
     { label: 'Delete', class: 'danger', onclick: async (c) => { if (await confirmDialog('Delete this closed record? The bank entry stays as it is.')) { mutate((d) => { d[key] = d[key].filter((y) => y.id !== it.id); }); c(); } } },
-    { label: 'Reopen', onclick: (c) => { c(); reopen(it.name, (d) => { const t = d[key].find((y) => y.id === it.id); const lid = t.closed && t.closed.ledgerId; delete t.closed; if (lid) d.ledger = d.ledger.filter((e) => e.id !== lid); }); } },
+    { label: 'Reopen', onclick: (c) => { c(); reopen(it.name, (d) => { const t = d[key].find((y) => y.id === it.id); const lid = t.closed && t.closed.ledgerId; const par = key === 'bonds' && t.partOf ? d.bonds.find((y) => y.id === t.partOf) : null; if (par) { const full = par.principal + t.principal; if (par.payoutAmount > 0) par.payoutAmount += t.payoutAmount || 0; par.principal = full; par.partials = (par.partials || []).filter((p) => p.id !== t.id); d.bonds = d.bonds.filter((y) => y.id !== t.id); } else delete t.closed; if (lid) d.ledger = d.ledger.filter((e) => e.id !== lid); }); } },
     { label: 'Close window', onclick: (c) => c() },
   ] : [{ label: 'Close window', onclick: (c) => c() }]);
 }

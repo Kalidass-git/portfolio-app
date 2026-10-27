@@ -2,7 +2,7 @@
 
 > **Starting a new session? Do this first.** 1) Read this file, then the top three entries of `docs/SETUP.md`. 2) Clone, branch `release-X.Y.Z` off `origin/main` (check which PRs the owner has merged: `git log origin/main`). 3) Say what you have read, list "Waiting for the owner" below, and ask what to build. 4) The owner works in short numbered requests; do them all in one release, test, bump, open one PR. He checks on his real data, which you never see: say how each rule works so he can check it.
 
-**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.16.0 (cache `family-wealth-v83`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
+**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.17.0 (cache `family-wealth-v84`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
 
 Read this first, then `docs/SETUP.md` (release notes, newest first) and `README.md`.
 
@@ -48,7 +48,13 @@ A no-build installable web app (PWA, vanilla ES modules) that mirrors the owner'
 ## Release process
 Branch off `origin/main` (`release-X.Y.Z`), change files, bump `js/version.js` and the cache name in `sw.js`, add notes at the top of the release list in `docs/SETUP.md`, push, and open a PR to `main` with `gh api` (GraphQL is blocked). The owner merges it. Always base on `origin/main` so stacked PRs do not leave main behind.
 
-## State after 8.16.0 (newest)
+## State after 8.17.0 (newest)
+
+- **Part-closed bonds** (`partCloseForm` in `views/fixed.js`): remaining bond keeps its id with reduced `principal` (and scaled `payoutAmount`); each returned part is a separate bond with `closed`, `partOf`, `partKey` (`<id>-P<n>`), named `Name (part n)`. Never match them by name alone. `bondSchedule(bonds, b, asOf, tds)` adds the family together. Test `tests/bondpart.test.mjs`.
+- **Holder pie** credits = Income Bond ledger credits by account owner (`I.acctOwner`), not matched per bond.
+- `calcBond().monthNet` is this month's payment (period rule) for monthly bonds.
+
+## State after 8.16.0
 
 - **Bond interest rule** `bondPeriod(b, month)` in `calc.js` is the single source: days from the day after the previous payment day through the due day (quarterly: from the previous payout day; first period from the purchase day, last to the day before maturity/closing). `bondDaysIn`, `bondGrossIn`, `bondNetIn`, `bondDueAmount`, `bondPaidSoFar`, `monthCashflow`, tax summary (`taxSummary`, `holdingMonths`, bank recon in `insights.js`) all use it; never count calendar-month days for bonds again. `calcBond().monthNet` is only the nominal per-month estimate. Tests: `tests/bondmonth.test.mjs`, `taxbonds.test.mjs`.
 - **Interest by holder pie** (`holderPie()` in `views/fixed.js`, bottom of the Bonds tab); state in module `pieSel`.

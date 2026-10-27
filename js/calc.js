@@ -37,14 +37,18 @@ export const daysInMonthOf = (d) => new Date(Date.UTC(Number(d.slice(0, 4)), Num
 
 /** Bonds (Fixed Income!A3:N22). Interest is paid out, nothing accrues into the principal. */
 export function calcBond(b, asOf, s) {
-  const dim = daysInMonthOf(asOf);   // the real length of the month, not a fixed 30
+  const tds = s.tdsRate ?? 0.1;
   const completed = (toMs(asOf) - toMs(monthStart(asOf))) / DAY + 1; // Fixed Income!Q4
   const daily = (b.principal * b.rate) / 365; // N
+  // What this month's payment is, by the payment-period rule (the same figure Home shows). A quarterly bond pays in its payout months only,
+  // so for it (and for a bond with nothing due this month) the plain monthly average is shown instead.
+  const month = asOf.slice(0, 7), mg = bondGrossIn(b, month);
+  const monthly = b.credit !== 'Quarterly' && mg > 0;
   return {
     ...b,
     daily,
-    monthGross: daily * dim, // L
-    monthNet: daily * dim * (1 - (s.tdsRate ?? 0.1)), // M ("TDS" column = payout after 10% TDS)
+    monthGross: monthly ? mg : (daily * 365) / 12, // L
+    monthNet: monthly ? bondNetIn(b, month, tds) : ((daily * 365) / 12) * (1 - tds), // M ("TDS" column = payout after 10% TDS)
     accruedMonth: daily * completed, // K
   };
 }
@@ -103,6 +107,31 @@ export function bondPaysIn(b, month) {
 /** What a bond pays in `month` as a cash credit: the interest of its payment period (monthly or quarterly), 0 in a month it pays nothing. */
 export const bondDueAmount = (b, month, tdsRate = 0.1) => bondNetIn(b, month, tdsRate);
 
+/**
+ * Every payment of a bond from the day it was bought to maturity, for the schedule popup. A bond that was part-closed is kept as the remaining
+ * bond plus one closed entry per part (`partOf` = the bond's id), so the family is added together and each month shows what was really paid on
+ * the amount then held, with the principal that came back in that month.
+ * Returns { rows: [{ month, due, from, to, days, gross, tds, net, back, paid }], totals }.
+ */
+export function bondSchedule(bonds, b, asOf, tdsRate = 0.1) {
+  const root = b.partOf ? bonds.find((x) => x.id === b.partOf) || b : b;
+  const fam = bonds.filter((x) => x.id === root.id || x.partOf === root.id);
+  const start = fam.map((x) => x.depositDate).filter(Boolean).sort()[0];
+  const end = root.closed && root.closed.date ? root.closed.date : root.maturityDate;
+  const rows = [];
+  if (!start || !end) return { rows, totals: { gross: 0, tds: 0, net: 0, back: 0 } };
+  for (let m = start.slice(0, 7); m <= end.slice(0, 7); m = addMonths(m + '-01', 1).slice(0, 7)) {
+    const gross = sum(fam, (x) => bondGrossIn(x, m)), net = sum(fam, (x) => bondNetIn(x, m, tdsRate));
+    const p = bondPeriod(root, m) || fam.map((x) => bondPeriod(x, m)).find(Boolean);
+    let back = sum(fam.filter((x) => x.partOf && x.closed && x.closed.date && x.closed.date.slice(0, 7) === m), (x) => x.principal);
+    if (m === end.slice(0, 7) && !(root.closed && root.closed.date)) back += root.principal;
+    if (root.closed && root.closed.date && m === end.slice(0, 7)) back += root.principal;
+    if (!gross && !back) continue;
+    const due = bondDueDate(root, m);
+    rows.push({ month: m, due, from: p ? p.from : '', to: p ? p.to : '', days: p ? p.days : 0, gross, tds: gross - net, net, back, paid: due <= asOf });
+  }
+  return { rows, totals: { gross: sum(rows, (r) => r.gross), tds: sum(rows, (r) => r.tds), net: sum(rows, (r) => r.net), back: sum(rows, (r) => r.back) } };
+}
 /** What a bond has paid out so far (after TDS): every payment whose due date has come, each by the period rule (bondPeriod). */
 export function bondPaidSoFar(b, asOf, tdsRate = 0.1) {
   if (!b.depositDate) return 0;

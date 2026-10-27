@@ -154,6 +154,13 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.17.0 – Bond payout schedule, part-close, holder credits by account
+
+- **Navi mismatch fixed**: the Bonds page "Net per month" used the calendar month's days (31) while Home used the payment period (29 Sep to 28 Oct = 30 days): 1,758 against 1,701. `calcBond` now takes this month's payment by the period rule for monthly bonds (quarterly bonds show the monthly average), so both pages agree.
+- **Payout schedule**: a Schedule button on every bond (Bonds table, and in the bond's edit form) opens every payment from the day bought to maturity: due date, period and days, interest, TDS, what you receive, principal back; paid ones in green, upcoming in grey (`bondSchedule()` in `calc.js`).
+- **Part-close**: in the bond's edit form, "Part-close" takes the date and principal returned (and the bank account to credit). The bond keeps the remaining amount; a new closed entry "Name (part n)" holds the returned amount from the day bought to the day returned, with `partOf` (the bond's id) and a unique `partKey` (`b1-P1`); the bond also keeps a `partials` list. Do it as many times as you like. Interest on the amount held at each time stays right, and the schedule adds the parts together. Reopening a part entry from the Closed list puts the amount back into the bond.
+- **Holder pie credited**: bank entries are no longer matched to bonds. "Credited" is the total of Income Bond credits in the holder's own accounts in the period, set against the total due; the bank entries are listed under the bonds, and a bond's schedule is one tap away.
+
 ## Release 8.16.0 – Bond interest by payment period, interest by holder
 
 - **One rule for bond interest** (`bondPeriod()` in `js/calc.js`): a payment covers the days from the day after the previous payment day up to and including the due day. Due 13 Oct: 14 Sep to 13 Oct = 30 days; due 13 Nov: 14 Oct to 13 Nov = 31 days; due the 31st: previous payment day 30 Sep, so October is 1 to 31 = 31 days; February and leap years follow the real previous payment day. Quarterly bonds work the same from their previous payout day (about 91 to 92 days). The first period starts the day the bond was bought; the last one ends the day before it matures or is closed.
