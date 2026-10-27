@@ -1,0 +1,25 @@
+{
+  "appId": "com.familywealth.app",
+  "appName": "Family Wealth",
+  "webDir": "www",
+  "backgroundColor": "#0f5a47",
+  "android": {
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "launchShowDuration": 0,
+      "backgroundColor": "#0f5a47",
+      "showSpinner": false
+    },
+    "SystemBars": {
+      "insetsHandling": "native",
+      "style": "DEFAULT"
+    },
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_icon",
+      "iconColor": "#0f5a47"
+    }
+  }
+}

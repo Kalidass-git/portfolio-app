@@ -2,7 +2,7 @@
 
 > **Starting a new session? Do this first.** 1) Read this file, then the top three entries of `docs/SETUP.md`. 2) Clone, branch `release-X.Y.Z` off `origin/main` (check which PRs the owner has merged: `git log origin/main`). 3) Say what you have read, list "Waiting for the owner" below, and ask what to build. 4) The owner works in short numbered requests; do them all in one release, test, bump, open one PR. He checks on his real data, which you never see: say how each rule works so he can check it.
 
-**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.22.0 (cache `family-wealth-v89`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
+**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.23.0 (cache `family-wealth-v90`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
 
 Read this first, then `docs/SETUP.md` (release notes, newest first) and `README.md`.
 
@@ -48,7 +48,15 @@ A no-build installable web app (PWA, vanilla ES modules) that mirrors the owner'
 ## Release process
 Branch off `origin/main` (`release-X.Y.Z`), change files, bump `js/version.js` and the cache name in `sw.js`, add notes at the top of the release list in `docs/SETUP.md`, push, and open a PR to `main` with `gh api` (GraphQL is blocked). The owner merges it. Always base on `origin/main` so stacked PRs do not leave main behind.
 
-## State after 8.22.0 (newest)
+## State after 8.23.0 (newest): Android app
+
+- **Capacitor shell in `android/`** (package `com.familywealth.app`, Capacitor 8). The web app stays no-build; `scripts/sync-web.mjs` copies `index.html`, `css`, `js`, `icons`, `manifest` into `www/` (git-ignored) and `cap sync` puts it in the app. Owner builds the APK himself from `docs/ANDROID.md`. **The environment Claude works in cannot reach npm, Maven or the Android SDK, so the Android project has never been compiled by Claude.** If a build fails, ask for the error text first.
+- **No bundler, so plugins are registered by name**: `js/native.js` uses `Capacitor.registerPlugin('App' | 'LocalNotifications' | 'SplashScreen' | 'NativeTools')`. Never `import '@capacitor/...'` in `js/`. In a browser `isNative()` is false and every native function does nothing.
+- **Reminders**: `js/notify.js` (`buildReminders`, pure, built from the same `C.upcoming` dates as Home's Action centre, tested by `tests/notify.test.mjs`). `native.js` replaces all pending notifications on open and on every data change. Settings live in `S.cfg.reminders` (phone only, not in the data file). Android has no server push here, so reminders only exist for the 45 days after the app was last opened.
+- **Own native plugin** `NativeToolsPlugin.java`: `print()` (WebView ignores `window.print`) and `shareFile()` (WebView ignores `<a download>`; `native.js` patches `HTMLAnchorElement.click` for blob downloads).
+- **Not testable by Claude**: the APK build, notifications on a real phone (exact time, lock screen, reboot), print to PDF, share sheet, back button, status bar spacing. Ask the owner to try these first.
+
+## State after 8.22.0
 
 - Home `actionCentre()` (in `views/home.js`) replaces `watchCard/attention/comingUp`: `agenda()` = `C.upcoming(60)` + bond interest due today; `notices()` = the undated alerts (price alerts, stale prices, loan interest > income) with dismiss-until-tomorrow (`fw.dismissed` in localStorage); CSS `.ac-*` at the end of `app.css`; tab and expanded state in `acState`.
 

@@ -28,3 +28,7 @@ node_modules/
 # Misc
 .DS_Store
 Thumbs.db
+
+# Android app: web files copied here by `npm run android:sync`, and installed packages
+/www/
+/node_modules/

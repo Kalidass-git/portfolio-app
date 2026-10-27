@@ -17,6 +17,7 @@ import * as incexp from './views/incexp.js';
 import * as networth from './views/networth.js';
 import * as insights from './views/insights.js';
 import * as settings from './views/settings.js';
+import { startNative } from './native.js';
 
 const ROUTES = {
   home: { label: 'Home', view: home, tab: 'home', icon: 'M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z' },
@@ -196,4 +197,6 @@ window.addEventListener('beforeunload', (e) => { if (S.meta && S.meta.dirty && S
 if (S.remote) pull().catch(() => {});
 window.addEventListener('online', () => S.remote && pull().catch(() => {}));
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.remote && !S.meta.dirty) pull().catch(() => {}); });
-if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('./sw.js').catch(() => {});
+startNative();
+// Inside the Android app the files are bundled, so no offline cache worker is needed (it would only keep old copies).
+if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) navigator.serviceWorker.register('./sw.js').catch(() => {});

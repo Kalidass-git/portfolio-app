@@ -1,1 +1,26 @@
-{"type":"module"}
+{
+  "name": "family-wealth",
+  "version": "8.23.0",
+  "private": true,
+  "description": "Family Wealth: installable web app, plus an Android shell (Capacitor) that adds phone reminders. The web app itself has no build step.",
+  "type": "module",
+  "scripts": {
+    "android:sync": "node scripts/sync-web.mjs && cap sync android",
+    "android:open": "cap open android",
+    "android:debug": "npm run android:sync && node scripts/gradle.mjs assembleDebug",
+    "android:release": "npm run android:sync && node scripts/gradle.mjs assembleRelease"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/local-notifications": "^8.2.1",
+    "@capacitor/splash-screen": "^8.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
