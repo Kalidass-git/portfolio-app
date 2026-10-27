@@ -154,6 +154,13 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.22.0 – Home: the Action centre card
+
+- "Needs a look and coming up" is replaced by one properly designed card, **Action centre**: "What needs you now, and what is coming".
+- **One list from one source**: everything dated comes from the same place as before (`upcoming()`: maturities, bond interest, money to receive, loan EMIs, other dues; bond interest due today is added), and each item appears once, grouped Overdue, Today, Next 7 days and Later (to 60 days). The old "N payments overdue / N falling due" summary rows are gone, since the items themselves are listed.
+- **Totals strip** at the top: overdue amount, next 7 days, next 60 days. **Tabs** with counts: All, Overdue, This week, Later, Alerts. Rows show the date, what it is, the type and how late or how soon, and the amount (+ for money coming in, − for EMIs); tapping a row opens the page for it. Long groups show the first few with "Show all".
+- **Alerts** (price alerts, old share prices, loan interest higher than interest earned) keep their logic and the "Dismiss until tomorrow" button, in a section of their own.
+
 ## Release 8.21.0 – Home: fewer cards; certificate shows what is due later this month
 
 - **Home: "Money to receive this month" is gone.** Its two unique parts now sit under Income in **This month in detail** (current month only): the money due to you that has not arrived (overdue and due today, with the total waiting), and the bank check on bond interest ("Income Bond · not in the bank yet", or the quiet "Bank check" line). Tapping a pending income line still opens the bond list or lets you mark it received.
