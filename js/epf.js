@@ -48,3 +48,20 @@ export function modelFlows(sv, asOf, toMs) {
   const value = modelValue(sv, asOf);
   return { flows: dep.map((d) => ({ t: toMs(d.date), amount: -d.amount })).concat([{ t: toMs(asOf), amount: value }]), value, put: dep.reduce((a, d) => a + d.amount, 0) };
 }
+
+/** Interest the money would have earned in each month up to last month (the same model as modelValue): { 'YYYY-MM': amount }. Not credited until March, but earned month by month. */
+export function monthlyInterest(sv, asOf) {
+  const dep = deposits(sv, asOf), out = {};
+  if (!dep.length) return out;
+  const startM = dep[0].date.slice(0, 7), endM = asOf.slice(0, 7);
+  let credited = 0, accrued = 0, i = 0;
+  for (let y = Number(startM.slice(0, 4)), m = Number(startM.slice(5, 7)); ; ) {
+    const mk = `${y}-${String(m).padStart(2, '0')}`;
+    if (mk > endM) break;
+    while (i < dep.length && dep[i].date.slice(0, 7) === mk) credited += dep[i++].amount;
+    if (mk < endM) { const v = (credited * rateFor(sv, fyOf(mk))) / 12; accrued += v; out[mk] = v; }
+    if (m === 3) { credited += accrued; accrued = 0; }
+    if (++m > 12) { m = 1; y++; }
+  }
+  return out;
+}
