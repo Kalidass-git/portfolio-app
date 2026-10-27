@@ -154,6 +154,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.
 
+## Release 8.20.0 – Interest certificate: projections switch
+
+- A switch **"Include projections and future payments"** (off by default) on the Interest certificate.
+- **Off**: money is counted when it is paid or credited, and only once that date has come. A compounding deposit's interest falls in the month it matures or is closed (the amount you entered when closing, if any); a chit's gain in the month it completes (the amount received once closed; an open chit that has reached its end date is still shown as an estimate); bonds and payout deposits on each payment date (every quarter for a quarterly bond, once a year for a yearly payout); EPF and PPF in the March they are credited.
+- **On**: interest is spread the way it is earned (deposits, chits and EPF/PPF month by month) and payments still to come are included. Anything not yet paid or closed is shown in italics (with a Projection tag) and added up in the Projected card; EPF and PPF are not projected into future months.
+
 ## Release 8.19.0 – Interest certificate: EPF, PPF, chits and multi-select types
 
 - **Types are now chips you can combine** (All, Bonds, Fixed deposits, Private lending, EPF, PPF, Chits). With one type selected every holding is shown open; with several, tap a type to open it.

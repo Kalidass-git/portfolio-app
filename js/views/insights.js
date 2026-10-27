@@ -529,15 +529,16 @@ function holdingDialog(data, all, t, r) {
 }
 
 // ---------- 6. Interest certificate: interest of every fixed-income holding in a chosen period ----------
-const cert = { period: 'cfy', kinds: [] };
+const cert = { period: 'cfy', kinds: [], proj: false };
 const ital = (node, r) => (r.projected ? h('i', { class: 'proj' }, node) : node);
 function certView(root) {
   const { data, all } = S;
   const periods = IC.periods(all.asOf), per = periods.find((p) => p.id === cert.period) || periods[7];
-  const res = IC.certificate(data, all, per, cert.kinds), t = res.totals;
+  const res = IC.certificate(data, all, per, cert.kinds, { projections: cert.proj }), t = res.totals;
   const kindLabel = cert.kinds.join(', ');
   root.append(h('div', { class: 'toolbar' },
     select(periods.map((p) => ({ value: p.id, label: p.label })), per.id, 'Period', (v) => { cert.period = v; rerender(); }),
+    h('label', { class: 'switch', style: { display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer' } }, h('input', { type: 'checkbox', checked: cert.proj, 'aria-label': 'Include projections', onchange: (e) => { cert.proj = e.target.checked; rerender(); } }), 'Include projections and future payments'),
     btn('Download CSV', () => {
       const q = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
       const lines = [['Type', 'Name', 'Holder', 'Issuer / party', 'Invested', 'Rate', ...res.months, 'Interest', 'TDS', 'Net', 'Status'].map(q).join(',')];
@@ -548,7 +549,7 @@ function certView(root) {
   root.append(h('div', { class: 'chips', role: 'group', 'aria-label': 'Types' },
     h('button', { class: 'chip' + (cert.kinds.length ? '' : ' on'), type: 'button', 'aria-pressed': String(!cert.kinds.length), onclick: () => { cert.kinds = []; rerender(); } }, 'All'),
     IC.KINDS.map(([k, l]) => h('button', { class: 'chip' + (cert.kinds.includes(k) ? ' on' : ''), type: 'button', 'aria-pressed': String(cert.kinds.includes(k)), onclick: () => flip(k) }, l))));
-  root.append(note(`${per.label}: ${dateStr(per.from)} to ${dateStr(per.to)}. Each holding is worked out with its own settings: bonds by their payment periods and TDS (Settings), payout deposits and loans by the amount you receive each payout, compounding ones by the interest added to the balance each month; EPF and PPF by the declared yearly rate on the balance; chits by what they pay at the end less what you paid in (the amount received once closed). Projections for chits still running are in italics.`));
+  root.append(note(`${per.label}: ${dateStr(per.from)} to ${dateStr(per.to)}. Each holding is worked out with its own settings: bonds by their payment periods and TDS (Settings), payout deposits and loans by the amount you receive each payout, compounding ones by the interest added to the balance each month; EPF and PPF by the declared yearly rate on the balance; chits by what they pay at the end less what you paid in (the amount received once closed). With the projections switch off, money is counted when it is paid: a deposit's interest at maturity, a chit's gain in the month it completes, EPF and PPF in March, bonds on each payment date, and only once that date has come. Switch it on to spread interest month by month and include payments still to come, shown in italics.`));
   if (!res.rows.length) { root.append(section('Interest certificate', h('p', { class: 'empty' }, 'No interest from these holdings in this period.'))); return; }
   root.append(h('div', { class: 'stats' },
     stat('Interest earned', h('span', { class: 'pos' }, money(t.gross)), `${t.items} ${t.items === 1 ? 'holding' : 'holdings'}${cert.kinds.length ? ' · ' + kindLabel : ''}`),
@@ -556,7 +557,7 @@ function certView(root) {
     stat('Net to you', h('b', null, money(t.net)), 'after TDS'),
     stat('Received so far', money(t.received), per.to > all.asOf ? 'payments already due' : 'all due'),
     stat('Still to come', money(t.coming), t.coming > 0 ? 'payments not yet due' : 'nothing pending'),
-    t.projected > 0 ? stat('Projected', h('i', { class: 'proj' }, money(t.projected)), 'chits still running (net)') : null));
+    t.projected > 0 ? stat('Projected', h('i', { class: 'proj' }, money(t.projected)), 'not yet paid or closed (net)') : null));
   const groups = res.byKind.map((g) => ({ id: g.kind, label: g.kind, color: color(IC.KINDS.findIndex((k) => k[0] === g.kind) + 1) }));
   const byId = new Map(res.byKind.map((g) => [g.kind, g]));
   const tot = (k) => (rows) => money(rows.reduce((a, r) => a + r[k], 0));
@@ -564,7 +565,7 @@ function certView(root) {
     groupedTable({
       rows: res.rows, groupOf: (r) => r.kind, groups, open: cert.kinds.length === 1, footerLabel: 'Total',
       cols: [
-        { label: 'Holding', parent: (items) => h('span', null, h('b', null, items[0].kind), h('small', { class: 'muted', style: { marginLeft: '6px' } }, `${items.length} ${items.length === 1 ? 'holding' : 'holdings'}`)), child: (r) => h('span', null, ital(r.name, r), r.closedOn ? h('span', { class: 'chip-closed' }, ' Closed') : r.projected ? h('span', { class: 'chip-closed' }, ' Projection') : null, h('small', { class: 'muted', style: { display: 'block', fontWeight: 400 } }, [r.holder, r.party, r.closedOn ? 'closed ' + dateStr(r.closedOn) : ''].filter(Boolean).join(' · '))) },
+        { label: 'Holding', parent: (items) => h('span', null, h('b', null, items[0].kind), h('small', { class: 'muted', style: { marginLeft: '6px' } }, `${items.length} ${items.length === 1 ? 'holding' : 'holdings'}`)), child: (r) => h('span', null, ital(r.name, r), r.closedOn ? h('span', { class: 'chip-closed' }, ' Closed') : null, r.projected ? h('span', { class: 'chip-closed' }, ' Projection') : null, h('small', { class: 'muted', style: { display: 'block', fontWeight: 400 } }, [r.holder, r.party, r.closedOn ? 'closed ' + dateStr(r.closedOn) : ''].filter(Boolean).join(' · '))) },
         { label: 'Invested', cls: 'r', hide: true, parent: (items) => money(byId.get(items[0].kind).principal), child: (r) => money(r.principal), total: (rows) => money(rows.filter((r) => !r.closedOn).reduce((a, r) => a + r.principal, 0)) },
         { label: 'Rate', cls: 'r', hide: true, parent: () => '', child: (r) => pct(r.rate, 2) },
         { label: 'Interest', cls: 'r', parent: (items) => money(byId.get(items[0].kind).gross), child: (r) => ital(money(r.gross), r), total: tot('gross') },
@@ -577,7 +578,7 @@ function certView(root) {
   root.append(section('Monthly interest', h('div', null,
     stackedBars({ names: ['Interest'], colors: [2], partColors: Object.fromEntries(kinds.map((k) => [k, color(kidx(k) + 1)])), fmt: money, height: 240,
       groups: rowsM.map((r) => ({ label: monthLabel(r.month).slice(0, 3) + (res.months.length > 12 || per.from.slice(0, 4) !== per.to.slice(0, 4) ? ' ' + r.month.slice(2, 4) : ''), title: monthLabel(r.month, true), faded: r.month > all.asOf.slice(0, 7), bars: [r.parts.map((p) => ({ name: p.kind, value: p.gross }))] })) }),
-    h('div', { class: 'legend-row', style: { display: 'flex', gap: '14px', flexWrap: 'wrap', margin: '6px 0' } }, kinds.map((k) => h('span', null, h('i', { style: { display: 'inline-block', width: '10px', height: '10px', borderRadius: '2px', marginRight: '5px', background: color(kidx(k) + 1) } }), k)), h('span', { class: 'muted' }, 'Months still to come are paler. Chit figures for chits still running are projections.')),
+    h('div', { class: 'legend-row', style: { display: 'flex', gap: '14px', flexWrap: 'wrap', margin: '6px 0' } }, kinds.map((k) => h('span', null, h('i', { style: { display: 'inline-block', width: '10px', height: '10px', borderRadius: '2px', marginRight: '5px', background: color(kidx(k) + 1) } }), k)), h('span', { class: 'muted' }, 'Months still to come are paler; projections are in italics in the table.')),
     table([
       { label: 'Month', host: true, get: (r) => monthLabel(r.month, true) },
       ...(window.innerWidth < 700 ? [] : kinds).map((k) => ({ label: k, cls: 'r', get: (r) => money((r.parts.find((p) => p.kind === k) || {}).gross || 0), total: () => money(rowsM.reduce((a, r) => a + ((r.parts.find((p) => p.kind === k) || {}).gross || 0), 0)) })),
