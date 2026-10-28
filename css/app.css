@@ -1076,8 +1076,11 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
   .tabbar a { gap: 2px; padding: 5px 2px 4px; font-size: 10px; font-weight: 600; line-height: 1.1; color: color-mix(in srgb, var(--ink) 72%, var(--surface)); border: 1.5px solid transparent; border-radius: 12px; }
   .tabbar a .ico { width: 22px; height: 22px; stroke-width: 2; }
   .tabbar a { position: relative; border: 0; }
-  .tabbar a.on { color: var(--brand); font-weight: 700; }
-  .tabbar a.on::after { content: ''; position: absolute; left: 50%; bottom: 0; width: 30px; height: 3px; margin-left: -15px; border-radius: 3px 3px 0 0; background: var(--brand); }
+  .tabbar a.on { color: #B27D00; font-weight: 700; }
+  .tabbar a.on::after { content: ''; position: absolute; left: 50%; bottom: 0; width: 30px; height: 3px; margin-left: -15px; border-radius: 3px 3px 0 0; background: linear-gradient(90deg, #FFD84D, #E3A416); }
+}
+@media (max-width: 899px) and (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tabbar a.on { color: #F2C84B; } }
+@media (max-width: 899px) { :root[data-theme="dark"] .tabbar a.on { color: #F2C84B; }
 }
 @media (max-width: 360px) {
   .hero-right { border-left: 0; padding-left: 0; }
@@ -1085,4 +1088,19 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
   .hero-top { flex-direction: column; align-items: stretch; gap: 14px; }
   .hero-right { justify-items: stretch; }
   .chip-status { font-size: 0; gap: 0; padding: 6px 8px; }
+}
+
+/* Sync status: a dot beside the icons all the time (phone), the full message only for a few seconds when it changes */
+.sync-dot { display: none; flex: 0 0 auto; width: 34px; height: 34px; padding: 0; border: 0; background: none; place-items: center; cursor: pointer; text-decoration: none; }
+.sync-dot::before { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 22%, transparent); }
+.sync-dot.ok { --c: var(--pos); } .sync-dot.idle { --c: var(--muted); } .sync-dot.bad { --c: var(--neg); } .sync-dot.busy { --c: #E8B923; }
+.sync-dot.busy::before { animation: sync-pulse 1s ease-in-out infinite; }
+@keyframes sync-pulse { 50% { opacity: .35; transform: scale(.8); } }
+@media (prefers-reduced-motion: reduce) { .sync-dot.busy::before { animation: none; } }
+@media (max-width: 899px) {
+  .sync-dot { display: grid; }
+  .top-right > .refresh { display: none; }
+  .top:not(.flashing) .chip-status { display: none; }
+  .top.flashing .top-right > :not(.chip-status) { display: none; }
+  .top-right { flex: 1 1 auto; justify-content: flex-end; }
 }

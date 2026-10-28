@@ -39,6 +39,8 @@ const ROUTES = {
 const TABS = [['home', 'Home', 'home'], ['assets', 'Assets', 'cash'], ['flow', 'Expenses', 'flow'], ['outlook', 'Outlook', 'projector'], ['report', 'Report', 'report']];
 const icon = (d) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'ico'); s.setAttribute('aria-hidden', 'true'); const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', d); s.append(p); return s; };
 
+let flashKey = '', flashUntil = 0, flashTimer = null;
+const FLASH_MS = 3000;
 const SLIDERS = 'M14 6a2 2 0 1 0 4 0a2 2 0 1 0-4 0M4 6h10M18 6h2M6 12a2 2 0 1 0 4 0a2 2 0 1 0-4 0M4 12h2M10 12h10M13 18a2 2 0 1 0 4 0a2 2 0 1 0-4 0M4 18h9M17 18h3';
 const FS = [0.8, 0.9, 1, 1.15, 1.3, 1.5];
 const setFont = (n) => { setCfg({ fontScale: n }); document.documentElement.style.setProperty('--fs', n); renderView(); };
@@ -78,18 +80,31 @@ function chrome() {
 
   const top = $('#top');
   const st = S.status;
-  const chip = S.saveFailed ? h('a', { class: 'chip-status bad', href: '#/settings', title: 'Storage on this device is full or blocked' }, 'Not saved on this device')
-    : S.status === 'guard' ? h('button', { class: 'chip-status bad', onclick: guardDialog }, 'Check big change')
-    : !S.remote ? h('span', { class: 'chip-status lock', title: 'Your data is on this device only' }, 'This device only')
-    : st === 'syncing' ? h('span', { class: 'chip-status' }, 'Syncing…')
-    : st === 'conflict' ? h('button', { class: 'chip-status bad', onclick: conflictDialog }, 'Fix sync')
-    : st === 'error' || st === 'offline' ? h('a', { class: 'chip-status bad', href: '#/settings' }, st === 'offline' ? 'Offline' : 'Sync problem')
-    : S.meta.dirty ? h('span', { class: 'chip-status' }, 'Saving…') : h('span', { class: 'chip-status ok cloud', title: 'Your data is kept in your own Google Drive' }, S.role === 'owner' ? 'Saved to Drive' : 'View only');
+  // What to tell the owner about saving and syncing. kind: ok (green), busy (amber), bad (red), idle (grey).
+  const info = S.saveFailed ? { text: 'Not saved on this device', kind: 'bad', href: '#/settings', title: 'Storage on this device is full or blocked' }
+    : S.status === 'guard' ? { text: 'Check big change', kind: 'bad', click: guardDialog }
+    : !S.remote ? { text: 'This device only', kind: 'idle', icon: 'lock', title: 'Your data is on this device only' }
+    : st === 'syncing' ? { text: 'Syncing…', kind: 'busy' }
+    : st === 'conflict' ? { text: 'Fix sync', kind: 'bad', click: conflictDialog }
+    : st === 'error' || st === 'offline' ? { text: st === 'offline' ? 'Offline' : 'Sync problem', kind: 'bad', href: '#/settings' }
+    : S.meta.dirty ? { text: 'Saving…', kind: 'busy' }
+    : { text: S.role === 'owner' ? 'Saved to Drive' : 'View only', kind: 'ok', icon: 'cloud', title: 'Your data is kept in your own Google Drive' };
+  const make = (cls, kids, extra = {}) => {
+    const props = { class: cls, title: info.title || info.text, ...extra };
+    if (info.href) return h('a', { ...props, href: info.href }, kids);
+    return h(info.click ? 'button' : 'span', { ...props, ...(info.click ? { onclick: info.click } : {}) }, kids);
+  };
+  const chip = make('chip-status ' + (info.kind === 'bad' ? 'bad ' : info.kind === 'ok' ? 'ok ' : '') + (info.icon || ''), info.text);
+  // The dot stays on the phone all the time; tapping it says what it means (or opens the fix when something is wrong).
+  const dot = h(info.href ? 'a' : 'button', { class: 'sync-dot ' + info.kind, type: info.href ? null : 'button', href: info.href || null, 'aria-label': info.text, title: info.text, onclick: info.href ? null : (info.click || (() => toast(info.text))) });
+  // On a phone the message takes the place of the icons for a few seconds whenever it changes, then the icons come back.
+  if (info.text !== flashKey) { flashKey = info.text; flashUntil = Date.now() + FLASH_MS; clearTimeout(flashTimer); flashTimer = setTimeout(chrome, FLASH_MS + 60); }
+  top.classList.toggle('flashing', Date.now() < flashUntil);
   top.replaceChildren(
     h('span', { class: 'mark top-mark', 'aria-hidden': 'true' }),
     h('div', { class: 'title' }, ROUTES[cur].group ? h('span', { class: 'crumb' }, ROUTES[cur].group) : null, h('h1', null, ROUTES[cur].label)),
-    h('div', { class: 'top-right' }, chip,
-      S.remote ? h('button', { class: 'icon', 'aria-label': 'Refresh from Drive', title: 'Refresh from Drive', onclick: async () => { try { await pull(); } catch (e) { toast(e.message, 'bad'); } } }, '↻') : null,
+    h('div', { class: 'top-right' }, chip, dot,
+      S.remote ? h('button', { class: 'icon refresh', 'aria-label': 'Refresh from Drive', title: 'Refresh from Drive', onclick: async () => { try { await pull(); } catch (e) { toast(e.message, 'bad'); } } }, '↻') : null,
       h('button', { class: 'icon eye', 'aria-label': S.masked ? 'Show figures' : 'Hide figures', title: S.masked ? 'Show figures' : 'Hide figures', 'aria-pressed': S.masked ? 'false' : 'true', onclick: () => { S.masked = !S.masked; renderView(); } }, eye(S.masked)),
       h('button', { class: 'icon aa', 'aria-label': 'Text size', title: 'Text size', onclick: () => { const i = FS.findIndex((f) => f >= (S.cfg.fontScale || 1) - 0.001); const n = FS[(i + 1) % FS.length]; setFont(n); toast('Text size ' + Math.round(n * 100) + '%'); } }, h('span', { class: 'aa-t' }, 'Aa')),
       h('a', { class: 'icon', href: '#/settings', 'aria-label': 'Settings' }, icon(SLIDERS))));
