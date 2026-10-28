@@ -9,7 +9,7 @@ You build the APK on your own computer. Do this once to set up, then three comma
 | Tool | Version | Where |
 | --- | --- | --- |
 | Node.js | 22 or newer | https://nodejs.org |
-| JDK | 21 | Comes inside Android Studio (step 2), nothing to install separately |
+| JDK | 21 (21 to 24 work, 25 does not) | Comes inside Android Studio (step 2), nothing to install separately |
 | Android Studio | current | https://developer.android.com/studio |
 
 ## 2. Set up Android Studio once
@@ -20,7 +20,7 @@ You build the APK on your own computer. Do this once to set up, then three comma
    - Windows: `sdk.dir=C\:\\Users\\YOU\\AppData\\Local\\Android\\Sdk`
    - Mac: `sdk.dir=/Users/YOU/Library/Android/sdk`
    - Linux: `sdk.dir=/home/YOU/Android/Sdk`
-4. If the build says it cannot find Java 21, set `JAVA_HOME` to Android Studio's folder `jbr` (Windows: `C:\Program Files\Android\Android Studio\jbr`).
+4. The build script picks Android Studio's Java 21 for you when the Java on your PATH is too new or missing. To choose a Java yourself, set `JAVA_HOME` to a JDK 21 folder (Android Studio's is its `jbr` folder; Windows: `C:\Program Files\Android\Android Studio\jbr`). Only the `npm run` commands do this switch. If you run `gradlew` by hand, set `JAVA_HOME` first.
 
 ## 3. Build a test APK
 
@@ -85,7 +85,7 @@ To work in Android Studio instead: `npm run android:sync`, then `npm run android
 | What you see | What to do |
 | --- | --- |
 | `SDK location not found` | Make `android/local.properties` (step 2.3) |
-| `Unsupported class file major version` or Java errors | Use JDK 21 (step 2.4) |
+| `Unsupported class file major version 69` (or any number above 68) | Your Java is too new (Java 25). `npm run android:debug` now switches to Android Studio's Java 21 by itself. If it cannot find Android Studio, it says so: install Android Studio, or set `JAVA_HOME` to a JDK 21 folder (step 2.4) |
 | `capacitor-cordova-android-plugins` not found | Run `npm run android:sync` before building (the `android:debug` command does this for you) |
 | White or old screen after an update | Uninstall the old app, install the new APK |
 | No reminders | Settings → Payment reminders is on, the phone allows notifications for the app, and battery saving is not restricting it |
