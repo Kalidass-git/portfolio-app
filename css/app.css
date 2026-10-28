@@ -1075,7 +1075,9 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
   .tabbar { gap: 4px; padding: 4px 6px calc(4px + env(safe-area-inset-bottom)); border-top: 1.5px solid color-mix(in srgb, var(--brand) 40%, var(--line)); }
   .tabbar a { gap: 2px; padding: 5px 2px 4px; font-size: 10px; font-weight: 600; line-height: 1.1; color: color-mix(in srgb, var(--ink) 72%, var(--surface)); border: 1.5px solid transparent; border-radius: 12px; }
   .tabbar a .ico { width: 22px; height: 22px; stroke-width: 2; }
-  .tabbar a.on { color: var(--brand); background: var(--brand-soft); border-color: var(--brand); font-weight: 700; }
+  .tabbar a { position: relative; border: 0; }
+  .tabbar a.on { color: var(--brand); font-weight: 700; }
+  .tabbar a.on::after { content: ''; position: absolute; left: 50%; bottom: 0; width: 30px; height: 3px; margin-left: -15px; border-radius: 3px 3px 0 0; background: var(--brand); }
 }
 @media (max-width: 360px) {
   .hero-right { border-left: 0; padding-left: 0; }
