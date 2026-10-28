@@ -150,6 +150,15 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.24.0 – Brand look: logo, top bar, Net worth card, bottom tabs
+
+- Logo: the old rupee tile is gone from the side menu and the welcome screen; the new bars-and-arrow logo is used there and in the phone top bar. The browser tab icon now points at versioned files (`?v=8.24`) with PNG fallbacks, so browsers drop the old cached icon.
+- Top bar (phone): logo tile, page title and the "This device only" chip with a lock. The title and logo are fixed size (px), they do not follow the text-size setting; the chip shrinks first when space is short. Settings uses a sliders icon.
+- Net worth card: green edge, soft green wash, short gold bar under the number (replaces the double rule), faint logo mark behind, divider before the figures.
+- Bottom tabs (phone): icons 28px, small bold 11.5px labels, active tab has a green highlight with a green border; the bar has a green top line. Page bottom space was raised so nothing hides behind it.
+- Summary cards are unchanged. New files: `icons/mark.svg`, `icons/favicon-32.png`, `icons/apple-touch-180.png` (made by `tools/make-icons.py`).
+- Android: rebuild the APK to get it. No stored data changed.
+
 ## Release 8.23.3 – Android: status bar readable in dark mode
 
 - Problem: in dark mode the clock, battery and signal icons on the phone's top bar could be hard to read.
