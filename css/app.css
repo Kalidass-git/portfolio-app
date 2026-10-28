@@ -1033,3 +1033,6 @@ html.native .ptr { position: fixed; top: calc(env(safe-area-inset-top) + 8px); l
 html.native .ptr.spin { animation: ptr-spin .8s linear infinite; }
 @keyframes ptr-spin { to { rotate: 360deg; } }
 @media (prefers-reduced-motion: reduce) { html.native .tabbar a:active, html.native button:active { transform: none; } html.native .ptr.spin { animation: none; } }
+
+/* Android app: no ruled-paper lines behind the Net worth card (they cut through larger text) */
+html.native .hero { background-image: none; }

@@ -43,7 +43,9 @@ Your APK is `android/app/build/outputs/apk/debug/app-debug.apk`. The first build
 
 1. Open **Family Wealth**. Choose **Connect to Google Drive** and enter the backend URL and key, the same as in the web app. Family members use the family link.
 2. When asked, choose **Turn on reminders** and allow notifications.
-3. In **Settings → Payment reminders (this phone)** pick the time and which reminders you want. **Send a test reminder** shows how many are planned.
+3. Pull down on any page to refresh: it loads the latest Drive data, then today's share, fund and gold prices.
+4. Text too big or small? Tap **Aa** at the top, or use Settings → This device → Text size (80% to 150%). Android's own font size setting does not change this app.
+5. In **Settings → Payment reminders (this phone)** pick the time and which reminders you want. **Send a test reminder** shows how many are planned.
 
 The installed web app (PWA) and this app keep their data separately. Connect again in the app, nothing is lost in Drive.
 

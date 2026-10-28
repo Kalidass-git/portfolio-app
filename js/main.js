@@ -39,7 +39,7 @@ const ROUTES = {
 const TABS = [['home', 'Home', 'home'], ['assets', 'Assets', 'cash'], ['flow', 'Expenses', 'flow'], ['outlook', 'Outlook', 'projector'], ['report', 'Report', 'report']];
 const icon = (d) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'ico'); s.setAttribute('aria-hidden', 'true'); const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', d); s.append(p); return s; };
 
-const FS = [1, 1.15, 1.3, 1.5];
+const FS = [0.8, 0.9, 1, 1.15, 1.3, 1.5];
 const setFont = (n) => { setCfg({ fontScale: n }); document.documentElement.style.setProperty('--fs', n); renderView(); };
 const eye = (masked) => icon(masked ? 'M3 3l18 18M10.6 6.2A9.8 9.8 0 0 1 12 6c5 0 8.5 4 9.5 6a14 14 0 0 1-3 3.6M6.5 7.5C4.5 9 3.1 11 2.5 12c1 2 4.5 6 9.5 6 1.5 0 2.8-.4 4-.9M9.9 9.9a3 3 0 0 0 4.2 4.2' : 'M2.5 12C3.5 10 7 6 12 6s8.5 4 9.5 6c-1 2-4.5 6-9.5 6s-8.5-4-9.5-6zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z');
 const routeName = () => { const r = route().name; return ROUTES[r] ? r : 'home'; };

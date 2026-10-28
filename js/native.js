@@ -1,6 +1,7 @@
 // The Android app's bridge. In a browser or the installed web app (PWA) every function here does nothing, so the web app is unchanged.
 // Capacitor puts `window.Capacitor` into the page only inside the Android app.
 import { S, setCfg, subscribe, pull } from './store.js';
+import { refreshAll } from './prices.js';
 import { buildReminders, DEFAULTS } from './notify.js';
 import { toast, dialog, h } from './ui.js';
 
@@ -21,7 +22,7 @@ function ticks() {
   }, { passive: true });
 }
 
-// ---------- pull down to refresh from Drive ----------
+// ---------- pull down to refresh: latest Drive data, then share, fund and gold prices ----------
 function pullToRefresh() {
   const dot = h('div', { class: 'ptr', 'aria-hidden': 'true' }, '↻');
   document.body.append(dot);
@@ -35,11 +36,16 @@ function pullToRefresh() {
     dot.style.transform = `translate(-50%, ${Math.min(d, 110) * 0.7 - 64}px) rotate(${d * 2}deg)`;
   }, { passive: true });
   document.addEventListener('touchend', async () => {
-    const go = y0 != null && d > 90 && S.remote;
+    const go = y0 != null && d > 90 && !!S.data;
     reset();
     if (!go) return;
     busy = true; dot.style.transform = 'translate(-50%, 8px)'; dot.classList.add('spin');
-    try { await pull(); toast('Up to date'); } catch (e) { toast(e.message, 'bad'); }
+    try {
+      // latest data from Drive first (when nothing is waiting to upload), then today's share, fund and gold prices
+      if (S.remote && !S.meta.dirty) { try { await pull(); } catch { /* offline: carry on with prices */ } }
+      const res = await refreshAll(() => {});
+      toast(res.stocks || res.funds ? `Updated ${res.stocks} shares and ${res.funds} funds` + (res.errors.length ? `. ${res.errors.length} issue${res.errors.length > 1 ? 's' : ''}: ${res.errors[0]}` : '') : (res.errors[0] || 'No prices updated'), res.errors.length ? 'bad' : '');
+    } catch (e) { toast(e.message, 'bad'); }
     dot.classList.remove('spin'); dot.style.transform = ''; busy = false;
   }, { passive: true });
 }
@@ -128,6 +134,8 @@ function offerReminders() {
 export function startNative() {
   if (!isNative()) return;
   document.documentElement.classList.add('native');
+  // The phone screen is small: start one step smaller than the web app's normal size, once. Change it with Aa or in Settings.
+  try { if (!localStorage.getItem('pt.fs.native')) { localStorage.setItem('pt.fs.native', '1'); if ((S.cfg.fontScale || 1) === 1) { setCfg({ fontScale: 0.9 }); document.documentElement.style.setProperty('--fs', 0.9); } } } catch { /* private mode */ }
   ticks(); pullToRefresh(); backButton(); files(); tapToOpen();
   subscribe(planSoon);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') planSoon(); });

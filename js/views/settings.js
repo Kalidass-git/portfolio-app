@@ -102,7 +102,7 @@ export function render() {
   if (isNative()) root.append(remindersSection());
   root.append(section('This device',
     h('div', { class: 'kv' },
-      h('div', { class: 'inline-label' }, 'Text size ', h('span', { class: 'fs-pick' }, [['Normal', 1], ['Large', 1.15], ['Larger', 1.3], ['Largest', 1.5]].map(([l, v]) => h('button', { 'aria-pressed': String(Math.abs((S.cfg.fontScale || 1) - v) < 0.001), onclick: () => { setCfg({ fontScale: v }); document.documentElement.style.setProperty('--fs', v); rerender(); } }, l)))),
+      h('div', { class: 'inline-label' }, 'Text size ', h('span', { class: 'fs-pick' }, [['Smaller', 0.8], ['Small', 0.9], ['Normal', 1], ['Large', 1.15], ['Larger', 1.3], ['Largest', 1.5]].map(([l, v]) => h('button', { 'aria-pressed': String(Math.abs((S.cfg.fontScale || 1) - v) < 0.001), onclick: () => { setCfg({ fontScale: v }); document.documentElement.style.setProperty('--fs', v); rerender(); } }, l)))),
       h('label', { class: 'inline-label' }, 'Theme ', h('select', { onchange: (e) => { setCfg({ theme: e.target.value }); document.documentElement.dataset.theme = e.target.value === 'auto' ? '' : e.target.value; } },
         [['auto', 'Match phone'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) => h('option', { value: v, selected: S.cfg.theme === v }, l)))),
       h('label', { class: 'inline-label check' }, h('input', { type: 'checkbox', checked: S.cfg.useLive, onchange: (e) => setCfg({ useLive: e.target.checked }) }), ' Use refreshed live prices on this device'),

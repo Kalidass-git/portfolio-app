@@ -2,7 +2,7 @@
   "appId": "com.familywealth.app",
   "appName": "Family Wealth",
   "webDir": "www",
-  "backgroundColor": "#0f5a47",
+  "backgroundColor": "#f1f3ef",
   "android": {
     "allowMixedContent": false
   },
