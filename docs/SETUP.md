@@ -152,7 +152,7 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 ## Release 8.24.1 – Smaller title and bottom tabs; chart and ruled lines kept
 
-- Phone top bar: title 16px, logo 28px, chip 11px (still fixed sizes). Bottom tabs: icons 22px, labels 10px, slimmer bar; the active tab is shown by a short green bar along the bottom edge (no box), green icon and label.
+- Phone top bar: title 16px, logo 28px, chip 11px (still fixed sizes). Bottom tabs: icons 22px, labels 10px, slimmer bar; the active tab is shown by a short gold bar (the logo's gold) along the bottom edge (no box), with a gold icon and label.
 - Net worth card: the ruled lines behind it are back (not on the Android app, where they cut through the number). The little trend chart stays on desktop and wide screens; the faint logo mark behind the card now shows only where that chart is hidden (phones).
 - No stored data changed. Android: rebuild the APK.
 
