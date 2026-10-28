@@ -2,6 +2,8 @@ package com.familywealth.app;
 
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.print.PrintAttributes;
 import android.print.PrintDocumentAdapter;
@@ -9,6 +11,8 @@ import android.print.PrintManager;
 import android.util.Base64;
 
 import androidx.core.content.FileProvider;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -26,6 +30,30 @@ import java.io.FileOutputStream;
  */
 @CapacitorPlugin(name = "NativeTools")
 public class NativeToolsPlugin extends Plugin {
+
+    /**
+     * Status and navigation bar icons that can be read on the page's real colour.
+     * dark=true means a dark page, so the clock, battery and signal icons are drawn light.
+     * color (optional "#rrggbb") is painted behind the bars, so the strip matches the page even when the app's own
+     * light/dark setting differs from the phone's.
+     */
+    @PluginMethod
+    public void setBars(final PluginCall call) {
+        final boolean dark = Boolean.TRUE.equals(call.getBoolean("dark", false));
+        final String color = call.getString("color");
+        getActivity().runOnUiThread(() -> {
+            try {
+                android.view.Window w = getActivity().getWindow();
+                if (color != null) w.setBackgroundDrawable(new ColorDrawable(Color.parseColor(color)));
+                WindowInsetsControllerCompat ic = WindowCompat.getInsetsController(w, w.getDecorView());
+                ic.setAppearanceLightStatusBars(!dark);
+                ic.setAppearanceLightNavigationBars(!dark);
+                call.resolve();
+            } catch (Exception e) {
+                call.reject("Could not set the system bars: " + e.getMessage());
+            }
+        });
+    }
 
     @PluginMethod
     public void print(final PluginCall call) {

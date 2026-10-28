@@ -24,17 +24,23 @@ function ticks() {
 
 // ---------- phone status bar: icon colour that can be read, and an optional full-screen mode ----------
 let lastBars = '';
-/** Dark icons on a light page, light icons on a dark page. Decided from what the page really shows, not from Android's night flag. */
+const hex2 = (n) => Number(n).toString(16).padStart(2, '0');
+/** Dark icons on a light page, light icons on a dark page. Decided from what the page really shows, not from Android's night flag,
+ *  because the app's own Light / Dark setting can differ from the phone's. The same colour is painted behind the bars. */
 function statusBar() {
-  const SB = P('SystemBars'); if (!SB) return;
+  const SB = P('SystemBars'), NT = P('NativeTools'); if (!SB && !NT) return;
   const hide = !!(S.cfg && S.cfg.hideStatusBar);
   const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(getComputedStyle(document.body).backgroundColor || '');
   const dark = m ? (0.299 * m[1] + 0.587 * m[2] + 0.114 * m[3]) < 128 : false;
-  const key = (dark ? 'DARK' : 'LIGHT') + (hide ? '-hidden' : '');
+  const color = m ? '#' + hex2(m[1]) + hex2(m[2]) + hex2(m[3]) : null;
+  const key = (dark ? 'DARK' : 'LIGHT') + (color || '') + (hide ? '-hidden' : '');
   if (key === lastBars) return;
   lastBars = key;
-  SB.setStyle({ style: dark ? 'DARK' : 'LIGHT' }).catch(() => {});
-  (hide ? SB.hide({ bar: 'StatusBar' }) : SB.show({ bar: 'StatusBar' })).catch(() => {});
+  if (NT) NT.setBars({ dark, color }).catch(() => {});   // sets the icon colour directly on the window: the most reliable way
+  if (SB) {
+    SB.setStyle({ style: dark ? 'DARK' : 'LIGHT' }).catch(() => {});
+    (hide ? SB.hide({ bar: 'StatusBar' }) : SB.show({ bar: 'StatusBar' })).catch(() => {});
+  }
 }
 
 // ---------- pull down to refresh: latest Drive data, then share, fund and gold prices ----------
@@ -155,6 +161,8 @@ export function startNative() {
   subscribe(planSoon); subscribe(statusBar); statusBar();
   try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => setTimeout(statusBar, 100)); } catch { /* old WebView */ }
   setTimeout(statusBar, 800); setTimeout(statusBar, 2500);
+  // Switching Light / Dark in Settings changes the page after the store has already told us, so also watch the page itself.
+  try { let t; new MutationObserver(() => { clearTimeout(t); t = setTimeout(statusBar, 60); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'style'] }); } catch { /* old WebView */ }
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { planSoon(); lastBars = ''; statusBar(); } });
   setTimeout(offerReminders, 2500);
   // keep the splash up until the first page has drawn, then fade it

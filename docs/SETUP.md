@@ -150,6 +150,14 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.23.3 – Android: status bar readable in dark mode
+
+- Problem: in dark mode the clock, battery and signal icons on the phone's top bar could be hard to read.
+- Cause: the icon colour was set through a plugin call, and it ran before the page had switched theme when Light / Dark was changed in Settings. The strip behind the bar also followed the phone's night setting, not the app's own Light / Dark choice, so the two could disagree.
+- Fix: `NativeTools.setBars` (new, in `NativeToolsPlugin.java`) sets the icon colour directly on the window and paints the page's real background colour behind the bars. `js/native.js` now also watches the page for theme changes.
+- **Rebuild the APK** to get this (it changes Android code). The web app is unchanged.
+- No stored data changed.
+
 ## Release 8.23.2 – New app icon
 
 - The rupee is gone. The icon is now rising gold bars with a growth arrow over them, on the same green.
