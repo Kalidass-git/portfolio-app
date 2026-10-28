@@ -1038,16 +1038,16 @@ html.native .ptr.spin { animation: ptr-spin .8s linear infinite; }
 
 /* ---- 8.24 brand look: logo, top bar, Net worth card, bottom tabs ---- */
 .mark, .brand .mark { background: #0F5A47 url(../icons/mark.svg) center / 68% no-repeat; color: transparent; font-size: 0; }
-.top-mark { display: none; flex: 0 0 auto; width: 34px; height: 34px; border-radius: 10px; margin-right: -2px; }
+.top-mark { display: none; flex: 0 0 auto; width: 28px; height: 28px; border-radius: 8px; margin-right: -2px; }
 .top { gap: 10px; border-bottom-color: color-mix(in srgb, var(--brand) 18%, var(--line-2)); }
 .top .title { margin-right: auto; flex: 0 0 auto; }
 .top-right { gap: 2px; }
 .top-right > .icon, .top-right > a.icon, .top-right > button.icon { flex: 0 0 auto; width: 34px; }
 /* fixed sizes: the title and logo do not follow the text-size setting or the space left; the status chip gives way first */
-.top h1 { font-size: 20px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
-.top .crumb { font-size: 11px; white-space: nowrap; }
+.top h1 { font-size: 16px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+.top .crumb { font-size: 10px; white-space: nowrap; }
 .top-right { flex: 0 1 auto; min-width: 0; }
-.chip-status { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; padding: 4px 9px; min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--brand); background: var(--brand-soft); border-color: color-mix(in srgb, var(--brand) 45%, var(--line)); }
+.chip-status { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; padding: 3px 8px; min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--brand); background: var(--brand-soft); border-color: color-mix(in srgb, var(--brand) 45%, var(--line)); }
 .chip-status.ok { color: var(--brand); }
 .chip-status.bad { color: var(--neg); border-color: var(--neg); background: color-mix(in srgb, var(--neg) 10%, transparent); }
 .chip-status.lock::before, .chip-status.cloud::before { content: ''; flex: 0 0 auto; width: 14px; height: 14px; background: currentColor; -webkit-mask: var(--chip-ico) center / contain no-repeat; mask: var(--chip-ico) center / contain no-repeat; }
@@ -1055,7 +1055,9 @@ html.native .ptr.spin { animation: ptr-spin .8s linear infinite; }
 .chip-status.cloud { --chip-ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 18a4 4 0 0 1-.6-7.95A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9z'/%3E%3Cpath d='M9.5 13.5l2 2 3.5-4'/%3E%3C/svg%3E"); }
 
 /* Net worth card: green edge, soft green wash, short gold bar, faint logo mark behind */
-.hero.card { position: relative; overflow: hidden; border: 1.5px solid color-mix(in srgb, var(--brand) 60%, var(--line)); background: linear-gradient(135deg, var(--surface) 45%, var(--brand-soft)); }
+.hero.card { position: relative; overflow: hidden; border: 1.5px solid color-mix(in srgb, var(--brand) 60%, var(--line)); background-color: var(--surface); background-image: repeating-linear-gradient(to bottom, transparent 0 31px, var(--line-2) 31px 32px), linear-gradient(135deg, var(--surface) 45%, var(--brand-soft)); }
+html.native .hero.card { background-image: linear-gradient(135deg, var(--surface) 45%, var(--brand-soft)); } /* Android: no ruled lines through the big number */
+@media (min-width: 701px) { .hero.card:has(.spark)::after { display: none; } } /* the little trend chart takes the corner */
 .hero.card::after { content: ''; position: absolute; right: 8px; top: 6px; width: 128px; height: 108px; background: var(--brand); opacity: .07; -webkit-mask: url(../icons/mark.svg) center / contain no-repeat; mask: url(../icons/mark.svg) center / contain no-repeat; pointer-events: none; }
 .hero.card > * { position: relative; z-index: 1; }
 .hero-num { white-space: nowrap; border-bottom: 0; position: relative; padding-bottom: 14px; }
@@ -1067,13 +1069,15 @@ html.native .ptr.spin { animation: ptr-spin .8s linear infinite; }
 
 /* Bottom tabs (phone): larger icons, small bold labels, green highlight with a green border */
 @media (max-width: 899px) {
-  .main-col { padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
-  #toast { bottom: calc(104px + env(safe-area-inset-bottom)); }
+  .main-col { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  #toast { bottom: calc(86px + env(safe-area-inset-bottom)); }
   .top-mark { display: block; }
-  .tabbar { gap: 4px; padding: 6px 6px calc(6px + env(safe-area-inset-bottom)); border-top: 1.5px solid color-mix(in srgb, var(--brand) 40%, var(--line)); }
-  .tabbar a { gap: 3px; padding: 7px 2px 6px; font-size: 11.5px; font-weight: 600; line-height: 1.1; color: color-mix(in srgb, var(--ink) 72%, var(--surface)); border: 1.5px solid transparent; border-radius: 14px; }
-  .tabbar a .ico { width: 28px; height: 28px; stroke-width: 2; }
-  .tabbar a.on { color: var(--brand); background: var(--brand-soft); border-color: var(--brand); font-weight: 700; }
+  .tabbar { gap: 4px; padding: 4px 6px calc(4px + env(safe-area-inset-bottom)); border-top: 1.5px solid color-mix(in srgb, var(--brand) 40%, var(--line)); }
+  .tabbar a { gap: 2px; padding: 5px 2px 4px; font-size: 10px; font-weight: 600; line-height: 1.1; color: color-mix(in srgb, var(--ink) 72%, var(--surface)); border: 1.5px solid transparent; border-radius: 12px; }
+  .tabbar a .ico { width: 22px; height: 22px; stroke-width: 2; }
+  .tabbar a { position: relative; border: 0; }
+  .tabbar a.on { color: var(--brand); font-weight: 700; }
+  .tabbar a.on::after { content: ''; position: absolute; left: 50%; bottom: 0; width: 30px; height: 3px; margin-left: -15px; border-radius: 3px 3px 0 0; background: var(--brand); }
 }
 @media (max-width: 360px) {
   .hero-right { border-left: 0; padding-left: 0; }
