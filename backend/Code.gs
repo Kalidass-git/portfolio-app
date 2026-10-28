@@ -108,6 +108,7 @@ function doPost(e) {
           return json_({ ok: true, version: next.version, updatedAt: next.updatedAt });
         } finally { lock.releaseLock(); }
       }
+      case 'mf': return json_(mf_(req.path));
       case 'quotes': return json_(quotes_(req.symbols || []));
       case 'dividends': return json_(dividends_(req.symbols || []));
       case 'history': return json_(history_(req.symbol, req.yahoo));
@@ -118,6 +119,15 @@ function doPost(e) {
   } catch (err) {
     return json_({ error: 'Backend error: ' + err.message });
   }
+}
+
+/** Mutual fund NAVs from mfapi.in, read here so the browser's CORS rules do not matter. path: '/152156', '/152156/latest', '/search?q=hdfc' */
+function mf_(path) {
+  path = String(path || '');
+  if (!/^\/(\d{3,8}(\/latest)?|search\?q=[A-Za-z0-9%+._ -]{1,80})$/.test(path)) return { error: 'Bad fund request.' };
+  var r = UrlFetchApp.fetch('https://api.mfapi.in/mf' + path, { muteHttpExceptions: true });
+  if (r.getResponseCode() !== 200) return { error: 'mfapi answered ' + r.getResponseCode() };
+  return { ok: true, body: JSON.parse(r.getContentText()) };
 }
 
 /** Share prices from Yahoo Finance (NSE first, then BSE). symbols: [{symbol:'INFY', yahoo:'' }] */

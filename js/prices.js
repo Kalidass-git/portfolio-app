@@ -1,30 +1,23 @@
 // Live prices.
-//  - Mutual funds: NAV from mfapi.in (free, no key, allows browser requests).
+//  - Mutual funds: NAV from mfapi.in (free, no key; read through the backend when the browser blocks it).
 //  - Stocks and ETFs: asked from the backend (Apps Script), which reads Yahoo Finance on the server side.
 import { premiumFrom, applyLive } from './goldlive.js';
 import { todayISO } from './calc.js';
 import { S, mutate, saveQuotes } from './store.js';
 import { call } from './remote.js';
-
-const MFAPI = 'https://api.mfapi.in/mf';
+import { mfGet } from './mfapi.js';
 
 export async function searchScheme(q) {
-  const r = await fetch(`${MFAPI}/search?q=${encodeURIComponent(q)}`);
-  if (!r.ok) throw new Error('Fund search failed');
-  return r.json(); // [{schemeCode, schemeName}]
+  return mfGet(`/search?q=${encodeURIComponent(q)}`); // [{schemeCode, schemeName}]
 }
 const isoDate = (s) => { const [d, m, y] = s.split('-'); return `${y}-${m}-${d}`; };
 /** Latest NAV and the one before it (that gives the day's change). The full history call is used because it lists both. */
 async function latestNav(code) {
   let rows;
   try {
-    const r = await fetch(`${MFAPI}/${code}`);
-    if (!r.ok) throw new Error('history');
-    rows = (await r.json()).data;
+    rows = (await mfGet(`/${code}`)).data;
   } catch {
-    const r = await fetch(`${MFAPI}/${code}/latest`);
-    if (!r.ok) throw new Error('NAV fetch failed for ' + code);
-    rows = (await r.json()).data;
+    rows = (await mfGet(`/${code}/latest`)).data;
   }
   const row = rows && rows[0];
   if (!row) throw new Error('No NAV for ' + code);
