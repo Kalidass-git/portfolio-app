@@ -150,6 +150,13 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.23.1 – Fix: fund prices blocked by CORS
+
+- mfapi.in sometimes answers without the CORS header, so the browser blocked NAV and history calls (some funds updated, others did not).
+- New `js/mfapi.js`: tries the browser, retries once, then asks the backend to read mfapi.in on the server. After one block it uses the backend first for the rest of the session.
+- Backend: new optional `mf` action in `backend/Code.gs` (read-only, path is checked). **Paste the new Code.gs into Apps Script and deploy a new version.** Until then the app behaves as before.
+- No stored data changed.
+
 ## Release 8.9.28 – Fix
 
 - Insights and Tax summary failed to load with "Cannot access 'folds' before initialization" when more than one person is on record. Fixed.

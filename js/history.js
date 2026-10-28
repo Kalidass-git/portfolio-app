@@ -3,6 +3,7 @@
 //  - Shares and ETFs: daily closes asked from the backend (Apps Script, reads Yahoo Finance). Needs the backend with the "history" action.
 import { S } from './store.js';
 import { call } from './remote.js';
+import { mfGet } from './mfapi.js';
 
 const cache = new Map();
 const iso = (s) => { const [d, m, y] = s.split('-'); return `${y}-${m}-${d}`; };
@@ -11,9 +12,7 @@ const iso = (s) => { const [d, m, y] = s.split('-'); return `${y}-${m}-${d}`; };
 export async function fundNavs(code) {
   const key = 'mf:' + code;
   if (cache.has(key)) return cache.get(key);
-  const r = await fetch(`https://api.mfapi.in/mf/${encodeURIComponent(code)}`);
-  if (!r.ok) throw new Error('Could not load the NAV history.');
-  const body = await r.json();
+  const body = await mfGet(`/${encodeURIComponent(code)}`);
   cache.set('mfmeta:' + code, body.meta || null);
   const rows = (body.data || []).map((x) => ({ d: iso(x.date), v: parseFloat(x.nav) })).filter((x) => x.v > 0).reverse();
   cache.set(key, rows);
