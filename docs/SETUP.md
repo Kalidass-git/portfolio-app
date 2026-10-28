@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.24.1 – Smaller title and bottom tabs; chart and ruled lines kept
+
+- Phone top bar: title 16px, logo 28px, chip 11px (still fixed sizes). Bottom tabs: icons 22px, labels 10px, slimmer bar; the green highlight with green border stays.
+- Net worth card: the ruled lines behind it are back (not on the Android app, where they cut through the number). The little trend chart stays on desktop and wide screens; the faint logo mark behind the card now shows only where that chart is hidden (phones).
+- No stored data changed. Android: rebuild the APK.
+
 ## Release 8.24.0 – Brand look: logo, top bar, Net worth card, bottom tabs
 
 - Logo: the old rupee tile is gone from the side menu and the welcome screen; the new bars-and-arrow logo is used there and in the phone top bar. The browser tab icon now points at versioned files (`?v=8.24`) with PNG fallbacks, so browsers drop the old cached icon.
