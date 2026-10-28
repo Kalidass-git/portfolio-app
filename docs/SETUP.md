@@ -9,7 +9,7 @@ Your data lives in **one JSON file in your own Google Drive**. Only you (owner k
 - The app's *code* (HTML/JS files, no data in them) must be opened from a web address for a phone to install it. Android only allows "Install app" from an https page. Pick one:
   1. **Free static host (recommended).** Upload the app folder to GitHub Pages, Netlify or Cloudflare Pages. It holds code only. Open the link on each phone, then Chrome menu > *Install app*.
   2. **Desktop only, fully local.** In the app folder run `python3 -m http.server 8765` and open http://localhost:8765. Phones cannot install from this.
-  3. **APK later.** A Capacitor wrapper can package the same files into an APK so no host is needed. It was not built here (no Android SDK in the build environment).
+  3. **Android app (APK).** A Capacitor wrapper packs the same files into an APK, with payment reminders on the phone. See `docs/ANDROID.md`.
 
 ## Step 1. Put the app online (code only)
 
@@ -722,3 +722,15 @@ No change to your stored data. Nothing is migrated, renamed or removed. The new 
   - Private lending: **Lent to**
 - **Home → Where your money is** shows what is over a limit in red and what is close in amber, with how much is left. Settings → Risk limits has "Show amber when a limit is 80 / 90 / 95% used".
 - **What-if** takes a bond purchase or a new loan with its own **interest rate** (it earns that rate in the projection and pays out monthly interest, as the real one would), and a trade by quantity × price. The mix after is shown in rupees and percent, with over (red) and close (amber) marked.
+
+## Release 8.23.0 – Android app (Capacitor), phone payment reminders
+
+- **New `android/` folder** with a ready Android Studio / Gradle project, plus `capacitor.config.json`, `package.json` and `scripts/`. Build steps are in `docs/ANDROID.md`. The web app is unchanged and still has no build step; `npm run android:sync` copies it into the app.
+- **Payment reminders on the phone** (Android app only). The same dates Home's "Needs a look" uses become notifications: loan EMI the day before, on the day and for three mornings if late; bond interest as many days ahead as set on Fixed income, and on the day; money due to you; bonds, deposits, chits and lending maturing. Time of day, each kind and "show amounts" are set in Settings → Payment reminders (this phone). Stored on the phone only, never in the data file. The plan is rebuilt on every open and data change (`js/notify.js`, test `tests/notify.test.mjs`).
+- **Reminders use the same dates as Home's Action centre** (`C.upcoming`), so what the phone reminds you about matches what Home shows. Home itself is unchanged by this release.
+- **Native feel:** Android back button (closes a popup, then goes back, then exits), pull down to refresh (latest Drive data, then share, fund and gold prices), a light tap on buttons and tabs, full-screen layout under the status bar, green splash with the app mark, launcher and notification icons from the existing icon. The service worker is not registered inside the app (files are bundled).
+- **Family report → Print** opens Android's print dialog (Save as PDF), and downloads (backups, CSV) open the share sheet so they can be saved to Drive or sent on WhatsApp. This is a small native plugin in `android/app/src/main/java/com/familywealth/app/`.
+- **Phone screen fixes:** a green Android title bar above the header is gone (the window was being built before the app theme was applied), and the window behind the page has a plain colour; the app ignores Android's system font size (text size is set with Aa or Settings); two smaller text sizes (80% and 90%) were added, and the app starts at 90% once on first run; no ruled lines behind the Net worth card in the app.
+- **Phone top bar:** clock and battery are now dark on the light page (and light on the dark page), so they can be read. Settings → Phone status bar can hide the top bar completely.
+- **Build uses Java 21 to 24:** `scripts/gradle.mjs` switches to Android Studio's Java when the Java on the PATH is newer (25 fails with "Unsupported class file major version 69") or missing.
+- **Not changed:** stored data, Drive sync, prices, any figure. In a browser or installed web app nothing above appears.

@@ -1023,3 +1023,16 @@ tr.moved-main td:first-child { box-shadow: inset 4px 0 0 var(--pos); } tr.moved-
 .ac-more { margin: 6px 0 0; background: none; border: 0; color: var(--brand); cursor: pointer; font: inherit; font-size: .85rem; padding: 4px 2px; }
 @media (max-width: 700px) { .ac { padding: 14px 12px 10px; } .ac-kpis { width: 100%; } .ac-kpi { flex: 1 1 0; min-width: 0; } .ac-row { gap: 9px; } .ac-alert .ac-amt { flex-direction: column; align-items: flex-end; gap: 4px; } }
 .ac-row.neg, .ac-row.warn { color: var(--ink); font-weight: 400; }
+
+/* ---- Android app only (html.native is set by js/native.js) ---- */
+html.native, html.native body { overscroll-behavior-y: none; }
+html.native .tabbar a, html.native .side a, html.native button, html.native .btn { -webkit-user-select: none; user-select: none; touch-action: manipulation; }
+html.native .tabbar a:active, html.native button:active, html.native .btn:active { opacity: .72; transform: scale(.98); transition: transform .08s, opacity .08s; }
+html.native .top { padding-top: calc(10px + env(safe-area-inset-top)); }
+html.native .ptr { position: fixed; top: calc(env(safe-area-inset-top) + 8px); left: 50%; z-index: 60; transform: translate(-50%, -64px); width: 40px; height: 40px; border-radius: 50%; background: var(--surface); box-shadow: 0 2px 10px rgba(0,0,0,.25); display: grid; place-items: center; color: var(--brand); font-size: 1.15rem; transition: transform .15s; pointer-events: none; }
+html.native .ptr.spin { animation: ptr-spin .8s linear infinite; }
+@keyframes ptr-spin { to { rotate: 360deg; } }
+@media (prefers-reduced-motion: reduce) { html.native .tabbar a:active, html.native button:active { transform: none; } html.native .ptr.spin { animation: none; } }
+
+/* Android app: no ruled-paper lines behind the Net worth card (they cut through larger text) */
+html.native .hero { background-image: none; }

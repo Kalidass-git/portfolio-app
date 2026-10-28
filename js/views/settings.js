@@ -3,6 +3,7 @@ import * as C from '../calc.js';
 import { VERSION, RELEASED } from '../version.js';
 import { section_ as restorePoints, doRestore } from './backups.js';
 import { section_ as storageInfo } from './storage.js';
+import { isNative, reminderOpts, setReminderOpts, reminderPermission, planReminders } from '../native.js';
 import { h, money, dateStr, section, btn, formDialog, dialog, confirmDialog, toast, canEdit, table } from '../ui.js';
 
 const rerender = () => window.dispatchEvent(new Event('rerender'));
@@ -41,6 +42,27 @@ function connectForm() {
   });
 }
 
+
+/** Android app only: payment reminders. Kept on this phone (never in the data file). */
+function remindersSection() {
+  const o = reminderOpts();
+  const chk = (key, label) => h('label', { class: 'inline-label check' }, h('input', { type: 'checkbox', checked: o[key] !== false, onchange: (e) => { setReminderOpts({ [key]: e.target.checked }); } }), ' ' + label);
+  return section('Payment reminders (this phone)', h('div', { class: 'kv' },
+    h('label', { class: 'inline-label check' }, h('input', { type: 'checkbox', checked: !!o.on, onchange: async (e) => {
+      if (e.target.checked) { const p = await reminderPermission(true); if (p !== 'granted') { e.target.checked = false; toast('Allow notifications for Family Wealth in the phone settings', 'bad'); return; } }
+      setReminderOpts({ on: e.target.checked }); rerender();
+    } }), ' Remind me about payments'),
+    o.on ? h('div', { class: 'kv' },
+      h('label', { class: 'inline-label' }, 'Time of day ', h('select', { onchange: (e) => setReminderOpts({ hour: Number(e.target.value) }) }, [7, 8, 9, 10, 12, 18, 20].map((x) => h('option', { value: x, selected: o.hour === x }, (x % 12 || 12) + (x < 12 ? ' am' : ' pm'))))),
+      chk('emi', 'Loan EMIs (the day before, on the day, and if late)'),
+      chk('bonds', 'Bond interest (as many days before as set on Fixed income)'),
+      chk('receipts', 'Money due to you'),
+      chk('maturities', 'Bonds, deposits, chits and lending that mature'),
+      chk('amounts', 'Show amounts in the note (turn off to keep them private on the lock screen)'),
+      btn('Send a test reminder', async () => { const n = await planReminders(true); toast(n ? n + ' reminder' + (n === 1 ? '' : 's') + ' planned' : 'Nothing is due in the next 45 days'); }, 'small'),
+      h('p', { class: 'note' }, 'Reminders are planned on this phone each time you open the app. If you do not open it for a few weeks they run out, so open it now and then.')) : null));
+}
+
 export function render() {
   const { data, all } = S;
   const root = h('div', { class: 'page' });
@@ -77,9 +99,13 @@ export function render() {
         canEdit() ? btn('Restore from file', async () => { const d = await pickFile(); if (!d) return; if (!validData(d)) return toast('That file is not a portfolio data file.', 'bad'); if (await confirmDialog('Replace everything in the app with this file?', 'Restore')) { await doRestore(d); } }) : null))));
 
   root.append(section('About', h('p', null, 'Family Wealth version ', h('b', null, VERSION), ' · released ' + RELEASED + '. If this number is older than the one you expect, close the app fully and open it again so the new files load.')));
+  if (isNative()) root.append(remindersSection());
+  if (isNative()) root.append(section('Phone status bar', h('div', { class: 'kv' },
+    h('label', { class: 'inline-label check' }, h('input', { type: 'checkbox', checked: !!S.cfg.hideStatusBar, onchange: (e) => setCfg({ hideStatusBar: e.target.checked }) }), ' Hide the phone’s top bar (clock, battery) for more room'),
+    h('p', { class: 'note' }, 'Swipe down from the very top of the screen to see it for a moment.'))));
   root.append(section('This device',
     h('div', { class: 'kv' },
-      h('div', { class: 'inline-label' }, 'Text size ', h('span', { class: 'fs-pick' }, [['Normal', 1], ['Large', 1.15], ['Larger', 1.3], ['Largest', 1.5]].map(([l, v]) => h('button', { 'aria-pressed': String(Math.abs((S.cfg.fontScale || 1) - v) < 0.001), onclick: () => { setCfg({ fontScale: v }); document.documentElement.style.setProperty('--fs', v); rerender(); } }, l)))),
+      h('div', { class: 'inline-label' }, 'Text size ', h('span', { class: 'fs-pick' }, [['Smaller', 0.8], ['Small', 0.9], ['Normal', 1], ['Large', 1.15], ['Larger', 1.3], ['Largest', 1.5]].map(([l, v]) => h('button', { 'aria-pressed': String(Math.abs((S.cfg.fontScale || 1) - v) < 0.001), onclick: () => { setCfg({ fontScale: v }); document.documentElement.style.setProperty('--fs', v); rerender(); } }, l)))),
       h('label', { class: 'inline-label' }, 'Theme ', h('select', { onchange: (e) => { setCfg({ theme: e.target.value }); document.documentElement.dataset.theme = e.target.value === 'auto' ? '' : e.target.value; } },
         [['auto', 'Match phone'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) => h('option', { value: v, selected: S.cfg.theme === v }, l)))),
       h('label', { class: 'inline-label check' }, h('input', { type: 'checkbox', checked: S.cfg.useLive, onchange: (e) => setCfg({ useLive: e.target.checked }) }), ' Use refreshed live prices on this device'),
