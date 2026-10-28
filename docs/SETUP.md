@@ -150,6 +150,11 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.24.3 – Phone top bar a little bigger; active tab bold
+
+- Title is now 18px and the logo 32px (fixed sizes; a very long title is cut with an ellipsis only if it truly has no room). In the bottom bar the active tab is bold (label and icon) and the others are light, so it stands out.
+- No stored data changed. Android: rebuild the APK.
+
 ## Release 8.24.2 – Phone top bar: sync status as a dot, message only briefly
 
 - The "Saved to Drive" / "This device only" pill no longer sits in the phone top bar all the time (it overlapped the title). The refresh-from-Drive icon is gone on phones (the Android app still has pull down to refresh).
