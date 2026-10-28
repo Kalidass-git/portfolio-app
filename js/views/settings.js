@@ -100,6 +100,9 @@ export function render() {
 
   root.append(section('About', h('p', null, 'Family Wealth version ', h('b', null, VERSION), ' · released ' + RELEASED + '. If this number is older than the one you expect, close the app fully and open it again so the new files load.')));
   if (isNative()) root.append(remindersSection());
+  if (isNative()) root.append(section('Phone status bar', h('div', { class: 'kv' },
+    h('label', { class: 'inline-label check' }, h('input', { type: 'checkbox', checked: !!S.cfg.hideStatusBar, onchange: (e) => setCfg({ hideStatusBar: e.target.checked }) }), ' Hide the phone’s top bar (clock, battery) for more room'),
+    h('p', { class: 'note' }, 'Swipe down from the very top of the screen to see it for a moment.'))));
   root.append(section('This device',
     h('div', { class: 'kv' },
       h('div', { class: 'inline-label' }, 'Text size ', h('span', { class: 'fs-pick' }, [['Smaller', 0.8], ['Small', 0.9], ['Normal', 1], ['Large', 1.15], ['Larger', 1.3], ['Largest', 1.5]].map(([l, v]) => h('button', { 'aria-pressed': String(Math.abs((S.cfg.fontScale || 1) - v) < 0.001), onclick: () => { setCfg({ fontScale: v }); document.documentElement.style.setProperty('--fs', v); rerender(); } }, l)))),

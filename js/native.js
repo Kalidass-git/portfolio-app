@@ -22,6 +22,21 @@ function ticks() {
   }, { passive: true });
 }
 
+// ---------- phone status bar: icon colour that can be read, and an optional full-screen mode ----------
+let lastBars = '';
+/** Dark icons on a light page, light icons on a dark page. Decided from what the page really shows, not from Android's night flag. */
+function statusBar() {
+  const SB = P('SystemBars'); if (!SB) return;
+  const hide = !!(S.cfg && S.cfg.hideStatusBar);
+  const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(getComputedStyle(document.body).backgroundColor || '');
+  const dark = m ? (0.299 * m[1] + 0.587 * m[2] + 0.114 * m[3]) < 128 : false;
+  const key = (dark ? 'DARK' : 'LIGHT') + (hide ? '-hidden' : '');
+  if (key === lastBars) return;
+  lastBars = key;
+  SB.setStyle({ style: dark ? 'DARK' : 'LIGHT' }).catch(() => {});
+  (hide ? SB.hide({ bar: 'StatusBar' }) : SB.show({ bar: 'StatusBar' })).catch(() => {});
+}
+
 // ---------- pull down to refresh: latest Drive data, then share, fund and gold prices ----------
 function pullToRefresh() {
   const dot = h('div', { class: 'ptr', 'aria-hidden': 'true' }, '↻');
@@ -137,8 +152,10 @@ export function startNative() {
   // The phone screen is small: start one step smaller than the web app's normal size, once. Change it with Aa or in Settings.
   try { if (!localStorage.getItem('pt.fs.native')) { localStorage.setItem('pt.fs.native', '1'); if ((S.cfg.fontScale || 1) === 1) { setCfg({ fontScale: 0.9 }); document.documentElement.style.setProperty('--fs', 0.9); } } } catch { /* private mode */ }
   ticks(); pullToRefresh(); backButton(); files(); tapToOpen();
-  subscribe(planSoon);
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') planSoon(); });
+  subscribe(planSoon); subscribe(statusBar); statusBar();
+  try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => setTimeout(statusBar, 100)); } catch { /* old WebView */ }
+  setTimeout(statusBar, 800); setTimeout(statusBar, 2500);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { planSoon(); lastBars = ''; statusBar(); } });
   setTimeout(offerReminders, 2500);
   // keep the splash up until the first page has drawn, then fade it
   const SS = P('SplashScreen'); if (SS) requestAnimationFrame(() => setTimeout(() => SS.hide({ fadeOutDuration: 200 }).catch(() => {}), 150));

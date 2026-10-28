@@ -15,7 +15,7 @@
     },
     "SystemBars": {
       "insetsHandling": "native",
-      "style": "DEFAULT"
+      "style": "LIGHT"
     },
     "LocalNotifications": {
       "smallIcon": "ic_stat_icon",
