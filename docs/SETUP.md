@@ -150,6 +150,15 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.23.2 – New app icon
+
+- The rupee is gone. The icon is now rising gold bars with a growth arrow over them, on the same green.
+- Replaced: web favicon (`icons/icon.svg`), PWA icons (192, 512, maskable), Android launcher icons (square, round, adaptive foreground), the notification icon and the splash screens.
+- `tools/make-icons.py` draws everything from one place. Run `python3 tools/make-icons.py` from the repo root (needs Pillow) to change the design.
+- Android: rebuild the APK to see the new launcher icon and splash. After installing, the old icon can stay on the home screen until the app is removed and installed again.
+- Phones using the web app may need one reload, or a remove and re-add of the home screen shortcut, to pick up the new icon.
+- No stored data changed.
+
 ## Release 8.23.1 – Fix: fund prices blocked by CORS
 
 - mfapi.in sometimes answers without the CORS header, so the browser blocked NAV and history calls (some funds updated, others did not).
