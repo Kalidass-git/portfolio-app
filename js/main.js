@@ -39,8 +39,6 @@ const ROUTES = {
 const TABS = [['home', 'Home', 'home'], ['assets', 'Assets', 'cash'], ['flow', 'Expenses', 'flow'], ['outlook', 'Outlook', 'projector'], ['report', 'Report', 'report']];
 const icon = (d) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'ico'); s.setAttribute('aria-hidden', 'true'); const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', d); s.append(p); return s; };
 
-let flashKey = '', flashUntil = 0, flashTimer = null;
-const FLASH_MS = 3000;
 const SLIDERS = 'M14 6a2 2 0 1 0 4 0a2 2 0 1 0-4 0M4 6h10M18 6h2M6 12a2 2 0 1 0 4 0a2 2 0 1 0-4 0M4 12h2M10 12h10M13 18a2 2 0 1 0 4 0a2 2 0 1 0-4 0M4 18h9M17 18h3';
 const FS = [0.8, 0.9, 1, 1.15, 1.3, 1.5];
 const setFont = (n) => { setCfg({ fontScale: n }); document.documentElement.style.setProperty('--fs', n); renderView(); };
@@ -97,9 +95,6 @@ function chrome() {
   const chip = make('chip-status ' + (info.kind === 'bad' ? 'bad ' : info.kind === 'ok' ? 'ok ' : '') + (info.icon || ''), info.text);
   // The dot stays on the phone all the time; tapping it says what it means (or opens the fix when something is wrong).
   const dot = h(info.href ? 'a' : 'button', { class: 'sync-dot ' + info.kind, type: info.href ? null : 'button', href: info.href || null, 'aria-label': info.text, title: info.text, onclick: info.href ? null : (info.click || (() => toast(info.text))) });
-  // On a phone the message takes the place of the icons for a few seconds whenever it changes, then the icons come back.
-  if (info.text !== flashKey) { flashKey = info.text; flashUntil = Date.now() + FLASH_MS; clearTimeout(flashTimer); flashTimer = setTimeout(chrome, FLASH_MS + 60); }
-  top.classList.toggle('flashing', Date.now() < flashUntil);
   top.replaceChildren(
     h('span', { class: 'mark top-mark', 'aria-hidden': 'true' }),
     h('div', { class: 'title' }, ROUTES[cur].group ? h('span', { class: 'crumb' }, ROUTES[cur].group) : null, h('h1', null, ROUTES[cur].label)),
