@@ -1180,3 +1180,29 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
   .ac-tl-card .ac-main b { white-space: normal; }
 }
 .ac-tl-row.neg, .ac-tl-row.warn { color: var(--ink); font-weight: 400; }
+
+/* Net worth card, phone: calmer spacing under the gold bar */
+.hero-delta .dtxt { color: var(--muted); font-weight: 500; }
+.hero-delta .dpill { font-weight: 700; }
+.hx-dot { display: inline; margin: 0 .45em; color: var(--muted); }
+@media (max-width: 700px) {
+  .hero-exact { margin-top: 20px; font-size: .92rem; gap: 12px; flex-wrap: wrap; }
+  .hero-exact .hx-amt { font-weight: 600; color: var(--ink); }
+  .hero-exact .hx-dot { margin: 0 -4px; }
+  .hero-exact .hx-date { color: var(--muted); }
+  .hero-delta { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+  .hero-delta .dpill { display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: 99px; font-size: .95rem; color: var(--pos); background: color-mix(in srgb, var(--pos) 13%, transparent); }
+  .hero-delta.neg .dpill { color: var(--neg); background: color-mix(in srgb, var(--neg) 13%, transparent); }
+  .hero-delta .dtxt { font-size: .92rem; }
+  .hero-right .hero-side { margin-top: 22px; }
+  .hero-side div { padding: 11px 0; }
+  .hero-label { white-space: nowrap; }
+}
+@media (max-width: 360px) {
+  .hero-num { font-size: 2rem; }
+  .hero-right .spark { width: 104px; }
+  .hero-pill { padding: 4px 9px; font-size: .82rem; }
+  .hero-exact { font-size: .85rem; }
+  .hero-exact .hx-dot { display: none; }
+  .hero-exact .hx-date { flex-basis: 100%; padding-left: 38px; margin-top: -6px; }
+}

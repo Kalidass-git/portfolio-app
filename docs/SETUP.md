@@ -150,6 +150,11 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.24.9 – Net worth card: calmer spacing under the gold bar
+
+- Phone: the exact amount and date read as one line ("₹1,54,34,908 · As of 28 Oct 2026") with more space above; the change since the month end is a green pill ("▲ ₹16,34,908") followed by "since 30 Sep"; more room before the divider and rows. Small phones (320px) wrap the date to its own line and the chart and figure shrink so nothing overlaps.
+- Browser: same layout; the amount and date now have a "·" between them.
+
 ## Release 8.24.8 – Plain phone Net worth card, no nav border, Action centre timeline
 
 - Phone: the Net worth card matches the reference exactly: plain background, no gradient, no watermark, no ruled lines. A thin divider sits above the four rows and between each of them, as in the reference. The "since 30 Sep" line stays.
