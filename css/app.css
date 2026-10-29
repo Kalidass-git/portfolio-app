@@ -1197,7 +1197,7 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
   .hero-delta.neg .dpill { color: var(--neg); }
   .hero-delta .dtxt { font-size: .74rem; margin-left: 5px; }
   .hero-delta { padding: 5px 10px; align-self: center; }
-  .hero-exact .hx-txt { display: flex; flex-direction: column; line-height: 1.25; }
+  .hero-exact .hx-txt { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 8px; line-height: 1.25; min-width: 0; }
   .hero-exact .hx-dot { display: none; }
   .hero-exact { align-items: center; }
   .hero-right .hero-side { margin-top: 22px; }
@@ -1214,7 +1214,5 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
 /* Under 340px there is no room beside the date: the amount and date go back to one line, and the change gets its own row */
 @media (max-width: 340px) {
   .hero-top { grid-template-areas: "label pill" "num spark" "exact exact" "delta delta" "side side"; }
-  .hero-exact .hx-txt { flex-direction: row; align-items: baseline; gap: 6px; }
-  .hero-exact .hx-dot { display: inline; margin: 0; }
   .hero-delta { justify-self: start; margin-top: 12px; }
 }

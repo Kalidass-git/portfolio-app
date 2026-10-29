@@ -2,7 +2,7 @@
 
 > **Starting a new session? Do this first.** 1) Read this file, then the top three entries of `docs/SETUP.md`. 2) Clone, branch `release-X.Y.Z` off `origin/main` (check which PRs the owner has merged: `git log origin/main`). 3) Say what you have read, list "Waiting for the owner" below, and ask what to build. 4) The owner works in short numbered requests; do them all in one release, test, bump, open one PR. He checks on his real data, which you never see: say how each rule works so he can check it.
 
-**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.24.11 (cache `family-wealth-v105`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
+**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.24.12 (cache `family-wealth-v106`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
 
 Read this first, then `docs/SETUP.md` (release notes, newest first) and `README.md`.
 

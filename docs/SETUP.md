@@ -150,6 +150,10 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.24.12 – Net worth card: date stays beside the amount when there is room
+
+- Phone: the short date ("29 Oct") now sits on the same line as the exact amount whenever the row has room, and only drops below it when the screen is too narrow. (Before, it was always forced below.)
+
 ## Release 8.24.11 – Net worth card: gold bar under the number only, change on one line
 
 - The gold bar sits under the number only ("1.54"), not under "Cr" / "L".
