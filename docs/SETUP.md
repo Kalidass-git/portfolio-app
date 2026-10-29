@@ -150,6 +150,11 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.24.13 – Bottom tabs: border across the bar, no gold marker
+
+- Phone: the thin border across the top of the whole bottom tab bar is back, so the tabs no longer blend into the page.
+- The gold marker above the selected tab is removed. The selected tab is still shown by its gold icon and label.
+
 ## Release 8.24.12 – Net worth card: date stays beside the amount when there is room
 
 - Phone: the short date ("29 Oct") now sits on the same line as the exact amount whenever the row has room, and only drops below it when the screen is too narrow. (Before, it was always forced below.)
