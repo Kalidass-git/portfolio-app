@@ -411,16 +411,19 @@ function actionCentre(data, all) {
   const tabs = [['all', 'All', items.length + nt.shown.length], ['overdue', 'Overdue', od.length], ['week', 'This week', week.length], ['later', 'Later', groups[3].list.length], ['alerts', 'Alerts', nt.shown.length]];
   if (!tabs.some((t) => t[0] === acState.tab)) acState.tab = 'all';
   const dir = (u) => (ACTION_KIND[u.kind] || {}).dir;
-  const line = (u, g) => h('li', { class: 'ac-row ' + (g.tone || ''), tabindex: 0, onclick: () => { location.hash = (ACTION_KIND[u.kind] || {}).href || '#/savings'; } },
-    dateChip(u.date),
-    h('div', { class: 'ac-main' }, h('b', null, u.title.replace(/\s*\((overdue|due today)\)$/, '')), h('span', { class: 'ac-meta' }, u.kind, ' · ', g.id === 'overdue' ? h('span', { class: 'neg' }, `${-u.days} day${u.days === -1 ? '' : 's'} late`) : u.days === 0 ? h('span', { class: 'warn' }, 'today') : `in ${u.days} day${u.days === 1 ? '' : 's'}`)),
-    h('div', { class: 'ac-amt' }, h('b', { class: g.id === 'overdue' ? 'neg' : dir(u) === 'in' ? 'pos' : '' }, (dir(u) === 'in' ? '+' : dir(u) === 'out' ? '−' : '') + money(u.amount))));
+  // Timeline: date on the left, a rail with one node per item, the item on the right. A date shows once for several items on the same day.
+  const line = (u, g, first) => h('li', { class: 'ac-tl-row ' + (g.tone || '') + (dir(u) ? ' ' + dir(u) : ''), tabindex: 0, onclick: () => { location.hash = (ACTION_KIND[u.kind] || {}).href || '#/savings'; } },
+    h('div', { class: 'ac-tl-date' }, first ? dateChip(u.date) : null),
+    h('div', { class: 'ac-tl-node', 'aria-hidden': 'true' }, h('i', null, dir(u) === 'in' ? '↓' : dir(u) === 'out' ? '↑' : '•')),
+    h('div', { class: 'ac-tl-card' },
+      h('div', { class: 'ac-main' }, h('b', null, u.title.replace(/\s*\((overdue|due today)\)$/, '')), h('span', { class: 'ac-meta' }, u.kind, ' · ', g.id === 'overdue' ? h('span', { class: 'neg' }, `${-u.days} day${u.days === -1 ? '' : 's'} late`) : u.days === 0 ? h('span', { class: 'warn' }, 'today') : `in ${u.days} day${u.days === 1 ? '' : 's'}`)),
+      h('div', { class: 'ac-amt' }, h('b', { class: g.id === 'overdue' ? 'neg' : dir(u) === 'in' ? 'pos' : '' }, (dir(u) === 'in' ? '+' : dir(u) === 'out' ? '−' : '') + money(u.amount)))));
   const block = (g) => {
     if (!g.list.length) return null;
     const open = acState.more[g.id], cap = g.id === 'later' ? 5 : 8, shown = open ? g.list : g.list.slice(0, cap);
     return h('div', { class: 'ac-group' },
       h('div', { class: 'ac-head ' + (g.tone || '') }, h('span', null, g.label, h('em', null, ' · ' + g.list.length)), h('span', { class: 'ac-sum' }, money(sumOf(g.list)))),
-      h('ul', { class: 'ac-list' }, shown.map((u) => line(u, g))),
+      h('ul', { class: 'ac-list ac-tl' }, shown.map((u, i) => line(u, g, i === 0 || shown[i - 1].date !== u.date))),
       g.list.length > cap ? h('button', { type: 'button', class: 'ac-more', onclick: () => { acState.more[g.id] = !open; rerender(); } }, open ? 'Show less' : `Show all ${g.list.length}`) : null);
   };
   const alerts = nt.shown.length ? h('div', { class: 'ac-group' },
