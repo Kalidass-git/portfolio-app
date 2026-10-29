@@ -1072,13 +1072,12 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
   .main-col { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
   #toast { bottom: calc(86px + env(safe-area-inset-bottom)); }
   .top-mark { display: block; }
-  .tabbar { gap: 4px; padding: 4px 6px calc(4px + env(safe-area-inset-bottom)); border-top: 0; box-shadow: none; }
+  .tabbar { gap: 4px; padding: 4px 6px calc(4px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
   .tabbar a { gap: 2px; padding: 5px 2px 4px; font-size: 10px; font-weight: 500; line-height: 1.1; color: color-mix(in srgb, var(--ink) 72%, var(--surface)); border: 1.5px solid transparent; border-radius: 12px; }
   .tabbar a .ico { width: 22px; height: 22px; stroke-width: 1.7; }
   .tabbar a { position: relative; border: 0; }
   .tabbar a.on { color: #B27D00; font-weight: 800; }
   .tabbar a.on .ico { stroke-width: 2.7; }
-  .tabbar a.on::after { content: ''; position: absolute; left: 50%; top: -4px; width: 30px; height: 3px; margin-left: -15px; border-radius: 0 0 3px 3px; background: linear-gradient(90deg, #FFD84D, #E3A416); }
 }
 @media (max-width: 899px) and (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tabbar a.on { color: #F2C84B; } }
 @media (max-width: 899px) { :root[data-theme="dark"] .tabbar a.on { color: #F2C84B; }
