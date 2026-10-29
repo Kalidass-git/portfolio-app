@@ -70,6 +70,8 @@ function netWorthHistory(data, all) {
     h('p', { class: 'note' }, `Drawn from the readings the app has saved: one for each day you open it on the owner’s device (net worth, assets and loans on that day), plus the month-end figures from your Plan sheet and check-ins. Where a day has no reading, the line runs straight between the nearest two. The oldest reading is ${dateStr(first)}, so a longer period shows a flatter, month-end-only line until daily readings build up.${hasAssets ? '' : ' Total assets appear once the period has daily readings throughout.'} Hover or touch the chart for the figure on any day.`)));
 }
 
+/** Small round icon for the Net worth card (class says which colour). */
+const hico = (k, cls) => { const e = document.createElement('span'); e.className = 'hico ' + cls; e.setAttribute('aria-hidden', 'true'); e.append(sv('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, ...ICONS[k].map((d) => sv('path', { d })))); return e; };
 function hero(all, series, ox) {
   const monthStartIso = C.monthStart(all.asOf);
   const base = series.filter((p) => p.date < monthStartIso).pop();
@@ -78,17 +80,18 @@ function hero(all, series, ox) {
   return h('section', { class: 'hero card span-12' },
     h('div', { class: 'hero-top' },
       h('div', null,
-        h('p', { class: 'hero-label' }, 'Net worth'),
+        h('p', { class: 'hero-label' }, hico('wallet', 'nw'), h('span', null, 'Net worth')),
+        ox && ox.xirr != null ? h('span', { class: 'hero-pill ' + tone(ox.xirr), title: 'Overall XIRR' }, `${ox.xirr >= 0 ? '▲' : '▼'} ${pct(ox.xirr, 1)}`) : null,
         h('p', { class: 'hero-num' }, compact(all.netAsset)),
-        h('p', { class: 'hero-exact' }, money(all.netAsset) + ' as on ' + dateStr(all.asOf)),
+        h('p', { class: 'hero-exact' }, hico('cal', 'cal'), h('span', null, money(all.netAsset) + ' as on ' + dateStr(all.asOf))),
         delta != null ? h('p', { class: 'hero-delta ' + tone(delta) }, `${delta >= 0 ? '▲' : '▼'} ${money(Math.abs(delta))} since ${dateStr(base.date).replace(/ \d{4}$/, '')}`) : null),
       h('div', { class: 'hero-right' },
         spark(trend, { width: 150, height: 44, tone: 2 }),
         h('dl', { class: 'hero-side' },
-          h('div', null, h('dt', null, 'Assets'), h('dd', null, compact(all.totalAssets))),
-          h('div', null, h('dt', null, 'Loans'), h('dd', null, compact(all.liabTotal))),
-          ox && ox.xirr != null ? h('div', { title: `Yearly return counting when each rupee went in, over gold, bonds, deposits, lending, EPF/PPF, shares, funds and anything you closed. Covers ${pct(ox.coverage, 0)} of your assets.` }, h('dt', null, 'Overall XIRR'), h('dd', { class: tone(ox.xirr) }, pct(ox.xirr, 1))) : null,
-          ox && ox.xirrNoPf != null && Math.abs(ox.xirrNoPf - ox.xirr) > 0.002 ? h('div', { title: 'The same, leaving out EPF and PPF, which are long, steady savings.' }, h('dt', null, 'Without EPF/PPF'), h('dd', { class: tone(ox.xirrNoPf) }, pct(ox.xirrNoPf, 1))) : null,
+          h('div', null, h('dt', null, hico('db', 'assets'), h('span', null, 'Assets')), h('dd', null, compact(all.totalAssets))),
+          h('div', null, h('dt', null, hico('loan', 'loans'), h('span', null, 'Loans')), h('dd', null, compact(all.liabTotal))),
+          ox && ox.xirr != null ? h('div', { title: `Yearly return counting when each rupee went in, over gold, bonds, deposits, lending, EPF/PPF, shares, funds and anything you closed. Covers ${pct(ox.coverage, 0)} of your assets.` }, h('dt', null, hico('chart', 'xirr'), h('span', null, 'Overall XIRR')), h('dd', { class: tone(ox.xirr) }, pct(ox.xirr, 1))) : null,
+          ox && ox.xirrNoPf != null && Math.abs(ox.xirrNoPf - ox.xirr) > 0.002 ? h('div', { title: 'The same, leaving out EPF and PPF, which are long, steady savings.' }, h('dt', null, hico('shield', 'nopf'), h('span', null, 'Without EPF/PPF')), h('dd', { class: tone(ox.xirrNoPf) }, pct(ox.xirrNoPf, 1))) : null,
           null))));
 }
 
@@ -182,6 +185,10 @@ const ICONS = {
   db: ['M3 5c0 1.66 4.03 3 9 3s9-1.34 9-3-4.03-3-9-3-9 1.34-9 3z', 'M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5', 'M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3'],
   up: ['M22 7l-8.5 8.5-5-5L2 17', 'M16 7h6v6'],
   down: ['M22 17l-8.5-8.5-5 5L2 7', 'M16 17h6v-6'],
+  cal: ['M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z', 'M16 3v4M8 3v4M4 11h16'],
+  loan: ['M3 7h18v10H3z', 'M12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z', 'M6.5 10v.01M17.5 14v.01'],
+  chart: ['M3 3v18h18', 'M7 15l4-4 3 3 5-6'],
+  shield: ['M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z', 'M9 12l2 2 4-4'],
   wallet: ['M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1', 'M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4'],
 };
 const icon = (k) => sv('svg', { viewBox: '0 0 24 24', class: 'kt-svg', 'aria-hidden': 'true', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, ...ICONS[k].map((d) => sv('path', { d })));
