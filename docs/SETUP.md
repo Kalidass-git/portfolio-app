@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.24.5 – Net worth card: browser right side as before; lighter watermark on phones
+
+- Browser (screens wider than 700px): no green wash on the card, no divider, no logo watermark; the ruled lines stop behind the Assets / Loans / XIRR block and the little trend chart, exactly as in earlier versions. The green edge and gold bar stay.
+- Phone: the faint logo mark behind the card is lighter so the figures on the right read clearly.
+- No stored data changed. Android: rebuild the APK.
+
 ## Release 8.24.4 – Phone: active tab marked at the top; no sync message in the top bar
 
 - Bottom bar: the gold bar that marks the active tab now sits on the top edge of the bar (was the bottom).
