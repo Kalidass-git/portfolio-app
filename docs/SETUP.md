@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.24.8 – Plain phone Net worth card, no nav border, Action centre timeline
+
+- Phone: the Net worth card matches the reference exactly: plain background, no gradient, no watermark, no ruled lines. A thin divider sits above the four rows and between each of them, as in the reference. The "since 30 Sep" line stays.
+- Phone: the bottom tab bar no longer has a top border (the gold marker on the active tab stays).
+- Action centre (all screens): the dated list is now a timeline. Date on the left (shown once per day), a rail with one node per item (green down arrow = money in, up arrow = money out, red = overdue, amber = today), and a card with the title, kind, days and amount.
+
 ## Release 8.24.7 – Net worth card: icons, and a new phone layout
 
 - Phone: the Net worth card is a stack. Header with the wallet icon, "Net worth" and a green pill with Overall XIRR; the big figure beside a small trend chart; a calendar line with the exact amount and date; the "since 30 Sep" change line (kept); then Assets, Loans, Overall XIRR and Without EPF/PPF as rows with coloured round icons.
