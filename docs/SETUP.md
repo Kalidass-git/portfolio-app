@@ -150,6 +150,11 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.24.7 – Net worth card: icons, and a new phone layout
+
+- Phone: the Net worth card is a stack. Header with the wallet icon, "Net worth" and a green pill with Overall XIRR; the big figure beside a small trend chart; a calendar line with the exact amount and date; the "since 30 Sep" change line (kept); then Assets, Loans, Overall XIRR and Without EPF/PPF as rows with coloured round icons.
+- Browser: same layout as before; only the icons are added (Net worth label and the four rows).
+
 ## Release 8.24.6 – Phone: watermark stays behind the Net worth card
 
 - 8.24.5 hid the faint logo watermark on phones whenever the small trend chart showed. It now stays on phones (lighter than before); only the browser has no watermark.

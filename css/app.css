@@ -1116,3 +1116,34 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
 @media (max-width: 700px) {
   .hero-right .spark { display: block; width: 96px; height: 28px; margin-bottom: 2px; justify-self: end; }
 }
+
+/* Net worth card icons (browser and phone) */
+.hero { --hc-nw: var(--brand); --hc-assets: #2a5fc4; --hc-loans: #6a45c9; --hc-xirr: #17744a; --hc-nopf: #0b7a8c; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .hero { --hc-nw: #4fc39a; --hc-assets: #7fa8f7; --hc-loans: #b69cf5; --hc-xirr: #4cc38a; --hc-nopf: #5fd0e0; } }
+:root[data-theme="dark"] .hero { --hc-nw: #4fc39a; --hc-assets: #7fa8f7; --hc-loans: #b69cf5; --hc-xirr: #4cc38a; --hc-nopf: #5fd0e0; }
+.hico { display: inline-grid; place-items: center; flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%; color: var(--c, var(--brand)); background: color-mix(in srgb, var(--c, var(--brand)) 16%, transparent); }
+.hico svg { width: 58%; height: 58%; }
+.hico.nw { --c: var(--hc-nw); width: 28px; height: 28px; } .hico.assets { --c: var(--hc-assets); } .hico.loans { --c: var(--hc-loans); } .hico.xirr { --c: var(--hc-xirr); } .hico.nopf { --c: var(--hc-nopf); }
+.hero-label { display: flex; align-items: center; gap: 8px; }
+.hero-side dt { display: flex; align-items: center; gap: 8px; }
+.hico.cal, .hero-pill { display: none; }
+
+/* Phone: the card as a stack. Header with the XIRR pill, number beside the trend chart, date, change since month end, then the four figures as icon rows */
+@media (max-width: 700px) {
+  .hero-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "label pill" "num spark" "exact exact" "delta delta" "side side"; gap: 0 12px; align-items: center; }
+  .hero-top > div:first-child, .hero-right { display: contents; }
+  .hero-label { grid-area: label; font-size: 1rem; font-weight: 500; color: var(--muted); margin-bottom: 6px; }
+  .hero-pill { grid-area: pill; display: inline-flex; align-items: center; gap: 4px; justify-self: end; padding: 5px 12px; border-radius: 99px; font-weight: 700; font-size: .9rem; color: var(--pos); background: color-mix(in srgb, var(--pos) 14%, transparent); }
+  .hero-pill.neg { color: var(--neg); background: color-mix(in srgb, var(--neg) 14%, transparent); }
+  .hero-num { grid-area: num; justify-self: start; font-size: clamp(2.2rem, 11vw, 3rem); }
+  .hero-right .spark { grid-area: spark; display: block; width: 132px; height: auto; margin: 0; justify-self: end; align-self: center; }
+  .hero-exact { grid-area: exact; display: flex; align-items: flex-start; gap: 10px; margin-top: 12px; font-size: .85rem; }
+  .hico.cal { display: inline-grid; width: 26px; height: 26px; --c: var(--muted); background: none; }
+  .hero-delta { grid-area: delta; margin-top: 8px; }
+  .hero-side { grid-area: side; margin-top: 14px; gap: 0; padding: 0; border-top: 1px solid var(--line); }
+  .hero-side div { align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line-2); }
+  .hero-side div:last-child { border-bottom: 0; }
+  .hero-side dt { gap: 12px; font-size: .95rem; }
+  .hero-side dd { font-size: 1.05rem; }
+  .hero-side .hico { width: 34px; height: 34px; }
+}
