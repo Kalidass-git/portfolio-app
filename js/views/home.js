@@ -191,6 +191,12 @@ const ICONS = {
   loan: ['M3 7h18v10H3z', 'M12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z', 'M6.5 10v.01M17.5 14v.01'],
   chart: ['M3 3v18h18', 'M7 15l4-4 3 3 5-6'],
   shield: ['M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z', 'M9 12l2 2 4-4'],
+  alert: ['M12 3.5l9.5 16.5h-19z', 'M12 10v4.5M12 17.2v.01'],
+  clock: ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z', 'M12 7.5V12l3 2'],
+  bank: ['M3 10l9-6 9 6', 'M5 10v8M9.5 10v8M14.5 10v8M19 10v8', 'M3 20.5h18'],
+  receipt: ['M6 3h12a1 1 0 0 1 1 1v17l-3-2-2 2-2-2-2 2-2-2-3 2V4a1 1 0 0 1 1-1z', 'M9 8h6M9 12h6'],
+  coins: ['M12 3.5c4.4 0 8 1.3 8 3s-3.6 3-8 3-8-1.3-8-3 3.6-3 8-3z', 'M4 6.5v5c0 1.7 3.6 3 8 3s8-1.3 8-3v-5', 'M4 11.5v5c0 1.7 3.6 3 8 3s8-1.3 8-3v-5'],
+  bell: ['M6 9a6 6 0 0 1 12 0c0 6 2 7.5 2 7.5H4S6 15 6 9z', 'M10 20a2 2 0 0 0 4 0'],
   wallet: ['M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1', 'M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4'],
 };
 const icon = (k) => sv('svg', { viewBox: '0 0 24 24', class: 'kt-svg', 'aria-hidden': 'true', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, ...ICONS[k].map((d) => sv('path', { d })));
@@ -400,50 +406,55 @@ function notices(data, all) {
   const hid = dismissed();
   return { shown: out.filter((o) => !hid[o.title]), hidden: out.filter((o) => hid[o.title]).length, hid };
 }
+const AX_KIND = { 'Bond interest': ['receipt', 'bond'], Bond: ['receipt', 'bond'], 'Fixed deposit': ['bank', 'fd'], Lending: ['loan', 'lend'], 'Money to receive': ['loan', 'lend'], 'Loan EMI': ['receipt', 'emi'], Chit: ['coins', 'chit'] };
+const axKind = (k) => AX_KIND[k] || ['coins', 'chit'];
 function actionCentre(data, all) {
   const items = agenda(data, all), nt = notices(data, all), today = C.todayISO();
   const groups = [
-    { id: 'overdue', label: 'Overdue', tone: 'neg', list: items.filter((u) => u.days < 0) },
-    { id: 'today', label: 'Today', tone: 'warn', list: items.filter((u) => u.days === 0) },
-    { id: 'week', label: 'Next 7 days', tone: '', list: items.filter((u) => u.days >= 1 && u.days <= 7) },
-    { id: 'later', label: 'Later (to 60 days)', tone: '', list: items.filter((u) => u.days > 7) },
+    { id: 'overdue', label: 'Overdue', tone: 'neg', icon: 'alert', list: items.filter((u) => u.days < 0) },
+    { id: 'today', label: 'Today', tone: 'warn', icon: 'clock', list: items.filter((u) => u.days === 0) },
+    { id: 'week', label: 'Next 7 days', tone: '', icon: 'cal', list: items.filter((u) => u.days >= 1 && u.days <= 7) },
+    { id: 'later', label: 'Later (to 60 days)', tone: '', icon: 'cal', list: items.filter((u) => u.days > 7) },
   ];
-  const sumOf = (l) => l.reduce((a, u) => a + (u.amount || 0), 0);
+  // Each amount is shown in whole rupees, so the totals add up the rupees that are shown (adding the exact paise and rounding once could differ by ₹1 from the rows above).
+  const sumOf = (l) => l.reduce((a, u) => a + Math.round(u.amount || 0), 0);
   const od = groups[0].list, week = groups[1].list.concat(groups[2].list);
   const tabs = [['all', 'All', items.length + nt.shown.length], ['overdue', 'Overdue', od.length], ['week', 'This week', week.length], ['later', 'Later', groups[3].list.length], ['alerts', 'Alerts', nt.shown.length]];
   if (!tabs.some((t) => t[0] === acState.tab)) acState.tab = 'all';
   const dir = (u) => (ACTION_KIND[u.kind] || {}).dir;
-  // Timeline: date on the left, a rail with one node per item, the item on the right. A date shows once for several items on the same day.
-  const line = (u, g, first) => h('li', { class: 'ac-tl-row ' + (g.tone || '') + (dir(u) ? ' ' + dir(u) : ''), tabindex: 0, onclick: () => { location.hash = (ACTION_KIND[u.kind] || {}).href || '#/savings'; } },
-    h('div', { class: 'ac-tl-date' }, first ? dateChip(u.date) : null),
-    h('div', { class: 'ac-tl-node', 'aria-hidden': 'true' }, h('i', null, dir(u) === 'in' ? '↓' : dir(u) === 'out' ? '↑' : '•')),
-    h('div', { class: 'ac-tl-card' },
-      h('div', { class: 'ac-main' }, h('b', null, u.title.replace(/\s*\((overdue|due today)\)$/, '')), h('span', { class: 'ac-meta' }, u.kind, ' · ', g.id === 'overdue' ? h('span', { class: 'neg' }, `${-u.days} day${u.days === -1 ? '' : 's'} late`) : u.days === 0 ? h('span', { class: 'warn' }, 'today') : `in ${u.days} day${u.days === 1 ? '' : 's'}`)),
-      h('div', { class: 'ac-amt' }, h('b', { class: g.id === 'overdue' ? 'neg' : dir(u) === 'in' ? 'pos' : '' }, (dir(u) === 'in' ? '+' : dir(u) === 'out' ? '−' : '') + money(u.amount)))));
+  const line = (u, g, first) => { const [ik, kc] = axKind(u.kind); return h('li', { class: 'ax-row ' + (g.tone || '') + (dir(u) ? ' ' + dir(u) : '') + ' k-' + kc, tabindex: 0, onclick: () => { location.hash = (ACTION_KIND[u.kind] || {}).href || '#/savings'; } },
+    h('div', { class: 'ax-date' }, first ? dateChip(u.date) : null),
+    h('div', { class: 'ax-node', 'aria-hidden': 'true' }, h('i', null, dir(u) === 'in' ? '↓' : dir(u) === 'out' ? '↑' : '•')),
+    h('div', { class: 'ax-card' },
+      hico(ik, 'ax-ev'),
+      h('div', { class: 'ax-main' }, h('b', null, u.title.replace(/\s*\((overdue|due today)\)$/, '')), h('span', { class: 'ax-meta' }, u.kind, ' · ', g.id === 'overdue' ? h('span', { class: 'neg' }, `${-u.days} day${u.days === -1 ? '' : 's'} late`) : u.days === 0 ? h('span', { class: 'warn' }, 'today') : `in ${u.days} day${u.days === 1 ? '' : 's'}`)),
+      h('b', { class: 'ax-amt ' + (g.id === 'overdue' ? 'neg' : dir(u) === 'in' ? 'pos' : '') }, (dir(u) === 'in' ? '+' : dir(u) === 'out' ? '−' : '') + money(u.amount)))); };
+  const head = (g, n, total) => h('div', { class: 'ax-gh ' + (g.tone || '') }, hico(g.icon, 'ax-gi'), h('span', { class: 'ax-gt' }, g.label, h('em', null, ' · ' + n)), total != null ? h('span', { class: 'ax-gs' }, money(total)) : null);
   const block = (g) => {
     if (!g.list.length) return null;
     const open = acState.more[g.id], cap = g.id === 'later' ? 5 : 8, shown = open ? g.list : g.list.slice(0, cap);
-    return h('div', { class: 'ac-group' },
-      h('div', { class: 'ac-head ' + (g.tone || '') }, h('span', null, g.label, h('em', null, ' · ' + g.list.length)), h('span', { class: 'ac-sum' }, money(sumOf(g.list)))),
-      h('ul', { class: 'ac-list ac-tl' }, shown.map((u, i) => line(u, g, i === 0 || shown[i - 1].date !== u.date))),
-      g.list.length > cap ? h('button', { type: 'button', class: 'ac-more', onclick: () => { acState.more[g.id] = !open; rerender(); } }, open ? 'Show less' : `Show all ${g.list.length}`) : null);
+    return h('div', { class: 'ax-group' },
+      head(g, g.list.length, sumOf(g.list)),
+      h('ul', { class: 'ax-tl' }, shown.map((u, i) => line(u, g, i === 0 || shown[i - 1].date !== u.date))),
+      g.list.length > cap ? h('button', { type: 'button', class: 'ax-more', onclick: () => { acState.more[g.id] = !open; rerender(); } }, open ? 'Show less' : `Show all ${g.list.length}`) : null);
   };
-  const alerts = nt.shown.length ? h('div', { class: 'ac-group' },
-    h('div', { class: 'ac-head' }, h('span', null, 'Alerts', h('em', null, ' · ' + nt.shown.length))),
-    h('ul', { class: 'ac-list' }, nt.shown.map((o) => h('li', { class: 'ac-row ac-alert ' + (o.tone || ''), tabindex: 0, onclick: () => { location.hash = o.href; } },
-      h('i', { class: 'ac-dot ' + (o.tone || ''), 'aria-hidden': 'true' }),
-      h('div', { class: 'ac-main' }, h('b', null, o.title), o.sub ? h('span', { class: 'ac-meta' }, o.sub) : null),
-      h('div', { class: 'ac-amt' }, o.value ? h('b', { class: o.tone === 'neg' ? 'neg' : '' }, o.value) : null, h('button', { type: 'button', class: 'small dismiss', title: 'Hide this until tomorrow', 'aria-label': 'Hide until tomorrow: ' + o.title, onclick: (e) => { e.stopPropagation(); setDismissed({ ...nt.hid, [o.title]: today }); } }, 'Dismiss')))))) : null;
+  const alerts = nt.shown.length ? h('div', { class: 'ax-group' },
+    head({ label: 'Alerts', tone: 'warn', icon: 'bell' }, nt.shown.length, null),
+    h('ul', { class: 'ax-alerts' }, nt.shown.map((o) => h('li', { class: 'ax-alert ' + (o.tone || ''), tabindex: 0, onclick: () => { location.hash = o.href; } },
+      hico(o.tone === 'neg' ? 'alert' : 'bell', 'ax-ev'),
+      h('div', { class: 'ax-main' }, h('b', null, o.title), o.sub ? h('span', { class: 'ax-meta' }, o.sub) : null),
+      h('button', { type: 'button', class: 'ax-dismiss', title: 'Hide this until tomorrow', 'aria-label': 'Hide until tomorrow: ' + o.title, onclick: (e) => { e.stopPropagation(); setDismissed({ ...nt.hid, [o.title]: today }); } }, 'Dismiss'))))) : null;
   const pickGroups = acState.tab === 'overdue' ? [groups[0]] : acState.tab === 'week' ? [groups[1], groups[2]] : acState.tab === 'later' ? [groups[3]] : acState.tab === 'alerts' ? [] : groups;
   const body = [...pickGroups.map(block), acState.tab === 'all' || acState.tab === 'alerts' ? alerts : null].filter(Boolean);
-  return h('section', { class: 'card ac' },
-    h('div', { class: 'ac-top' }, h('div', null, h('h2', null, 'Action centre'), h('p', { class: 'ac-sub' }, 'What needs you now, and what is coming')),
-      h('div', { class: 'ac-kpis' },
-        h('div', { class: 'ac-kpi' + (od.length ? ' bad' : '') }, h('span', null, 'Overdue'), h('b', null, od.length ? money(sumOf(od)) : '–')),
-        h('div', { class: 'ac-kpi' }, h('span', null, 'Next 7 days'), h('b', null, week.length ? money(sumOf(week)) : '–')),
-        h('div', { class: 'ac-kpi' }, h('span', null, 'Next 60 days'), h('b', null, items.length ? money(sumOf(items.filter((u) => u.days >= 0))) : '–')))),
-    h('nav', { class: 'seg ac-tabs', role: 'tablist', 'aria-label': 'Action centre' }, tabs.map(([k, l, n]) => h('a', { href: 'javascript:void 0', role: 'tab', class: acState.tab === k ? 'on' : '', 'aria-selected': String(acState.tab === k), onclick: (e) => { e.preventDefault(); acState.tab = k; rerender(); } }, l, n ? h('span', { class: 'ac-n' }, n) : null))),
-    body.length ? h('div', null, body) : h('p', { class: 'empty' }, acState.tab === 'all' ? 'All clear: nothing overdue and nothing falls due in the next 60 days.' : 'Nothing here.'),
+  const kpi = (cls, ik, label, val) => h('div', { class: 'ax-kpi ' + cls }, h('span', { class: 'ax-kl' }, hico(ik, 'ax-ki'), label), h('b', null, val));
+  return h('section', { class: 'card ax' },
+    h('div', { class: 'ax-top' }, hico('bell', 'ax-logo'), h('div', null, h('h2', null, 'Action centre'), h('p', { class: 'ax-sub' }, 'What needs attention now'))),
+    h('div', { class: 'ax-kpis' },
+      kpi(od.length ? 'bad' : '', 'alert', 'Overdue', od.length ? money(sumOf(od)) : '–'),
+      kpi('up', 'cal', 'Next 7 days', week.length ? money(sumOf(week)) : '–'),
+      kpi('', 'cal', 'Next 60 days', items.length ? money(sumOf(items.filter((u) => u.days >= 0))) : '–')),
+    h('nav', { class: 'ax-tabs', role: 'tablist', 'aria-label': 'Action centre' }, tabs.map(([k, l, n]) => h('a', { href: 'javascript:void 0', role: 'tab', class: acState.tab === k ? 'on' : '', 'aria-selected': String(acState.tab === k), onclick: (e) => { e.preventDefault(); acState.tab = k; rerender(); } }, l, h('span', { class: 'ax-n' }, String(n))))),
+    body.length ? h('div', { class: 'ax-body' }, body) : h('p', { class: 'empty' }, acState.tab === 'all' ? 'All clear: nothing overdue and nothing falls due in the next 60 days.' : 'Nothing here.'),
     nt.hidden ? h('p', { class: 'note' }, `${nt.hidden} alert${nt.hidden === 1 ? '' : 's'} hidden until tomorrow. `, h('a', { href: '#', onclick: (e) => { e.preventDefault(); setDismissed({}); } }, 'Show again')) : null);
 }
 
