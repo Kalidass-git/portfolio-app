@@ -1057,7 +1057,6 @@ html.native .ptr.spin { animation: ptr-spin .8s linear infinite; }
 /* Net worth card: green edge, soft green wash, short gold bar, faint logo mark behind */
 .hero.card { position: relative; overflow: hidden; border: 1.5px solid color-mix(in srgb, var(--brand) 60%, var(--line)); background-color: var(--surface); background-image: repeating-linear-gradient(to bottom, transparent 0 31px, var(--line-2) 31px 32px), linear-gradient(135deg, var(--surface) 45%, var(--brand-soft)); }
 html.native .hero.card { background-image: linear-gradient(135deg, var(--surface) 45%, var(--brand-soft)); } /* Android: no ruled lines through the big number */
-.hero.card:has(.spark)::after { display: none; } /* the little trend chart takes the corner */
 .hero.card::after { content: ''; position: absolute; right: 8px; top: 6px; width: 128px; height: 108px; background: var(--brand); opacity: .035; -webkit-mask: url(../icons/mark.svg) center / contain no-repeat; mask: url(../icons/mark.svg) center / contain no-repeat; pointer-events: none; }
 .hero.card > * { position: relative; z-index: 1; }
 .hero-num { white-space: nowrap; border-bottom: 0; position: relative; padding-bottom: 14px; }

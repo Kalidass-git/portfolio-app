@@ -154,7 +154,7 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 - Browser (screens wider than 700px): no green wash on the card, no divider, no logo watermark; the ruled lines stop behind the Assets / Loans / XIRR block and the little trend chart, exactly as in earlier versions. The green edge and gold bar stay.
 - Phone: the faint logo mark behind the card is lighter so the figures on the right read clearly.
-- Phone: a small trend chart (the last 14 readings, same as on wide screens) sits above Assets. When it shows, the logo watermark is hidden; with no history yet the watermark stays.
+- Phone: a small trend chart (the last 14 readings, same as on wide screens) sits above Assets, and the faint logo watermark stays behind the card (lighter than before).
 - No stored data changed. Android: rebuild the APK.
 
 ## Release 8.24.4 – Phone: active tab marked at the top; no sync message in the top bar
