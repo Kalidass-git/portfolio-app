@@ -150,6 +150,15 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.25.0 – Action centre redesign (phone and browser)
+
+- The Action centre is its own panel (tinted background, rounded border, white inner cards) so it no longer looks like the other Home cards. Same data, same sorting, same tap targets.
+- Header with a bell tile, "Action centre" and "What needs attention now". Three equal summary tiles: Overdue (red accent), Next 7 days (green), Next 60 days (neutral).
+- Filter pills (All, Overdue, This week, Later, Alerts) with count badges; the selected one is brand green. The row scrolls sideways on narrow screens and the pills never shrink.
+- Groups (Overdue, Today, Next 7 days, Later) have a compact header with icon, count and total. Under it a thin timeline: a small date badge (day over month, shown once per date), a node with an arrow (green down = money in, up = money out, amber/red for today/overdue), and an event card with a kind icon (bond, fixed deposit, chit, lending, EMI), title, kind with "in N days" or "N days late", and the amount on the right. Long titles wrap; amounts never overlap.
+- The totals now add up the whole rupees shown on the rows. Each row is shown rounded to the rupee, but the totals used to add the exact paise first and round once, which could differ by ₹1 from the visible rows (for example ₹1,569 + ₹1,569 + ₹1,391 + ₹9,70,000 showed ₹9,74,528 instead of ₹9,74,529). The stored amounts are not changed.
+- Phones 360px wide and narrower hide the small kind icon to give titles room.
+
 ## Release 8.24.13 – Bottom tabs: border across the bar, no gold marker
 
 - Phone: the thin border across the top of the whole bottom tab bar is back, so the tabs no longer blend into the page.
