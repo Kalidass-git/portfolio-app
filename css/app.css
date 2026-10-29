@@ -1060,7 +1060,7 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
 .hero.card::after { content: ''; position: absolute; right: 8px; top: 6px; width: 128px; height: 108px; background: var(--brand); opacity: .035; -webkit-mask: url(../icons/mark.svg) center / contain no-repeat; mask: url(../icons/mark.svg) center / contain no-repeat; pointer-events: none; }
 .hero.card > * { position: relative; z-index: 1; }
 .hero-num { white-space: nowrap; border-bottom: 0; position: relative; padding-bottom: 14px; }
-.hero-num::after { content: ''; position: absolute; left: 2px; bottom: 0; width: 56px; height: 5px; border-radius: 3px; background: #E8B923; }
+.hero-num::after { content: ''; position: absolute; left: 2px; right: 2px; bottom: 0; height: 5px; border-radius: 3px; background: #E8B923; }
 .hero-right, .hero-side { background: transparent; }
 .hero-right { border-left: 1px solid color-mix(in srgb, var(--brand) 25%, var(--line)); padding-left: 16px; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .hero.card::after { opacity: .07; } }
@@ -1130,7 +1130,7 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
 
 /* Phone: the card as a stack. Header with the XIRR pill, number beside the trend chart, date, change since month end, then the four figures as icon rows */
 @media (max-width: 700px) {
-  .hero-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "label pill" "num spark" "exact exact" "delta delta" "side side"; gap: 0 12px; align-items: center; }
+  .hero-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "label pill" "num spark" "exact delta" "side side"; gap: 0 12px; align-items: center; }
   .hero-top > div:first-child, .hero-right { display: contents; }
   .hero-label { grid-area: label; font-size: 1rem; font-weight: 500; color: var(--muted); margin-bottom: 6px; }
   .hero-pill { grid-area: pill; display: inline-flex; align-items: center; gap: 4px; justify-self: end; padding: 5px 12px; border-radius: 99px; font-weight: 700; font-size: .9rem; color: var(--pos); background: color-mix(in srgb, var(--pos) 14%, transparent); }
@@ -1186,14 +1186,14 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
 .hero-delta .dpill { font-weight: 700; }
 .hx-dot { display: inline; margin: 0 .45em; color: var(--muted); }
 @media (max-width: 700px) {
-  .hero-exact { margin-top: 20px; font-size: .92rem; gap: 12px; flex-wrap: wrap; }
+  .hero-exact { margin-top: 20px; font-size: .88rem; gap: 10px; flex-wrap: nowrap; white-space: nowrap; }
   .hero-exact .hx-amt { font-weight: 600; color: var(--ink); }
   .hero-exact .hx-dot { margin: 0 -4px; }
   .hero-exact .hx-date { color: var(--muted); }
-  .hero-delta { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
-  .hero-delta .dpill { display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: 99px; font-size: .95rem; color: var(--pos); background: color-mix(in srgb, var(--pos) 13%, transparent); }
+  .hero-delta { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; margin-top: 20px; justify-self: end; }
+  .hero-delta .dpill { display: inline-flex; align-items: center; gap: 4px; padding: 5px 11px; border-radius: 99px; font-size: .92rem; color: var(--pos); background: color-mix(in srgb, var(--pos) 13%, transparent); }
   .hero-delta.neg .dpill { color: var(--neg); background: color-mix(in srgb, var(--neg) 13%, transparent); }
-  .hero-delta .dtxt { font-size: .92rem; }
+  .hero-delta .dtxt { font-size: .75rem; }
   .hero-right .hero-side { margin-top: 22px; }
   .hero-side div { padding: 11px 0; }
   .hero-label { white-space: nowrap; }
@@ -1204,5 +1204,10 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
   .hero-pill { padding: 4px 9px; font-size: .82rem; }
   .hero-exact { font-size: .85rem; }
   .hero-exact .hx-dot { display: none; }
-  .hero-exact .hx-date { flex-basis: 100%; padding-left: 38px; margin-top: -6px; }
+}
+
+@media (max-width: 340px) {
+  .hero-top { grid-template-areas: "label pill" "num spark" "exact exact" "delta delta" "side side"; }
+  .hero-delta { flex-direction: row; align-items: center; justify-self: start; gap: 8px; margin-top: 12px; }
+  .hero-delta .dtxt { font-size: .85rem; }
 }
