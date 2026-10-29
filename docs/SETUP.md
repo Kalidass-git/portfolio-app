@@ -152,7 +152,7 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 ## Release 8.24.8 – Plain phone Net worth card, no nav border, Action centre timeline
 
-- Phone: the Net worth card matches the reference exactly: plain background, no gradient, no watermark, no ruled lines, no row dividers (one divider above the four rows). The "since 30 Sep" line stays.
+- Phone: the Net worth card matches the reference exactly: plain background, no gradient, no watermark, no ruled lines. A thin divider sits above the four rows and between each of them, as in the reference. The "since 30 Sep" line stays.
 - Phone: the bottom tab bar no longer has a top border (the gold marker on the active tab stays).
 - Action centre (all screens): the dated list is now a timeline. Date on the left (shown once per day), a rail with one node per item (green down arrow = money in, up arrow = money out, red = overdue, amber = today), and a card with the title, kind, days and amount.
 

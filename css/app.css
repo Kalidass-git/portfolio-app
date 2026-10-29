@@ -1071,7 +1071,7 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
   .main-col { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
   #toast { bottom: calc(86px + env(safe-area-inset-bottom)); }
   .top-mark { display: block; }
-  .tabbar { gap: 4px; padding: 4px 6px calc(4px + env(safe-area-inset-bottom)); border-top: 0; }
+  .tabbar { gap: 4px; padding: 4px 6px calc(4px + env(safe-area-inset-bottom)); border-top: 0; box-shadow: none; }
   .tabbar a { gap: 2px; padding: 5px 2px 4px; font-size: 10px; font-weight: 500; line-height: 1.1; color: color-mix(in srgb, var(--ink) 72%, var(--surface)); border: 1.5px solid transparent; border-radius: 12px; }
   .tabbar a .ico { width: 22px; height: 22px; stroke-width: 1.7; }
   .tabbar a { position: relative; border: 0; }
@@ -1141,7 +1141,8 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
   .hico.cal { display: inline-grid; width: 26px; height: 26px; --c: var(--muted); background: none; }
   .hero-delta { grid-area: delta; margin-top: 8px; }
   .hero-side { grid-area: side; margin-top: 14px; gap: 0; padding: 0; border-top: 1px solid var(--line); }
-  .hero-side div { align-items: center; padding: 8px 0; }
+  .hero-side div { align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); }
+  .hero-side div:last-child { border-bottom: 0; }
   .hero.card { background-image: none; }
   .hero.card::after { display: none; }
   .hero-right { border-left: 0; padding-left: 0; }
