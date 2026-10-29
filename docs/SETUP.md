@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.24.4 – Phone: active tab marked at the top; no sync message in the top bar
+
+- Bottom bar: the gold bar that marks the active tab now sits on the top edge of the bar (was the bottom).
+- Top bar: the message that replaced the icons for a few seconds is gone. The sync dot beside the icons is the only status on a phone (tap it for the words). Desktop still shows the status pill.
+- No stored data changed. Android: rebuild the APK.
+
 ## Release 8.24.3 – Phone top bar a little bigger; active tab bold
 
 - Title is now 18px and the logo 32px (fixed sizes; a very long title is cut with an ellipsis only if it truly has no room). In the bottom bar the active tab is bold (label and icon) and the others are light, so it stands out.

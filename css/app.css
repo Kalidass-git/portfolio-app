@@ -1078,7 +1078,7 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
   .tabbar a { position: relative; border: 0; }
   .tabbar a.on { color: #B27D00; font-weight: 800; }
   .tabbar a.on .ico { stroke-width: 2.7; }
-  .tabbar a.on::after { content: ''; position: absolute; left: 50%; bottom: 0; width: 30px; height: 3px; margin-left: -15px; border-radius: 3px 3px 0 0; background: linear-gradient(90deg, #FFD84D, #E3A416); }
+  .tabbar a.on::after { content: ''; position: absolute; left: 50%; top: -4px; width: 30px; height: 3px; margin-left: -15px; border-radius: 0 0 3px 3px; background: linear-gradient(90deg, #FFD84D, #E3A416); }
 }
 @media (max-width: 899px) and (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tabbar a.on { color: #F2C84B; } }
 @media (max-width: 899px) { :root[data-theme="dark"] .tabbar a.on { color: #F2C84B; }
@@ -1101,7 +1101,6 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
 @media (max-width: 899px) {
   .sync-dot { display: grid; }
   .top-right > .refresh { display: none; }
-  .top:not(.flashing) .chip-status { display: none; }
-  .top.flashing .top-right > :not(.chip-status) { display: none; }
+  .top .chip-status { display: none; } /* the dot says it; the pill is desktop only */
   .top-right { flex: 1 1 auto; justify-content: flex-end; }
 }
