@@ -1060,7 +1060,8 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
 .hero.card::after { content: ''; position: absolute; right: 8px; top: 6px; width: 128px; height: 108px; background: var(--brand); opacity: .035; -webkit-mask: url(../icons/mark.svg) center / contain no-repeat; mask: url(../icons/mark.svg) center / contain no-repeat; pointer-events: none; }
 .hero.card > * { position: relative; z-index: 1; }
 .hero-num { white-space: nowrap; border-bottom: 0; position: relative; padding-bottom: 14px; }
-.hero-num::after { content: ''; position: absolute; left: 2px; right: 2px; bottom: 0; height: 5px; border-radius: 3px; background: #E8B923; }
+.hn-amt { position: relative; display: inline-block; }
+.hn-amt::after { content: ''; position: absolute; left: 2px; right: 2px; bottom: -14px; height: 5px; border-radius: 3px; background: #E8B923; }
 .hero-right, .hero-side { background: transparent; }
 .hero-right { border-left: 1px solid color-mix(in srgb, var(--brand) 25%, var(--line)); padding-left: 16px; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .hero.card::after { opacity: .07; } }
@@ -1138,7 +1139,7 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
   .hero-num { grid-area: num; justify-self: start; font-size: clamp(2.2rem, 11vw, 3rem); }
   .hero-right .spark { grid-area: spark; display: block; width: 150px; height: auto; margin: 0; justify-self: end; align-self: center; }
   .hero-exact { grid-area: exact; display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: .85rem; }
-  .hico.cal { display: inline-grid; width: 26px; height: 26px; --c: var(--muted); background: none; }
+  .hico.cal { display: inline-grid; width: 20px; height: 20px; --c: var(--muted); background: none; }
   .hero-delta { grid-area: delta; margin-top: 8px; }
   .hero-side { grid-area: side; margin-top: 14px; gap: 0; padding: 0; border-top: 1px solid var(--line); }
   .hero-side div { align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); }
@@ -1182,7 +1183,7 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
 .ac-tl-row.neg, .ac-tl-row.warn { color: var(--ink); font-weight: 400; }
 
 /* Net worth card, phone: calmer spacing under the gold bar */
-.hero-delta .dtxt { color: var(--muted); font-weight: 500; }
+.hero-delta .dtxt { color: var(--muted); font-weight: 500; margin-left: .3em; }
 .hero-delta .dpill { font-weight: 700; }
 .hx-dot { display: inline; margin: 0 .45em; color: var(--muted); }
 @media (max-width: 700px) {
@@ -1190,10 +1191,15 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
   .hero-exact .hx-amt { font-weight: 600; color: var(--ink); }
   .hero-exact .hx-dot { margin: 0 -4px; }
   .hero-exact .hx-date { color: var(--muted); }
-  .hero-delta { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; margin-top: 20px; justify-self: end; }
-  .hero-delta .dpill { display: inline-flex; align-items: center; gap: 4px; padding: 5px 11px; border-radius: 99px; font-size: .92rem; color: var(--pos); background: color-mix(in srgb, var(--pos) 13%, transparent); }
-  .hero-delta.neg .dpill { color: var(--neg); background: color-mix(in srgb, var(--neg) 13%, transparent); }
-  .hero-delta .dtxt { font-size: .75rem; }
+  .hero-delta { display: inline-flex; align-items: center; gap: 0; margin-top: 20px; justify-self: end; white-space: nowrap; padding: 5px 11px; border-radius: 99px; font-size: .8rem; background: color-mix(in srgb, var(--pos) 13%, transparent); }
+  .hero-delta.neg { background: color-mix(in srgb, var(--neg) 13%, transparent); }
+  .hero-delta .dpill { display: inline; padding: 0; background: none; font-size: .82rem; color: var(--pos); }
+  .hero-delta.neg .dpill { color: var(--neg); }
+  .hero-delta .dtxt { font-size: .74rem; margin-left: 5px; }
+  .hero-delta { padding: 5px 10px; align-self: center; }
+  .hero-exact .hx-txt { display: flex; flex-direction: column; line-height: 1.25; }
+  .hero-exact .hx-dot { display: none; }
+  .hero-exact { align-items: center; }
   .hero-right .hero-side { margin-top: 22px; }
   .hero-side div { padding: 11px 0; }
   .hero-label { white-space: nowrap; }
@@ -1203,11 +1209,12 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
   .hero-right .spark { width: 104px; }
   .hero-pill { padding: 4px 9px; font-size: .82rem; }
   .hero-exact { font-size: .85rem; }
-  .hero-exact .hx-dot { display: none; }
 }
 
+/* Under 340px there is no room beside the date: the amount and date go back to one line, and the change gets its own row */
 @media (max-width: 340px) {
   .hero-top { grid-template-areas: "label pill" "num spark" "exact exact" "delta delta" "side side"; }
-  .hero-delta { flex-direction: row; align-items: center; justify-self: start; gap: 8px; margin-top: 12px; }
-  .hero-delta .dtxt { font-size: .85rem; }
+  .hero-exact .hx-txt { flex-direction: row; align-items: baseline; gap: 6px; }
+  .hero-exact .hx-dot { display: inline; margin: 0; }
+  .hero-delta { justify-self: start; margin-top: 12px; }
 }

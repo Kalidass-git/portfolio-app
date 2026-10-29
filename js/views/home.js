@@ -71,6 +71,8 @@ function netWorthHistory(data, all) {
 }
 
 /** Small round icon for the Net worth card (class says which colour). */
+/** The big figure with the gold bar under the number only (not under Cr / L). */
+const heroNum = (t) => { const m = /^(.*\d)(\s.*)?$/.exec(t) || [t, t, '']; return h('p', { class: 'hero-num' }, h('span', { class: 'hn-amt' }, m[1]), m[2] ? h('span', { class: 'hn-unit' }, m[2]) : null); };
 const hico = (k, cls) => { const e = document.createElement('span'); e.className = 'hico ' + cls; e.setAttribute('aria-hidden', 'true'); e.append(sv('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, ...ICONS[k].map((d) => sv('path', { d })))); return e; };
 function hero(all, series, ox) {
   const monthStartIso = C.monthStart(all.asOf);
@@ -82,9 +84,9 @@ function hero(all, series, ox) {
       h('div', null,
         h('p', { class: 'hero-label' }, hico('wallet', 'nw'), h('span', null, 'Net worth')),
         ox && ox.xirr != null ? h('span', { class: 'hero-pill ' + tone(ox.xirr), title: 'Overall XIRR' }, `${ox.xirr >= 0 ? '▲' : '▼'} ${pct(ox.xirr, 1)}`) : null,
-        h('p', { class: 'hero-num' }, compact(all.netAsset)),
-        h('p', { class: 'hero-exact' }, hico('cal', 'cal'), h('span', { class: 'hx-amt' }, money(all.netAsset)), h('span', { class: 'hx-dot', 'aria-hidden': 'true' }, '·'), h('span', { class: 'hx-date' }, dateStr(all.asOf).replace(/ \d{4}$/, ''))),
-        delta != null ? h('p', { class: 'hero-delta ' + tone(delta) }, h('span', { class: 'dpill' }, `${delta >= 0 ? '▲' : '▼'} ${money(Math.abs(delta))}`), h('span', { class: 'dtxt' }, ` since ${dateStr(base.date).replace(/ \d{4}$/, '')}`)) : null),
+        heroNum(compact(all.netAsset)),
+        h('p', { class: 'hero-exact' }, hico('cal', 'cal'), h('span', { class: 'hx-txt' }, h('span', { class: 'hx-amt' }, money(all.netAsset)), h('span', { class: 'hx-dot', 'aria-hidden': 'true' }, '·'), h('span', { class: 'hx-date' }, dateStr(all.asOf).replace(/ \d{4}$/, '')))),
+        delta != null ? h('p', { class: 'hero-delta ' + tone(delta) }, h('span', { class: 'dpill' }, `${delta >= 0 ? '▲' : '▼'} ${money(Math.abs(delta))}`), h('span', { class: 'dtxt' }, `since ${dateStr(base.date).replace(/ \d{4}$/, '')}`)) : null),
       h('div', { class: 'hero-right' },
         spark(trend, { width: 150, height: 44, tone: 2 }),
         h('dl', { class: 'hero-side' },
