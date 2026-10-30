@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.26.2 – Fund NAVs: no more CORS errors, NAV date shown, AMFI cross-check
+
+- When a backend is connected, fund prices are read through it first, so the browser no longer makes the request that CORS blocks (the red console lines for 152156, 120847, 122639 and the history/metrics calls are gone). The browser is only a back-up.
+- Each fund now shows the date of its NAV (for example "438.8371 · 27 Oct" in the holdings table on wide screens, and "avg 120.5 · NAV of 27 Oct" in the NAV view on phones), so a stale price is easy to spot.
+- backend/Code.gs: when mfapi.in is a day behind for some funds (it copies AMFI's daily file a little later), the backend reads AMFI's own NAV file and uses its NAV if it is newer. **Paste backend/Code.gs into Apps Script and deploy a new version for this to work.**
+
 ## Release 8.26.1 – Fund prices: fewer misses, quieter console
 
 - Refreshing prices now asks the backend for all fund NAVs in one call (new `mfnav` action in backend/Code.gs). Any fund that is missing is then fetched on its own, and any that still fail get one more pass after a short pause. Before, a single slow answer from mfapi.in left that fund without a new price.

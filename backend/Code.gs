@@ -161,7 +161,32 @@ function mfnav_(codes) {
     try { var j = mfFetch_('/' + c); if (j && j.data && j.data.length) navs[c] = { rows: j.data.slice(0, 2), name: j.meta && j.meta.scheme_name }; else errors[c] = 'No NAV listed'; }
     catch (e) { errors[c] = e.message; }
   });
+  amfiFix_(navs);
   return { ok: true, navs: navs, errors: errors };
+}
+
+/** mfapi.in copies AMFI's daily file a little later, so a fund can show yesterday's NAV there while AMFI already has today's. For funds whose latest date is older than the newest date in this batch, read AMFI's own file and use its NAV when it is newer (the old latest becomes the "previous" NAV). */
+function amfiFix_(navs) {
+  var ymd = function (d) { var p = String(d).split('-'); return p[2] + p[1] + p[0]; };     // dd-MM-yyyy -> yyyyMMdd
+  var newest = '';
+  Object.keys(navs).forEach(function (c) { var d = ymd(navs[c].rows[0].date); if (d > newest) newest = d; });
+  var stale = Object.keys(navs).filter(function (c) { return ymd(navs[c].rows[0].date) < newest; });
+  if (!stale.length) return;
+  try {
+    var r = UrlFetchApp.fetch('https://www.amfiindia.com/spages/NAVAll.txt', { muteHttpExceptions: true });
+    if (r.getResponseCode() !== 200) return;
+    var want = {}; stale.forEach(function (c) { want[c] = true; });
+    var MON = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
+    r.getContentText().split(/\r?\n/).forEach(function (line) {
+      var f = line.split(';');
+      if (f.length < 6 || !want[f[0]]) return;
+      var dm = /^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/.exec(f[5].trim()); if (!dm) return;
+      var date = ('0' + dm[1]).slice(-2) + '-' + MON[dm[2]] + '-' + dm[3], nav = parseFloat(f[4]);
+      if (!(nav > 0) || ymd(date) <= ymd(navs[f[0]].rows[0].date)) return;
+      navs[f[0]].rows = [{ date: date, nav: String(nav) }, navs[f[0]].rows[0]];
+      navs[f[0]].src = 'amfi';
+    });
+  } catch (e) { /* mfapi's value is kept */ }
 }
 
 /** Share prices from Yahoo Finance (NSE first, then BSE). symbols: [{symbol:'INFY', yahoo:'' }] */
