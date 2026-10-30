@@ -304,7 +304,8 @@ export function calcMFs(data, quotes, useLive) {
     const prev = useLive && q && q.price > 0 && q.prev > 0 ? q.prev : m.prevNav || 0;
     const current = m.units * nav;
     const day = prev > 0 ? m.units * (nav - prev) : null;
-    return { ...m, liveNav: nav, prevNav: prev || null, current, pl: current - m.invested, ret: m.invested ? (current - m.invested) / m.invested : 0, day, dayPct: prev > 0 ? nav / prev - 1 : null };
+    const navDate = useLive && q && q.price > 0 ? q.date : m.navDate;
+    return { ...m, navDate, liveNav: nav, prevNav: prev || null, current, pl: current - m.invested, ret: m.invested ? (current - m.invested) / m.invested : 0, day, dayPct: prev > 0 ? nav / prev - 1 : null };
   });
   const invested = sum(items, (x) => x.invested), current = sum(items, (x) => x.current);
   const dayItems = items.filter((x) => x.day != null);

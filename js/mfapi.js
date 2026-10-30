@@ -1,12 +1,10 @@
 // One place that talks to mfapi.in.
 // mfapi.in sometimes answers without the CORS header (the browser then blocks it, even though the server said 200).
-// So: try the browser first; if that fails, ask the backend (Apps Script) to read it on the server side, where CORS does not apply.
-// Once the browser path fails in a session, the backend is tried first for the rest of the session (no repeated red errors).
+// So: when a backend (Apps Script) is connected it reads mfapi.in on the server side, where CORS does not apply, and the browser is only a back-up.
 import { S } from './store.js';
 import { call } from './remote.js';
 
 const BASE = 'https://api.mfapi.in/mf';
-let directBlocked = false;
 
 async function direct(path) {
   const r = await fetch(`${BASE}${path}`);
@@ -29,14 +27,14 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const hasBackend = () => !!(S.cfg && S.cfg.backendUrl);
 
 /** path: '/152156', '/152156/latest' or '/search?q=hdfc'. Returns the parsed JSON.
- *  Up to 3 rounds, alternating between the browser and the backend (the first browser failure is almost always the missing CORS header, so after that the backend goes first and the browser console stays quiet). */
+ *  Up to 3 rounds. The backend (Apps Script) is asked first when connected, the browser only as a back-up or when there is no backend. */
 export async function mfGet(path) {
   let lastErr;
   for (let round = 0; round < 3; round++) {
-    const order = hasBackend() ? (directBlocked ? [viaBackend, direct] : [direct, viaBackend]) : [direct];
+    const order = hasBackend() ? [viaBackend, direct] : [direct];   // with a backend connected it goes first, so the browser never makes the request that CORS blocks (and the console stays quiet)
     for (const fn of order) {
-      try { const j = await fn(path); if (fn === direct) directBlocked = false; return j; }
-      catch (e) { lastErr = e; if (fn === direct && hasBackend()) directBlocked = true; }
+      try { return await fn(path); }
+      catch (e) { lastErr = e; }
     }
     if (round < 2) await wait(500 * (round + 1));
   }
