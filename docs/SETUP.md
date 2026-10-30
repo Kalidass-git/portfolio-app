@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.26.1 – Fund prices: fewer misses, quieter console
+
+- Refreshing prices now asks the backend for all fund NAVs in one call (new `mfnav` action in backend/Code.gs). Any fund that is missing is then fetched on its own, and any that still fail get one more pass after a short pause. Before, a single slow answer from mfapi.in left that fund without a new price.
+- The browser is only asked directly when no backend is connected. After the first CORS failure it is skipped, so the red CORS lines in the console appear once at most (they were two per fund).
+- backend/Code.gs also retries mfapi.in up to 3 times. **To get the one-call version, paste backend/Code.gs into your Apps Script project and deploy a new version.** Without that, the app still works: it falls back to one backend call per fund, now with retries.
+
 ## Release 8.26.0 – Home polish, folded details on phones, gold rate setting
 
 - Settings > Gold rate (owner only): shows the live world price per gram, the current adjustment (the local difference: duty, GST, margin, carat) and the rate in use. You can type the adjustment as a percent of the world price, or type a market rate you trust (for example the 22K rate on Goodreturns) and the app works the adjustment out from the live price and applies it straight away.

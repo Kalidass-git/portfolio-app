@@ -5,7 +5,7 @@ import { premiumFrom, applyLive } from './goldlive.js';
 import { todayISO } from './calc.js';
 import { S, mutate, saveQuotes } from './store.js';
 import { call } from './remote.js';
-import { mfGet } from './mfapi.js';
+import { mfGet, mfNavBatch } from './mfapi.js';
 
 export async function searchScheme(q) {
   return mfGet(`/search?q=${encodeURIComponent(q)}`); // [{schemeCode, schemeName}]
@@ -99,17 +99,32 @@ export async function refreshAll(onProgress = () => {}) {
   } else {
     out.errors.push('Share prices need the Google Drive backend (Settings).');
   }
-  // Mutual funds (direct from mfapi.in)
+  // Mutual funds: one backend call for all of them when it can (fewer failures, no browser CORS errors), then each missing fund on its own, then one more pass for any that still failed.
   const linked = S.data.mutualFunds.filter((m) => m.schemeCode);
-  for (let i = 0; i < linked.length; i++) {
-    const m = linked[i];
-    try {
-      onProgress(`Fetching NAV ${i + 1}/${linked.length}…`);
-      const n = await latestNav(m.schemeCode);
-      quotes['MF:' + m.schemeCode] = { ...n, ts: now };
-      out.funds++;
-    } catch (e) { out.errors.push(`${m.name}: ${e.message}`); }
+  const got = {};
+  const fromRows = (rows) => { const row = rows && rows[0]; if (!row) return null; const prev = rows[1]; return { price: parseFloat(row.nav), date: isoDate(row.date), prev: prev ? parseFloat(prev.nav) : null, prevDate: prev ? isoDate(prev.date) : null }; };
+  if (linked.length) {
+    onProgress(`Fetching ${linked.length} fund NAVs…`);
+    const batch = await mfNavBatch([...new Set(linked.map((m) => String(m.schemeCode)))]);
+    if (batch) for (const [code, v] of Object.entries(batch.navs || {})) { const n = fromRows(v.rows); if (n && n.price > 0) got[code] = n; }
   }
+  let todo = linked.filter((m) => !got[String(m.schemeCode)]);
+  const errs = {};
+  for (let pass = 0; pass < 2 && todo.length; pass++) {
+    if (pass) await new Promise((r) => setTimeout(r, 1500));
+    const next = [];
+    for (let i = 0; i < todo.length; i++) {
+      const m = todo[i];
+      try { onProgress(`Fetching NAV ${i + 1}/${todo.length}…`); got[String(m.schemeCode)] = await latestNav(m.schemeCode); delete errs[m.schemeCode]; }
+      catch (e) { errs[m.schemeCode] = `${m.name}: ${e.message}`; next.push(m); }
+    }
+    todo = next;
+  }
+  for (const m of linked) {
+    const n = got[String(m.schemeCode)];
+    if (n) { quotes['MF:' + m.schemeCode] = { ...n, ts: now }; out.funds++; }
+  }
+  for (const m of todo) out.errors.push(errs[m.schemeCode]);
   if (!S.data.mutualFunds.every((m) => m.schemeCode)) out.errors.push('Some funds are not linked to a scheme code yet (Equity → Funds → Link).');
   saveQuotes(quotes);
   // The owner's refresh becomes the shared snapshot, so family devices see the same prices without fetching anything.

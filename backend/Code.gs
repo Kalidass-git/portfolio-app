@@ -109,6 +109,7 @@ function doPost(e) {
         } finally { lock.releaseLock(); }
       }
       case 'mf': return json_(mf_(req.path));
+      case 'mfnav': return json_(mfnav_(req.codes || []));
       case 'quotes': return json_(quotes_(req.symbols || []));
       case 'dividends': return json_(dividends_(req.symbols || []));
       case 'history': return json_(history_(req.symbol, req.yahoo));
@@ -121,13 +122,46 @@ function doPost(e) {
   }
 }
 
+/** Reads one mfapi.in address, trying up to 3 times (mfapi is sometimes slow or answers with an error for a moment). Returns the parsed JSON or throws. */
+function mfFetch_(path) {
+  var last = 'no answer';
+  for (var i = 0; i < 3; i++) {
+    try {
+      var r = UrlFetchApp.fetch('https://api.mfapi.in/mf' + path, { muteHttpExceptions: true });
+      if (r.getResponseCode() === 200) return JSON.parse(r.getContentText());
+      last = 'mfapi answered ' + r.getResponseCode();
+    } catch (e) { last = e.message; }
+    Utilities.sleep(400 * (i + 1));
+  }
+  throw new Error(last);
+}
+
 /** Mutual fund NAVs from mfapi.in, read here so the browser's CORS rules do not matter. path: '/152156', '/152156/latest', '/search?q=hdfc' */
 function mf_(path) {
   path = String(path || '');
   if (!/^\/(\d{3,8}(\/latest)?|search\?q=[A-Za-z0-9%+._ -]{1,80})$/.test(path)) return { error: 'Bad fund request.' };
-  var r = UrlFetchApp.fetch('https://api.mfapi.in/mf' + path, { muteHttpExceptions: true });
-  if (r.getResponseCode() !== 200) return { error: 'mfapi answered ' + r.getResponseCode() };
-  return { ok: true, body: JSON.parse(r.getContentText()) };
+  try { return { ok: true, body: mfFetch_(path) }; } catch (e) { return { error: e.message }; }
+}
+
+/** Latest two NAVs for many funds in one go (the app sends the scheme codes it holds). Funds that fail are listed in `errors` and the app tries them again itself. */
+function mfnav_(codes) {
+  var list = [];
+  codes.slice(0, 80).forEach(function (c) { c = String(c); if (/^\d{3,8}$/.test(c) && list.indexOf(c) < 0) list.push(c); });
+  var navs = {}, errors = {};
+  var reqs = list.map(function (c) { return { url: 'https://api.mfapi.in/mf/' + c, muteHttpExceptions: true }; });
+  var res = [];
+  try { res = UrlFetchApp.fetchAll(reqs); } catch (e) { res = []; }
+  var retry = [];
+  list.forEach(function (c, i) {
+    var r = res[i], ok = false;
+    try { if (r && r.getResponseCode() === 200) { var j = JSON.parse(r.getContentText()); if (j && j.data && j.data.length) { navs[c] = { rows: j.data.slice(0, 2), name: j.meta && j.meta.scheme_name }; ok = true; } } } catch (e) { /* retried below */ }
+    if (!ok) retry.push(c);
+  });
+  retry.forEach(function (c) {
+    try { var j = mfFetch_('/' + c); if (j && j.data && j.data.length) navs[c] = { rows: j.data.slice(0, 2), name: j.meta && j.meta.scheme_name }; else errors[c] = 'No NAV listed'; }
+    catch (e) { errors[c] = e.message; }
+  });
+  return { ok: true, navs: navs, errors: errors };
 }
 
 /** Share prices from Yahoo Finance (NSE first, then BSE). symbols: [{symbol:'INFY', yahoo:'' }] */
