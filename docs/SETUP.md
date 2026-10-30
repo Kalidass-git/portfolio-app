@@ -150,6 +150,11 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.26.3 – Action centre: bond interest due on one date is one row
+
+- When two or more bonds pay interest on the same date, the Action centre shows one row ("Bond interest due", "4 bonds", the total) instead of one per bond. Tap it to see each bond and its amount (a bottom sheet on phones, a dialog on the browser) with a link to Bonds.
+- A single bond, bond maturities and every other kind of item stay as they were. The group counts and totals are unchanged.
+
 ## Release 8.26.2 – Fund NAVs: no more CORS errors, NAV date shown, AMFI cross-check
 
 - When a backend is connected, fund prices are read through it first, so the browser no longer makes the request that CORS blocks (the red console lines for 152156, 120847, 122639 and the history/metrics calls are gone). The browser is only a back-up.

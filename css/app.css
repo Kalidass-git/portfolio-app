@@ -1252,3 +1252,7 @@ html.native .ptr.spin { animation: ptr-spin .8s linear infinite; }
 }
 @media (prefers-reduced-motion: reduce) { .hm-chev { transition: none; } }
 .hero-more, .hero-more:hover, .hero-more:focus, .hero-more:active { background: none; border-radius: 0; box-shadow: none; }
+.ax-sheet-sum { margin: 0 0 8px; color: var(--muted); } .ax-sheet-sum b { color: var(--pos); font-size: 1.15rem; margin-right: 4px; }
+.ax-sheet-list { list-style: none; margin: 0 0 10px; padding: 0; }
+.ax-sheet-list li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.ax-sheet-list li:last-child { border-bottom: 0; } .ax-sheet-list li span { min-width: 0; overflow-wrap: anywhere; } .ax-sheet-list b { white-space: nowrap; font-variant-numeric: tabular-nums; }

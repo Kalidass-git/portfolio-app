@@ -415,6 +415,31 @@ function notices(data, all) {
 }
 const AX_KIND = { 'Bond interest': ['receipt', 'bond'], Bond: ['receipt', 'bond'], 'Fixed deposit': ['bank', 'fd'], Lending: ['loan', 'lend'], 'Money to receive': ['loan', 'lend'], 'Loan EMI': ['receipt', 'emi'], Chit: ['coins', 'chit'] };
 const axKind = (k) => AX_KIND[k] || ['coins', 'chit'];
+/** Bond interest due on the same date is shown as one row (tap it for the list). A single bond, and every other kind of item, stays as it was. */
+function mergeBondDues(list) {
+  const out = [], at = {};
+  for (const u of list) {
+    if (u.kind !== 'Bond interest') { out.push(u); continue; }
+    const k = u.date;
+    if (!at[k]) { at[k] = { ...u, bonds: [u] }; out.push(at[k]); } else at[k].bonds.push(u);
+  }
+  for (const m of out) if (m.bonds && m.bonds.length > 1) {
+    m.amount = m.bonds.reduce((a, b) => a + Math.round(b.amount || 0), 0);
+    m.title = 'Bond interest due';
+  } else if (m.bonds) delete m.bonds;
+  return out;
+}
+/** The individual bonds behind a merged row. */
+function showBondDues(u) {
+  const body = h('div', { class: 'ax-sheet' },
+    h('p', { class: 'ax-sheet-sum' }, h('b', null, '+' + money(u.amount)), ` from ${u.bonds.length} bonds · ${dateStr(u.date)}`),
+    h('ul', { class: 'ax-sheet-list' }, u.bonds.slice().sort((a, b) => (b.amount || 0) - (a.amount || 0)).map((b) => h('li', null,
+      h('span', null, b.title.replace(/\s*interest due$/, '')), h('b', { class: 'pos' }, '+' + money(b.amount))))),
+    h('p', null, h('a', { href: '#/fixed/bonds' }, 'Open Bonds')));
+  if (window.matchMedia('(max-width: 700px)').matches) openInfo('Bond interest due', body);
+  else dialog('Bond interest due', body, [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
+}
+
 function actionCentre(data, all) {
   const items = agenda(data, all), nt = notices(data, all), today = C.todayISO();
   const groups = [
@@ -431,21 +456,22 @@ function actionCentre(data, all) {
   const count = (k) => (tabs.find((t) => t[0] === k) || [])[2] || 0;
   if (!acState.chosen || !tabs.some((t) => t[0] === acState.tab)) acState.tab = count('alerts') ? 'alerts' : count('overdue') ? 'overdue' : count('week') ? 'week' : 'all';
   const dir = (u) => (ACTION_KIND[u.kind] || {}).dir;
-  const line = (u, g, first) => { const [ik, kc] = axKind(u.kind); return h('li', { class: 'ax-row ' + (g.tone || '') + (dir(u) ? ' ' + dir(u) : '') + ' k-' + kc, tabindex: 0, onclick: () => { location.hash = (ACTION_KIND[u.kind] || {}).href || '#/savings'; } },
+  const line = (u, g, first) => { const [ik, kc] = axKind(u.kind); return h('li', { class: 'ax-row ' + (g.tone || '') + (dir(u) ? ' ' + dir(u) : '') + ' k-' + kc, tabindex: 0, onclick: () => { if (u.bonds) showBondDues(u); else location.hash = (ACTION_KIND[u.kind] || {}).href || '#/savings'; } },
     h('div', { class: 'ax-date' }, first ? dateChip(u.date) : null),
     h('div', { class: 'ax-node', 'aria-hidden': 'true' }, h('i', null, dir(u) === 'in' ? '↓' : dir(u) === 'out' ? '↑' : '•')),
     h('div', { class: 'ax-card' },
       hico(ik, 'ax-ev'),
-      h('div', { class: 'ax-main' }, h('b', null, u.title.replace(/\s*\((overdue|due today)\)$/, '')), h('span', { class: 'ax-meta' }, u.kind, ' · ', g.id === 'overdue' ? h('span', { class: 'neg' }, `${-u.days} day${u.days === -1 ? '' : 's'} late`) : u.days === 0 ? h('span', { class: 'warn' }, 'today') : `in ${u.days} day${u.days === 1 ? '' : 's'}`)),
+      h('div', { class: 'ax-main' }, h('b', null, u.title.replace(/\s*\((overdue|due today)\)$/, '')), h('span', { class: 'ax-meta' }, u.bonds ? `${u.bonds.length} bonds` : u.kind, ' · ', g.id === 'overdue' ? h('span', { class: 'neg' }, `${-u.days} day${u.days === -1 ? '' : 's'} late`) : u.days === 0 ? h('span', { class: 'warn' }, 'today') : `in ${u.days} day${u.days === 1 ? '' : 's'}`)),
       h('b', { class: 'ax-amt ' + (g.id === 'overdue' ? 'neg' : dir(u) === 'in' ? 'pos' : '') }, (dir(u) === 'in' ? '+' : dir(u) === 'out' ? '−' : '') + money(u.amount)))); };
   const head = (g, n, total) => h('div', { class: 'ax-gh ' + (g.tone || '') }, hico(g.icon, 'ax-gi'), h('span', { class: 'ax-gt' }, g.label, h('em', null, ' · ' + n)), total != null ? h('span', { class: 'ax-gs' }, money(total)) : null);
   const block = (g) => {
     if (!g.list.length) return null;
-    const open = acState.more[g.id], cap = g.id === 'later' ? 5 : 8, shown = open ? g.list : g.list.slice(0, cap);
+    const rows = mergeBondDues(g.list);
+    const open = acState.more[g.id], cap = g.id === 'later' ? 5 : 8, shown = open ? rows : rows.slice(0, cap);
     return h('div', { class: 'ax-group' },
-      head(g, g.list.length, sumOf(g.list)),
+      head(g, rows.length, sumOf(g.list)),
       h('ul', { class: 'ax-tl' }, shown.map((u, i) => line(u, g, i === 0 || shown[i - 1].date !== u.date))),
-      g.list.length > cap ? h('button', { type: 'button', class: 'ax-more', onclick: () => { acState.more[g.id] = !open; rerender(); } }, open ? 'Show less' : `Show all ${g.list.length}`) : null);
+      rows.length > cap ? h('button', { type: 'button', class: 'ax-more', onclick: () => { acState.more[g.id] = !open; rerender(); } }, open ? 'Show less' : `Show all ${rows.length}`) : null);
   };
   const alerts = nt.shown.length ? h('div', { class: 'ax-group' },
     head({ label: 'Alerts', tone: 'warn', icon: 'bell' }, nt.shown.length, null),
