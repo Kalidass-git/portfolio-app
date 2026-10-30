@@ -25,21 +25,33 @@ async function viaBackend(path) {
   return res.body;
 }
 
-/** path: '/152156', '/152156/latest' or '/search?q=hdfc'. Returns the parsed JSON. */
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const hasBackend = () => !!(S.cfg && S.cfg.backendUrl);
+
+/** path: '/152156', '/152156/latest' or '/search?q=hdfc'. Returns the parsed JSON.
+ *  Up to 3 rounds, alternating between the browser and the backend (the first browser failure is almost always the missing CORS header, so after that the backend goes first and the browser console stays quiet). */
 export async function mfGet(path) {
-  if (!directBlocked) {
-    try { return await direct(path); }
-    catch (e) {
-      try { return await direct(path); }   // one quick retry: the missing header is often a one-off
-      catch (e2) {
-        directBlocked = true;
-        try { return await viaBackend(path); }
-        catch (be) { directBlocked = false; throw be; } // backend not usable: keep trying the browser next time
-      }
+  let lastErr;
+  for (let round = 0; round < 3; round++) {
+    const order = hasBackend() ? (directBlocked ? [viaBackend, direct] : [direct, viaBackend]) : [direct];
+    for (const fn of order) {
+      try { const j = await fn(path); if (fn === direct) directBlocked = false; return j; }
+      catch (e) { lastErr = e; if (fn === direct && hasBackend()) directBlocked = true; }
     }
+    if (round < 2) await wait(500 * (round + 1));
   }
-  try { return await viaBackend(path); }
-  catch (be) {
-    try { const j = await direct(path); directBlocked = false; return j; } catch { throw be; }
+  throw lastErr || new Error('Fund price service did not answer.');
+}
+
+let batchOff = false;
+/** Latest two NAVs for many funds from the backend in one call. Returns { navs: {code: {rows:[{date,nav},..]}}, errors } or null when the backend cannot do it (not connected, or an older Code.gs). */
+export async function mfNavBatch(codes) {
+  if (batchOff || !hasBackend() || !codes.length) return null;
+  try {
+    const res = await call(S.cfg.backendUrl, S.cfg.key, 'mfnav', { codes });
+    return res && res.navs ? res : null;
+  } catch (e) {
+    if (/Unknown action/i.test(e.message)) batchOff = true;
+    return null;
   }
 }
