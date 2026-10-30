@@ -3,6 +3,8 @@ import * as C from '../calc.js';
 import { VERSION, RELEASED } from '../version.js';
 import { section_ as restorePoints, doRestore } from './backups.js';
 import { section_ as storageInfo } from './storage.js';
+import { liveParity } from '../goldlive.js';
+import { applyGold } from '../prices.js';
 import { isNative, reminderOpts, setReminderOpts, reminderPermission, planReminders } from '../native.js';
 import { h, money, dateStr, section, btn, formDialog, dialog, confirmDialog, toast, canEdit, table } from '../ui.js';
 
@@ -63,6 +65,25 @@ function remindersSection() {
       h('p', { class: 'note' }, 'Reminders are planned on this phone each time you open the app. If you do not open it for a few weeks they run out, so open it now and then.')) : null));
 }
 
+
+/** Owner only: how the gold rate is worked out. India's price per gram = world gold price per gram x an adjustment (duty, GST, local margin, and 22K vs 24K). */
+function goldSection() {
+  const st = S.data.settings, live = st.goldLive, par = liveParity(live), prem = st.goldPremium;
+  const setPrem = (p) => {
+    if (!(p > 0.5 && p < 2)) return toast('That adjustment looks wrong. It should be close to 100% of the world price.', 'bad');
+    mutate((d) => { d.settings.goldPremium = p; if (d.settings.goldLive) applyGold(d, d.settings.goldLive, {}); });
+    toast('Gold rate is now ' + money(S.data.settings.goldRate) + ' per gram'); rerender();
+  };
+  const pctIn = h('input', { type: 'number', step: '0.1', min: '50', max: '200', value: prem ? (prem * 100).toFixed(1) : '', placeholder: '100', inputmode: 'decimal', 'aria-label': 'Adjustment in percent' });
+  const rateIn = h('input', { type: 'number', step: '1', min: '1', placeholder: 'e.g. 13135', inputmode: 'numeric', 'aria-label': 'Rate per gram today' });
+  return section('Gold rate', h('div', { class: 'kv' },
+    h('p', null, par ? h('span', null, 'World gold price now: ', h('b', null, money(par.now) + ' per gram'), ' (COMEX in dollars, changed to rupees)') : 'No live gold price yet. Refresh prices on Home first.'),
+    h('p', null, 'Adjustment now: ', h('b', null, prem ? (prem * 100).toFixed(1) + '% of the world price' : 'not set yet'), ' · rate used: ', h('b', null, money(st.goldRate) + ' per gram')),
+    h('label', { class: 'inline-label' }, 'Set the adjustment (%) ', pctIn, ' ', btn('Save', () => setPrem(Number(pctIn.value) / 100), 'small')),
+    h('label', { class: 'inline-label' }, 'Or match a rate you trust (₹ per gram) ', rateIn, ' ', btn('Use this rate', () => { const r = Number(rateIn.value); if (!(r > 0)) return toast('Enter the rate per gram.', 'bad'); if (!par) return toast('Refresh prices on Home first, so there is a live price to compare with.', 'bad'); setPrem(r / par.now); }, 'small')),
+    h('p', { class: 'note' }, 'Use the rate for the carat you track (for example the 22K rate on Goodreturns or from your jeweller, before GST). The app keeps that gap steady and then follows the live world price. If the rate here drifts away from the market over time, enter a fresh market rate above.')));
+}
+
 export function render() {
   const { data, all } = S;
   const root = h('div', { class: 'page' });
@@ -92,6 +113,7 @@ export function render() {
 
   { const rp = restorePoints(); if (rp) root.append(rp); }
   root.append(storageInfo());
+  if (canEdit()) root.append(goldSection());
   root.append(section('Data file',
     h('div', null, h('p', { class: 'note' }, 'A backup is a single JSON file. Keep one somewhere safe, for example in Google Drive.'),
       h('div', { class: 'row' },

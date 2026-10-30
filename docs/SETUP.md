@@ -150,6 +150,13 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.26.0 – Home polish, folded details on phones, gold rate setting
+
+- Settings > Gold rate (owner only): shows the live world price per gram, the current adjustment (the local difference: duty, GST, margin, carat) and the rate in use. You can type the adjustment as a percent of the world price, or type a market rate you trust (for example the 22K rate on Goodreturns) and the app works the adjustment out from the live price and applies it straight away.
+- Action centre now has the same background and border as the other Home cards. The filter pills wrap onto two lines instead of scrolling sideways, and the tab "This week" is now "Next 7 days". It opens on the most urgent tab: Alerts if there are any, otherwise Overdue, otherwise Next 7 days (otherwise All). A tab you pick stays picked.
+- Android app: the green gradient behind the Net worth card is gone, so it matches the phone web app.
+- Phones (web app and Android app): Assets, Loans, Overall XIRR and Without EPF/PPF start folded away behind one row, "Assets, loans & XIRR" with a chevron; tap it to open them and tap "Hide details" to close. The browser version always shows them.
+
 ## Release 8.25.0 – Action centre redesign (phone and browser)
 
 - The Action centre is its own panel (tinted background, rounded border, white inner cards) so it no longer looks like the other Home cards. Same data, same sorting, same tap targets.

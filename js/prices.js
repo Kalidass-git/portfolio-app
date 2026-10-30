@@ -42,7 +42,7 @@ export async function guessScheme(name) {
 }
 
 /** Store the live gold reading and move the rate with it, every time. (The rate can no longer be typed in; the "automatic rate off" switch is gone.) */
-function applyGold(d, live, out) {
+export function applyGold(d, live, out) {
   d.settings.goldLive = live;
   const prem = d.settings.goldPremium || premiumFrom(d.settings.goldRate, live);
   if (!prem) return;

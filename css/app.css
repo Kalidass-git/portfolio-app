@@ -1023,7 +1023,6 @@ html.native .ptr.spin { animation: ptr-spin .8s linear infinite; }
 
 /* Net worth card: green edge, soft green wash, short gold bar, faint logo mark behind */
 .hero.card { position: relative; overflow: hidden; border: 1.5px solid color-mix(in srgb, var(--brand) 60%, var(--line)); background-color: var(--surface); background-image: repeating-linear-gradient(to bottom, transparent 0 31px, var(--line-2) 31px 32px), linear-gradient(135deg, var(--surface) 45%, var(--brand-soft)); }
-html.native .hero.card { background-image: linear-gradient(135deg, var(--surface) 45%, var(--brand-soft)); } /* Android: no ruled lines through the big number */
 .hero.card::after { content: ''; position: absolute; right: 8px; top: 6px; width: 128px; height: 108px; background: var(--brand); opacity: .035; -webkit-mask: url(../icons/mark.svg) center / contain no-repeat; mask: url(../icons/mark.svg) center / contain no-repeat; pointer-events: none; }
 .hero.card > * { position: relative; z-index: 1; }
 .hero-num { white-space: nowrap; border-bottom: 0; position: relative; padding-bottom: 14px; }
@@ -1097,7 +1096,7 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
 
 /* Phone: the card as a stack. Header with the XIRR pill, number beside the trend chart, date, change since month end, then the four figures as icon rows */
 @media (max-width: 700px) {
-  .hero-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "label pill" "num spark" "exact delta" "side side"; gap: 0 12px; align-items: center; }
+  .hero-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "label pill" "num spark" "exact delta" "more more" "side side"; gap: 0 12px; align-items: center; }
   .hero-top > div:first-child, .hero-right { display: contents; }
   .hero-label { grid-area: label; font-size: 1rem; font-weight: 500; color: var(--muted); margin-bottom: 6px; }
   .hero-pill { grid-area: pill; display: inline-flex; align-items: center; gap: 4px; justify-self: end; padding: 5px 12px; border-radius: 99px; font-weight: 700; font-size: .9rem; color: var(--pos); background: color-mix(in srgb, var(--pos) 14%, transparent); }
@@ -1107,7 +1106,7 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
   .hero-exact { grid-area: exact; display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: .85rem; }
   .hico.cal { display: inline-grid; width: 20px; height: 20px; --c: var(--muted); background: none; }
   .hero-delta { grid-area: delta; margin-top: 8px; }
-  .hero-side { grid-area: side; margin-top: 14px; gap: 0; padding: 0; border-top: 1px solid var(--line); }
+  .hero-side { grid-area: side; margin-top: 14px; gap: 0; padding: 0; border-top: 0; }
   .hero-side div { align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); }
   .hero-side div:last-child { border-bottom: 0; }
   .hero.card { background-image: none; }
@@ -1149,15 +1148,15 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
 
 /* Under 340px there is no room beside the date: the amount and date go back to one line, and the change gets its own row */
 @media (max-width: 340px) {
-  .hero-top { grid-template-areas: "label pill" "num spark" "exact exact" "delta delta" "side side"; }
+  .hero-top { grid-template-areas: "label pill" "num spark" "exact exact" "delta delta" "more more" "side side"; }
   .hero-delta { justify-self: start; margin-top: 12px; }
 }
 
 /* ---- Action centre (Home): its own panel, unlike the other cards. Dated timeline of what needs you. ---- */
-.ax { --ax-bg: #f3f6f2; --ax-card: #fff; --ax-green: #087f5b; --ax-on: #fff; --ax-muted: #5f6e68; --ax-line: #dce5de; --ax-red: #c24141; --ax-amber: #9a6200; --ax-ink: var(--ink);
-  background: var(--ax-bg); border: 1px solid var(--ax-line); border-radius: 16px; padding: 16px 14px 12px; box-shadow: none; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ax { --ax-bg: #071713; --ax-card: #10251f; --ax-green: #34d399; --ax-on: #052018; --ax-muted: #a9bbb3; --ax-line: #284239; --ax-red: #f87171; --ax-amber: #e3b25a; } }
-:root[data-theme="dark"] .ax { --ax-bg: #071713; --ax-card: #10251f; --ax-green: #34d399; --ax-on: #052018; --ax-muted: #a9bbb3; --ax-line: #284239; --ax-red: #f87171; --ax-amber: #e3b25a; }
+.ax { --ax-bg: var(--surface); --ax-card: var(--surface); --ax-green: #087f5b; --ax-on: #fff; --ax-muted: var(--muted); --ax-line: var(--line); --ax-red: #c24141; --ax-amber: #9a6200; --ax-ink: var(--ink);
+  border-radius: var(--radius); padding: 16px 14px 12px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ax { --ax-green: #34d399; --ax-on: #052018; --ax-red: #f87171; --ax-amber: #e3b25a; } }
+:root[data-theme="dark"] .ax { --ax-green: #34d399; --ax-on: #052018; --ax-red: #f87171; --ax-amber: #e3b25a; }
 .ax .hico { width: 36px; height: 36px; border-radius: 10px; color: var(--c, var(--ax-green)); background: color-mix(in srgb, var(--c, var(--ax-green)) 14%, transparent); }
 .ax .hico svg { width: 52%; height: 52%; }
 .ax-top { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
@@ -1166,7 +1165,7 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
 .ax .ax-logo { width: 40px; height: 40px; border-radius: 12px; background: var(--ax-green); color: var(--ax-on); }
 /* three equal summary tiles */
 .ax-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
-.ax-kpi { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 12px; background: var(--ax-card); border: 1px solid var(--ax-line); min-width: 0; }
+.ax-kpi { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--ax-line); min-width: 0; }
 .ax-kpi b { font-size: clamp(.92rem, 4.3vw, 1.2rem); line-height: 1.15; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .ax-kl { display: flex; align-items: center; gap: 6px; font-size: .76rem; font-weight: 600; color: var(--ax-muted); white-space: nowrap; }
 .ax .ax-ki { width: 20px; height: 20px; border-radius: 50%; flex: 0 0 auto; --c: var(--ax-muted); }
@@ -1174,9 +1173,8 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
 .ax-kpi.bad .ax-kl, .ax-kpi.bad b { color: var(--ax-red); } .ax-kpi.bad .ax-ki { --c: var(--ax-red); }
 .ax-kpi.up .ax-ki { --c: var(--ax-green); } .ax-kpi.up b { color: var(--ax-green); }
 /* filters: a scrollable row of pills that never shrink */
-.ax-tabs { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 0 -14px 6px; padding: 0 14px 2px; }
-.ax-tabs::-webkit-scrollbar { display: none; }
-.ax-tabs a { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px; border-radius: 99px; border: 1px solid var(--ax-line); background: var(--ax-card); color: var(--ax-ink); font-size: .88rem; font-weight: 500; text-decoration: none; white-space: nowrap; }
+.ax-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 6px; }
+.ax-tabs a { flex: 0 1 auto; display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px; border-radius: 99px; border: 1px solid var(--ax-line); background: var(--ax-card); color: var(--ax-ink); font-size: .88rem; font-weight: 500; text-decoration: none; white-space: nowrap; }
 .ax-tabs a.on { background: var(--ax-green); border-color: var(--ax-green); color: var(--ax-on); font-weight: 650; }
 .ax-n { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 99px; display: inline-grid; place-items: center; font-size: .72rem; font-weight: 600; background: color-mix(in srgb, var(--ax-muted) 16%, transparent); }
 .ax-tabs a.on .ax-n { background: color-mix(in srgb, var(--ax-on) 24%, transparent); }
@@ -1224,7 +1222,8 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
 .ax-more { margin: 4px 0 0 72px; background: none; border: 0; color: var(--ax-green); font: inherit; font-size: .85rem; font-weight: 600; padding: 6px 2px; cursor: pointer; }
 @media (max-width: 700px) {
   .ax { padding: 14px 12px 10px; }
-  .ax-tabs { margin: 0 -12px 6px; padding: 0 12px 2px; }
+  .ax-tabs { gap: 6px; }
+  .ax-tabs a { height: 34px; padding: 0 11px; gap: 6px; font-size: .84rem; }
   .ax-row { grid-template-columns: 40px 20px minmax(0, 1fr); column-gap: 5px; }
   .ax-date .datechip { width: 38px; }
   .ax-card, .ax-alert { gap: 10px; padding: 10px; }
@@ -1240,3 +1239,16 @@ html.native .hero.card { background-image: linear-gradient(135deg, var(--surface
   .ax-card .hico.ax-ev { display: none; }
   .ax-more { margin-left: 58px; }
 }
+
+/* Phones: the Assets / Loans / XIRR rows fold away behind one quiet row; the browser always shows them */
+.hero-more { display: none; }
+@media (max-width: 700px) {
+  .hero-more { grid-area: more; display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; margin-top: 16px; padding: 12px 0 2px; border: 0; border-top: 1px solid var(--line); background: none; color: var(--brand); font: inherit; font-size: .88rem; font-weight: 600; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .hero-more .hm-open { display: none; } .hero.open .hero-more .hm-open { display: inline; } .hero.open .hero-more .hm-closed { display: none; }
+  .hm-chev { width: 18px; height: 18px; transition: transform .2s; } .hero.open .hm-chev { transform: rotate(180deg); }
+  .hero:not(.open) .hero-side { display: none; }
+  .hero-right .hero-side { margin-top: 2px; }
+  .hero-more:active { opacity: .7; }
+}
+@media (prefers-reduced-motion: reduce) { .hm-chev { transition: none; } }
+.hero-more, .hero-more:hover, .hero-more:focus, .hero-more:active { background: none; border-radius: 0; box-shadow: none; }
