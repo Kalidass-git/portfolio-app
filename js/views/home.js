@@ -74,12 +74,13 @@ function netWorthHistory(data, all) {
 /** The big figure with the gold bar under the number only (not under Cr / L). */
 const heroNum = (t) => { const m = /^(.*\d)(\s.*)?$/.exec(t) || [t, t, '']; return h('p', { class: 'hero-num' }, h('span', { class: 'hn-amt' }, m[1]), m[2] ? h('span', { class: 'hn-unit' }, m[2]) : null); };
 const hico = (k, cls) => { const e = document.createElement('span'); e.className = 'hico ' + cls; e.setAttribute('aria-hidden', 'true'); e.append(sv('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, ...ICONS[k].map((d) => sv('path', { d })))); return e; };
+let heroOpen = false; // phones: the assets / loans / XIRR rows start folded away; the choice is kept while the app is open
 function hero(all, series, ox) {
   const monthStartIso = C.monthStart(all.asOf);
   const base = series.filter((p) => p.date < monthStartIso).pop();
   const delta = base ? all.netAsset - base.value : null;
   const trend = series.slice(-14).map((p) => p.value);
-  return h('section', { class: 'hero card span-12' },
+  return h('section', { class: 'hero card span-12' + (heroOpen ? ' open' : '') },
     h('div', { class: 'hero-top' },
       h('div', null,
         h('p', { class: 'hero-label' }, hico('wallet', 'nw'), h('span', null, 'Net worth')),
@@ -94,7 +95,13 @@ function hero(all, series, ox) {
           h('div', null, h('dt', null, hico('loan', 'loans'), h('span', null, 'Loans')), h('dd', null, compact(all.liabTotal))),
           ox && ox.xirr != null ? h('div', { title: `Yearly return counting when each rupee went in, over gold, bonds, deposits, lending, EPF/PPF, shares, funds and anything you closed. Covers ${pct(ox.coverage, 0)} of your assets.` }, h('dt', null, hico('chart', 'xirr'), h('span', null, 'Overall XIRR')), h('dd', { class: tone(ox.xirr) }, pct(ox.xirr, 1))) : null,
           ox && ox.xirrNoPf != null && Math.abs(ox.xirrNoPf - ox.xirr) > 0.002 ? h('div', { title: 'The same, leaving out EPF and PPF, which are long, steady savings.' }, h('dt', null, hico('shield', 'nopf'), h('span', null, 'Without EPF/PPF')), h('dd', { class: tone(ox.xirrNoPf) }, pct(ox.xirrNoPf, 1))) : null,
-          null))));
+          null)),
+    // Phones only (the browser always shows the rows): fold the four figures away until asked for.
+    h('button', { type: 'button', class: 'hero-more', 'aria-expanded': String(heroOpen), onclick: (e) => {
+      const b = e.currentTarget, sec = b.closest('.hero'); heroOpen = !sec.classList.contains('open');
+      sec.classList.toggle('open', heroOpen); b.setAttribute('aria-expanded', String(heroOpen));
+    } }, h('span', { class: 'hm-closed' }, 'Assets, loans & XIRR'), h('span', { class: 'hm-open' }, 'Hide details'),
+      sv('svg', { viewBox: '0 0 24 24', class: 'hm-chev', 'aria-hidden': 'true', fill: 'none', stroke: 'currentColor', 'stroke-width': '2.2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, sv('path', { d: 'M6 9l6 6 6-6' })))));
 }
 
 const isEtf = (x) => x.assetClass && x.assetClass !== 'equity';
@@ -382,7 +389,7 @@ const setDismissed = (o) => { try { localStorage.setItem(DISMISS, JSON.stringify
 /** Things that need a look: overdue money, old prices, loans, behind plan. Each can be hidden for the rest of today (this device only). */
 // ---------- Action centre: everything dated that needs you, and the notices, in one card ----------
 const ACTION_KIND = { 'Money to receive': { href: '#/fixed/lending', dir: 'in' }, 'Bond interest': { href: '#/fixed/bonds', dir: 'in' }, Bond: { href: '#/fixed/bonds', dir: 'in' }, 'Fixed deposit': { href: '#/fixed/fds', dir: 'in' }, Lending: { href: '#/fixed/lending', dir: 'in' }, 'Loan EMI': { href: '#/fixed/loans', dir: 'out' } };
-const acState = { tab: 'all', more: {} };
+const acState = { tab: null, chosen: false, more: {} };
 /** One dated list from the single source (C.upcoming, 60 days: maturities, interest, money to receive, EMIs), plus bond interest due today, each item once. */
 function agenda(data, all) {
   const items = C.upcoming(data, all, 60).map((u) => ({ ...u, key: u.date + '|' + u.title }));
@@ -419,8 +426,10 @@ function actionCentre(data, all) {
   // Each amount is shown in whole rupees, so the totals add up the rupees that are shown (adding the exact paise and rounding once could differ by ₹1 from the rows above).
   const sumOf = (l) => l.reduce((a, u) => a + Math.round(u.amount || 0), 0);
   const od = groups[0].list, week = groups[1].list.concat(groups[2].list);
-  const tabs = [['all', 'All', items.length + nt.shown.length], ['overdue', 'Overdue', od.length], ['week', 'This week', week.length], ['later', 'Later', groups[3].list.length], ['alerts', 'Alerts', nt.shown.length]];
-  if (!tabs.some((t) => t[0] === acState.tab)) acState.tab = 'all';
+  const tabs = [['all', 'All', items.length + nt.shown.length], ['overdue', 'Overdue', od.length], ['week', 'Next 7 days', week.length], ['later', 'Later', groups[3].list.length], ['alerts', 'Alerts', nt.shown.length]];
+  // Opens on what matters most: alerts first, then overdue, then the next 7 days (otherwise everything). Once the person picks a tab, it stays.
+  const count = (k) => (tabs.find((t) => t[0] === k) || [])[2] || 0;
+  if (!acState.chosen || !tabs.some((t) => t[0] === acState.tab)) acState.tab = count('alerts') ? 'alerts' : count('overdue') ? 'overdue' : count('week') ? 'week' : 'all';
   const dir = (u) => (ACTION_KIND[u.kind] || {}).dir;
   const line = (u, g, first) => { const [ik, kc] = axKind(u.kind); return h('li', { class: 'ax-row ' + (g.tone || '') + (dir(u) ? ' ' + dir(u) : '') + ' k-' + kc, tabindex: 0, onclick: () => { location.hash = (ACTION_KIND[u.kind] || {}).href || '#/savings'; } },
     h('div', { class: 'ax-date' }, first ? dateChip(u.date) : null),
@@ -453,7 +462,7 @@ function actionCentre(data, all) {
       kpi(od.length ? 'bad' : '', 'alert', 'Overdue', od.length ? money(sumOf(od)) : '–'),
       kpi('up', 'cal', 'Next 7 days', week.length ? money(sumOf(week)) : '–'),
       kpi('', 'cal', 'Next 60 days', items.length ? money(sumOf(items.filter((u) => u.days >= 0))) : '–')),
-    h('nav', { class: 'ax-tabs', role: 'tablist', 'aria-label': 'Action centre' }, tabs.map(([k, l, n]) => h('a', { href: 'javascript:void 0', role: 'tab', class: acState.tab === k ? 'on' : '', 'aria-selected': String(acState.tab === k), onclick: (e) => { e.preventDefault(); acState.tab = k; rerender(); } }, l, h('span', { class: 'ax-n' }, String(n))))),
+    h('nav', { class: 'ax-tabs', role: 'tablist', 'aria-label': 'Action centre' }, tabs.map(([k, l, n]) => h('a', { href: 'javascript:void 0', role: 'tab', class: acState.tab === k ? 'on' : '', 'aria-selected': String(acState.tab === k), onclick: (e) => { e.preventDefault(); acState.tab = k; acState.chosen = true; rerender(); } }, l, h('span', { class: 'ax-n' }, String(n))))),
     body.length ? h('div', { class: 'ax-body' }, body) : h('p', { class: 'empty' }, acState.tab === 'all' ? 'All clear: nothing overdue and nothing falls due in the next 60 days.' : 'Nothing here.'),
     nt.hidden ? h('p', { class: 'note' }, `${nt.hidden} alert${nt.hidden === 1 ? '' : 's'} hidden until tomorrow. `, h('a', { href: '#', onclick: (e) => { e.preventDefault(); setDismissed({}); } }, 'Show again')) : null);
 }
