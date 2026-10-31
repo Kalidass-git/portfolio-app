@@ -808,6 +808,8 @@ details.tax-sec > summary { color: var(--ink); font-weight: 700; font-size: 1rem
   .mr-cycle { appearance: none; background: var(--brand-soft); border: 0; border-radius: 999px; padding: 0 10px; min-height: 36px; display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; font: inherit; font-size: .7rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--brand); cursor: pointer; max-width: 100%; }
   .mr-cycle .mr-ic { font-size: .95rem; line-height: 1; }
   .mr-cycle:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  .mr-tap { cursor: pointer; -webkit-tap-highlight-color: transparent; align-self: stretch; display: flex; flex-direction: column; justify-content: center; }
+  .mrow.click:has(.mr-tap:active) { background: transparent; }
   .mr-total { border-top: 2px solid var(--ink); border-bottom: 0; font-weight: 650; }
 }
 @media (max-width: 359px) { .mrow.has-mid { grid-template-columns: minmax(0, 1fr) fit-content(55%); } .mr-mid { display: none; } .mr-end { min-width: 72px; } }
@@ -1256,3 +1258,12 @@ html.native .ptr.spin { animation: ptr-spin .8s linear infinite; }
 .ax-sheet-list { list-style: none; margin: 0 0 10px; padding: 0; }
 .ax-sheet-list li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .ax-sheet-list li:last-child { border-bottom: 0; } .ax-sheet-list li span { min-width: 0; overflow-wrap: anywhere; } .ax-sheet-list b { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* multi-choice chips (Holdings: shares, ETFs, mutual funds) */
+.chipset { display: flex; flex-wrap: wrap; gap: 8px; }
+.chipopt { appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 6px 14px; min-height: 36px; font: inherit; font-size: .9rem; cursor: pointer; }
+.chipopt.on { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); font-weight: 600; }
+.chipopt:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.chipset-inline { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.chipset-inline > .lab { color: var(--muted); font-size: .85rem; }
+.chipset-inline .chipopt { padding: 4px 12px; min-height: 30px; font-size: .85rem; }

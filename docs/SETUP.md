@@ -150,6 +150,15 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.27.0 – Monthly budget setting, Holdings chips and Gain · XIRR, tap the last column
+
+- **Monthly budget (Expenses → Categories & budgets):** a new read-only "Monthly budget" card shows this month and the next two. "Change budget" opens a sheet (a bottom sheet on phones). Interest income expected stays the default. You can fix an amount for the whole year (from this month to December), and set this month and the next two to the same-as-year, interest income or their own amount. Months before this one always use the interest income. Stored as an optional `settings.budgetPlan`; old files work without it.
+- **Where the budget is used:** Month in detail (limit, status, heat map, charts, and a Budget column when you fixed an amount) and Home's This month in detail and Spent this month tile (Budget, spent of budget, left to spend, pace warning). Expected, received and spent are unchanged. Home's "Spent this month" tile (and its drop-down) uses the same budget.
+- **Shares & funds → Holdings:** on phones "Gain · Return" no longer shows XIRR; the new "Gain · XIRR" view shows gain with XIRR. The Show filter is now chips (Shares, ETFs, Mutual funds), several can be on, all are on by default, one always stays on. The chips are in the phone filter sheet and also on the computer. Old links (`?f=shares`, `?f=etfs`, `?v=funds`) still work.
+- **Phone lists:** tap the last column of any row to switch the figures (same as tapping the heading). Tapping anywhere else in the row still opens it. This applies to every list built on the shared phone rows (Holdings, bank transactions, bonds, savings, chits, fixed income, Wealth outlook and the rest).
+- **Home → Markets today:** Shares, ETFs and Mutual funds open Holdings with that filter on; Gold opens the Gold page. Works in the computer popover and the phone sheet.
+- New test: `node tests/budget.test.mjs`.
+
 ## Release 8.26.3 – Action centre: bond interest due on one date is one row
 
 - When two or more bonds pay interest on the same date, the Action centre shows one row ("Bond interest due", "4 bonds", the total) instead of one per bond. Tap it to see each bond and its amount (a bottom sheet on phones, a dialog on the browser) with a link to Bonds.

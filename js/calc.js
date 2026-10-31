@@ -3,6 +3,7 @@
 
 import { kindOf } from './categories.js';
 import { liveParity } from './goldlive.js';
+import { budgetFor } from './budget.js';
 import { modelFlows } from './epf.js';
 import { buildEquity, buildFunds, xirrFor, fundKey, flowsFor, symKey } from './trades.js';
 export const DAY = 86400000;
@@ -715,7 +716,9 @@ export function monthCashflow(data, all, month) {
   for (const o of others) if (o.counted) spend.push({ name: o.name, amount: o.amount, cats: [o.key] });
   const notCounted = sum(others.filter((o) => !o.counted), (o) => o.amount);
   const totalSpent = sum(spend, (x) => x.amount); // sheet's G55 excludes the lifestyle line, we show it separately
-  return { month, income, totalExpected, totalReceived, yetToReceive: totalExpected - totalReceived, spend, lifestyle, totalSpent, remaining: totalExpected - totalSpent, others, notCounted };
+  // The budget to judge spending against: the interest income expected (default) or the amount the owner fixed for the month. Expected, received and spent above are not touched.
+  const bud = budgetFor(data, month, monthKey(all.asOf), totalExpected);
+  return { month, income, totalExpected, totalReceived, yetToReceive: totalExpected - totalReceived, spend, lifestyle, totalSpent, remaining: totalExpected - totalSpent, others, notCounted, budget: bud.amount, budgetSource: bud.source };
 }
 
 /**

@@ -242,7 +242,7 @@ function tiles(all, data, mc, plan) {
   const baseAll = (mk.total.dayPct ? mk.total.day / mk.total.dayPct : 0) + (gd ? all.gold.value - gd.total : 0);
   const dayPctAll = baseAll ? dayAll / baseAll : 0;
   const spent = mc.totalSpent + mc.lifestyle.amount;
-  const budget = mc.totalExpected, used = budget ? spent / budget : 0;
+  const budget = mc.budget, used = budget ? spent / budget : 0;   // same budget as This month in detail
   const bar = budget ? h('div', { class: 'kt-barrow' }, h('div', { class: 'kt-bar', role: 'img', 'aria-label': `${pct(used, 0)} of the budget spent` }, h('i', { style: { width: Math.min(100, Math.max(2, used * 100)).toFixed(1) + '%' } })), h('b', { class: 'kt-pctl' }, pct(used, 0))) : null;
   const spentSub = h('span', { class: 'kt-one' }, (budget ? `${pct(used, 0)} of ${money(budget)} budget` : 'no budget income yet') + (mc.notCounted > 0 ? ` · ${money(mc.notCounted)} not counted` : ''));
   const earnPerDay = all.cfTotal.perDay;
@@ -250,18 +250,17 @@ function tiles(all, data, mc, plan) {
     plan ? blueTile(italicValue(dress(tile('Investable balance', money(plan.current), h('span', null, `Invested so far ${money(plan.done)} this month`), { tone: plan.current >= 0 ? 'inv' : 'neg', sheet: () => showInvestable(plan) }), { kind: 'invest', ico: 'db' })))
       : dress(tile('Net monthly inflow', money(all.netMonthly), h('span', null, `${money(all.cfTotal.perMonth)} earned `, all.loans.monthlyInterest > 0 ? h('span', { class: 'neg' }, `− ${money(all.loans.monthlyInterest)} loan interest`) : '− ₹ 0 loan interest'), { tone: tone(all.netMonthly), href: '#/fixed/loans' }), { kind: 'invest', ico: 'db' }),
     dress(tile('Earning every day', money(earnPerDay), h('span', null, `${money(earnPerDay - all.loans.monthlyInterest / 30)} after `, h('span', { class: 'neg' }, `${money(all.loans.monthlyInterest / 30)} loan interest`)), { tone: 'pos', href: '#/fixed', pop: h('div', null, earningBody(all, false), h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income'))), sheet: () => openInfo('Earning every day', h('div', null, earningBody(all, true), h('p', null, h('a', { href: '#/fixed' }, 'Open Fixed income')))) }), { kind: 'earn', ico: 'up', trendDir: earnPerDay > 0 ? 'up' : null }),
-    dress(tile('Markets today', anyDay ? sgn(dayAll) : '–', anyDay ? `${sgp(dayPctAll)} · shares, funds, ETFs, gold` : 'refresh prices to see', { tone: anyDay ? tone(dayAll) : '', href: '#/equity', pop: h('div', null, todayBody(all), h('p', null, h('a', { href: '#/equity' }, 'Open Shares & funds'))), sheet: () => openInfo('Markets today', h('div', null, todayBody(all), h('p', null, h('a', { href: '#/equity' }, 'Open Shares & funds')))) }), { kind: anyDay ? (dayAll < 0 ? 'down' : 'up') : 'flat', ico: anyDay && dayAll < 0 ? 'down' : 'up', trendDir: anyDay && Math.abs(dayAll) > 0 ? (dayAll < 0 ? 'down' : 'up') : null }),
+    dress(tile('Markets today', anyDay ? sgn(dayAll) : '–', anyDay ? `${sgp(dayPctAll)} · shares, funds, ETFs, gold` : 'refresh prices to see', { tone: anyDay ? tone(dayAll) : '', href: '#/equity', pop: h('div', null, todayBody(all, (href) => { closeTiles(); location.hash = href; }), h('p', null, h('a', { href: '#/equity' }, 'Open Shares & funds'))), sheet: () => { const dlg = openInfo('Markets today', h('div', null, todayBody(all, (href) => { dlg.close(); location.hash = href; }), h('p', null, h('a', { href: '#/equity' }, 'Open Shares & funds')))); } }), { kind: anyDay ? (dayAll < 0 ? 'down' : 'up') : 'flat', ico: anyDay && dayAll < 0 ? 'down' : 'up', trendDir: anyDay && Math.abs(dayAll) > 0 ? (dayAll < 0 ? 'down' : 'up') : null }),
     dress(tile('Spent this month', money(spent), spentSub, { tone: budget && spent > mc.totalReceived ? 'neg' : '', href: '#/flow', pop: spentBody(mc, spent), right: true }), { kind: 'spent', ico: 'wallet', extra: [bar] }));
 }
 
 /** Short expense summary for the drop-down. */
 function spentBody(mc, spent) {
   const top = mc.spend.concat([mc.lifestyle]).filter((x) => x.amount > 0).sort((a, b) => b.amount - a.amount).slice(0, 5);
-  const exp = mc.totalExpected;
   return h('div', null,
     h('p', { class: 'mini-title' }, 'Biggest spends so far'),
     top.length ? rowList(top.map((x) => ({ title: x.name, value: money(x.amount), valueSub: spent ? pct(x.amount / spent, 0) : null }))) : h('p', { class: 'empty' }, 'No expenses recorded this month.'),
-    h('p', { class: 'summary-line' }, 'Spent ', h('b', null, money(spent)), exp ? ' of ' + money(exp) + ' budget · left ' : null, exp ? h('b', { class: tone(exp - spent) }, sgn(exp - spent)) : null),
+    h('p', { class: 'summary-line' }, 'Spent ', h('b', null, money(spent)), mc.budget ? ' of ' + money(mc.budget) + ' budget · left ' : null, mc.budget ? h('b', { class: tone(mc.budget - spent) }, sgn(mc.budget - spent)) : null),
     mc.notCounted > 0 ? h('p', { class: 'note' }, `${money(mc.notCounted)} of other payments (${mc.others.filter((o) => !o.counted).map((o) => o.name).join(', ')}) is not counted here. Open “Review” under This month in detail to count them.`) : null,
     h('p', null, h('a', { href: '#/flow' }, 'See where it went')));
 }
@@ -371,10 +370,13 @@ function refreshBar() {
     h('span', { class: 'stamp' + (stale ? ' warn' : ''), title: upd ? 'Prices ' + new Date(upd).toLocaleString('en-IN') : '' }, stale ? '⚠ ' : '', ms == null ? 'Prices not fetched yet' : 'Prices updated ' + agoText(ms)),
     h('button', { class: 'refresh-btn small', type: 'button', title: 'Fetch the latest prices of shares, ETFs, funds and gold', 'aria-label': 'Refresh all market prices', onclick: (e) => { e.stopPropagation(); refreshPrices(e.currentTarget); } }, h('span', { class: 'ic' }, uiIcon('refresh')), h('span', { class: 'lb' }, 'Refresh')));
 }
-function todayBody(all) {
+const MARKET_LINK = { Shares: '#/equity/holdings?f=shares', ETFs: '#/equity/holdings?f=etfs', 'Mutual funds': '#/equity/holdings?v=funds', Gold: '#/gold' };
+/** `go(href)` opens a page and closes the popover or sheet the list is shown in. Each line opens its own list: shares, ETFs or funds on Holdings with that filter on, gold on the Gold page. */
+function todayBody(all, go) {
   const mk = marketGroups(all), gd = all.gold.day;
-  const rows = mk.rows.filter((r) => r.hasDay).map((r) => ({ title: r.name, sub: sgp(r.dayPct), value: h('span', { class: tone(r.day) }, sgn(r.day)) }));
-  if (gd) rows.push({ title: 'Gold', sub: `${sgp(gd.pct)} · ${money(all.gold.rate)}/g (${sgn(gd.perGram)})`, value: h('span', { class: tone(gd.total) }, sgn(gd.total)) });
+  const link = (name) => (go ? () => go(MARKET_LINK[name]) : null);
+  const rows = mk.rows.filter((r) => r.hasDay).map((r) => ({ title: r.name, sub: sgp(r.dayPct), value: h('span', { class: tone(r.day) }, sgn(r.day)), onClick: link(r.name) }));
+  if (gd) rows.push({ title: 'Gold', sub: `${sgp(gd.pct)} · ${money(all.gold.rate)}/g (${sgn(gd.perGram)})`, value: h('span', { class: tone(gd.total) }, sgn(gd.total)), onClick: link('Gold') });
   const total = rows.length ? mk.total.day + (gd ? gd.total : 0) : null;
   return h('div', null,
     refreshBar(),
@@ -608,19 +610,20 @@ function thisMonth(data, all, months) {
   const isCur = selMonth === C.monthKey(all.asOf);
   const spend = mc.spend.concat([mc.lifestyle]).filter((x) => x.amount > 0).sort((a, b) => b.amount - a.amount);
   const spent = mc.totalSpent + mc.lifestyle.amount, exp = mc.totalExpected, rec = mc.totalReceived;
-  const pend = Math.max(0, exp - rec), left = exp - spent;
+  const bud = mc.budget, manual = mc.budgetSource === 'manual';   // the budget: interest income expected, or the amount fixed in Categories & budgets
+  const pend = Math.max(0, exp - rec), left = bud - spent;
   const got = exp ? Math.min(1, rec / exp) : 0;
   const bar = (v, of, cls) => h('div', { class: 'pbar ' + (cls || '') }, h('span', { style: { width: (of > 0 ? Math.min(100, Math.max(0, (v / of) * 100)) : 0).toFixed(1) + '%' } }));
   const asOf = new Date(all.asOf), day = asOf.getUTCDate(), dim = new Date(Date.UTC(asOf.getUTCFullYear(), asOf.getUTCMonth() + 1, 0)).getUTCDate();
-  const pace = exp ? exp * (day / dim) : 0;
+  const pace = bud ? bud * (day / dim) : 0;
   const budget = h('div', { class: 'budget-box' },
     h('div', { class: 'trio' },
-      h('div', null, h('span', { class: 'mini-title' }, 'Budget (expected)'), h('b', null, money(exp))),
+      h('div', null, h('span', { class: 'mini-title' }, manual ? 'Budget (set by you)' : 'Budget (expected)'), h('b', null, money(bud))),
       h('div', null, h('span', { class: 'mini-title' }, 'Received'), h('b', { class: 'pos' }, money(rec))),
       h('div', null, h('span', { class: 'mini-title' }, 'Spent'), h('b', { class: spent > rec ? 'neg' : '' }, money(spent)))),
-    h('p', { class: 'mini-title' }, `Spent ${money(spent)} of ${money(exp)} budget` + (exp ? ` (${pct(spent / exp, 0)})` : '')), bar(spent, exp, spent > exp ? 'bad' : spent > rec ? 'warn' : ''),
+    h('p', { class: 'mini-title' }, `Spent ${money(spent)} of ${money(bud)} budget` + (bud ? ` (${pct(spent / bud, 0)})` : '')), bar(spent, bud, spent > bud ? 'bad' : spent > rec ? 'warn' : ''),
     h('p', { class: 'summary-line' }, 'Left to spend from budget ', h('b', { class: tone(left) }, sgn(left)), pend > 0 ? h('span', { class: 'muted' }, ` · ${money(pend)} still to receive`) : null),
-    isCur && exp && spent > pace * 1.15 && day < dim - 3 ? h('p', { class: 'note warn' }, `Spending is ahead of the month: ${money(spent)} spent by day ${day}, an even pace would be about ${money(pace)}.`) : null);
+    isCur && bud && spent > pace * 1.15 && day < dim - 3 ? h('p', { class: 'note warn' }, `Spending is ahead of the month: ${money(spent)} spent by day ${day}, an even pace would be about ${money(pace)}.`) : null);
   const toggle = (o, on) => mutate((d) => { const set = new Set((d.settings.homeSpendExtra || []).map((x) => String(x).toLowerCase())); on ? set.add(o.key) : set.delete(o.key); d.settings.homeSpendExtra = [...set]; });
   const review = () => {
     const box = (o) => h('label', { class: 'check-inline', style: { display: 'flex', gap: '8px', alignItems: 'center' } }, h('input', { type: 'checkbox', checked: o.counted, disabled: !canEdit(), onchange: (e) => toggle(o, e.target.checked) }), ' count in Spent');

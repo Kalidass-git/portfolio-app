@@ -292,7 +292,9 @@ export function mobileRows(rows, m, { onRow, rowClass } = {}) {
     const head = h('div', { class: 'mrow mr-head' + (hasMid ? ' has-mid' : '') }, h('div', { class: 'mr-first' }, m.head || ''), hasMid ? h('div', { class: 'mr-mid' }, m.midHead || '') : null,
       n > 1 ? h('button', { type: 'button', class: 'mr-end mr-cycle', 'aria-label': 'Tap to change the figures shown', onclick: (e) => { e.stopPropagation(); cycle(); } }, label, h('span', { class: 'mr-ic', 'aria-hidden': 'true' }, '⇄')) : h('div', { class: 'mr-end' }, label));
     const body = shown.map((r, i) => {
-      const f = m.first(r) || {}, end = h('div', { class: 'mr-end' }, ...endNodes(r));
+      const f = m.first(r) || {};
+      // tapping the last column of any row switches the figures for every row (same as the heading); the rest of the row still opens it. A button or link inside the cell keeps its own action.
+      const end = h('div', { class: 'mr-end' + (n > 1 ? ' mr-tap' : ''), onclick: n > 1 ? (e) => { if (e.target.closest && e.target.closest('button, a, input, select, label')) return; e.stopPropagation(); cycle(); } : null }, ...endNodes(r));
       ends.push([end, r]);
       const go = onRow ? () => onRow(r) : null;
       return h('div', { class: 'mrow' + (hasMid ? ' has-mid' : '') + (go ? ' click' : '') + (rowClass ? ' ' + (rowClass(r) || '') : ''), tabindex: go ? 0 : null, role: go ? 'button' : null, onclick: go, onkeydown: go ? (e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); go(); } } : null },

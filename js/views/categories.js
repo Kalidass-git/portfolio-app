@@ -2,7 +2,8 @@
 import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
 import * as CAT from '../categories.js';
-import { h, money, dateStr, section, table, btn, formDialog, canEdit, toast, empty, num } from '../ui.js';
+import { h, money, dateStr, section, table, btn, formDialog, canEdit, toast, empty, num, monthLabel, rowList } from '../ui.js';
+import * as BUD from '../budget.js';
 import { openLedger } from './cash.js';
 
 const rerender = () => window.dispatchEvent(new Event('rerender'));
@@ -72,6 +73,31 @@ function ruleForm(rule) {
   });
 }
 
+/** The monthly budget: the interest income expected (default), or an amount you fix for the year, or for this month and the next two. */
+function budgetForm() {
+  const { data } = S, cur = C.monthKey(S.all.asOf), win = BUD.windowMonths(cur);
+  const interestOf = (m) => C.monthCashflow(data, S.all, m).totalExpected;
+  const fields = [
+    { key: 'yearMode', label: `Budget for ${cur.slice(0, 4)} (from ${monthLabel(cur, true)})`, type: 'select', options: [{ value: 'interest', label: 'Interest income expected (default)' }, { value: 'fixed', label: 'A fixed amount every month' }], hint: 'Months before this one always use the interest income.' },
+    { key: 'yearAmount', label: 'Amount per month (₹)', type: 'number', required: true, showIf: (v) => v.yearMode === 'fixed' },
+  ];
+  win.forEach((m, i) => fields.push(
+    { key: 'm' + i, label: monthLabel(m, true) + (i === 0 ? ' (this month)' : ''), type: 'select', options: [{ value: 'follow', label: 'Same as the year setting' }, { value: 'interest', label: 'Interest income · ' + money(interestOf(m)) }, { value: 'fixed', label: 'A fixed amount' }] },
+    { key: 'a' + i, label: 'Amount for ' + monthLabel(m) + ' (₹)', type: 'number', required: true, showIf: (v) => v['m' + i] === 'fixed' }));
+  formDialog({ title: 'Monthly budget', fields, value: BUD.formValues(data, cur), saveLabel: 'Save budget',
+    onSave: (v) => { try { mutate((d) => BUD.save(d, cur, v)); } catch (e) { return fail(e); } } });
+}
+
+/** Read-only summary of the monthly budget on this page: this month and the next two. Changing it opens a sheet. */
+function budgetCard() {
+  const { data, all } = S, cur = C.monthKey(all.asOf);
+  const rows = BUD.windowMonths(cur).map((m) => { const b = BUD.budgetFor(data, m, cur, C.monthCashflow(data, all, m).totalExpected); return { title: monthLabel(m, true) + (m === cur ? ' · this month' : ''), sub: b.source === 'manual' ? 'Set by you' : 'Interest income expected', value: money(b.amount), tone: b.source === 'manual' ? 'inv' : '' }; });
+  return section('Monthly budget', h('div', null,
+    rowList(rows),
+    h('p', { class: 'note' }, 'This is what Month in detail and Home’s “This month in detail” measure spending against. Months before this one always use the interest income (bonds and lending). Spending, received and expected amounts are not changed by this.')),
+    canEdit() ? [btn('Change budget', budgetForm)] : null);
+}
+
 export function render() {
   const { data } = S;
   const root = h('div', { class: 'page' });
@@ -79,6 +105,7 @@ export function render() {
   const usage = CAT.usage(data, C.addMonths(C.monthStart(S.all.asOf), -11).slice(0, 7));
   const editable = canEdit();
 
+  root.append(budgetCard());
   root.append(h('p', { class: 'note', style: { marginTop: 0 } }, 'Categories decide where each transaction is counted. Tap a row to rename it, change what it counts as, set a monthly and/or yearly budget, or merge it into another category.'));
 
   for (const k of CAT.KINDS) {

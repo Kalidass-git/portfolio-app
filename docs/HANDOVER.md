@@ -2,7 +2,7 @@
 
 > **Starting a new session? Do this first.** 1) Read this file, then the top three entries of `docs/SETUP.md`. 2) Clone, branch `release-X.Y.Z` off `origin/main` (check which PRs the owner has merged: `git log origin/main`). 3) Say what you have read, list "Waiting for the owner" below, and ask what to build. 4) The owner works in short numbered requests; do them all in one release, test, bump, open one PR. He checks on his real data, which you never see: say how each rule works so he can check it.
 
-**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.26.3 (cache `family-wealth-v112`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
+**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 8.27.0 (cache `family-wealth-v113`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
 
 Read this first, then `docs/SETUP.md` (release notes, newest first) and `README.md`.
 
@@ -26,7 +26,7 @@ A no-build installable web app (PWA, vanilla ES modules) that mirrors the owner'
 - `js/projector.js`, `risk.js`, `actuals.js`, `yearplan.js`, `epf.js`, `goldlive.js`, `archive.js`.
 
 ## Pages (route: file: what it does)
-- `#/home` `views/home.js`: dashboard cards, net worth, allocation and risk strip, this month (budget, received, spent), money to receive, needs a look, coming up. Spent counts fixed groups; other payments are reviewed in a popup (`settings.homeSpendExtra`).
+- `#/home` `views/home.js`: dashboard cards, net worth, allocation and risk strip, this month (budget, received, spent), money to receive, needs a look, coming up. Spent counts fixed groups; other payments are reviewed in a popup (`settings.homeSpendExtra`); the budget it measures against is `settings.budgetPlan` (optional year amount and per-month choices, `js/budget.js`, default = interest income).
 - `#/cash` `cash.js`: accounts, transactions (ledger), transfers.
 - `#/fixed` `fixed.js`: tabs Bonds, FDs, Lendings (private lending and money to receive), Loans (`loans.js`, liabilities), Closed.
 - `#/equity` `equity*.js`: today, shares and ETFs, funds, insights, sold, dividends, imports. Refresh prices sits on the right with "updated X ago".
