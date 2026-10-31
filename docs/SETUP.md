@@ -150,6 +150,16 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.28.0 – Shares & funds: phone lists use the compact rows everywhere
+
+- **Phone only; computer tables unchanged.** Every remaining Shares & funds table that showed as cards now uses the same compact rows as Holdings: a fixed first column, and a last column that switches figures when you tap its heading or the last column of any row. Tapping anywhere else in a row opens it as before.
+- **History → Sold shares:** share with sold date and quantity; views Profit / loss · Sold for, Bought for · Value today if kept, and Kept vs sold. Phone Sort added (sold on, profit, sold for, share).
+- **History → Dividends:** company with date; amount. Phone Sort added. The "Dividends found" preview shows Amount · Shares and Per share.
+- **Manage → Investment planner:** "Invested in the month" (Amount · Times, Last on) and "Plan for the month" (Left · Done, Each month · Each year; the Mark done button stays under the name).
+- **Manage → Import:** holdings that will change, splits/bonus/dividends, and stock trades (Value · Type, Price · Qty).
+- Also: Today's biggest gains and falls, a share's purchase lots, trades and corporate actions, a fund's buy history, and Watch (alerts and watchlist).
+- `mobileFrom` accepts `extra: 'Column label'` to show a column (such as a button) under the first line.
+
 ## Release 8.27.0 – Monthly budget setting, Holdings chips and Gain · XIRR, tap the last column
 
 - **Monthly budget (Expenses → Categories & budgets):** a new read-only "Monthly budget" card shows this month and the next two. "Change budget" opens a sheet (a bottom sheet on phones). Interest income expected stays the default. You can fix an amount for the whole year (from this month to December), and set this month and the next two to the same-as-year, interest income or their own amount. Months before this one always use the interest income. Stored as an optional `settings.budgetPlan`; old files work without it.

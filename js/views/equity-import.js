@@ -66,7 +66,7 @@ async function importStocks() {
         { label: 'Share', host: true, get: (r) => r.name }, { label: 'Change', mob: 'under', get: (r) => (r.kind === 'new' ? 'added' : r.kind === 'removed' ? 'removed' : 'changed') },
         { label: 'Qty', cls: 'r', get: (r) => (r.kind === 'changed' ? `${num(r.oldQty)} → ${num(r.qty)}` : r.kind === 'removed' ? `${num(r.oldQty)} → 0` : num(r.qty)) },
         { label: 'Cost', cls: 'r', get: (r) => (r.kind === 'changed' ? `${money(r.oldCost)} → ${money(r.cost)}` : money(r.kind === 'removed' ? r.oldCost : r.cost)) },
-      ], dr.rows, {})) : h('p', { class: 'note' }, `All ${dr.count} holdings match what you have now.`)].filter(Boolean));
+      ], dr.rows, { m: { key: 'eq-imp-diff', head: 'Share', sub: ['Change'], views: [['Qty', 'Cost']] } })) : h('p', { class: 'note' }, `All ${dr.count} holdings match what you have now.`)].filter(Boolean));
   };
   const body = h('div', { class: 'form' },
     h('p', null, h('b', null, `${parsed.trades.length} executed orders`), ` from ${dateStr(parsed.from)} to ${dateStr(parsed.to)}.`),
@@ -151,7 +151,7 @@ export function render(root) {
     table([
       { label: 'Date', mob: 'under', get: (a) => dateStr(a.date) }, { label: 'Share', host: true, get: (a) => a.symbol }, { label: 'What', mob: 'under', get: (a) => ACTION_LABEL[a.type] },
       { label: 'Details', get: (a) => describeAction(a) },
-    ], actions.slice().sort((a, b) => (a.date < b.date ? 1 : -1)), { onRow: canEdit() ? (a) => actionForm(actions.find((x) => x.id === a.id)) : null, empty: 'None yet. Add a dividend you received, or a split or bonus that changed your quantity.' })),
+    ], actions.slice().sort((a, b) => (a.date < b.date ? 1 : -1)), { m: { key: 'eq-actions', head: 'Share', sub: (a) => `${dateStr(a.date)} · ${ACTION_LABEL[a.type]}`, views: [['Details']] }, onRow: canEdit() ? (a) => actionForm(actions.find((x) => x.id === a.id)) : null, empty: 'None yet. Add a dividend you received, or a split or bonus that changed your quantity.' })),
     canEdit() ? [btn('Add', () => actionForm())] : null));
 
   const q = tradeFilter.toLowerCase();
@@ -162,7 +162,7 @@ export function render(root) {
       { label: 'Date', mob: 'under', get: (t) => dateStr(t.date) }, { label: 'Share', host: true, get: (t) => t.name || t.symbol },
       { label: 'Type', render: (t) => h('span', { class: t.type === 'SELL' ? 'neg' : '' }, t.type === 'SELL' ? 'Sell' : 'Buy') },
       { label: 'Qty', mob: 'under', mlabel: 'qty ', cls: 'r', get: (t) => num(t.qty) }, { label: 'Price', mob: 'under', mlabel: 'at ', cls: 'r', get: (t) => dec(t.amount / t.qty) }, { label: 'Value', cls: 'r', get: (t) => money(t.amount) },
-    ], list.slice(0, tradeLimit), { onRow: canEdit() ? (t) => tradeForm(trades.find((x) => x.id === t.id)) : null, empty: 'No trades yet. Import your Groww history above.' }),
+    ], list.slice(0, tradeLimit), { m: { key: 'eq-trades', head: 'Share', sub: ['Date'], views: [['Value', 'Type'], ['Price', 'Qty']] }, onRow: canEdit() ? (t) => tradeForm(trades.find((x) => x.id === t.id)) : null, empty: 'No trades yet. Import your Groww history above.' }),
     list.length > tradeLimit ? btn(`Show more (${list.length - tradeLimit} left)`, () => { tradeLimit += 60; rerender(); }, 'wide') : null),
     canEdit() ? [btn('Record a buy or sell', () => tradeForm(), 'primary')] : null));
 }

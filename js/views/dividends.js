@@ -29,7 +29,7 @@ async function fetchNow(button) {
         { label: 'Per share', mob: 'under', mlabel: '₹', cls: 'r', get: (x) => String(x.dps) },
         { label: 'Shares', mob: 'hide', cls: 'r', get: (x) => num(x.qty) },
         { label: 'Amount', cls: 'r', get: (x) => money(x.amount), total: () => money(total) },
-      ], r.found.slice(0, 200), { footer: { label: 'Total' } }),
+      ], r.found.slice(0, 200), { footer: { label: 'Total' }, m: { key: 'eq-div-found', head: 'Company', sub: ['Ex-date'], views: [['Amount', 'Shares'], ['Per share']] } }),
       Object.keys(r.errors).length ? h('p', { class: 'note' }, `Not found for ${Object.keys(r.errors).length} symbol${Object.keys(r.errors).length === 1 ? '' : 's'} (for example sold long ago or renamed): ${Object.keys(r.errors).slice(0, 8).join(', ')}.`) : null);
     dialog('Dividends found', body, [
       { label: 'Cancel', onclick: (c) => c() },
@@ -124,6 +124,7 @@ export function render(root) {
       { label: 'Company', host: true, get: (d) => d.name },
       { label: 'Date', mob: 'under', get: (d) => dateStr(d.date) },
       { label: 'Amount', cls: 'r', get: (d) => money(d.amount), total: () => money(sum) },
-    ], shown, { footer: { label: 'Total' }, onRow: canEdit() ? (d) => dividendForm(list.find((x) => x.id === d.id)) : null, empty: 'No dividends in this year.' }),
+    ], shown, { footer: { label: 'Total' }, m: { key: 'eq-div', head: 'Company', sub: ['Date'], views: [['Amount']],
+      sort: [{ value: 'none', label: 'As listed', kind: 'none' }, { value: 'date', label: 'Date', kind: 'date', get: (d) => d.date }, { value: 'amount', label: 'Amount', kind: 'num', get: (d) => d.amount }, { value: 'name', label: 'Company', kind: 'text', get: (d) => String(d.name || '').toLowerCase() }] }, onRow: canEdit() ? (d) => dividendForm(list.find((x) => x.id === d.id)) : null, empty: 'No dividends in this year.' }),
     h('p', { class: 'note' }, 'Dividends found automatically use the ex-date and are before tax; those you type in are as received. ' + (checked ? 'Last checked ' + new Date(checked).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) + '.' : ''))), [fetchBtn(), add].filter(Boolean)));
 }

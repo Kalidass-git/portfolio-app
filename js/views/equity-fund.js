@@ -119,6 +119,6 @@ export function render(root) {
     { label: 'Units', mob: 'under', mlabel: '', cls: 'r', get: (t) => dec(t.units, 3) },
     { label: 'NAV', mob: 'under', mlabel: 'at ', cls: 'r', get: (t) => dec(t.nav || (t.units ? t.amount / t.units : 0), 4) },
     { label: 'Amount', cls: 'r', get: (t) => money(t.amount) },
-  ], txns, { onRow: canEdit() ? (t) => fundTxnForm(m, data.mfTxns.find((x) => x.id === t.id)) : null }));
+  ], txns, { m: { key: 'eq-f-txns', head: 'Date', sub: ['Type'], views: [['Amount', 'Units'], ['NAV']] }, onRow: canEdit() ? (t) => fundTxnForm(m, data.mfTxns.find((x) => x.id === t.id)) : null }));
   root.append(section(`Buy history${txns.length ? ` (${txns.length})` : ''}`, body, canEdit() ? [btn('Record a buy', () => fundTxnForm(m, null, { type: 'Purchase' }), 'primary')] : null));
 }
