@@ -80,12 +80,12 @@ export function render() {
   // the year map, so any month is one tap away
   const year = (single ? r0.month : months[0]).slice(0, 4);
   const yearRows = new Map(Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`).filter((m) => m <= cur && (ledger.includes(m) || m === cur)).map((m) => [m, rows.find((r) => r.month === m) || monthRow(data, all, m, ov)]));
-  root.append(section(`${year}, month by month`, h('div', null, monthMap(year, yearRows, months), legendRow(), h('p', { class: 'note' }, 'Each month is judged by the spending that counts against the interest income expected in it. Tap a month to open it.'))));
+  root.append(section(`${year}, month by month`, h('div', null, monthMap(year, yearRows, months), legendRow(), h('p', { class: 'note' }, (tot.manual ? 'Each month is judged by the spending that counts against its budget: the interest income expected, or the amount you set in Categories & budgets. Tap a month to open it.' : 'Each month is judged by the spending that counts against the interest income expected in it. Tap a month to open it.')))));
 
   // headline
   const worst = rows.filter((r) => r.status && ['over', 'beyond'].includes(r.status.level.id)).length;
   root.append(h('div', { class: 'stats' },
-    stat('Interest income', money(tot.received), `of ${money(tot.limit)} expected${single ? '' : ' over ' + rows.length + ' months'}`),
+    stat('Interest income', money(tot.received), `of ${money(tot.expected)} expected${single ? '' : ' over ' + rows.length + ' months'}`),
     stat('Spending that counts', h('span', { class: tot.spent > tot.limit ? 'neg' : '' }, money(tot.spent)), usedText(tot.status) || ''),
     stat(tot.left >= 0 ? 'Left within the limit' : 'Over the limit', h('span', { class: tone(tot.left) }, sgn(tot.left)), single ? '' : `${worst} of ${rows.length} months over`),
     stat('Status', pill(tot.status), tot.status ? tot.status.level.hint : '')));
@@ -93,14 +93,14 @@ export function render() {
   // interest income against spending
   if (!single) {
     root.append(section(`Interest income vs spending · ${label}`, h('div', null,
-      barChart({ groups: rows.map((r) => ({ label: short(r.month), title: monthLabel(r.month, true) + (r.status ? ' · ' + r.status.level.label : ''), values: [r.limit, r.spent] })), names: ['Interest income expected', 'Spending that counts'], colors: [2, 1], fmt: money }),
+      barChart({ groups: rows.map((r) => ({ label: short(r.month), title: monthLabel(r.month, true) + (r.status ? ' · ' + r.status.level.label : ''), values: [r.limit, r.spent] })), names: [tot.manual ? 'Budget' : 'Interest income expected', 'Spending that counts'], colors: [2, 1], fmt: money }),
       h('p', { class: 'note' }, 'Where the red bar is taller than the green one, that month went over its limit.'))));
   } else {
     const bar = (v, of, cls) => h('div', { class: 'pbar ' + (cls || '') }, h('span', { style: { width: (of > 0 ? Math.min(100, Math.max(0, (v / of) * 100)) : 0).toFixed(1) + '%' } }));
     root.append(section(`Interest income vs spending · ${label}`, h('div', { class: 'month' },
-      h('div', null, h('p', { class: 'mini-title' }, 'Interest income'), h('p', { class: 'big-line' }, h('b', null, money(r0.received)), h('span', { class: 'muted' }, ` of ${money(r0.limit)} expected`)), bar(r0.received, r0.limit, 'good'),
+      h('div', null, h('p', { class: 'mini-title' }, 'Interest income'), h('p', { class: 'big-line' }, h('b', null, money(r0.received)), h('span', { class: 'muted' }, ` of ${money(r0.expected)} expected`)), bar(r0.received, r0.expected, 'good'),
         rowList(r0.mc.income.map((x) => ({ title: x.name, sub: 'expected ' + money(x.expected), value: money(x.received), valueSub: x.expected - x.received > 0.5 ? h('span', { class: 'warn' }, money(x.expected - x.received) + ' pending') : '✓ received' })))),
-      h('div', null, h('p', { class: 'mini-title' }, 'Spending that counts'), h('p', { class: 'big-line' }, h('b', { class: r0.spent > r0.limit ? 'neg' : '' }, money(r0.spent)), h('span', { class: 'muted' }, ` of ${money(r0.limit)} limit`)), bar(r0.spent, r0.limit, r0.status && ['over', 'beyond'].includes(r0.status.level.id) ? 'bad' : r0.status && r0.status.level.id === 'marginal' ? 'warn' : '')))));
+      h('div', null, h('p', { class: 'mini-title' }, 'Spending that counts'), h('p', { class: 'big-line' }, h('b', { class: r0.spent > r0.limit ? 'neg' : '' }, money(r0.spent)), h('span', { class: 'muted' }, ` of ${money(r0.limit)} ${r0.source === 'manual' ? 'budget (set by you)' : 'limit'}`)), bar(r0.spent, r0.limit, r0.status && ['over', 'beyond'].includes(r0.status.level.id) ? 'bad' : r0.status && r0.status.level.id === 'marginal' ? 'warn' : '')))));
   }
 
   // what the spending is made of
@@ -114,13 +114,14 @@ export function render() {
   if (!single) {
     root.append(section('Month by month', h('div', null, table([
       { label: 'Month', host: true, render: (r) => h('a', { href: '#', onclick: (e) => { e.preventDefault(); period = r.month; rerender(); } }, monthLabel(r.month, true)) },
-      { label: 'Interest income', cls: 'r', get: (r) => money(r.limit) },
+      { label: 'Interest income', cls: 'r', get: (r) => money(r.expected) },
+      ...(tot.manual ? [{ label: 'Budget', cls: 'r', render: (r) => h('span', null, money(r.limit), r.source === 'manual' ? h('small', { class: 'muted' }, ' (set)') : null) }] : []),
       { label: 'Spending', cls: 'r', get: (r) => money(r.spent) },
       { label: 'Left', cls: 'r', render: (r) => h('span', { class: tone(r.left) }, sgn(r.left)) },
       { label: 'Used', cls: 'r', get: (r) => (r.status && r.status.used != null ? pct(r.status.used, 0) : '–') },
       { label: 'Status', render: (r) => pill(r.status) },
-    ], rows.slice().reverse(), { m: { key: 'monthdetail', head: 'Month', sub: ['Status'], views: [['Spending', 'Used'], ['Interest income', 'Left']] } }),
-      h('p', { class: 'note' }, 'Interest income is what the month was expected to bring (bonds and lending); spending is what counts under your choice above.'))));
+    ], rows.slice().reverse(), { m: { key: 'monthdetail', head: 'Month', sub: ['Status'], views: tot.manual ? [['Spending', 'Used'], ['Budget', 'Left'], ['Interest income']] : [['Spending', 'Used'], ['Interest income', 'Left']] } }),
+      h('p', { class: 'note' }, (tot.manual ? 'Interest income is what the month was expected to bring (bonds and lending). Budget is that amount, or the one you set in Categories & budgets. Spending is what counts under your choice above.' : 'Interest income is what the month was expected to bring (bonds and lending); spending is what counts under your choice above.')))));
   }
   return root;
 }

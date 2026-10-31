@@ -1,6 +1,6 @@
 // Month in detail: pure logic (no DOM). How far each month went against its limit, and what counts as spending.
 //
-// The limit of a month is the interest income expected in it (the same "budget" Home's "This month in detail" uses).
+// The limit of a month is its budget: the interest income expected in it (default), or the amount the owner fixed in Categories & budgets. Home's "This month in detail" uses the same budget.
 // Spending is the same list of lines as Home (groups, the clothes/entertainment line and the other payments the owner ticked there),
 // and each line can be counted or left out here, for example one-time payments such as tax, EMI or rent.
 import * as C from './calc.js';
@@ -67,15 +67,16 @@ export function monthLines(mc, override = {}) {
 /** One month: limit (expected interest income), received, counted spending, the left over and the status. */
 export function monthRow(data, all, month, override = {}) {
   const mc = C.monthCashflow(data, all, month), lines = monthLines(mc, override);
-  const spent = lines.filter((l) => l.counted).reduce((a, l) => a + l.amount, 0), limit = mc.totalExpected;
-  return { month, limit, received: mc.totalReceived, spent, left: limit - spent, status: statusOf(spent, limit), lines, mc };
+  const spent = lines.filter((l) => l.counted).reduce((a, l) => a + l.amount, 0), limit = mc.budget;
+  return { month, limit, expected: mc.totalExpected, source: mc.budgetSource, received: mc.totalReceived, spent, left: limit - spent, status: statusOf(spent, limit), lines, mc };
 }
 
 /** Several months added up, with the status of the whole period. */
 export function periodTotal(rows) {
+  const expected = rows.reduce((a, r) => a + r.expected, 0), manual = rows.some((r) => r.source === 'manual');
   const limit = rows.reduce((a, r) => a + r.limit, 0), spent = rows.reduce((a, r) => a + r.spent, 0), received = rows.reduce((a, r) => a + r.received, 0);
   const byLevel = {}; for (const r of rows) if (r.status) byLevel[r.status.level.id] = (byLevel[r.status.level.id] || 0) + 1;
-  return { limit, spent, received, left: limit - spent, status: statusOf(spent, limit), byLevel };
+  return { limit, expected, manual, spent, received, left: limit - spent, status: statusOf(spent, limit), byLevel };
 }
 /** Spending lines added up over the months; counted lines first, biggest first. */
 export function mixOf(rows) {

@@ -15,7 +15,7 @@ import { xirrFor, symKey } from '../trades.js';
 import { stockEditForm } from './equity-holding.js';
 import { tradeForm, tradeMode } from './eqshared.js';
 import { route } from '../ui.js';
-import { sortFilterBar } from '../mobilebar.js';
+import { sortFilterBar, chipGroup } from '../mobilebar.js';
 import { monthlyBuys, lastMonths, byName, planDone } from '../buys.js';
 import { barChart } from '../charts.js';
 
@@ -203,7 +203,8 @@ function holdCols(kind, tot) {
 /** Phone rows for shares, ETFs and funds. First column stays put; today's move sits in the middle (only when a day price exists); the last column cycles. */
 function holdMobile(kind) {
   const mixed = kind === 'mixed', isF = (x) => kind === 'fund' || (mixed && isFund(x));
-  const retTxt = (x) => h('span', null, h('span', { class: posNeg(x.pl) }, (x.ret > 0 ? '+' : x.ret < 0 ? '−' : '') + pct(Math.abs(x.ret), 1)), x.xirr != null ? h('span', null, ' · XIRR ', h('span', { class: posNeg(x.xirr) }, pct(x.xirr, 1))) : null);
+  const retTxt = (x) => h('span', { class: posNeg(x.pl) }, (x.ret > 0 ? '+' : x.ret < 0 ? '−' : '') + pct(Math.abs(x.ret), 1));
+  const xirrTxt = (x) => (x.xirr == null ? null : h('span', null, 'XIRR ', h('span', { class: posNeg(x.xirr) }, pct(x.xirr, 1))));
   return {
     key: kind === 'fund' ? 'funds' : mixed ? 'all' : 'shares', head: kind === 'fund' ? 'Fund' : 'Holding', midHead: 'Today',
     first: (x) => { const fund = isF(x); return ({ title: x.name, tag: x.assetClass === 'goldetf' ? 'Gold' : (!fund && isEtf(x) ? 'ETF' : fund && mixed ? 'Fund' : null), sub: fund ? `${dec(x.units, 3)} units` : `${num(x.qty)} ${x.qty === 1 ? 'share' : 'shares'}`,
@@ -212,6 +213,7 @@ function holdMobile(kind) {
     views: [
       { label: 'Value · Invested', main: (x) => money(x.current), sub: (x) => '(' + money(x.invested) + ')' },
       { label: 'Gain · Return', main: (x) => h('span', { class: posNeg(x.pl) }, arrow(x.pl) + money(Math.abs(x.pl))), sub: retTxt },
+      { label: 'Gain · XIRR', main: (x) => h('span', { class: posNeg(x.pl) }, arrow(x.pl) + money(Math.abs(x.pl))), sub: xirrTxt },
       { label: (kind === 'fund' ? 'NAV' : mixed ? 'Price / NAV' : 'Price') + ' · Average', main: (x) => dec(isF(x) ? x.liveNav : x.livePrice, isF(x) ? 4 : 2), sub: (x) => 'avg ' + dec(isF(x) ? (x.units ? x.invested / x.units : 0) : x.avgPrice, 2) + (isF(x) && x.navDate ? ' · NAV of ' + dateStr(x.navDate).replace(/ \d{4}$/, '') : '') },
       { label: 'Share of ' + (kind === 'fund' ? 'funds' : 'group') + ' · XIRR', main: (x) => pct(expo(x), 1), sub: (x) => (x.xirr == null ? null : h('span', { class: posNeg(x.xirr) }, 'XIRR ' + pct(x.xirr, 1))) },
     ],
@@ -232,15 +234,16 @@ const sortBox = () => h('span', { class: 'inline-label desk-ctl', style: { displ
   h('select', { 'aria-label': 'Sort direction', onchange: (e) => { sortDir = e.target.value; rerender(); } },
     [['desc', 'Descending'], ['asc', 'Ascending']].map(([v, l]) => h('option', { value: v, selected: v === sortDir }, l))));
 /** Sort on the left, find box on the right, just above the table. */
-/** What the Holdings list shows. One list, one filter: all types, shares, ETFs, shares and ETFs together, or mutual funds. */
-let typeSel = 'all';
-const TYPES = [['all', 'All types'], ['shares', 'Shares'], ['etfs', 'ETFs'], ['stocks', 'Shares & ETFs'], ['funds', 'Mutual funds']];
-const setType = (v) => { typeSel = TYPES.some((t) => t[0] === v) ? v : 'all'; if (location.hash.includes('?')) location.hash = '#/equity/holdings'; else rerender(); };
-const typeBox = () => h('label', { class: 'inline-label desk-ctl' }, 'Show ', h('select', { 'aria-label': 'Type of holding', onchange: (e) => setType(e.target.value) },
-  TYPES.map(([v, l]) => h('option', { value: v, selected: v === typeSel }, l))));
-const typeFilters = () => ({ fields: [{ key: 'type', label: 'Show', type: 'select', options: TYPES.map(([value, label]) => ({ value, label })), default: 'all' }], values: { type: typeSel }, apply: (v) => setType(v.type) });
+/** What the Holdings list shows: any mix of shares, ETFs and mutual funds. All three are on until you switch some off (at least one stays on). */
+const KINDS = [{ value: 'shares', label: 'Shares' }, { value: 'etfs', label: 'ETFs' }, { value: 'funds', label: 'Mutual funds' }];
+const ALL_KINDS = KINDS.map((k) => k.value);
+let typeSel = ALL_KINDS.slice();
+const setType = (list) => { const l = ALL_KINDS.filter((k) => (list || []).includes(k)); typeSel = l.length ? l : ALL_KINDS.slice(); if (location.hash.includes('?')) location.hash = '#/equity/holdings'; else rerender(); };
+const typeChips = () => h('div', { class: 'chipset-inline desk-ctl' }, h('span', { class: 'lab' }, 'Show'), chipGroup(KINDS, typeSel, setType, { label: 'Type of holding' }));
+const kindsText = (sel) => { const t = sel.filter((k) => k !== 'funds').map((k) => (k === 'shares' ? 'Shares' : 'ETFs')); return (t.length === 2 ? ['Shares & ETFs'] : t).concat(sel.includes('funds') ? ['Mutual funds'] : []).join(' + '); };
+const typeFilters = () => ({ fields: [{ key: 'type', label: 'Show', type: 'chips', options: KINDS, default: ALL_KINDS.slice(), chip: (v) => 'Showing ' + kindsText(v.type) }], values: { type: typeSel.slice() }, apply: (v) => setType(v.type) });
 /** Type filter on the left, then sort, then the find box (computer only) above the list. */
-const tableTools = () => h('div', { class: 'tbl-tools' }, mobileSort(), typeBox(), sortBox(), searchBox());
+const tableTools = () => h('div', { class: 'tbl-tools' }, mobileSort(), typeChips(), sortBox(), searchBox());
 const totalRow = (g, label) => h('div', { class: 'totalbar' }, h('b', null, label + ' total'), h('span', null, money(g.current), h('small', null, ' (' + money(g.invested) + ')')), h('span', { class: posNeg(g.pl) }, arrow(g.pl) + money(Math.abs(g.pl)), h('small', null, ' ' + pct(Math.abs(g.ret), 1))), g.dayCount ? h('span', { class: posNeg(g.day) }, 'today ' + signed(g.day)) : null);
 
 /** The one Holdings list. The type filter picks what it holds: everything, shares, ETFs, shares and ETFs, or mutual funds. */
@@ -248,21 +251,23 @@ function holdingsTab(root) {
   const { data, all } = S;
   const gr = groups(), mf = all.mf;
   const stocks = totalsOf(gr.shares.items.concat(gr.etfs.items));
-  const g = typeSel === 'shares' ? gr.shares : typeSel === 'etfs' ? gr.etfs : typeSel === 'stocks' ? stocks : typeSel === 'funds' ? mf : totalsOf(stocks.items.concat(mf.items));
-  const label = Object.fromEntries(TYPES)[typeSel] === 'All types' ? 'All holdings' : Object.fromEntries(TYPES)[typeSel];
-  const xi = typeSel === 'funds' ? mf.xirr : typeSel === 'all' ? null : groupXirr(g.items);
-  const kind = typeSel === 'funds' ? 'fund' : typeSel === 'all' ? 'mixed' : 'stock';
+  const has = (k) => typeSel.includes(k), one = typeSel.length === 1 ? typeSel[0] : null;
+  const g = one === 'shares' ? gr.shares : one === 'etfs' ? gr.etfs : one === 'funds' ? mf : !has('funds') ? stocks : has('shares') && has('etfs') ? totalsOf(stocks.items.concat(mf.items)) : totalsOf((has('shares') ? gr.shares : gr.etfs).items.concat(mf.items));
+  const all3 = typeSel.length === 3;
+  const label = all3 ? 'All holdings' : kindsText(typeSel);
+  const xi = one === 'funds' ? mf.xirr : has('funds') ? null : groupXirr(g.items);
+  const kind = one === 'funds' ? 'fund' : has('funds') ? 'mixed' : 'stock';
   root.append(summaryCards(label, g, xi));
   const goRow = (x) => { if (isFund(x)) location.hash = '#/equity/fund?id=' + encodeURIComponent(x.id); else if (tradeMode()) location.hash = '#/equity/holding?sym=' + encodeURIComponent(x.symbol); else if (canEdit()) stockForm(data.stocks.find((y) => y.id === x.id)); };
-  const funds = typeSel === 'funds';
+  const funds = one === 'funds';
   root.append(section(label, h('div', null,
     tableTools(),
     compactTable(table(holdCols(kind, g.current), sortItems(g.items), { mobile: holdMobile(kind), empty: 'Nothing here yet.', onRow: goRow })),
     totalRow(g, label),
     h('p', { class: 'note' }, funds ? 'Tap a fund to see its buy history, record another buy or sell, and edit it. XIRR appears for funds with dated transactions (imported from Groww or recorded here).'
-      : (tradeMode() ? 'Tap a holding to buy more, sell, see its purchase lots and XIRR, or add a split, bonus or dividend. Gain is value now minus what you put in. XIRR appears for holdings with dated buys that are over a month old.' : 'Import your Groww history (Import tab) to unlock buy and sell tracking and XIRR. Tap a holding to edit it.') + (typeSel === 'all' ? ' Funds are listed with the shares and ETFs; the summary XIRR is left out for the mixed list, so pick one type to see it.' : ''))),
+      : (tradeMode() ? 'Tap a holding to buy more, sell, see its purchase lots and XIRR, or add a split, bonus or dividend. Gain is value now minus what you put in. XIRR appears for holdings with dated buys that are over a month old.' : 'Import your Groww history (Import tab) to unlock buy and sell tracking and XIRR. Tap a holding to edit it.') + (kind === 'mixed' ? ' Funds are listed with the shares and ETFs; the summary XIRR is left out for the mixed list, so pick shares and ETFs, or funds, to see it.' : ''))),
     // not on phones: buys are recorded from a holding or on the computer
-    canEdit() ? [btn(funds ? 'Add fund' : tradeMode() ? 'Record a buy' : typeSel === 'etfs' ? 'Add ETF' : 'Add share', () => (funds ? fundForm() : tradeMode() ? tradeForm(null, { type: 'BUY' }) : stockForm(null, typeSel === 'etfs' ? 'etf' : 'equity')), 'primary desk-ctl')] : null));
+    canEdit() ? [btn(funds ? 'Add fund' : tradeMode() ? 'Record a buy' : one === 'etfs' ? 'Add ETF' : 'Add share', () => (funds ? fundForm() : tradeMode() ? tradeForm(null, { type: 'BUY' }) : stockForm(null, one === 'etfs' ? 'etf' : 'equity')), 'primary desk-ctl')] : null));
 }
 
 // ---------- search across everything you hold or sold ----------
@@ -350,8 +355,8 @@ export function render() {
   } else if (tab === 'holdings') {
     // old links: v=funds, v=stocks&f=etfs, f=shares ... pick the type; old sold / dividends links go to History
     if (view === 'sold' || view === 'dividends') { location.replace('#/equity/history?v=' + view); return root; }
-    const f = q.get('f'), want = view === 'funds' ? 'funds' : ['shares', 'etfs'].includes(f) ? f : ['shares', 'etfs'].includes(view) ? view : view === 'stocks' ? 'stocks' : null;
-    if (want) typeSel = want;
+    const f = q.get('f'), want = view === 'funds' ? ['funds'] : ['shares', 'etfs'].includes(f) ? [f] : ['shares', 'etfs'].includes(view) ? [view] : view === 'stocks' ? ['shares', 'etfs'] : view === 'all' ? ALL_KINDS : null;
+    if (want) typeSel = want.slice();
     holdingsTab(root);
   } else if (tab === 'history') {
     const v = view === 'dividends' ? 'dividends' : 'sold';

@@ -63,6 +63,16 @@ export function openSort(sort) {
   sheet({ title: 'Sort by', body, onApply: () => sort.apply(value, dir) });
 }
 
+/** A filter value equals the default; a multi-choice value is a list, compared without caring about order. */
+const sameVal = (a, b) => (Array.isArray(a) && Array.isArray(b) ? a.length === b.length && a.every((x) => b.includes(x)) : a === b);
+/** Chips you can switch on and off together. `onChange(list)` gets the new list; the last chip left on cannot be switched off. */
+export function chipGroup(options, selected, onChange, { label = 'Show' } = {}) {
+  const on = new Set(selected);
+  return h('div', { class: 'chipset', role: 'group', 'aria-label': label }, options.map((o) => h('button', { type: 'button', class: 'chipopt' + (on.has(o.value) ? ' on' : ''), 'aria-pressed': String(on.has(o.value)),
+    onclick: () => { const next = new Set(on); if (next.has(o.value)) { if (next.size > 1) next.delete(o.value); } else next.add(o.value); onChange(options.map((x) => x.value).filter((v) => next.has(v))); } },
+    on.has(o.value) ? h('span', { class: 'chk', 'aria-hidden': 'true' }, '✓ ') : null, o.label)));
+}
+
 const optNodes = (opts, cur) => opts.map((o) => (o.group ? h('optgroup', { label: o.group }, optNodes(o.options, cur)) : h('option', { value: o.value, selected: String(o.value) === String(cur) }, o.label)));
 const optLabel = (opts, v) => { for (const o of opts) { if (o.group) { const x = optLabel(o.options, v); if (x != null) return x; } else if (String(o.value) === String(v)) return o.label; } return null; };
 
@@ -76,6 +86,7 @@ export function openFilter(filters) {
   const draw = () => {
     body.replaceChildren(...filters.fields.filter((f) => !f.showIf || f.showIf(vals)).map((f) => {
       const id = 'mf-' + f.key;
+      if (f.type === 'chips') return h('div', { class: 'ms-field' }, h('label', null, f.label), chipGroup(f.options, vals[f.key], (list) => { vals[f.key] = list; draw(); }, { label: f.label }));
       const input = f.type === 'number'
         ? h('input', { id, type: 'number', min: '0', step: 'any', inputmode: 'decimal', placeholder: f.placeholder || '', value: vals[f.key] ?? '', oninput: (e) => { vals[f.key] = e.target.value; } })
         : h('select', { id, onchange: (e) => { vals[f.key] = e.target.value; draw(); } }, optNodes(f.options, vals[f.key]));
@@ -84,7 +95,7 @@ export function openFilter(filters) {
   };
   draw();
   sheet({ title: 'Filter', body, applyLabel: 'Apply', onApply: () => filters.apply({ ...vals }),
-    onReset: () => { for (const f of filters.fields) vals[f.key] = f.default; draw(); } });
+    onReset: () => { for (const f of filters.fields) vals[f.key] = Array.isArray(f.default) ? [...f.default] : f.default; draw(); } });
 }
 
 /** Chips for what is switched on right now, each with a ✕ to remove just that one. */
@@ -92,14 +103,14 @@ function activeChips(filters) {
   const out = [];
   for (const f of filters.fields) {
     const v = filters.values[f.key];
-    if (v === f.default || f.count === false && !f.chip) continue;
+    if (sameVal(v, f.default) || f.count === false && !f.chip) continue;
     const text = f.chip ? f.chip(filters.values) : f.type === 'select' ? `${f.label}: ${optLabel(f.options, v) ?? v}` : null;
     if (!text) continue;
     out.push({ text, clear: () => { const nv = { ...filters.values }; nv[f.key] = f.default; for (const g of filters.fields) if (g.showIf && !g.showIf(nv)) nv[g.key] = g.default; filters.apply(nv); } });
   }
   return out;
 }
-export const activeCount = (filters) => filters.fields.filter((f) => f.count !== false && filters.values[f.key] !== f.default).length;
+export const activeCount = (filters) => filters.fields.filter((f) => f.count !== false && !sameVal(filters.values[f.key], f.default)).length;
 
 /**
  * The bar itself. Either part is optional.
