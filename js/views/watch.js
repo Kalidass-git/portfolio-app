@@ -128,13 +128,13 @@ export function alertsTab(root) {
     { label: 'Rule', mob: 'under', mlabel: '', get: (a) => W.alertText(a) },
     { label: 'Now', cls: 'r', get: cur },
     { label: 'Status', cls: 'r', render: (a) => (a.on === false ? h('span', { class: 'muted' }, 'off') : hitIds.has(a.id) ? h('b', { class: 'neg' }, 'triggered') : h('span', { class: 'muted' }, 'waiting')) },
-  ], al, { onRow: canEdit() ? (a) => alertForm(a) : null, empty: 'No alerts yet.' }), h('p', { class: 'note' }, 'Alerts are checked each time you open this page and when you press Refresh indicators. They show here and on Today; the app does not send phone notifications.')),
+  ], al, { m: { key: 'w-alerts', head: 'Share or fund', sub: ['Rule'], views: [['Now', 'Status']] }, onRow: canEdit() ? (a) => alertForm(a) : null, empty: 'No alerts yet.' }), h('p', { class: 'note' }, 'Alerts are checked each time you open this page and when you press Refresh indicators. They show here and on Today; the app does not send phone notifications.')),
     canEdit() ? [btn('New alert', () => alertForm(), 'primary')] : null));
   root.append(section('Watchlist', h('div', null, table([
     { label: 'Name', host: true, get: (w) => w.name || w.ref }, { label: 'Kind', mob: 'under', mlabel: '', get: (w) => (w.kind === 'fund' ? 'Fund' : 'Share') },
     { label: 'P/E', cls: 'r', get: (w) => { const m = W.metrics()[w.kind === 'stock' ? W.stockKey(w.ref) : W.fundKey(w.ref)]; return m && m.pe ? m.pe.toFixed(1) : '–'; } },
     { label: 'Price / NAV', cls: 'r', get: (w) => { const m = W.metrics()[w.kind === 'stock' ? W.stockKey(w.ref) : W.fundKey(w.ref)]; return m ? rs(m.price) : '–'; } },
-  ], wl, { onRow: canEdit() ? (w) => confirmRemove(w) : null, empty: 'Nothing on the watchlist. Add shares or funds you do not own to track them here.' }), h('p', { class: 'note' }, 'Anything on the watchlist is included in the “Where to look” lists. Tap a row to remove it.')),
+  ], wl, { m: { key: 'w-list', head: 'Name', sub: ['Kind'], views: [['Price / NAV', 'P/E']] }, onRow: canEdit() ? (w) => confirmRemove(w) : null, empty: 'Nothing on the watchlist. Add shares or funds you do not own to track them here.' }), h('p', { class: 'note' }, 'Anything on the watchlist is included in the “Where to look” lists. Tap a row to remove it.')),
     canEdit() ? [btn('Add share', () => stockAdder()), btn('Add fund', () => fundPicker())] : null));
 }
 async function confirmRemove(w) {

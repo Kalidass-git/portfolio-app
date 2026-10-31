@@ -317,7 +317,7 @@ export function mobileRows(rows, m, { onRow, rowClass } = {}) {
 
 /**
  * Build a phone-row config from a table's own columns, so the phone rows show the very same cells and totals.
- *   o = { key, head, title?: (r) => node, sub?: ['Column label', …] | (r) => node, mid?: 'Column label', midHead?,
+ *   o = { key, head, title?: (r) => node, sub?: ['Column label', …] | (r) => node, mid?: 'Column label', midHead?, extra?: 'Column label' (shown under the first column, e.g. a button),
  *         views: [['Column A', 'Column B'], ['Column C']],   // label is "A · B"; B is the small line under A
  *         sort?: [{ value, label, kind, get }], sortDefault?: { value, dir }, filters? }
  * A column is found by its label. Totals come from the columns' own `total` (a table with a footer shows them for the chosen view).
@@ -334,10 +334,11 @@ export function mobileFrom(cols, o) {
     return { label: v.join(' · '), main: (r) => cell(a, r), sub: b ? (r) => cell(b, r) : null, total: hasTotal ? (rs) => ({ main: a.total ? a.total(rs) : null, sub: b && b.total ? b.total(rs) : null }) : undefined };
   });
   const midCol = o.mid != null ? by(o.mid) : null;
+  const extraCol = o.extra != null ? by(o.extra) : null;   // a column shown under the first line, such as a button
   const dashy = (v) => v == null || v === '' || v === '–';
   return {
     key: o.key, head: o.head || host.label, midHead: o.midHead ?? o.mid, views,
-    first: (r) => ({ title: o.title ? o.title(r) : cell(host, r), sub: typeof o.sub === 'function' ? o.sub(r) : subs ? subs.map((c) => cell(c, r)).filter((v) => !dashy(v)).map((v, i) => [i ? ' · ' : '', v]) : null }),
+    first: (r) => ({ extra: extraCol ? cell(extraCol, r) : null, title: o.title ? o.title(r) : cell(host, r), sub: typeof o.sub === 'function' ? o.sub(r) : subs ? subs.map((c) => cell(c, r)).filter((v) => !dashy(v)).map((v, i) => [i ? ' · ' : '', v]) : null }),
     mid: midCol ? (r) => { const v = cell(midCol, r); return dashy(v) ? null : v; } : undefined,
     sort: o.sort ? { options: o.sort, default: o.sortDefault || { value: o.sort[0].value, dir: 'asc' } } : undefined, filters: o.filters,
   };

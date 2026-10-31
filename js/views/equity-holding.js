@@ -51,16 +51,16 @@ export function render(root) {
       { label: 'Bought', host: true, get: (l) => dateStr(l.date) }, { label: 'Qty', cls: 'r', get: (l) => num(l.qty) },
       { label: 'Cost / share', mob: 'under', mlabel: 'at ', cls: 'r', get: (l) => dec(l.cost / l.qty) }, { label: 'Cost', cls: 'r', get: (l) => money(l.cost) },
       { label: 'Gain', cls: 'r', render: (l) => gainText(l.qty * s.livePrice - l.cost) },
-    ], h0.lots.slice().sort((a, b) => (a.date < b.date ? -1 : 1)), { footer: { label: 'Total' } }),
+    ], h0.lots.slice().sort((a, b) => (a.date < b.date ? -1 : 1)), { footer: { label: 'Total' }, m: { key: 'eq-lots', head: 'Bought', views: [['Cost', 'Qty'], ['Gain', 'Cost / share']] } }),
       h('p', { class: 'note' }, 'Quantities already include splits and bonus shares. A sale uses the oldest lot first. Bonus shares have no cost of their own.'))));
     const tr = (data.trades || []).filter((t) => symKey(t.symbol) === sym).sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1));
     root.append(section(`Trades (${tr.length})`, table([
       { label: 'Date', host: true, get: (t) => dateStr(t.date) }, { label: 'Type', render: (t) => h('span', { class: t.type === 'SELL' ? 'neg' : '' }, t.type === 'SELL' ? 'Sell' : 'Buy') },
       { label: 'Qty', cls: 'r', get: (t) => num(t.qty) }, { label: 'Price', mob: 'under', mlabel: 'at ', cls: 'r', get: (t) => dec(t.amount / t.qty) }, { label: 'Value', cls: 'r', get: (t) => money(t.amount) },
-    ], tr, { onRow: canEdit() ? (t) => tradeForm(data.trades.find((x) => x.id === t.id)) : null, empty: 'No trades for this share.' })));
+    ], tr, { m: { key: 'eq-h-trades', head: 'Date', sub: ['Type'], views: [['Value', 'Qty'], ['Price']] }, onRow: canEdit() ? (t) => tradeForm(data.trades.find((x) => x.id === t.id)) : null, empty: 'No trades for this share.' })));
     const ac = (data.corporateActions || []).filter((a) => [symKey(a.symbol), symKey(a.to || '')].includes(sym)).sort((a, b) => (a.date < b.date ? 1 : -1));
     if (ac.length) root.append(section('Splits, bonus, dividends', table([
       { label: 'Date', get: (a) => dateStr(a.date) }, { label: 'What', get: (a) => ACTION_LABEL[a.type] }, { label: 'Details', get: (a) => (symKey(a.symbol) === sym ? '' : a.symbol + ': ') + describeAction(a) },
-    ], ac, { onRow: canEdit() ? (a) => actionForm(data.corporateActions.find((x) => x.id === a.id)) : null })));
+    ], ac, { m: { key: 'eq-h-actions', head: 'Date', sub: ['What'], views: [['Details']] }, onRow: canEdit() ? (a) => actionForm(data.corporateActions.find((x) => x.id === a.id)) : null })));
   } else root.append(h('div', { class: 'card' }, h('p', null, 'This holding was entered by hand, so there is no trade history. Import your Groww history to see lots, XIRR and sales.'), h('a', { class: 'btn small', href: '#/equity/manage?v=import' }, 'Go to Import')));
 }

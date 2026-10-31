@@ -169,8 +169,8 @@ function today(root) {
   const lose = movers.filter((x) => x.day < 0).sort((a, b) => a.day - b.day).slice(0, 5);
   const noun = GROUP_LABEL[todayScope].toLowerCase();
   root.append(h('div', { class: 'grid2' },
-    section(`Biggest gains today · ${noun}`, table(cols, gain, { empty: `No ${noun} are up today.` })),
-    section(`Biggest falls today · ${noun}`, table(cols, lose, { empty: `No ${noun} are down today.` }))));
+    section(`Biggest gains today · ${noun}`, table(cols, gain, { m: { key: 'eq-movers', head: 'Name', views: [['Today', 'Value']] }, empty: `No ${noun} are up today.` })),
+    section(`Biggest falls today · ${noun}`, table(cols, lose, { m: { key: 'eq-movers', head: 'Name', views: [['Today', 'Value']] }, empty: `No ${noun} are down today.` }))));
   const flat = t.items.length - t.dayCount;
   root.append(h('p', { class: 'note' }, `${when ? 'Prices refreshed ' + when + '. ' : ''}Shares, ETFs and funds are listed separately because they behave differently. Change is against the previous close (shares, ETFs) or the previous NAV (funds), in rupees for the quantity you hold. Funds publish one NAV a day, usually in the evening, so a fund can show yesterday’s move until then.${flat ? ` ${flat} ${noun === 'mutual funds' ? 'fund' : 'holding'}${flat > 1 ? 's have' : ' has'} no day-by-day price yet and ${flat > 1 ? 'are' : 'is'} left out.` : ''}`));
 }
@@ -315,7 +315,7 @@ function plannerBuys(data) {
   wrap.append(table([
     { label: 'Bought', host: true, get: (r) => r.name }, { label: 'Type', mob: 'under', get: (r) => GROUP_NAME[r.group] }, { label: 'Times', mob: 'under', mlabel: 'times ', cls: 'r', get: (r) => String(r.count) },
     { label: 'Last on', mob: 'under', mlabel: 'last ', get: (r) => dateStr(r.last) }, { label: 'Amount', cls: 'r', get: (r) => money(r.amount), total: () => money(b.total) },
-  ], rows, { footer: { label: 'Total' }, empty: 'No purchases recorded in this month.' }));
+  ], rows, { footer: { label: 'Total' }, m: { key: 'eq-planner', head: 'Bought', sub: (r) => GROUP_NAME[r.group], views: [['Amount', 'Times'], ['Last on']] }, empty: 'No purchases recorded in this month.' }));
   const months = lastMonths(cur, planSpan);
   if (!Object.keys(buys).length) wrap.append(h('p', { class: 'note' }, 'Purchases appear here once your Groww files are imported or you add buys. Holdings entered by hand without dates are not counted.'));
   else wrap.append(barChart({ names: ['Shares', 'ETFs', 'Funds'], fmt: money, groups: months.map((m) => { const x = buys[m] || {}; return { label: monthLabel(m).slice(0, 3) + (m.endsWith('-01') ? " '" + m.slice(2, 4) : ''), title: monthLabel(m) + ' · total ' + money(x.total || 0), values: [x.shares || 0, x.etfs || 0, x.funds || 0] }; }) }),
@@ -390,7 +390,7 @@ function planner(root) {
       { label: 'Done this month', cls: 'r', render: (p) => h('span', null, money(sipDone(p)), fromHistory(p) ? h('small', { class: 'sub' }, ' from history') : null), total: () => money(done) },
       { label: 'Left this month', mob: 'under', mlabel: 'left ', cls: 'r', get: (p) => money(Math.max(0, p.monthly - sipDone(p))), total: () => money(Math.max(0, tot - done)) },
       { label: '', render: (p) => (canEdit() && sipDone(p) < p.monthly ? h('button', { class: 'small', onclick: (e) => { e.stopPropagation(); mutate((d) => { const t = d.sipPlans.find((x) => x.id === p.id); t.doneThisMonth = t.monthly; t.manual = true; t.doneMonth = C.monthKey(S.all.asOf); }); toast('Marked as invested'); } }, 'Mark done') : h('span', { class: 'tag good' }, 'Done')) },
-    ], plans, { footer: { label: 'Total' }, onRow: canEdit() ? (p) => sipForm(plans.find((x) => x.id === p.id)) : null }),
+    ], plans, { footer: { label: 'Total' }, m: { key: 'eq-sip', head: 'Where', views: [['Left this month', 'Done this month'], ['Each month', 'Each year']], extra: '' }, onRow: canEdit() ? (p) => sipForm(plans.find((x) => x.id === p.id)) : null }),
       h('p', { class: 'note' }, Object.keys(monthlyBuys(data)).length ? 'Done this month is read from your buy history (shares, ETFs and funds), so it follows every purchase you import or record. It resets by itself each month. Lines you set to manual keep the amount you typed.' : 'Done this month is the amount you type or mark. Once your buy history exists (Groww import), it is filled in from that automatically.'),
       (() => { const bd = planDone(plans, monthlyBuys(data), C.monthKey(S.all.asOf)); return bd.other > 0 ? h('p', { class: 'note' }, `Bought this month but not matching any line above: ${money(bd.other)}. Add a line for it, or set “Find its buys by” on the right line.`) : null; })()),
     canEdit() ? [btn('Refresh from history', () => { if (!Object.keys(monthlyBuys(data)).length) return toast('No buy history yet. Import your Groww files first.', 'bad'); mutate((d) => { const bd = planDone(d.sipPlans, monthlyBuys(d), C.monthKey(S.all.asOf)); for (const t of d.sipPlans) { t.manual = false; t.doneThisMonth = bd.byPlan.get(t.id) || 0; t.doneMonth = C.monthKey(S.all.asOf); } }); histDone = null; toast('Updated from your buy history'); }), btn('Add', () => sipForm(), 'primary')] : null));
