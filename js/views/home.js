@@ -242,7 +242,7 @@ function tiles(all, data, mc, plan) {
   const baseAll = (mk.total.dayPct ? mk.total.day / mk.total.dayPct : 0) + (gd ? all.gold.value - gd.total : 0);
   const dayPctAll = baseAll ? dayAll / baseAll : 0;
   const spent = mc.totalSpent + mc.lifestyle.amount;
-  const budget = mc.totalExpected, used = budget ? spent / budget : 0;
+  const budget = mc.budget, used = budget ? spent / budget : 0;   // same budget as This month in detail
   const bar = budget ? h('div', { class: 'kt-barrow' }, h('div', { class: 'kt-bar', role: 'img', 'aria-label': `${pct(used, 0)} of the budget spent` }, h('i', { style: { width: Math.min(100, Math.max(2, used * 100)).toFixed(1) + '%' } })), h('b', { class: 'kt-pctl' }, pct(used, 0))) : null;
   const spentSub = h('span', { class: 'kt-one' }, (budget ? `${pct(used, 0)} of ${money(budget)} budget` : 'no budget income yet') + (mc.notCounted > 0 ? ` · ${money(mc.notCounted)} not counted` : ''));
   const earnPerDay = all.cfTotal.perDay;
@@ -257,11 +257,10 @@ function tiles(all, data, mc, plan) {
 /** Short expense summary for the drop-down. */
 function spentBody(mc, spent) {
   const top = mc.spend.concat([mc.lifestyle]).filter((x) => x.amount > 0).sort((a, b) => b.amount - a.amount).slice(0, 5);
-  const exp = mc.totalExpected;
   return h('div', null,
     h('p', { class: 'mini-title' }, 'Biggest spends so far'),
     top.length ? rowList(top.map((x) => ({ title: x.name, value: money(x.amount), valueSub: spent ? pct(x.amount / spent, 0) : null }))) : h('p', { class: 'empty' }, 'No expenses recorded this month.'),
-    h('p', { class: 'summary-line' }, 'Spent ', h('b', null, money(spent)), exp ? ' of ' + money(exp) + ' budget · left ' : null, exp ? h('b', { class: tone(exp - spent) }, sgn(exp - spent)) : null),
+    h('p', { class: 'summary-line' }, 'Spent ', h('b', null, money(spent)), mc.budget ? ' of ' + money(mc.budget) + ' budget · left ' : null, mc.budget ? h('b', { class: tone(mc.budget - spent) }, sgn(mc.budget - spent)) : null),
     mc.notCounted > 0 ? h('p', { class: 'note' }, `${money(mc.notCounted)} of other payments (${mc.others.filter((o) => !o.counted).map((o) => o.name).join(', ')}) is not counted here. Open “Review” under This month in detail to count them.`) : null,
     h('p', null, h('a', { href: '#/flow' }, 'See where it went')));
 }
