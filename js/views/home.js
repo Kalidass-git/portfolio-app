@@ -147,12 +147,12 @@ function investableBody(m) {
     rowList([
       { title: 'Bank balance', sub: m.banks.length ? m.banks.map((a) => a.name).join(', ') : 'no bank account', value: money(m.bank) },
       { title: 'Cash in hand', sub: m.wallets.length ? m.wallets.map((w) => w.name).join(', ') : 'no wallet or cash account marked', value: money(m.cash) },
-      { title: 'Interest income still expected', sub: 'bonds and lending still to come this month', value: h('span', { class: 'pos' }, '+ ' + money(m.interest)) },
+      { title: 'Interest income still expected', sub: m.pend && m.pend.notInBank > 0 ? `not received yet ${money(m.interest - m.pend.notInBank)} + Income Bond not in the bank yet ${money(m.pend.notInBank)}` : 'income not received yet, from This month in detail', value: h('span', { class: 'pos' }, '+ ' + money(m.interest)) },
       { title: 'Pending mandatory investments', sub: `${mand.pending.length} chit${mand.pending.length === 1 ? '' : 's'} and gold chit${mand.pending.length === 1 ? '' : 's'} not paid yet`, value: '− ' + money(mand.total) },
       { title: 'Expenses still to come', sub: h('i', null, `projected: ${pr.left} day${pr.left === 1 ? '' : 's'} left at the pace so far, no rent`), value: h('i', { class: 'neg' }, '− ' + money(pr.total)) },
       { title: 'Investable balance', value: h('b', { class: m.current >= 0 ? 'inv' : 'neg', style: { fontStyle: 'italic' } }, money(m.current)), sub: h('i', null, 'italic: it includes projected expenses') },
     ]),
-    h('p', { class: 'note' }, 'Bank balance + cash in hand + interest still expected − pending mandatory investments − projected expenses. Mark an account as a wallet in its settings (or name it wallet or cash) to count it as cash in hand.'));
+    h('p', { class: 'note' }, 'Bank balance + cash in hand + interest still expected (income not received yet in This month in detail, plus Income Bond not in the bank yet) − pending mandatory investments − projected expenses. Mark an account as a wallet in its settings (or name it wallet or cash) to count it as cash in hand.'));
 }
 /** What went into each asset class this month against what the plan says is needed. */
 function investedBody(m) {
@@ -204,6 +204,8 @@ const ICONS = {
   receipt: ['M6 3h12a1 1 0 0 1 1 1v17l-3-2-2 2-2-2-2 2-2-2-3 2V4a1 1 0 0 1 1-1z', 'M9 8h6M9 12h6'],
   coins: ['M12 3.5c4.4 0 8 1.3 8 3s-3.6 3-8 3-8-1.3-8-3 3.6-3 8-3z', 'M4 6.5v5c0 1.7 3.6 3 8 3s8-1.3 8-3v-5', 'M4 11.5v5c0 1.7 3.6 3 8 3s8-1.3 8-3v-5'],
   bell: ['M6 9a6 6 0 0 1 12 0c0 6 2 7.5 2 7.5H4S6 15 6 9z', 'M10 20a2 2 0 0 0 4 0'],
+  close: ['M6 6l12 12', 'M18 6L6 18'],
+  undo: ['M9 14L4 9l5-5', 'M4 9h10a6 6 0 0 1 0 12h-3'],
   wallet: ['M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1', 'M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4'],
 };
 const icon = (k) => sv('svg', { viewBox: '0 0 24 24', class: 'kt-svg', 'aria-hidden': 'true', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, ...ICONS[k].map((d) => sv('path', { d })));
@@ -427,7 +429,7 @@ const DIS_ITEMS = 'fw.dismissed.items';
 const dismissedItems = () => { try { const o = JSON.parse(localStorage.getItem(DIS_ITEMS) || '{}'), cut = C.addMonths(C.todayISO().slice(0, 7) + '-01', -12); return Object.fromEntries(Object.entries(o).filter(([, d]) => d >= cut)); } catch (e) { return {}; } };
 const setDismissedItems = (o) => { try { localStorage.setItem(DIS_ITEMS, JSON.stringify(o)); } catch (e) { /* private window */ } rerender(); };
 const refsOf = (u) => (u.bonds ? u.bonds.map((b) => b.ref) : [u.ref]).filter(Boolean);
-const dismissRows = (u) => { const o = dismissedItems(); for (const r of refsOf(u)) o[r] = u.date; setDismissedItems(o); };
+const dismissRows = (u) => { const o = dismissedItems(); for (const r of refsOf(u)) o[r] = u.date; setDismissedItems(o); toast('Reminder dismissed', '', { label: 'Undo', onClick: () => restoreRows(u) }); };
 const restoreRows = (us) => { const o = dismissedItems(); for (const u of [].concat(us)) for (const r of refsOf(u)) delete o[r]; setDismissedItems(o); };
 /** A loan EMI due within this many days is also an alert (the Alerts tab); before that it is in Next 7 days. */
 const EMI_ALERT_DAYS = 3;
@@ -444,7 +446,8 @@ function agenda(data, all) {
     const u = { date: d.date, title: d.b.name + ' interest due', amount: C.bondDueAmount(d.b, d.date.slice(0, 7), data.settings.tdsRate ?? 0.1), kind: 'Bond interest', days: 0, ref: 'bondint:' + (d.b.id || d.b.name) + '|' + d.date };
     u.key = u.date + '|' + u.title; if (!seen.has(u.key)) { seen.add(u.key); items.push(u); }
   }
-  return items.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  // Items that come every month or quarter (monthly lending, bond interest) are only worth a place in the next 7 days; yearly lending and maturities stay as they were.
+  return items.filter((u) => !(u.recurring && u.days > 7)).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 }
 /** Notices that have no date: price alerts, old prices, loan interest higher than what you earn. Each can be hidden until tomorrow. */
 function notices(data, all) {
@@ -485,6 +488,9 @@ function showBondDues(u) {
   else dialog('Bond interest due', body, [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
 }
 
+/** A small round icon button (close or restore) for a row. */
+const axBtn = (ik, label, title, onClick) => h('button', { type: 'button', class: 'ax-x' + (ik === 'undo' ? ' ax-restore' : ''), 'aria-label': label, title, onclick: (e) => { e.stopPropagation(); onClick(); } }, hico(ik, 'ax-xi'));
+
 function actionCentre(data, all) {
   const every = agenda(data, all), hidRefs = dismissedItems(), nt = notices(data, all), today = C.todayISO();
   const isHid = (u) => !!u.ref && Object.prototype.hasOwnProperty.call(hidRefs, u.ref);
@@ -510,10 +516,10 @@ function actionCentre(data, all) {
     h('div', { class: 'ax-node', 'aria-hidden': 'true' }, h('i', null, dir(u) === 'in' ? '↓' : dir(u) === 'out' ? '↑' : '•')),
     h('div', { class: 'ax-card' },
       hico(ik, 'ax-ev'),
-      h('div', { class: 'ax-main' }, h('b', null, u.title.replace(/\s*\((overdue|due today)\)$/, '')), h('span', { class: 'ax-meta' }, u.bonds ? `${u.bonds.length} bonds` : u.kind, ' · ', u.days < 0 ? h('span', { class: 'neg' }, `${-u.days} day${u.days === -1 ? '' : 's'} late`) : u.days === 0 ? h('span', { class: 'warn' }, 'today') : h('span', { class: soon ? 'warn' : '' }, `in ${u.days} day${u.days === 1 ? '' : 's'}`))),
+      h('div', { class: 'ax-main' }, h('b', null, (u.bonds ? u.title : u.title.replace(/ to pay you$/, '').replace(/ EMI( due)?$/, '').replace(/ interest due$/, '')).replace(/\s*\((overdue|due today)\)$/, '').replace(/ EMI$/, '')), h('span', { class: 'ax-meta' }, u.bonds ? `${u.bonds.length} bonds` : ({ 'Loan EMI': 'EMI', 'Money to receive': 'Lending' })[u.kind] || u.kind, ' · ', u.days < 0 ? h('span', { class: 'neg' }, `${-u.days} day${u.days === -1 ? '' : 's'} late`) : u.days === 0 ? h('span', { class: 'warn' }, 'today') : h('span', { class: soon ? 'warn' : '' }, `in ${u.days} day${u.days === 1 ? '' : 's'}`))),
       h('div', { class: 'ax-end' },
         h('b', { class: 'ax-amt ' + (u.days < 0 && !o.dismissed ? 'neg' : dir(u) === 'in' ? 'pos' : '') }, (dir(u) === 'in' ? '+' : dir(u) === 'out' ? '−' : '') + money(u.amount)),
-        h('button', { type: 'button', class: 'ax-dismiss sm' + (o.dismissed ? ' ax-restore' : ''), title: o.dismissed ? 'Bring this back into Action centre' : 'Hide this one (it stays hidden until it is gone)', 'aria-label': (o.dismissed ? 'Restore: ' : 'Dismiss: ') + u.title, onclick: (e) => { e.stopPropagation(); if (o.dismissed) restoreRows(u); else dismissRows(u); } }, o.dismissed ? 'Restore' : 'Dismiss')))); };
+        axBtn(o.dismissed ? 'undo' : 'close', o.dismissed ? 'Restore: ' + u.title : 'Dismiss: ' + u.title, o.dismissed ? 'Bring this back into Action centre' : 'Dismiss (you can undo)', () => { if (o.dismissed) restoreRows(u); else dismissRows(u); })))); };
   const head = (g, n, total) => h('div', { class: 'ax-gh ' + (g.tone || '') }, hico(g.icon, 'ax-gi'), h('span', { class: 'ax-gt' }, g.label, h('em', null, ' · ' + n)), total != null ? h('span', { class: 'ax-gs' }, money(total)) : null);
   const block = (g) => {
     if (!g.list.length) return null;
@@ -528,21 +534,21 @@ function actionCentre(data, all) {
   const emiAlert = (u) => h('li', { class: 'ax-alert warn', tabindex: 0, onclick: () => { location.hash = '#/fixed/loans'; } },
     hico('alert', 'ax-ev'),
     h('div', { class: 'ax-main' }, h('b', null, `${emiName(u)} EMI ` + (u.days === 0 ? 'due today' : u.days === 1 ? 'due tomorrow' : `due in ${u.days} days`)), h('span', { class: 'ax-meta' }, `${shortDate(u.date)} · Loan EMI · −${money(u.amount)}`)),
-    h('button', { type: 'button', class: 'ax-dismiss', title: 'Hide this EMI until it is gone', 'aria-label': 'Dismiss: ' + u.title, onclick: (e) => { e.stopPropagation(); dismissRows(u); } }, 'Dismiss'));
+    axBtn('close', 'Dismiss: ' + u.title, 'Dismiss (you can undo)', () => dismissRows(u)));
   const alertN = nt.shown.length + soonEmi.length;
   const alerts = alertN ? h('div', { class: 'ax-group' },
     head({ label: 'Alerts', tone: 'warn', icon: 'bell' }, alertN, null),
     h('ul', { class: 'ax-alerts' }, soonEmi.map(emiAlert), nt.shown.map((o) => h('li', { class: 'ax-alert ' + (o.tone || ''), tabindex: 0, onclick: () => { location.hash = o.href; } },
       hico(o.tone === 'neg' ? 'alert' : 'bell', 'ax-ev'),
       h('div', { class: 'ax-main' }, h('b', null, o.title), o.sub ? h('span', { class: 'ax-meta' }, o.sub) : null),
-      h('button', { type: 'button', class: 'ax-dismiss', title: 'Hide this until tomorrow', 'aria-label': 'Hide until tomorrow: ' + o.title, onclick: (e) => { e.stopPropagation(); setDismissed({ ...nt.hid, [o.title]: today }); } }, 'Dismiss'))))) : null;
+      axBtn('close', 'Hide until tomorrow: ' + o.title, 'Hide until tomorrow (you can undo)', () => { setDismissed({ ...nt.hid, [o.title]: today }); toast('Alert hidden until tomorrow', '', { label: 'Undo', onClick: () => setDismissed(nt.hid) }); }))))) : null;
   // On All each item shows once: an EMI that is already an alert is left out of the dated groups there (it stays in Next 7 days).
   const noAlerts = groups.map((g) => ({ ...g, list: g.list.filter((u) => !promoted.has(u)) }));
   const pickGroups = acState.tab === 'overdue' ? [groups[0]] : acState.tab === 'week' ? [groups[1], groups[2]] : acState.tab === 'later' ? [groups[3]] : acState.tab === 'alerts' || acState.tab === 'dismissed' ? [] : noAlerts;
   const dismissedBlock = () => {
     const rows = mergeBondDues(dis), g = { id: 'dis', tone: '' };
     return h('div', { class: 'ax-group' },
-      h('div', { class: 'ax-gh' }, hico('clock', 'ax-gi'), h('span', { class: 'ax-gt' }, 'Dismissed', h('em', null, ' · ' + rows.length)), h('button', { type: 'button', class: 'ax-dismiss sm ax-restore', onclick: () => restoreRows(dis) }, 'Restore all')),
+      h('div', { class: 'ax-gh' }, hico('clock', 'ax-gi'), h('span', { class: 'ax-gt' }, 'Dismissed', h('em', null, ' · ' + rows.length)), h('button', { type: 'button', class: 'ax-dismiss sm ax-restore', onclick: () => restoreRows(dis) }, hico('undo', 'ax-xi'), 'Restore all')),
       h('ul', { class: 'ax-tl' }, rows.map((u, i) => line(u, g, i === 0 || rows[i - 1].date !== u.date, { dismissed: true }))),
       h('p', { class: 'note' }, 'Hidden from Action centre on this device only. Restore brings one back where it was.'));
   };

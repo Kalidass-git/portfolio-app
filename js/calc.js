@@ -1179,28 +1179,28 @@ export function nextReceivableDue(r, asOf) {
 }
 
 /**
- * Everything dated in the next `days` days. Every item has a stable `ref` (kind, record and due date, whatever its wording says: "overdue", "due today"),
+ * Everything dated in the next `days` days. `recurring` marks the items that come every month or quarter (monthly lending, bond interest). Every item has a stable `ref` (kind, record and due date, whatever its wording says: "overdue", "due today"),
  * which the Home Action centre uses to remember what was dismissed.
  */
 export function upcoming(data, all, days = 60) {
   const from = all.asOf, to = iso(toMs(from) + days * DAY);
   const out = [];
-  const add = (date, title, amount, kind, ref) => out.push({ date, title, amount, kind, ref: ref ? ref + '|' + date : '', days: Math.round((toMs(date) - toMs(from)) / DAY) });
+  const add = (date, title, amount, kind, ref, recurring = false) => out.push({ date, title, amount, kind, ref: ref ? ref + '|' + date : '', recurring, days: Math.round((toMs(date) - toMs(from)) / DAY) });
   const id = (x) => x.id || x.name;
   for (const b of all.bonds) if (b.maturityDate >= from && b.maturityDate <= to) add(b.maturityDate, b.name + ' matures', b.principal, 'Bond', 'bondmat:' + id(b));
   for (const f of all.fds) if (f.maturityDate >= from && f.maturityDate <= to) add(f.maturityDate, f.name + ' matures', f.value || f.principal, 'Fixed deposit', 'fd:' + id(f));
   for (const l of all.lending) if (l.principal > 0 && l.maturityDate >= from && l.maturityDate <= to) add(l.maturityDate, l.name + ' due back', l.principal + (l.accrued || 0), 'Lending', 'lend:' + id(l));
   for (const s of all.savings) { if (s.type === 'EPF' || s.type === 'PPF') continue; const end = savingEnd(s); if (end && end >= from && end <= to) { const m = savingMaturity(s); add(end, s.name + ' matures', m.amount, s.type, 'sav:' + id(s)); } }
   const bn = bondNotify(data);
-  if (bn.on && bn.days > 0) for (const d of bondsDueSoon(all, from, bn.days)) if (d.days >= 1) add(d.date, d.b.name + ' interest due', bondDueAmount(d.b, d.date.slice(0, 7), data.settings.tdsRate ?? 0.1), 'Bond interest', 'bondint:' + id(d.b));
+  if (bn.on && bn.days > 0) for (const d of bondsDueSoon(all, from, bn.days)) if (d.days >= 1) add(d.date, d.b.name + ' interest due', bondDueAmount(d.b, d.date.slice(0, 7), data.settings.tdsRate ?? 0.1), 'Bond interest', 'bondint:' + id(d.b), true);
   for (const x of data.receivables.filter((y) => y.active !== false && y.balanceDue > 0)) {
     const r = receivableStatus(x, from);
     if (!r.received && !r.notStarted) {
-      if (r.due <= to) add(r.due, r.name + (r.overdue ? ' (overdue)' : r.dueToday ? ' (due today)' : ' to pay you'), r.dueAmount ?? r.expected, 'Money to receive', 'rc:' + id(x));
+      if (r.due <= to) add(r.due, r.name + (r.overdue ? ' (overdue)' : r.dueToday ? ' (due today)' : ' to pay you'), r.dueAmount ?? r.expected, 'Money to receive', 'rc:' + id(x), x.term !== 'Yearly');
     } else {
       // this month's payment is in (or the line has not started): list the next one, so it shows ahead of its due day
       const n = nextReceivableDue(x, from);
-      if (n && n.date <= to) add(n.date, x.name + ' to pay you', n.amount, 'Money to receive', 'rc:' + id(x));
+      if (n && n.date <= to) add(n.date, x.name + ' to pay you', n.amount, 'Money to receive', 'rc:' + id(x), true);
     }
   }
   // An EMI already paid this month is listed at next month's date, so it shows ahead of time too.
