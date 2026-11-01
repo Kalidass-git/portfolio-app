@@ -1401,3 +1401,19 @@ button.info-i { width: 32px; height: 32px; font-size: 1rem; }
 .cp-later .info-i { width: 22px; height: 22px; font-size: .8rem; border-color: currentColor; color: inherit; }
 .cert-how ul { margin: 4px 0 10px; padding-left: 18px; display: grid; gap: 6px; font-size: .92rem; }
 .cert-how .mini-title { margin-top: 12px; }
+
+/* Family report: foldable groups, one per kind of holding */
+.hg-list { display: grid; gap: 10px; }
+.hg { border: 1px solid var(--line); border-left: 4px solid var(--g, var(--brand)); border-radius: 12px; background: var(--surface); overflow: hidden; }
+.hg-head { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 14px; border: 0; background: color-mix(in srgb, var(--g) 9%, var(--surface)); color: inherit; font: inherit; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.hg-head:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.hg-dot { width: 10px; height: 10px; border-radius: 3px; background: var(--g); flex: 0 0 auto; }
+.hg-name { flex: 1 1 auto; min-width: 0; font-weight: 650; display: flex; flex-direction: column; }
+.hg-name small { font-weight: 400; font-size: .78rem; }
+.hg-sum { display: flex; flex-direction: column; align-items: flex-end; font-variant-numeric: tabular-nums; }
+.hg-sum small { font-size: .74rem; }
+.hg-caret { color: var(--g); transition: transform .15s; flex: 0 0 auto; }
+.hg:not(.collapsed) .hg-caret { transform: rotate(90deg); }
+.hg.collapsed .hg-body { display: none; }
+.hg-body { padding: 4px 6px 8px; }
+.hg-body .tbl-wrap, .hg-body .mrows { margin: 0; }
