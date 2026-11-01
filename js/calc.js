@@ -1187,10 +1187,13 @@ export function upcoming(data, all, days = 60) {
   const out = [];
   const add = (date, title, amount, kind, ref, recurring = false) => out.push({ date, title, amount, kind, ref: ref ? ref + '|' + date : '', recurring, days: Math.round((toMs(date) - toMs(from)) / DAY) });
   const id = (x) => x.id || x.name;
-  for (const b of all.bonds) if (b.maturityDate >= from && b.maturityDate <= to) add(b.maturityDate, b.name + ' matures', b.principal, 'Bond', 'bondmat:' + id(b));
-  for (const f of all.fds) if (f.maturityDate >= from && f.maturityDate <= to) add(f.maturityDate, f.name + ' matures', f.value || f.principal, 'Fixed deposit', 'fd:' + id(f));
-  for (const l of all.lending) if (l.principal > 0 && l.maturityDate >= from && l.maturityDate <= to) add(l.maturityDate, l.name + ' due back', l.principal + (l.accrued || 0), 'Lending', 'lend:' + id(l));
-  for (const s of all.savings) { if (s.type === 'EPF' || s.type === 'PPF') continue; const end = savingEnd(s); if (end && end >= from && end <= to) { const m = savingMaturity(s); add(end, s.name + ' matures', m.amount, s.type, 'sav:' + id(s)); } }
+  // A holding that has matured stays here, as overdue, until it is closed or its maturity date is moved: it is never cleared just because the date passed.
+  // (Closed holdings are not in all.bonds / fds / lending / savings, so they drop out by themselves.)
+  const over = (d) => d < from;
+  for (const b of all.bonds) if (b.maturityDate && b.maturityDate <= to) add(b.maturityDate, b.name + (over(b.maturityDate) ? ' matured (overdue)' : ' matures'), b.principal, 'Bond', 'bondmat:' + id(b));
+  for (const f of all.fds) if (f.maturityDate && f.maturityDate <= to) add(f.maturityDate, f.name + (over(f.maturityDate) ? ' matured (overdue)' : ' matures'), f.value || f.principal, 'Fixed deposit', 'fd:' + id(f));
+  for (const l of all.lending) if (l.principal > 0 && l.maturityDate && l.maturityDate <= to) add(l.maturityDate, l.name + (over(l.maturityDate) ? ' due back (overdue)' : ' due back'), l.principal + (l.accrued || 0), 'Lending', 'lend:' + id(l));
+  for (const s of all.savings) { if (s.type === 'EPF' || s.type === 'PPF') continue; const end = savingEnd(s); if (end && end <= to) { const m = savingMaturity(s); add(end, s.name + (over(end) ? ' matured (overdue)' : ' matures'), m.amount, s.type, 'sav:' + id(s)); } }
   const bn = bondNotify(data);
   if (bn.on && bn.days > 0) for (const d of bondsDueSoon(all, from, bn.days)) if (d.days >= 1) add(d.date, d.b.name + ' interest due', bondDueAmount(d.b, d.date.slice(0, 7), data.settings.tdsRate ?? 0.1), 'Bond interest', 'bondint:' + id(d.b), true);
   for (const x of data.receivables.filter((y) => y.active !== false && y.balanceDue > 0)) {

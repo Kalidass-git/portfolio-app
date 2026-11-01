@@ -150,6 +150,13 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.34.0 – Action centre: matured holdings stay as overdue
+
+- A bond, fixed deposit, private lending line, chit or other saving whose maturity date has passed is **no longer cleared from Action centre**. It moves to **Overdue** ("matured (overdue)", "N days late") and stays there until you **close** the holding or **move its maturity date** (extend). Then it goes by itself.
+- Because Overdue now counts these, the bell on Home turns red until you deal with them, or dismiss one with the close icon (Undo still works).
+- Wording before the date is unchanged ("matures", "due back"). Phone reminders are unchanged. No stored data changed; closing and extending work as before.
+- Test: `tests/overduematurity.test.mjs`.
+
 ## Release 8.33.1 – Interest certificate: tidy header, explanations behind (i) buttons
 
 - The long paragraph under the filter chips is gone. In its place is one period card: the period name and its dates, with an (i) button. Tap (i) for **How this is worked out**, now a short list (each holding's own settings, and when money is counted).
