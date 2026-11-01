@@ -4,11 +4,12 @@ import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
 import * as P from '../projector.js';
 import * as I from '../insights.js';
-import { h, money, compact, pct, dateStr, monthLabel, section, stat, table, btn, segTabs, subTab, setOptions, formDialog, dialog, toast, canEdit } from '../ui.js';
+import { h, money, compact, pct, dateStr, monthLabel, section, stat, table, btn, segTabs, subTab, setOptions, formDialog, dialog, toast, canEdit, rowList } from '../ui.js';
 import { barChart, lineChart, donut, color, stackedBars } from '../charts.js';
 import { plannedByMonth } from './networth.js';
 import { groupedTable } from './groupmix.js';
 import * as IC from '../interestcert.js';
+import { openInfo } from '../mobilebar.js';
 
 const TABS = [['tax', 'Tax summary'], ['calendar', 'Cash calendar'], ['review', 'Annual review'], ['anomalies', 'Spending anomalies'], ['allocation', 'Allocation goal'], ['certificate', 'Interest certificate']];
 const rerender = () => window.dispatchEvent(new Event('rerender'));
@@ -549,9 +550,32 @@ function certView(root) {
   root.append(h('div', { class: 'chips', role: 'group', 'aria-label': 'Types' },
     h('button', { class: 'chip' + (cert.kinds.length ? '' : ' on'), type: 'button', 'aria-pressed': String(!cert.kinds.length), onclick: () => { cert.kinds = []; rerender(); } }, 'All'),
     IC.KINDS.map(([k, l]) => h('button', { class: 'chip' + (cert.kinds.includes(k) ? ' on' : ''), type: 'button', 'aria-pressed': String(cert.kinds.includes(k)), onclick: () => flip(k) }, l))));
-  root.append(note(`${per.label}: ${dateStr(per.from)} to ${dateStr(per.to)}. Each holding is worked out with its own settings: bonds by their payment periods and TDS (Settings), payout deposits and loans by the amount you receive each payout, compounding ones by the interest added to the balance each month; EPF and PPF by the declared yearly rate on the balance; chits by what they pay at the end less what you paid in (the amount received once closed). With the projections switch off, money is counted when it is paid: a deposit's interest at maturity, a chit's gain in the month it completes, EPF and PPF in March, bonds on each payment date, and only once that date has come. Switch it on to spread interest month by month and include payments still to come, shown in italics.`));
-  const laterNote = res.later && res.later.length ? h('p', { class: 'note' }, h('b', null, 'Due later this month, not counted yet: '), res.later.map((x) => `${x.name} · ${dateStr(x.date)} · ${money(x.amount)}`).join('; '), '. Switch on projections to include them.') : null;
-  if (laterNote) root.append(laterNote);
+  // Period line and a "later this month" chip; the long explanations sit behind small (i) buttons.
+  const popup = (title, body) => (window.matchMedia('(max-width: 700px)').matches ? openInfo(title, body) : dialog(title, body, [{ label: 'Done', class: 'primary', onclick: (c) => c() }]));
+  const infoBtn = (label, onClick) => h('button', { type: 'button', class: 'info-i', 'aria-label': label, title: label, onclick: onClick }, 'i');
+  const how = () => popup('How this is worked out', h('div', { class: 'cert-how' },
+    h('p', null, h('b', null, per.label), ` · ${dateStr(per.from)} to ${dateStr(per.to)}`),
+    h('p', { class: 'mini-title' }, 'Each holding uses its own settings'),
+    h('ul', null,
+      h('li', null, h('b', null, 'Bonds'), ': by their payment periods and TDS (Settings).'),
+      h('li', null, h('b', null, 'Payout deposits and loans'), ': by the amount you receive each payout.'),
+      h('li', null, h('b', null, 'Compounding deposits'), ': by the interest added to the balance each month.'),
+      h('li', null, h('b', null, 'EPF and PPF'), ': the declared yearly rate on the balance.'),
+      h('li', null, h('b', null, 'Chits'), ': what they pay at the end less what you paid in (the amount received once closed).')),
+    h('p', { class: 'mini-title' }, 'When money is counted'),
+    h('ul', null,
+      h('li', null, h('b', null, 'Projections off'), ': money counts when it is paid, and only once that date has come. A deposit’s interest at maturity, a chit’s gain in the month it completes, EPF and PPF in March, bonds on each payment date.'),
+      h('li', null, h('b', null, 'Projections on'), ': interest is spread month by month and payments still to come are included, shown in italics.'))));
+  const later = res.later || [], laterSum = later.reduce((a, x) => a + (x.amount || 0), 0);
+  const laterInfo = () => popup('Due later this month', h('div', { class: 'cert-how' },
+    h('p', { class: 'note' }, 'These payments have not been paid yet, so they are not counted in the figures below. Switch on “Include projections and future payments” to add them.'),
+    rowList(later.map((x) => ({ title: x.name, sub: dateStr(x.date), value: money(x.amount) }))),
+    h('p', { class: 'ax-sheet-sum' }, h('b', null, money(laterSum)), ` in ${later.length} payment${later.length === 1 ? '' : 's'}`)));
+  root.append(h('div', { class: 'cert-period' },
+    h('div', { class: 'cp-main' }, h('b', null, per.label), h('span', { class: 'muted' }, `${dateStr(per.from)} to ${dateStr(per.to)}`)),
+    h('div', { class: 'cp-end' },
+      later.length ? h('button', { type: 'button', class: 'cp-later', onclick: laterInfo, 'aria-label': `${later.length} payments due later this month, not counted yet. Tap for the list` }, h('i', { class: 'info-i' }, 'i'), `${later.length} due later this month`) : null,
+      infoBtn('How this is worked out', how))));
   if (!res.rows.length) { root.append(section('Interest certificate', h('p', { class: 'empty' }, 'No interest from these holdings in this period.'))); return; }
   root.append(h('div', { class: 'stats' },
     stat('Interest earned', h('span', { class: 'pos' }, money(t.gross)), `${t.items} ${t.items === 1 ? 'holding' : 'holdings'}${cert.kinds.length ? ' · ' + kindLabel : ''}`),

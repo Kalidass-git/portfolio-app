@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.33.1 – Interest certificate: tidy header, explanations behind (i) buttons
+
+- The long paragraph under the filter chips is gone. In its place is one period card: the period name and its dates, with an (i) button. Tap (i) for **How this is worked out**, now a short list (each holding's own settings, and when money is counted).
+- **Due later this month, not counted yet** is now a small amber chip, "N due later this month". Tap it for the list of those payments with dates and amounts, and the total. It only shows when there are some.
+- Nothing is calculated differently. No stored data changed.
+
 ## Release 8.33.0 – Android app: Family report Share or save PDF
 
 - **Family report in the Android app** now has a **Share or save PDF** button. It builds the A4 report as a PDF in the background and opens Android's share sheet: save it to Drive or Files, send it on WhatsApp or email, or print it from there. It no longer depends on the phone's print screen, which was not working. A separate **Print** button keeps the old route.
