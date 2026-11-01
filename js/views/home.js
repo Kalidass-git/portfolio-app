@@ -203,6 +203,7 @@ const ICONS = {
   bank: ['M3 10l9-6 9 6', 'M5 10v8M9.5 10v8M14.5 10v8M19 10v8', 'M3 20.5h18'],
   receipt: ['M6 3h12a1 1 0 0 1 1 1v17l-3-2-2 2-2-2-2 2-2-2-3 2V4a1 1 0 0 1 1-1z', 'M9 8h6M9 12h6'],
   coins: ['M12 3.5c4.4 0 8 1.3 8 3s-3.6 3-8 3-8-1.3-8-3 3.6-3 8-3z', 'M4 6.5v5c0 1.7 3.6 3 8 3s8-1.3 8-3v-5', 'M4 11.5v5c0 1.7 3.6 3 8 3s8-1.3 8-3v-5'],
+  chev: ['M6 9l6 6 6-6'],
   bell: ['M6 9a6 6 0 0 1 12 0c0 6 2 7.5 2 7.5H4S6 15 6 9z', 'M10 20a2 2 0 0 0 4 0'],
   close: ['M6 6l12 12', 'M18 6L6 18'],
   undo: ['M9 14L4 9l5-5', 'M4 9h10a6 6 0 0 1 0 12h-3'],
@@ -436,7 +437,7 @@ const EMI_ALERT_DAYS = 3;
 /** Things that need a look: overdue money, old prices, loans, behind plan. Each can be hidden for the rest of today (this device only). */
 // ---------- Action centre: everything dated that needs you, and the notices, in one card ----------
 const ACTION_KIND = { 'Money to receive': { href: '#/fixed/lending', dir: 'in' }, 'Bond interest': { href: '#/fixed/bonds', dir: 'in' }, Bond: { href: '#/fixed/bonds', dir: 'in' }, 'Fixed deposit': { href: '#/fixed/fds', dir: 'in' }, Lending: { href: '#/fixed/lending', dir: 'in' }, 'Loan EMI': { href: '#/fixed/loans', dir: 'out' } };
-const acState = { tab: null, chosen: false, more: {} };
+const acState = { tab: null, chosen: false, more: {}, open: false };   // closed whenever Home opens; the person opens it when it asks for attention
 /** One dated list from the single source (C.upcoming, 60 days: maturities, interest, money to receive, EMIs), plus bond interest due today, each item once. */
 function agenda(data, all) {
   const items = C.upcoming(data, all, 60).map((u) => ({ ...u, key: u.date + '|' + u.title }));
@@ -554,15 +555,24 @@ function actionCentre(data, all) {
   };
   const body = [...pickGroups.map(block), acState.tab === 'all' || acState.tab === 'alerts' ? alerts : null, acState.tab === 'dismissed' ? dismissedBlock() : null].filter(Boolean);
   const kpi = (cls, ik, label, val) => h('div', { class: 'ax-kpi ' + cls }, h('span', { class: 'ax-kl' }, hico(ik, 'ax-ki'), label), h('b', null, val));
-  return h('section', { class: 'card ax' },
-    h('div', { class: 'ax-top' }, hico('bell', 'ax-logo'), h('div', null, h('h2', null, 'Action centre'), h('p', { class: 'ax-sub' }, 'What needs attention now'))),
-    h('div', { class: 'ax-kpis' },
-      kpi(od.length ? 'bad' : '', 'alert', 'Overdue', od.length ? money(sumOf(od)) : '–'),
-      kpi('up', 'cal', 'Next 7 days', week.length ? money(sumOf(week)) : '–'),
-      kpi('', 'cal', 'Next 60 days', items.length ? money(sumOf(items.filter((u) => u.days >= 0))) : '–')),
-    h('nav', { class: 'ax-tabs', role: 'tablist', 'aria-label': 'Action centre' }, tabs.map(([k, l, n]) => h('a', { href: 'javascript:void 0', role: 'tab', class: (acState.tab === k ? 'on' : '') + (k === 'dismissed' ? ' ax-chip-dis' : ''), 'aria-selected': String(acState.tab === k), onclick: (e) => { e.preventDefault(); acState.tab = k; acState.chosen = true; rerender(); } }, l, h('span', { class: 'ax-n' }, String(n))))),
-    body.length ? h('div', { class: 'ax-body' }, body) : h('p', { class: 'empty' }, acState.tab === 'all' ? 'All clear: nothing overdue and nothing falls due in the next 60 days.' : 'Nothing here.'),
-    nt.hidden ? h('p', { class: 'note' }, `${nt.hidden} alert${nt.hidden === 1 ? '' : 's'} hidden until tomorrow. `, h('a', { href: '#', onclick: (e) => { e.preventDefault(); setDismissed({}); } }, 'Show again')) : null);
+  // What needs a look: overdue items and alerts (EMI due soon, price alerts, old prices, loan interest). Dismissing one takes it out of this count, so the red goes once nothing is left.
+  const attn = od.length + alertN, soonN = week.length;
+  const summary = attn ? `${attn} need${attn === 1 ? 's' : ''} attention` + (od.length ? ` · ${od.length} overdue` : '') + (alertN ? ` · ${alertN} alert${alertN === 1 ? '' : 's'}` : '')
+    : soonN ? `Nothing urgent · ${soonN} due this week` : 'All clear';
+  const toggle = () => { acState.open = !acState.open; rerender(); };
+  return h('section', { class: 'card ax' + (acState.open ? ' is-open' : ' is-closed') + (attn ? ' needs' : '') },
+    h('button', { type: 'button', class: 'ax-top ax-toggle', 'aria-expanded': String(acState.open), 'aria-label': 'Action centre. ' + summary + (acState.open ? '. Tap to collapse' : '. Tap to open'), onclick: toggle },
+      h('span', { class: 'ax-bellwrap' }, hico('bell', 'ax-logo'), attn ? h('span', { class: 'ax-badge' }, String(attn)) : null),
+      h('div', { class: 'ax-ttl' }, h('h2', null, 'Action centre'), h('p', { class: 'ax-sub' }, summary)),
+      hico('chev', 'ax-chev')),
+    !acState.open ? null : h('div', { class: 'ax-panel' },
+      h('div', { class: 'ax-kpis' },
+        kpi(od.length ? 'bad' : '', 'alert', 'Overdue', od.length ? money(sumOf(od)) : '–'),
+        kpi('up', 'cal', 'Next 7 days', week.length ? money(sumOf(week)) : '–'),
+        kpi('', 'cal', 'Next 60 days', items.length ? money(sumOf(items.filter((u) => u.days >= 0))) : '–')),
+      h('nav', { class: 'ax-tabs', role: 'tablist', 'aria-label': 'Action centre' }, tabs.map(([k, l, n]) => h('a', { href: 'javascript:void 0', role: 'tab', class: (acState.tab === k ? 'on' : '') + (k === 'dismissed' ? ' ax-chip-dis' : ''), 'aria-selected': String(acState.tab === k), onclick: (e) => { e.preventDefault(); acState.tab = k; acState.chosen = true; rerender(); } }, l, h('span', { class: 'ax-n' }, String(n))))),
+      body.length ? h('div', { class: 'ax-body' }, body) : h('p', { class: 'empty' }, acState.tab === 'all' ? 'All clear: nothing overdue and nothing falls due in the next 60 days.' : 'Nothing here.'),
+    nt.hidden ? h('p', { class: 'note' }, `${nt.hidden} alert${nt.hidden === 1 ? '' : 's'} hidden until tomorrow. `, h('a', { href: '#', onclick: (e) => { e.preventDefault(); setDismissed({}); } }, 'Show again')) : null));
 }
 
 function riskState(all) {

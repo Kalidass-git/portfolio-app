@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.32.0 – Home: Action centre folds away and shows what needs attention
+
+- **Collapsed by default.** Home opens with a one-line Action centre: the bell, a count and a short summary. Tap it to open the full list (tiles, tabs, dates); tap again to fold it.
+- **Attention marker.** Overdue items and alerts (EMI due within 3 days, price alerts, old prices, loan interest higher than interest earned) turn the bell red, add a red count badge and a red "N need attention · overdue · alerts" line. Dismiss them (the close icon, Undo still works) and the red goes; the line then reads "Nothing urgent · N due this week" or "All clear".
+- Nothing else about Action centre changed. No stored data changed.
+
 ## Release 8.31.1 – Net worth: tap a colour in "What you own, month by month"
 
 - **Fixed:** tapping (or clicking) a coloured band in the month-by-month chart now opens that group, the same as tapping its name underneath. Hovering the chart also shows the figures for the month again. The chart's touch layer was never put on the chart, so nothing reacted.
