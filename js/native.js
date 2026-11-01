@@ -101,6 +101,13 @@ function files() {
   };
 }
 
+/** Android app only: make the page into an A4 PDF and open the share sheet (Save to Drive, WhatsApp, Gmail, Print). Resolves false in a browser. */
+export async function sharePdf(name) {
+  const NT = P('NativeTools'); if (!NT) return false;
+  await NT.exportPdf({ name: (name || 'Family-report') .replace(/\.pdf$/i, '') + '.pdf' });
+  return true;
+}
+
 // ---------- reminders ----------
 let timer = null, lastKey = '';
 async function ensureChannel(LN) {

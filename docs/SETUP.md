@@ -150,6 +150,13 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.33.0 – Android app: Family report Share or save PDF
+
+- **Family report in the Android app** now has a **Share or save PDF** button. It builds the A4 report as a PDF in the background and opens Android's share sheet: save it to Drive or Files, send it on WhatsApp or email, or print it from there. It no longer depends on the phone's print screen, which was not working. A separate **Print** button keeps the old route.
+- In a browser or the installed web app nothing changes: the button is still "Print or save as PDF".
+- Needs a new APK (a new native method `exportPdf` and a small helper class in `android/app/src/main/java/android/print/`). Claude cannot compile or run the Android app, so this has not been tried on a phone. If it fails, the toast shows the reason; send that text.
+- No stored data changed.
+
 ## Release 8.32.0 – Home: Action centre folds away and shows what needs attention
 
 - **Collapsed by default.** Home opens with a one-line Action centre: the bell, a count and a short summary. Tap it to open the full list (tiles, tabs, dates); tap again to fold it.

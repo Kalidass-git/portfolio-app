@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
+import android.print.PdfPrint;
 import android.print.PrintAttributes;
 import android.print.PrintDocumentAdapter;
 import android.print.PrintManager;
@@ -70,6 +71,78 @@ public class NativeToolsPlugin extends Plugin {
         });
     }
 
+
+    /** Android's share sheet for a file in the app's cache (save to Drive, send on WhatsApp, and so on). */
+    private void share(File file, String title, String mime) {
+        Uri uri = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".fileprovider", file);
+        Intent send = new Intent(Intent.ACTION_SEND);
+        send.setType(mime);
+        send.putExtra(Intent.EXTRA_STREAM, uri);
+        send.putExtra(Intent.EXTRA_SUBJECT, title);
+        send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        Intent chooser = Intent.createChooser(send, title);
+        chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        getActivity().startActivity(chooser);
+    }
+
+    /** The app's private exports folder, emptied first: old exports are not kept because they hold private numbers. */
+    private File freshExportsDir() {
+        File dir = new File(getContext().getCacheDir(), "exports");
+        if (!dir.exists() && !dir.mkdirs()) return null;
+        File[] old = dir.listFiles();
+        if (old != null) {
+            for (File f : old) {
+                //noinspection ResultOfMethodCallIgnored
+                f.delete();
+            }
+        }
+        return dir;
+    }
+
+    /**
+     * Builds the page as an A4 PDF in the background and opens the share sheet with it (Save to Drive, WhatsApp, Gmail,
+     * Print...). Does not depend on Android's print screen.
+     */
+    @PluginMethod
+    public void exportPdf(final PluginCall call) {
+        final String name = call.getString("name", "Family-report.pdf").replaceAll("[^A-Za-z0-9._-]", "_");
+        final boolean send = !Boolean.FALSE.equals(call.getBoolean("share", true));
+        getActivity().runOnUiThread(() -> {
+            try {
+                File dir = freshExportsDir();
+                if (dir == null) {
+                    call.reject("Could not prepare a folder for the file.");
+                    return;
+                }
+                final File file = new File(dir, name);
+                PrintAttributes attrs = new PrintAttributes.Builder()
+                        .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+                        .setResolution(new PrintAttributes.Resolution("pdf", "pdf", 300, 300))
+                        .setMinMargins(new PrintAttributes.Margins(200, 200, 200, 200))
+                        .build();
+                PrintDocumentAdapter adapter = getBridge().getWebView().createPrintDocumentAdapter(name);
+                PdfPrint.write(adapter, attrs, file, new PdfPrint.Done() {
+                    @Override
+                    public void ok(File f) {
+                        try {
+                            if (send) share(f, name, "application/pdf");
+                            call.resolve();
+                        } catch (Exception e) {
+                            call.reject("Could not share the PDF: " + e.getMessage());
+                        }
+                    }
+
+                    @Override
+                    public void fail(String message) {
+                        call.reject("Could not make the PDF: " + message);
+                    }
+                });
+            } catch (Exception e) {
+                call.reject("Could not make the PDF: " + e.getMessage());
+            }
+        });
+    }
+
     @PluginMethod
     public void shareFile(PluginCall call) {
         String name = call.getString("name");
@@ -80,32 +153,17 @@ public class NativeToolsPlugin extends Plugin {
             return;
         }
         try {
-            File dir = new File(getContext().getCacheDir(), "exports");
-            if (!dir.exists() && !dir.mkdirs()) {
+            File dir = freshExportsDir();
+            if (dir == null) {
                 call.reject("Could not prepare a folder for the file.");
                 return;
-            }
-            // Old exports are not kept: they hold private numbers.
-            File[] old = dir.listFiles();
-            if (old != null) {
-                for (File f : old) {
-                    //noinspection ResultOfMethodCallIgnored
-                    f.delete();
-                }
             }
             File file = new File(dir, name.replaceAll("[^A-Za-z0-9._-]", "_"));
             byte[] bytes = Base64.decode(data, Base64.DEFAULT);
             try (FileOutputStream out = new FileOutputStream(file)) {
                 out.write(bytes);
             }
-            Uri uri = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".fileprovider", file);
-            Intent send = new Intent(Intent.ACTION_SEND);
-            send.setType(mime);
-            send.putExtra(Intent.EXTRA_STREAM, uri);
-            send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            Intent chooser = Intent.createChooser(send, name);
-            chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            getActivity().startActivity(chooser);
+            share(file, name, mime);
             call.resolve();
         } catch (Exception e) {
             call.reject("Could not share the file: " + e.getMessage());

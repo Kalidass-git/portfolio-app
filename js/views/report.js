@@ -2,6 +2,7 @@ import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
 import { h, money, compact, dateStr, section, table, formDialog, canEdit, toast, isMasked } from '../ui.js';
 import { donut, hbars, legend, color } from '../charts.js';
+import { isNative, sharePdf } from '../native.js';
 
 function noteForm(item) {
   formDialog({
@@ -24,11 +25,19 @@ function metaForm() {
   });
 }
 
-/** Print with real figures even if the screen is masked, then restore. */
-function printReport() {
+/** Print with real figures even if the screen is masked, then restore. In the Android app "share" makes a PDF and opens the share sheet instead (the phone's print screen is only the second choice). */
+function printReport(share) {
   const was = S.masked;
   const restore = () => { if (S.masked !== was) { S.masked = was; window.dispatchEvent(new Event('rerender')); } window.removeEventListener('afterprint', restore); };
   if (was) { S.masked = false; window.dispatchEvent(new Event('rerender')); toast('Figures are shown while printing'); }
+  if (share) {
+    setTimeout(async () => {
+      try { await sharePdf('Family-report-' + new Date().toISOString().slice(0, 10)); }
+      catch (e) { toast((e && e.message) || 'Could not make the PDF', 'bad'); }
+      restore();
+    }, 400);
+    return;
+  }
   window.addEventListener('afterprint', restore);
   setTimeout(() => window.print(), 150);
 }
@@ -92,8 +101,8 @@ export function render() {
   const root = h('div', { class: 'page report' });
 
   root.append(h('div', { class: 'toolbar no-print' },
-    h('div', null, h('h2', { class: 'page-title' }, 'Family report'), h('p', { class: 'note' }, 'Page 1 lists every holding under its kind, with who to contact. Page 2 has the charts, your note and the key contacts. Tap a heading to fold it on screen; the printout always shows everything. Print or save as PDF.')),
-    h('div', { class: 'btn-row' }, h('button', { onclick: () => { const g = [...document.querySelectorAll('.rpt-detail .grp')], open = g.some((x) => x.classList.contains('collapsed')); g.forEach((x) => x.classList.toggle('collapsed', !open)); } }, 'Fold / unfold all'), canEdit() ? h('button', { onclick: metaForm }, 'Edit family note') : null, h('button', { class: 'primary', onclick: printReport }, 'Print or save as PDF'))));
+    h('div', null, h('h2', { class: 'page-title' }, 'Family report'), h('p', { class: 'note' }, 'Page 1 lists every holding under its kind, with who to contact. Page 2 has the charts, your note and the key contacts. Tap a heading to fold it on screen; the printout always shows everything. ' + (isNative() ? 'Share or save PDF opens the share sheet: save it to Drive, or send it on WhatsApp or email.' : 'Print or save as PDF.'))),
+    h('div', { class: 'btn-row' }, h('button', { onclick: () => { const g = [...document.querySelectorAll('.rpt-detail .grp')], open = g.some((x) => x.classList.contains('collapsed')); g.forEach((x) => x.classList.toggle('collapsed', !open)); } }, 'Fold / unfold all'), canEdit() ? h('button', { onclick: metaForm }, 'Edit family note') : null, isNative() ? h('button', { onclick: () => printReport(false) }, 'Print') : null, h('button', { class: 'primary', onclick: () => printReport(isNative()) }, isNative() ? 'Share or save PDF' : 'Print or save as PDF'))));
 
   // ---------- page 1 ----------
   const contactLines = (meta.contacts || '').split('\n').map((x) => x.trim()).filter(Boolean);

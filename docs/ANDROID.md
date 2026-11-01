@@ -92,6 +92,6 @@ To work in Android Studio instead: `npm run android:sync`, then `npm run android
 | `capacitor-cordova-android-plugins` not found | Run `npm run android:sync` before building (the `android:debug` command does this for you) |
 | White or old screen after an update | Uninstall the old app, install the new APK |
 | No reminders | Settings → Payment reminders is on, the phone allows notifications for the app, and battery saving is not restricting it |
-| Print does nothing | Use the system print dialog's **Save as PDF** |
+| Print does nothing | On the Family report use **Share or save PDF** (builds the PDF itself), or **Print** then the system print dialog's **Save as PDF** |
 
 If a build stops with an error, send me the last 30 lines of the output.
