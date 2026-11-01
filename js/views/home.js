@@ -453,8 +453,14 @@ function agenda(data, all) {
 /** Notices that have no date: price alerts, old prices, loan interest higher than what you earn. Each can be hidden until tomorrow. */
 function notices(data, all) {
   const out = [];
-  const al = evalAlerts(data).hit;
-  if (al.length) out.push({ title: al.length === 1 ? `Price alert: ${al[0].alert.name}` : `${al.length} price alerts triggered`, sub: al.slice(0, 2).map((x) => x.text).join(' · '), value: '', tone: 'warn', href: '#/equity/overview' });
+  // One row per triggered price alert (shares and funds), each opening Equity > Watch > Alerts.
+  for (const x of evalAlerts(data).hit) out.push({ title: `Price alert: ${x.alert.name}`, sub: x.text, value: '', tone: 'warn', href: '#/equity/watch?v=alerts' });
+  // One row per holding, group or kind that is over a limit set under Risk; it opens Risk limits.
+  try {
+    const cfg = R.riskCfg(data), ev = R.evaluate(cfg, R.stateNow(data, all));
+    const pc = (x) => (Math.round(x * 1000) / 10) + '%', kw = (b) => (b.kind === 'item' ? 'single holding' : b.kind === 'bucket' ? 'risk group' : 'kind of holding');
+    for (const b of ev.breaches) out.push({ title: `Over risk limit: ${b.name}`, sub: `${kw(b)} at ${pc(b.pct)}, over by ${money(b.excess)}`, value: '', tone: 'neg', href: '#/risk/limits' });
+  } catch (e) { /* risk limits not set up: nothing to show */ }
   const at = data.settings.pricesUpdatedAt;
   const age = at ? Math.round((Date.now() - new Date(at).getTime()) / 864e5) : null;
   if (age == null || age >= 3) out.push({ title: 'Share and fund prices are ' + (age == null ? 'not fetched yet' : age + ' days old'), sub: 'Refresh on Shares & funds', value: '', tone: 'warn', href: '#/equity' });
