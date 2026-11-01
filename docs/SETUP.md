@@ -150,6 +150,11 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.31.1 – Net worth: tap a colour in "What you own, month by month"
+
+- **Fixed:** tapping (or clicking) a coloured band in the month-by-month chart now opens that group, the same as tapping its name underneath. Hovering the chart also shows the figures for the month again. The chart's touch layer was never put on the chart, so nothing reacted.
+- No stored data changed.
+
 ## Release 8.31.0 – Cash & banks → Accounts as cards; investments in blue on Transactions
 
 - **Accounts is no longer a table.** A green total card (Total cash, with In banks and Cash in hand when you have a wallet), then one card per account: bank or wallet icon, name and holder, balance, its share of your cash as a bar, last entry with how long ago, and this month's money in and out. Tap a card for its transactions; the pencil edits the account; negative balances show red. Phones get one card per row. Add account is unchanged.
