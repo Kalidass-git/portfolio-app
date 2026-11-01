@@ -150,6 +150,15 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.29.0 – Action centre: dates ahead of time and Dismiss; lending income follows Money to receive marks
+
+- **Loan EMIs and lending payments show ahead of their day.** Once this month's EMI or lending payment was in, next month's was not listed until the 1st, so anything due on the 1st–5th only appeared on the day. Both now show at next month's date (`C.upcoming`; the loan EMI date uses that month's length). Each lending payment is its own row in Next 7 days.
+- **An EMI due within 3 days is also an alert** (Alerts tab, amber); before that it is in Next 7 days. On All it shows once, under Alerts. Phone reminders (`notify.js`) pick up the next month's EMI too; their one-day-ahead timing is unchanged.
+- **Dismiss on every dated row, and a Dismissed chip.** Dismissed items stay hidden until they are gone, on this device only (`localStorage` `fw.dismissed.items`, keyed by a stable `ref`: kind, record, due date). The chip lists them with Restore and Restore all. The old "Hide until tomorrow" on notices is unchanged.
+- **Home → This month in detail → lending lines (this month):** tap a line to see each payment behind it and mark it received or not received. They are the very marks on Money to receive, so a change shows on both, and Money to receive now also has **Mark not received**. This month, received for these lines counts only those marks: the old whole-amount "Received this month" mark and bank credits are ignored for them. Earlier months are unchanged. Investable balance (`pendingToReceive`) follows the same figures.
+- **Data:** no migration. Marking received keeps the earlier date in an optional `receivables[].prevReceived`, which "not received" puts back (without it, last month's due date is used). `manualMonthlyIncome[].paidMonths` is still read for earlier months and for lines not in Money to receive, which now have a "Not received" button too.
+- New test: `tests/actionlending.test.mjs` (synthetic data, no argument).
+
 ## Release 8.28.0 – Shares & funds: phone lists use the compact rows everywhere
 
 - **Phone only; computer tables unchanged.** Every remaining Shares & funds table that showed as cards now uses the same compact rows as Holdings: a fixed first column, and a last column that switches figures when you tap its heading or the last column of any row. Tapping anywhere else in a row opens it as before.

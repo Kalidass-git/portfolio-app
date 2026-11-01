@@ -678,11 +678,16 @@ export function monthCashflow(data, all, month) {
   const mStart = month + '-01', mEnd = `${month}-${String(daysInMonthOf(mStart)).padStart(2, '0')}`;
   for (const m of data.manualMonthlyIncome || []) {
     const w = incomeWindow(data, m);
-    let expected = Number(m.amount) || 0, fromDues;
+    let expected = Number(m.amount) || 0, fromDues, payments = null;
     if (w.recs.length) {
       // lines that are in Money to receive follow their own start date, with the first month pro-rated; the amount of a part month is shown as pending until it comes
       expected = sum(w.recs, (r) => dueInMonth(r, month));
       fromDues = sum(w.recs.filter((r) => r.lastReceived && r.lastReceived.slice(0, 7) === month), (r) => dueInMonth(r, month) || r.expected || 0);
+      // each payment behind the line, for the tap-through sheet on Home (mark received / not received)
+      payments = w.recs.map((r) => {
+        const amount = dueInMonth(r, month), got = !!r.lastReceived && r.lastReceived.slice(0, 7) === month, day = Math.min(daysInMonthOf(mStart), Math.max(1, Number(r.dueDay) || 1));
+        return { id: r.id, name: r.name, amount: got ? amount || r.expected || 0 : amount, due: `${month}-${String(day).padStart(2, '0')}`, received: got, lastReceived: r.lastReceived || '' };
+      }).filter((x) => x.amount > 0.5 || x.received).sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : a.name.localeCompare(b.name)));
     } else {
       // no Money to receive line: judge by the lending or deposit it belongs to; interest first pays the month after it was lent
       if ((w.starts && w.starts.slice(0, 7) >= month) || (w.ends && w.ends < mStart)) continue;
@@ -690,9 +695,10 @@ export function monthCashflow(data, all, month) {
     }
     if (!(expected > 0.5)) continue;
     const fromLedger = sum(rows.filter((e) => (e.desc || '').toLowerCase() === m.match), (e) => e.credit);
-    const received = Math.max(fromLedger, fromDues, (m.paidMonths || []).includes(month) ? expected : 0);
+    // This month, a line that is in Money to receive counts only what is marked received there (a mark can be undone). Earlier months keep using the bank and old marks.
+    const received = payments && month === monthKey(all.asOf) ? fromDues : Math.max(fromLedger, fromDues, (m.paidMonths || []).includes(month) ? expected : 0);
     // What actually came in is always part of the budget: a pro-rated or estimated amount must never be lower than what was paid, or "received" ends up above "expected".
-    income.push({ name: m.name, expected: Math.max(expected, received), received, since: w.starts, part: !!w.recs.length && expected < (Number(m.amount) || 0) - 0.5 });
+    income.push({ name: m.name, expected: Math.max(expected, received), received, since: w.starts, part: !!w.recs.length && expected < (Number(m.amount) || 0) - 0.5, payments: payments && payments.length ? payments : null });
   }
   const totalExpected = sum(income, (x) => x.expected), totalReceived = sum(income, (x) => x.received);
   const groupOf = (label, cats) => ({ name: label, amount: sum(cats, debit), cats });
@@ -814,6 +820,34 @@ export function receivableStatus(r, asOf) {
   }
   const dueAmount = r.term === 'Yearly' ? (r.expected || 0) : (dueInMonth(r, due.slice(0, 7)) || r.expected || 0);
   return { ...r, due, dueAmount, received, notStarted, overdue: !received && !notStarted && due < asOf, dueToday: !received && !notStarted && due === asOf, installmentsPaid: Math.max(0, paid), total: Math.max(0, paid) * (r.expected || 0) };
+}
+
+/**
+ * Marks a Money to receive record as received for this month's due date (call it inside mutate with the record itself).
+ * `lastReceived` becomes today, or the due date when it is marked ahead of time, so the payment counts straight away.
+ * The old value is kept in the optional `prevReceived` so "not received" can put it back.
+ */
+export function markReceivedOn(r, asOf) {
+  const st = receivableStatus(r, asOf);
+  r.prevReceived = r.lastReceived || '';
+  r.lastReceived = asOf > st.due ? asOf : st.due;
+}
+/**
+ * Undoes "received" for this month's due date: `lastReceived` goes back to what it was before (`prevReceived`). A record marked before this
+ * was kept has no `prevReceived`, so it goes back to last month's due date, or to nothing when it only started this month.
+ */
+export function markNotReceivedOn(r, asOf) {
+  const st = receivableStatus(r, asOf), month = st.due.slice(0, 7);
+  let back;
+  if (r.prevReceived === '') back = '';
+  else if (typeof r.prevReceived === 'string' && r.prevReceived.slice(0, 7) < month) back = r.prevReceived;
+  else {
+    const pm = addMonths(month + '-01', -1), day = Math.min(daysInMonthOf(pm), Math.max(1, Number(r.dueDay) || 1));
+    back = `${pm.slice(0, 7)}-${String(day).padStart(2, '0')}`;
+    if (r.startDate && back < r.startDate) back = '';
+  }
+  r.lastReceived = back;
+  delete r.prevReceived;
 }
 
 // ---------- projections (Proj + Targets sheets) ----------
@@ -1131,21 +1165,46 @@ export function bondsDueSoon(all, asOf, days) {
   return out;
 }
 
+/**
+ * The next monthly payment of a Money to receive line in the month after `asOf`: { date, amount }, or null when it pays nothing then (yearly, not started, closed).
+ * Used once this month's payment is in (or the line starts later), so a payment due on the 1st-5th is listed ahead of time instead of only on the day.
+ */
+export function nextReceivableDue(r, asOf) {
+  if (!r || r.term === 'Yearly') return null;
+  const nm = addMonths(monthStart(asOf), 1), month = nm.slice(0, 7);
+  const amount = dueInMonth(r, month);
+  if (!(amount > 0.5)) return null;
+  const day = Math.min(daysInMonthOf(nm), Math.max(1, Number(r.dueDay) || 1));
+  return { date: `${month}-${String(day).padStart(2, '0')}`, amount };
+}
+
+/**
+ * Everything dated in the next `days` days. Every item has a stable `ref` (kind, record and due date, whatever its wording says: "overdue", "due today"),
+ * which the Home Action centre uses to remember what was dismissed.
+ */
 export function upcoming(data, all, days = 60) {
   const from = all.asOf, to = iso(toMs(from) + days * DAY);
   const out = [];
-  const add = (date, title, amount, kind) => out.push({ date, title, amount, kind, days: Math.round((toMs(date) - toMs(from)) / DAY) });
-  for (const b of all.bonds) if (b.maturityDate >= from && b.maturityDate <= to) add(b.maturityDate, b.name + ' matures', b.principal, 'Bond');
-  for (const f of all.fds) if (f.maturityDate >= from && f.maturityDate <= to) add(f.maturityDate, f.name + ' matures', f.value || f.principal, 'Fixed deposit');
-  for (const l of all.lending) if (l.principal > 0 && l.maturityDate >= from && l.maturityDate <= to) add(l.maturityDate, l.name + ' due back', l.principal + (l.accrued || 0), 'Lending');
-  for (const s of all.savings) { if (s.type === 'EPF' || s.type === 'PPF') continue; const end = savingEnd(s); if (end && end >= from && end <= to) { const m = savingMaturity(s); add(end, s.name + ' matures', m.amount, s.type); } }
+  const add = (date, title, amount, kind, ref) => out.push({ date, title, amount, kind, ref: ref ? ref + '|' + date : '', days: Math.round((toMs(date) - toMs(from)) / DAY) });
+  const id = (x) => x.id || x.name;
+  for (const b of all.bonds) if (b.maturityDate >= from && b.maturityDate <= to) add(b.maturityDate, b.name + ' matures', b.principal, 'Bond', 'bondmat:' + id(b));
+  for (const f of all.fds) if (f.maturityDate >= from && f.maturityDate <= to) add(f.maturityDate, f.name + ' matures', f.value || f.principal, 'Fixed deposit', 'fd:' + id(f));
+  for (const l of all.lending) if (l.principal > 0 && l.maturityDate >= from && l.maturityDate <= to) add(l.maturityDate, l.name + ' due back', l.principal + (l.accrued || 0), 'Lending', 'lend:' + id(l));
+  for (const s of all.savings) { if (s.type === 'EPF' || s.type === 'PPF') continue; const end = savingEnd(s); if (end && end >= from && end <= to) { const m = savingMaturity(s); add(end, s.name + ' matures', m.amount, s.type, 'sav:' + id(s)); } }
   const bn = bondNotify(data);
-  if (bn.on && bn.days > 0) for (const d of bondsDueSoon(all, from, bn.days)) if (d.days >= 1) add(d.date, d.b.name + ' interest due', bondDueAmount(d.b, d.date.slice(0, 7), data.settings.tdsRate ?? 0.1), 'Bond interest');
-  for (const r of data.receivables.filter((x) => x.active !== false && x.balanceDue > 0).map((x) => receivableStatus(x, from))) {
-    if (r.received || r.notStarted) continue;
-    if (r.due <= to) add(r.due, r.name + (r.overdue ? ' (overdue)' : r.dueToday ? ' (due today)' : ' to pay you'), r.dueAmount ?? r.expected, 'Money to receive');
+  if (bn.on && bn.days > 0) for (const d of bondsDueSoon(all, from, bn.days)) if (d.days >= 1) add(d.date, d.b.name + ' interest due', bondDueAmount(d.b, d.date.slice(0, 7), data.settings.tdsRate ?? 0.1), 'Bond interest', 'bondint:' + id(d.b));
+  for (const x of data.receivables.filter((y) => y.active !== false && y.balanceDue > 0)) {
+    const r = receivableStatus(x, from);
+    if (!r.received && !r.notStarted) {
+      if (r.due <= to) add(r.due, r.name + (r.overdue ? ' (overdue)' : r.dueToday ? ' (due today)' : ' to pay you'), r.dueAmount ?? r.expected, 'Money to receive', 'rc:' + id(x));
+    } else {
+      // this month's payment is in (or the line has not started): list the next one, so it shows ahead of its due day
+      const n = nextReceivableDue(x, from);
+      if (n && n.date <= to) add(n.date, x.name + ' to pay you', n.amount, 'Money to receive', 'rc:' + id(x));
+    }
   }
-  for (const d of loanDues(data, from)) if (!d.paid && d.date <= to) add(d.date, d.name + (d.status === 'overdue' ? ' EMI (overdue)' : d.status === 'today' ? ' EMI (due today)' : ' EMI due'), d.emi, 'Loan EMI');
+  // An EMI already paid this month is listed at next month's date, so it shows ahead of time too.
+  for (const d of loanDues(data, from)) if (d.date <= to) add(d.date, d.name + (d.paid ? ' EMI due' : d.status === 'overdue' ? ' EMI (overdue)' : d.status === 'today' ? ' EMI (due today)' : ' EMI due'), d.emi, 'Loan EMI', 'emi:' + d.id);
   return out.sort((a, b) => (a.date < b.date ? -1 : 1));
 }
 
@@ -1213,7 +1272,7 @@ export function loanDues(data, asOf) {
     const hit = entries.find((x) => !x.used && x.amt >= l.emi * 0.95 && x.amt <= l.emi * 1.05);
     if (hit) hit.used = true;
     const paid = !!hit || (!!l.emiPaidOn && l.emiPaidOn >= ms && l.emiPaidOn <= me);
-    const nextDue = paid ? addMonths(ms, 1).slice(0, 8) + String(Math.min(Number(l.emiDay) || 1, 28)).padStart(2, '0') : due;
+    const nm = addMonths(ms, 1), nextDue = paid ? nm.slice(0, 8) + String(Math.min(daysInMonthOf(nm), Math.max(1, Math.round(l.emiDay)))).padStart(2, '0') : due;
     const date = paid ? nextDue : due;
     const days = Math.round((toMs(date) - toMs(asOf)) / DAY);
     const status = paid ? 'paid' : days < 0 ? 'overdue' : days === 0 ? 'today' : days <= 7 ? 'soon' : 'later';
