@@ -1372,3 +1372,20 @@ html.native .ptr.spin { animation: ptr-spin .8s linear infinite; }
 .acc-flow { display: inline-flex; gap: 10px; font-style: normal; font-variant-numeric: tabular-nums; } .acc-flow i { display: inline-flex; align-items: center; gap: 2px; font-style: normal; font-weight: 600; } .acc-flow .txi { width: 13px; height: 13px; }
 .acc-flow .pos { color: var(--pos); } .acc-flow .neg { color: var(--neg); }
 @media (max-width: 700px) { .acc-hero { padding: 14px; } .acc-grid { grid-template-columns: 1fr; gap: 10px; } .acc-chip { flex: 1 1 0; min-width: 0; } .acc-split { width: 100%; } }
+
+/* Action centre: collapsed by default, with a count; red bell and badge while something needs attention */
+.ax .ax-toggle { width: 100%; margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.ax .ax-toggle:focus-visible { outline: 2px solid var(--ax-green); outline-offset: 4px; border-radius: 12px; }
+.ax.is-closed .ax-top { margin-bottom: 0; }
+.ax-ttl { flex: 1 1 auto; min-width: 0; }
+.ax-ttl .ax-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ax-bellwrap { position: relative; flex: 0 0 auto; display: inline-flex; }
+.ax .ax-chev { width: 32px; height: 32px; flex: 0 0 auto; --c: var(--ax-muted); transition: transform .2s; }
+.ax.is-open .ax-chev { transform: rotate(180deg); }
+.ax-badge { position: absolute; top: -9px; right: -10px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 99px; display: grid; place-items: center; font-size: .72rem; font-weight: 700; line-height: 1; color: #fff; background: var(--ax-red); border: 2px solid var(--ax-card, var(--surface)); box-sizing: content-box; }
+.ax.needs .ax-logo { background: var(--ax-red); color: #fff; }
+.ax.needs .ax-sub { color: var(--ax-red); font-weight: 650; }
+.ax.needs.is-closed { border-color: color-mix(in srgb, var(--ax-red) 45%, var(--ax-line)); }
+.ax.needs .ax-logo { animation: ax-ring 2.4s ease-in-out 1; }
+@keyframes ax-ring { 0%, 100% { transform: rotate(0); } 10%, 30% { transform: rotate(-12deg); } 20%, 40% { transform: rotate(12deg); } 50% { transform: rotate(0); } }
+@media (prefers-reduced-motion: reduce) { .ax.needs .ax-logo, .ax .ax-chev { animation: none; transition: none; } }
