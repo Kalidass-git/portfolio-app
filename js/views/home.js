@@ -270,11 +270,44 @@ function spentBody(mc, spent) {
 function fixIncome(name, month) {
   const m = (S.data.manualMonthlyIncome || []).find((x) => x.name === name);
   if (!m) return;
-  dialog(name, h('p', null, `Expected ${money(m.amount)} each month. Mark it received for ${monthLabel(month, true)}, or remove it if you no longer expect it.`), [
+  const marked = (m.paidMonths || []).includes(month);
+  dialog(name, h('p', null, marked ? `Marked as received for ${monthLabel(month, true)}. If that was a mistake, mark it not received.` : `Expected ${money(m.amount)} each month. Mark it received for ${monthLabel(month, true)}, or remove it if you no longer expect it.`), [
     { label: 'Remove it for good', class: 'danger', onclick: (c) => { mutate((d) => { d.manualMonthlyIncome = d.manualMonthlyIncome.filter((x) => x.name !== name); }); c(); } },
-    { label: 'Received this month', class: 'primary', onclick: (c) => { mutate((d) => { const t = d.manualMonthlyIncome.find((x) => x.name === name); t.paidMonths = [...new Set([...(t.paidMonths || []), month])]; }); c(); } },
+    marked
+      ? { label: 'Not received', class: 'primary', onclick: (c) => { mutate((d) => { const t = d.manualMonthlyIncome.find((x) => x.name === name); t.paidMonths = (t.paidMonths || []).filter((x) => x !== month); }); c(); } }
+      : { label: 'Received this month', class: 'primary', onclick: (c) => { mutate((d) => { const t = d.manualMonthlyIncome.find((x) => x.name === name); t.paidMonths = [...new Set([...(t.paidMonths || []), month])]; }); c(); } },
     { label: 'Close', onclick: (c) => c() },
   ]);
+}
+/**
+ * Current month: the payments behind a lending income line, each marked received or not received.
+ * They are the very marks on Money to receive (Fixed income), so a change here shows there and the other way round. Only the owner can change them.
+ */
+function lendingPayments(name, month) {
+  const body = h('div', { class: 'ax-sheet' });
+  const draw = () => {
+    const line = C.monthCashflow(S.data, S.all, month).income.find((x) => x.name === name), pays = (line && line.payments) || [];
+    const got = pays.filter((p) => p.received).reduce((a, p) => a + p.amount, 0);
+    const dup = (n) => pays.filter((p) => p.name === n).length > 1;
+    const mark = (p) => {
+      try { mutate((d) => { const r = (d.receivables || []).find((x) => x.id === p.id); if (!r) return; if (p.received) C.markNotReceivedOn(r, S.all.asOf); else C.markReceivedOn(r, S.all.asOf); }); } catch (e) { toast(e.message); return; }
+      draw();
+    };
+    body.replaceChildren(
+      h('p', { class: 'ax-sheet-sum' }, h('b', null, money(got)), ` received of ${money(line ? line.expected : 0)} expected`),
+      h('p', { class: 'mini-title' }, 'Each payment you expect'),
+      rowList(pays.map((p, i) => ({
+        title: dup(p.name) ? `${p.name} · loan ${pays.filter((q, j) => j <= i && q.name === p.name).length}` : p.name,
+        sub: p.received ? h('span', { class: 'pos' }, 'Received' + (p.lastReceived ? ' ' + shortDate(p.lastReceived) : '')) : 'Due ' + shortDate(p.due),
+        value: money(p.amount),
+        valueSub: canEdit() ? h('button', { type: 'button', class: 'small', style: { whiteSpace: 'nowrap', marginTop: '4px' }, onclick: () => mark(p) }, p.received ? 'Not received' : 'Mark received') : null,
+      })), { empty: 'No payment is expected this month.' }),
+      h('p', { class: 'note' }, 'Only these marks count towards Received. They are the same marks as Money to receive on Fixed income, so a change here shows there too.'));
+  };
+  draw();
+  const title = name + ' · ' + monthLabel(month, true);
+  if (window.matchMedia('(max-width: 700px)').matches) openInfo(title, body);
+  else dialog(title, body, [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
 }
 /** Which bonds still have interest to come this month, with the amount and day each is due. */
 function pendingBonds(bonds, month) {
@@ -388,6 +421,16 @@ function todayBody(all, go) {
 const DISMISS = 'fw.dismissed';
 const dismissed = () => { try { const o = JSON.parse(localStorage.getItem(DISMISS) || '{}'), t = C.todayISO(); return Object.fromEntries(Object.entries(o).filter(([, d]) => d === t)); } catch (e) { return {}; } };
 const setDismissed = (o) => { try { localStorage.setItem(DISMISS, JSON.stringify(o)); } catch (e) { /* private window */ } rerender(); };
+// Dated items (EMIs, lending, bonds, maturities) hidden with "Dismiss": { ref: due date }, on this device only. The ref has the due date in it,
+// so next month's payment is a new item. Entries older than a year are dropped.
+const DIS_ITEMS = 'fw.dismissed.items';
+const dismissedItems = () => { try { const o = JSON.parse(localStorage.getItem(DIS_ITEMS) || '{}'), cut = C.addMonths(C.todayISO().slice(0, 7) + '-01', -12); return Object.fromEntries(Object.entries(o).filter(([, d]) => d >= cut)); } catch (e) { return {}; } };
+const setDismissedItems = (o) => { try { localStorage.setItem(DIS_ITEMS, JSON.stringify(o)); } catch (e) { /* private window */ } rerender(); };
+const refsOf = (u) => (u.bonds ? u.bonds.map((b) => b.ref) : [u.ref]).filter(Boolean);
+const dismissRows = (u) => { const o = dismissedItems(); for (const r of refsOf(u)) o[r] = u.date; setDismissedItems(o); };
+const restoreRows = (us) => { const o = dismissedItems(); for (const u of [].concat(us)) for (const r of refsOf(u)) delete o[r]; setDismissedItems(o); };
+/** A loan EMI due within this many days is also an alert (the Alerts tab); before that it is in Next 7 days. */
+const EMI_ALERT_DAYS = 3;
 /** Things that need a look: overdue money, old prices, loans, behind plan. Each can be hidden for the rest of today (this device only). */
 // ---------- Action centre: everything dated that needs you, and the notices, in one card ----------
 const ACTION_KIND = { 'Money to receive': { href: '#/fixed/lending', dir: 'in' }, 'Bond interest': { href: '#/fixed/bonds', dir: 'in' }, Bond: { href: '#/fixed/bonds', dir: 'in' }, 'Fixed deposit': { href: '#/fixed/fds', dir: 'in' }, Lending: { href: '#/fixed/lending', dir: 'in' }, 'Loan EMI': { href: '#/fixed/loans', dir: 'out' } };
@@ -398,7 +441,7 @@ function agenda(data, all) {
   const seen = new Set(items.map((u) => u.key));
   const bn = C.bondNotify(data);
   if (bn.on) for (const d of C.bondsDueSoon(all, all.asOf, 0)) {
-    const u = { date: d.date, title: d.b.name + ' interest due', amount: C.bondDueAmount(d.b, d.date.slice(0, 7), data.settings.tdsRate ?? 0.1), kind: 'Bond interest', days: 0 };
+    const u = { date: d.date, title: d.b.name + ' interest due', amount: C.bondDueAmount(d.b, d.date.slice(0, 7), data.settings.tdsRate ?? 0.1), kind: 'Bond interest', days: 0, ref: 'bondint:' + (d.b.id || d.b.name) + '|' + d.date };
     u.key = u.date + '|' + u.title; if (!seen.has(u.key)) { seen.add(u.key); items.push(u); }
   }
   return items.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
@@ -443,7 +486,10 @@ function showBondDues(u) {
 }
 
 function actionCentre(data, all) {
-  const items = agenda(data, all), nt = notices(data, all), today = C.todayISO();
+  const every = agenda(data, all), hidRefs = dismissedItems(), nt = notices(data, all), today = C.todayISO();
+  const isHid = (u) => !!u.ref && Object.prototype.hasOwnProperty.call(hidRefs, u.ref);
+  const items = every.filter((u) => !isHid(u)), dis = every.filter(isHid), disN = mergeBondDues(dis).length;
+  const soonEmi = items.filter((u) => u.kind === 'Loan EMI' && u.days >= 0 && u.days <= EMI_ALERT_DAYS), promoted = new Set(soonEmi);
   const groups = [
     { id: 'overdue', label: 'Overdue', tone: 'neg', icon: 'alert', list: items.filter((u) => u.days < 0) },
     { id: 'today', label: 'Today', tone: 'warn', icon: 'clock', list: items.filter((u) => u.days === 0) },
@@ -453,18 +499,21 @@ function actionCentre(data, all) {
   // Each amount is shown in whole rupees, so the totals add up the rupees that are shown (adding the exact paise and rounding once could differ by ₹1 from the rows above).
   const sumOf = (l) => l.reduce((a, u) => a + Math.round(u.amount || 0), 0);
   const od = groups[0].list, week = groups[1].list.concat(groups[2].list);
-  const tabs = [['all', 'All', items.length + nt.shown.length], ['overdue', 'Overdue', od.length], ['week', 'Next 7 days', week.length], ['later', 'Later', groups[3].list.length], ['alerts', 'Alerts', nt.shown.length]];
+  const tabs = [['all', 'All', items.length + nt.shown.length], ['overdue', 'Overdue', od.length], ['week', 'Next 7 days', week.length], ['later', 'Later', groups[3].list.length], ['alerts', 'Alerts', nt.shown.length + soonEmi.length]];
+  if (disN) tabs.push(['dismissed', 'Dismissed', disN]);
   // Opens on what matters most: alerts first, then overdue, then the next 7 days (otherwise everything). Once the person picks a tab, it stays.
   const count = (k) => (tabs.find((t) => t[0] === k) || [])[2] || 0;
   if (!acState.chosen || !tabs.some((t) => t[0] === acState.tab)) acState.tab = count('alerts') ? 'alerts' : count('overdue') ? 'overdue' : count('week') ? 'week' : 'all';
   const dir = (u) => (ACTION_KIND[u.kind] || {}).dir;
-  const line = (u, g, first) => { const [ik, kc] = axKind(u.kind); return h('li', { class: 'ax-row ' + (g.tone || '') + (dir(u) ? ' ' + dir(u) : '') + ' k-' + kc, tabindex: 0, onclick: () => { if (u.bonds) showBondDues(u); else location.hash = (ACTION_KIND[u.kind] || {}).href || '#/savings'; } },
+  const line = (u, g, first, o = {}) => { const [ik, kc] = axKind(u.kind), soon = promoted.has(u) && !o.dismissed; return h('li', { class: 'ax-row ' + (soon ? 'warn' : g.tone || '') + (dir(u) ? ' ' + dir(u) : '') + ' k-' + kc + (o.dismissed ? ' is-dismissed' : ''), tabindex: 0, onclick: () => { if (u.bonds) showBondDues(u); else location.hash = (ACTION_KIND[u.kind] || {}).href || '#/savings'; } },
     h('div', { class: 'ax-date' }, first ? dateChip(u.date) : null),
     h('div', { class: 'ax-node', 'aria-hidden': 'true' }, h('i', null, dir(u) === 'in' ? '↓' : dir(u) === 'out' ? '↑' : '•')),
     h('div', { class: 'ax-card' },
       hico(ik, 'ax-ev'),
-      h('div', { class: 'ax-main' }, h('b', null, u.title.replace(/\s*\((overdue|due today)\)$/, '')), h('span', { class: 'ax-meta' }, u.bonds ? `${u.bonds.length} bonds` : u.kind, ' · ', g.id === 'overdue' ? h('span', { class: 'neg' }, `${-u.days} day${u.days === -1 ? '' : 's'} late`) : u.days === 0 ? h('span', { class: 'warn' }, 'today') : `in ${u.days} day${u.days === 1 ? '' : 's'}`)),
-      h('b', { class: 'ax-amt ' + (g.id === 'overdue' ? 'neg' : dir(u) === 'in' ? 'pos' : '') }, (dir(u) === 'in' ? '+' : dir(u) === 'out' ? '−' : '') + money(u.amount)))); };
+      h('div', { class: 'ax-main' }, h('b', null, u.title.replace(/\s*\((overdue|due today)\)$/, '')), h('span', { class: 'ax-meta' }, u.bonds ? `${u.bonds.length} bonds` : u.kind, ' · ', u.days < 0 ? h('span', { class: 'neg' }, `${-u.days} day${u.days === -1 ? '' : 's'} late`) : u.days === 0 ? h('span', { class: 'warn' }, 'today') : h('span', { class: soon ? 'warn' : '' }, `in ${u.days} day${u.days === 1 ? '' : 's'}`))),
+      h('div', { class: 'ax-end' },
+        h('b', { class: 'ax-amt ' + (u.days < 0 && !o.dismissed ? 'neg' : dir(u) === 'in' ? 'pos' : '') }, (dir(u) === 'in' ? '+' : dir(u) === 'out' ? '−' : '') + money(u.amount)),
+        h('button', { type: 'button', class: 'ax-dismiss sm' + (o.dismissed ? ' ax-restore' : ''), title: o.dismissed ? 'Bring this back into Action centre' : 'Hide this one (it stays hidden until it is gone)', 'aria-label': (o.dismissed ? 'Restore: ' : 'Dismiss: ') + u.title, onclick: (e) => { e.stopPropagation(); if (o.dismissed) restoreRows(u); else dismissRows(u); } }, o.dismissed ? 'Restore' : 'Dismiss')))); };
   const head = (g, n, total) => h('div', { class: 'ax-gh ' + (g.tone || '') }, hico(g.icon, 'ax-gi'), h('span', { class: 'ax-gt' }, g.label, h('em', null, ' · ' + n)), total != null ? h('span', { class: 'ax-gs' }, money(total)) : null);
   const block = (g) => {
     if (!g.list.length) return null;
@@ -475,14 +524,29 @@ function actionCentre(data, all) {
       h('ul', { class: 'ax-tl' }, shown.map((u, i) => line(u, g, i === 0 || shown[i - 1].date !== u.date))),
       rows.length > cap ? h('button', { type: 'button', class: 'ax-more', onclick: () => { acState.more[g.id] = !open; rerender(); } }, open ? 'Show less' : `Show all ${rows.length}`) : null);
   };
-  const alerts = nt.shown.length ? h('div', { class: 'ax-group' },
-    head({ label: 'Alerts', tone: 'warn', icon: 'bell' }, nt.shown.length, null),
-    h('ul', { class: 'ax-alerts' }, nt.shown.map((o) => h('li', { class: 'ax-alert ' + (o.tone || ''), tabindex: 0, onclick: () => { location.hash = o.href; } },
+  const emiName = (u) => u.title.replace(/ EMI( due| \((overdue|due today)\))?$/, '');
+  const emiAlert = (u) => h('li', { class: 'ax-alert warn', tabindex: 0, onclick: () => { location.hash = '#/fixed/loans'; } },
+    hico('alert', 'ax-ev'),
+    h('div', { class: 'ax-main' }, h('b', null, `${emiName(u)} EMI ` + (u.days === 0 ? 'due today' : u.days === 1 ? 'due tomorrow' : `due in ${u.days} days`)), h('span', { class: 'ax-meta' }, `${shortDate(u.date)} · Loan EMI · −${money(u.amount)}`)),
+    h('button', { type: 'button', class: 'ax-dismiss', title: 'Hide this EMI until it is gone', 'aria-label': 'Dismiss: ' + u.title, onclick: (e) => { e.stopPropagation(); dismissRows(u); } }, 'Dismiss'));
+  const alertN = nt.shown.length + soonEmi.length;
+  const alerts = alertN ? h('div', { class: 'ax-group' },
+    head({ label: 'Alerts', tone: 'warn', icon: 'bell' }, alertN, null),
+    h('ul', { class: 'ax-alerts' }, soonEmi.map(emiAlert), nt.shown.map((o) => h('li', { class: 'ax-alert ' + (o.tone || ''), tabindex: 0, onclick: () => { location.hash = o.href; } },
       hico(o.tone === 'neg' ? 'alert' : 'bell', 'ax-ev'),
       h('div', { class: 'ax-main' }, h('b', null, o.title), o.sub ? h('span', { class: 'ax-meta' }, o.sub) : null),
       h('button', { type: 'button', class: 'ax-dismiss', title: 'Hide this until tomorrow', 'aria-label': 'Hide until tomorrow: ' + o.title, onclick: (e) => { e.stopPropagation(); setDismissed({ ...nt.hid, [o.title]: today }); } }, 'Dismiss'))))) : null;
-  const pickGroups = acState.tab === 'overdue' ? [groups[0]] : acState.tab === 'week' ? [groups[1], groups[2]] : acState.tab === 'later' ? [groups[3]] : acState.tab === 'alerts' ? [] : groups;
-  const body = [...pickGroups.map(block), acState.tab === 'all' || acState.tab === 'alerts' ? alerts : null].filter(Boolean);
+  // On All each item shows once: an EMI that is already an alert is left out of the dated groups there (it stays in Next 7 days).
+  const noAlerts = groups.map((g) => ({ ...g, list: g.list.filter((u) => !promoted.has(u)) }));
+  const pickGroups = acState.tab === 'overdue' ? [groups[0]] : acState.tab === 'week' ? [groups[1], groups[2]] : acState.tab === 'later' ? [groups[3]] : acState.tab === 'alerts' || acState.tab === 'dismissed' ? [] : noAlerts;
+  const dismissedBlock = () => {
+    const rows = mergeBondDues(dis), g = { id: 'dis', tone: '' };
+    return h('div', { class: 'ax-group' },
+      h('div', { class: 'ax-gh' }, hico('clock', 'ax-gi'), h('span', { class: 'ax-gt' }, 'Dismissed', h('em', null, ' · ' + rows.length)), h('button', { type: 'button', class: 'ax-dismiss sm ax-restore', onclick: () => restoreRows(dis) }, 'Restore all')),
+      h('ul', { class: 'ax-tl' }, rows.map((u, i) => line(u, g, i === 0 || rows[i - 1].date !== u.date, { dismissed: true }))),
+      h('p', { class: 'note' }, 'Hidden from Action centre on this device only. Restore brings one back where it was.'));
+  };
+  const body = [...pickGroups.map(block), acState.tab === 'all' || acState.tab === 'alerts' ? alerts : null, acState.tab === 'dismissed' ? dismissedBlock() : null].filter(Boolean);
   const kpi = (cls, ik, label, val) => h('div', { class: 'ax-kpi ' + cls }, h('span', { class: 'ax-kl' }, hico(ik, 'ax-ki'), label), h('b', null, val));
   return h('section', { class: 'card ax' },
     h('div', { class: 'ax-top' }, hico('bell', 'ax-logo'), h('div', null, h('h2', null, 'Action centre'), h('p', { class: 'ax-sub' }, 'What needs attention now'))),
@@ -490,7 +554,7 @@ function actionCentre(data, all) {
       kpi(od.length ? 'bad' : '', 'alert', 'Overdue', od.length ? money(sumOf(od)) : '–'),
       kpi('up', 'cal', 'Next 7 days', week.length ? money(sumOf(week)) : '–'),
       kpi('', 'cal', 'Next 60 days', items.length ? money(sumOf(items.filter((u) => u.days >= 0))) : '–')),
-    h('nav', { class: 'ax-tabs', role: 'tablist', 'aria-label': 'Action centre' }, tabs.map(([k, l, n]) => h('a', { href: 'javascript:void 0', role: 'tab', class: acState.tab === k ? 'on' : '', 'aria-selected': String(acState.tab === k), onclick: (e) => { e.preventDefault(); acState.tab = k; acState.chosen = true; rerender(); } }, l, h('span', { class: 'ax-n' }, String(n))))),
+    h('nav', { class: 'ax-tabs', role: 'tablist', 'aria-label': 'Action centre' }, tabs.map(([k, l, n]) => h('a', { href: 'javascript:void 0', role: 'tab', class: (acState.tab === k ? 'on' : '') + (k === 'dismissed' ? ' ax-chip-dis' : ''), 'aria-selected': String(acState.tab === k), onclick: (e) => { e.preventDefault(); acState.tab = k; acState.chosen = true; rerender(); } }, l, h('span', { class: 'ax-n' }, String(n))))),
     body.length ? h('div', { class: 'ax-body' }, body) : h('p', { class: 'empty' }, acState.tab === 'all' ? 'All clear: nothing overdue and nothing falls due in the next 60 days.' : 'Nothing here.'),
     nt.hidden ? h('p', { class: 'note' }, `${nt.hidden} alert${nt.hidden === 1 ? '' : 's'} hidden until tomorrow. `, h('a', { href: '#', onclick: (e) => { e.preventDefault(); setDismissed({}); } }, 'Show again')) : null);
 }
@@ -641,8 +705,9 @@ function thisMonth(data, all, months) {
         h('p', { class: 'big-line' }, h('b', null, money(rec)), h('span', { class: 'muted' }, ` of ${money(exp)} expected`)),
         bar(rec, exp, 'good'),
         rowList(mc.income.map((r) => ({
-          title: r.name, sub: 'expected ' + money(r.expected) + (r.bonds ? ' · tap to see each bond' : r.since ? ' · lent ' + dateStr(r.since) : ''), value: money(r.received),
-          onClick: r.bonds ? () => pendingBonds(r.bonds, selMonth) : isCur && canEdit() && r.expected - r.received > 1 ? () => fixIncome(r.name, selMonth) : null,
+          title: r.name, sub: 'expected ' + money(r.expected) + (r.bonds ? ' · tap to see each bond' : r.payments && isCur ? ' · tap for each payment' : r.since ? ' · lent ' + dateStr(r.since) : ''), value: money(r.received),
+          onClick: r.bonds ? () => pendingBonds(r.bonds, selMonth) : r.payments && isCur ? () => lendingPayments(r.name, selMonth)
+            : isCur && canEdit() && (r.expected - r.received > 1 || ((data.manualMonthlyIncome || []).find((x) => x.name === r.name) || {}).paidMonths?.includes(selMonth)) ? () => fixIncome(r.name, selMonth) : null,
           valueSub: r.expected - r.received > 0 ? h('span', { class: 'warn' }, money(r.expected - r.received) + ' pending') : '✓ received',
         }))),
         isCur ? toReceiveExtras(data, all, mc) : null),

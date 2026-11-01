@@ -1221,6 +1221,14 @@ html.native .ptr.spin { animation: ptr-spin .8s linear infinite; }
 .ax-alert { cursor: pointer; grid-template-columns: 36px minmax(0, 1fr) auto; }
 .ax-alert.neg .ax-ev { --c: var(--ax-red); } .ax-alert.warn .ax-ev { --c: var(--ax-amber); }
 .ax-dismiss { height: 32px; padding: 0 12px; border-radius: 99px; border: 1px solid var(--ax-line); background: transparent; color: var(--ax-ink); font: inherit; font-size: .8rem; cursor: pointer; }
+/* Action centre: dismiss / restore on each dated row, and the Dismissed chip */
+.ax-end { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.ax-dismiss.sm { height: 26px; padding: 0 10px; font-size: .74rem; }
+.ax-dismiss.ax-restore { border-color: var(--ax-green); color: var(--ax-green); font-weight: 600; }
+.ax-tabs a.ax-chip-dis { border-style: dashed; color: var(--ax-muted); }
+.ax-tabs a.ax-chip-dis.on { border-style: solid; color: var(--ax-on); }
+.ax-row.is-dismissed .ax-card { opacity: .75; background: var(--surface-2); }
+.ax-gh .ax-dismiss { margin-left: auto; }
 .ax-more { margin: 4px 0 0 72px; background: none; border: 0; color: var(--ax-green); font: inherit; font-size: .85rem; font-weight: 600; padding: 6px 2px; cursor: pointer; }
 @media (max-width: 700px) {
   .ax { padding: 14px 12px 10px; }

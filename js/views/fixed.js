@@ -259,6 +259,10 @@ export function render() {
   const rc = data.receivables.filter((r) => r.active !== false).map((r) => C.receivableStatus(r, all.asOf)).sort((a, b) => (b.overdue - a.overdue) || (a.received - b.received) || (a.due < b.due ? -1 : 1));
   const late = rc.filter((r) => r.overdue), waiting = rc.filter((r) => !r.received && !r.overdue && !r.notStarted && C.monthKey(r.due) <= C.monthKey(all.asOf));
   const lateSum = late.reduce((a, r) => a + (r.expected || 0), 0), waitSum = waiting.reduce((a, r) => a + (r.expected || 0), 0);
+  // Mark received / not received for this month's payment (the same marks the Home lending sheet uses). Not received puts the earlier date back.
+  const recvBtn = (r, style) => (canEdit() && r.active !== false
+    ? h('button', { class: 'small', style, onclick: (e) => { e.stopPropagation(); const was = r.received; mutate((d) => { const x = d.receivables.find((y) => y.id === r.id); if (was) C.markNotReceivedOn(x, all.asOf); else C.markReceivedOn(x, all.asOf); }); toast(was ? 'Marked as not received' : 'Marked as received'); } }, r.received ? 'Mark not received' : 'Mark received')
+    : null);
   root.append(section('Money to receive',
     h('div', null,
       late.length ? h('div', { class: 'alert' }, h('b', null, `${late.length} payment${late.length > 1 ? 's' : ''} overdue · ${money(lateSum)}`), h('p', null, late.map((r) => `${r.name} (${money(r.expected)}, was due ${dateStr(r.due)})`).join(' · '))) : null,
@@ -276,11 +280,11 @@ export function render() {
       { label: 'Total received', key: true, cls: 'r', render: (r) => green(money(r.total || 0)) },
       { label: 'Last received', mob: 'under', mlabel: 'last ', get: (r) => dateStr(r.lastReceived) },
       { label: 'This month', render: (r) => (r.active === false ? h('span', { class: 'tag' }, 'Closed') : h('span', { class: r.received ? 'tag good' : r.overdue ? 'tag bad' : r.dueToday ? 'tag warn' : 'tag' }, r.received ? 'Received' : r.overdue ? 'Overdue' : r.dueToday ? 'Due today' : r.notStarted ? 'Starts ' + dateStr(r.startDate) : 'Due ' + dateStr(r.due))) },
-      { label: '', render: (r) => (canEdit() && r.active !== false && !r.received ? h('button', { class: 'small', onclick: (e) => { e.stopPropagation(); mutate((d) => { d.receivables.find((x) => x.id === r.id).lastReceived = C.todayISO(); }); toast('Marked as received'); } }, 'Mark received') : '') },
+      { label: '', render: (r) => recvBtn(r) || '' },
     ], rc, { mobile: {
       key: 'recv', head: 'From', midHead: 'This month',
       first: (r) => ({ title: r.name, sub: r.term,
-        extra: canEdit() && r.active !== false && !r.received ? h('button', { class: 'small', style: { marginTop: '4px' }, onclick: (e) => { e.stopPropagation(); mutate((d) => { d.receivables.find((x) => x.id === r.id).lastReceived = C.todayISO(); }); toast('Marked as received'); } }, 'Mark received') : null }),
+        extra: recvBtn(r, { marginTop: '4px' }) }),
       mid: (r) => (r.active === false ? h('span', { class: 'tag' }, 'Closed') : h('span', { class: r.received ? 'tag good' : r.overdue ? 'tag bad' : r.dueToday ? 'tag warn' : 'tag' }, r.received ? 'Received' : r.overdue ? 'Overdue' : r.dueToday ? 'Due today' : r.notStarted ? 'Starts ' + dateStr(r.startDate) : 'Due ' + dateStr(r.due))),
       views: [
         { label: 'Expected · With them', main: (r) => money(r.expected), sub: (r) => 'with them ' + money(r.balanceDue) },
