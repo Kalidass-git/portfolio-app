@@ -333,6 +333,85 @@ export function anomalies(data, all, month, { back = 6 } = {}) {
   return { month, prior, spikes, fresh, missing, big: big.slice(0, 8), total, avgTotal, basis: prior.length };
 }
 
+/** Everyday spending lines of a month: expense categories only, loan EMIs and tax left out (the same rule the rest of this tab uses). */
+function everyday(data, month) {
+  const kind = kindOf(data);
+  return C.monthLedger(data, month).filter((e) => e.debit > 0 && kind(e.category) === 'expense' && !C.LOAN_TAX.has(lc(e.category)));
+}
+const median = (a) => { const v = a.slice().sort((x, y) => x - y); return v.length ? (v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2) : 0; };
+const dayOf = (iso) => Number(String(iso).slice(8, 10));
+const daysInMonth = (m) => new Date(Number(m.slice(0, 4)), Number(m.slice(5, 7)), 0).getDate();
+/** A description reduced to what stays the same from month to month (no dates, reference numbers or extra spaces). */
+export const payKey = (d) => lc(d).replace(/\b\d{1,2}[-/]\d{1,2}([-/]\d{2,4})?\b/g, ' ').replace(/[0-9#*]+/g, ' ').replace(/[^a-z& ]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+/**
+ * How this month is going, only for the month that is under way: spent so far, what the earlier months had spent by the same day,
+ * the usual full month, and where the month is heading (spent so far plus the usual rest of the month). Null for other months or with fewer than two earlier months.
+ */
+export function spendingPace(data, all, month, { back = 6 } = {}) {
+  const cur = C.monthKey(all.asOf);
+  if (month !== cur) return null;
+  const prior = C.ledgerMonths(data).filter((m) => m < month).slice(-back);
+  if (prior.length < 2) return null;
+  const day = dayOf(all.asOf), dim = daysInMonth(month);
+  const spent = sum(everyday(data, month).filter((e) => e.date <= all.asOf), (e) => e.debit);
+  const toDate = prior.map((m) => sum(everyday(data, m).filter((e) => dayOf(e.date) <= day), (e) => e.debit));
+  const full = prior.map((m) => sum(everyday(data, m), (e) => e.debit));
+  const usualToDate = sum(toDate) / prior.length, usualFull = sum(full) / prior.length;
+  const projected = spent + Math.max(0, usualFull - usualToDate);
+  return { day, daysIn: dim, daysLeft: dim - day, spent, usualToDate, usualFull, projected, ahead: spent - usualToDate, aheadPct: usualToDate > 0 ? (spent - usualToDate) / usualToDate : null, basis: prior.length };
+}
+
+/**
+ * Payments that come back month after month (rent, subscriptions, school fees, a regular transfer): the same description in at least three of the last six months.
+ * Shows the usual monthly amount, what this month had, and whether it changed or has not happened yet.
+ */
+export function regularPayments(data, all, month, { window: win = 6 } = {}) {
+  const cur = C.monthKey(all.asOf);
+  const months = C.ledgerMonths(data).filter((m) => m <= month).slice(-win);
+  if (months.length < 3) return { rows: [], monthly: 0, basis: months.length };
+  const by = new Map();
+  for (const m of months) for (const e of everyday(data, m)) {
+    const k = payKey(e.desc); if (!k || k.length < 3) continue;
+    const r = by.get(k) || { key: k, name: e.desc || k, category: e.category, perMonth: new Map(), days: [] };
+    r.perMonth.set(m, (r.perMonth.get(m) || 0) + e.debit); r.days.push(dayOf(e.date)); r.name = e.desc || r.name; by.set(k, r);
+  }
+  const rows = [];
+  for (const r of by.values()) {
+    const seen = [...r.perMonth.keys()];
+    if (seen.length < 3 || seen.length < Math.min(3, months.length)) continue;
+    const vals = seen.filter((m) => m !== month).map((m) => r.perMonth.get(m)), usual = median(vals.length ? vals : [...r.perMonth.values()]);
+    if (usual < 100) continue;
+    const thisMonth = r.perMonth.get(month) || 0, usualDay = Math.round(median(r.days));
+    const late = !thisMonth && (month < cur || dayOf(all.asOf) > usualDay + 3);
+    const diff = thisMonth ? thisMonth - usual : 0;
+    // In the month under way a lower total only means the month is not over: say so instead of calling it a drop.
+    const moved = Math.abs(diff) >= Math.max(50, 0.1 * usual);
+    const status = thisMonth ? (moved && !(month === cur && diff < 0) ? 'changed' : moved ? 'part' : 'ok') : late ? 'missing' : 'due';
+    rows.push({ name: r.name, category: r.category, usual, thisMonth, diff, usualDay, months: seen.length, status, yearly: usual * 12 });
+  }
+  const order = { missing: 0, changed: 1, part: 2, due: 3, ok: 4 };
+  rows.sort((a, b) => order[a.status] - order[b.status] || b.usual - a.usual);
+  return { rows, monthly: sum(rows, (x) => x.usual), basis: months.length };
+}
+
+/** The same description and amount twice within three days in one month: maybe a double payment or a double entry. */
+export function possibleDuplicates(data, month) {
+  const groups = new Map();
+  for (const e of everyday(data, month)) {
+    const k = payKey(e.desc); if (!k || e.debit < 200) continue;
+    const g = groups.get(k + '|' + Math.round(e.debit)) || []; g.push(e); groups.set(k + '|' + Math.round(e.debit), g);
+  }
+  const out = [];
+  for (const list of groups.values()) {
+    if (list.length < 2) continue;
+    const l = list.slice().sort((a, b) => (a.date < b.date ? -1 : 1));
+    const near = l.filter((e, i) => (i > 0 && (new Date(e.date) - new Date(l[i - 1].date)) / 864e5 <= 3) || (i < l.length - 1 && (new Date(l[i + 1].date) - new Date(e.date)) / 864e5 <= 3));
+    if (near.length >= 2) out.push({ desc: near[0].desc, category: near[0].category, amount: near[0].debit, dates: near.map((e) => e.date), count: near.length, extra: near[0].debit * (near.length - 1) });
+  }
+  return out.sort((a, b) => b.extra - a.extra);
+}
+
 // ---------- 5. Allocation goal ----------
 export const ALLOC = [
   { key: 'bonds', label: 'Bonds', from: ['bonds'], dflt: 0.08 },

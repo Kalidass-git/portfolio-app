@@ -142,14 +142,33 @@ export function render() {
   root.append(h('p', { class: 'note no-print other-reports' }, 'Other reports: ', h('a', { href: '#/incexp' }, 'Income vs expense'), ' · ', h('a', { href: '#/networth' }, 'Net worth over time')));
 
   // ---------- full list (screen only; tap to add notes) ----------
-  root.append(h('div', { class: 'no-print' }, h('h2', { class: 'sec-title' }, 'All holdings and contact notes'), ...rep.sections.filter((s) => s.items.length).map((sec) =>
-    section(sec.type + ' · ' + money(sec.total),
-      table([
-        { label: 'Details', host: true, get: (i) => i.label },
-        { label: 'Holder', mob: 'under', get: (i) => i.holder },
-        { label: 'Current value', cls: 'r', get: (i) => money(i.value), total: () => money(sec.total) },
-        { label: 'Monthly income', cls: 'r', get: (i) => (i.monthly ? money(i.monthly) : ''), total: () => (sec.monthly ? money(sec.monthly) : '') },
-        { label: 'Contact / notes', mob: 'under', render: (i) => h('span', { class: 'note-cell' }, notes[i.key] || (canEdit() ? h('span', { class: 'muted' }, 'Add note') : '')) },
-      ], sec.items, { footer: { label: 'Total' }, onRow: canEdit() ? noteForm : null })))));
+  // One foldable group per kind of holding, with its count and total on the bar. On a phone each group's holdings are the same two-line rows as Shares & funds
+  // (name and holder on the left, value on the right; tap the right side to see monthly income instead).
+  const phone = window.matchMedia('(max-width: 700px)').matches;
+  const listed = rep.sections.filter((s) => s.items.length);
+  const groupCard = (sec, gi) => {
+    const open = !phone || gi === 0 ? true : false;
+    const col = color(gi);
+    const body = table([
+      { label: 'Details', host: true, get: (i) => i.label },
+      { label: 'Holder', mob: 'under', get: (i) => i.holder },
+      { label: 'Current value', cls: 'r', get: (i) => money(i.value), total: () => money(sec.total) },
+      { label: 'Monthly income', cls: 'r', get: (i) => (i.monthly ? money(i.monthly) : ''), total: () => (sec.monthly ? money(sec.monthly) : '') },
+      { label: 'Contact / notes', mob: 'under', render: (i) => h('span', { class: 'note-cell' }, notes[i.key] || (canEdit() ? h('span', { class: 'muted' }, 'Add note') : '')) },
+    ], sec.items, { footer: { label: 'Total' }, onRow: canEdit() ? noteForm : null,
+      m: { key: 'rpt-' + sec.type, head: sec.type, sub: ['Holder'], extra: 'Contact / notes', views: [['Current value', 'Monthly income']] } });
+    const wrap = h('div', { class: 'hg' + (open ? '' : ' collapsed'), style: { '--g': col } });
+    const head = h('button', { type: 'button', class: 'hg-head', 'aria-expanded': String(open), onclick: () => { const c = wrap.classList.toggle('collapsed'); head.setAttribute('aria-expanded', String(!c)); } },
+      h('i', { class: 'hg-dot', 'aria-hidden': 'true' }),
+      h('span', { class: 'hg-name' }, sec.type, h('small', { class: 'muted' }, ` ${sec.items.length} ${sec.items.length === 1 ? 'holding' : 'holdings'}`)),
+      h('span', { class: 'hg-sum' }, h('b', null, money(sec.total)), sec.monthly ? h('small', { class: 'muted' }, money(sec.monthly) + ' a month') : null),
+      h('span', { class: 'hg-caret', 'aria-hidden': 'true' }, '▸'));
+    wrap.append(head, h('div', { class: 'hg-body' }, body));
+    return wrap;
+  };
+  root.append(h('div', { class: 'no-print' },
+    h('h2', { class: 'sec-title' }, 'All holdings and contact notes'),
+    h('p', { class: 'note' }, 'Tap a group to open or close it.' + (canEdit() ? ' Tap a holding to add or change its contact note.' : '')),
+    h('div', { class: 'hg-list' }, listed.map(groupCard))));
   return root;
 }

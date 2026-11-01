@@ -11,7 +11,7 @@ import { groupedTable } from './groupmix.js';
 import * as IC from '../interestcert.js';
 import { openInfo } from '../mobilebar.js';
 
-const TABS = [['tax', 'Tax summary'], ['calendar', 'Cash calendar'], ['review', 'Annual review'], ['anomalies', 'Spending anomalies'], ['allocation', 'Allocation goal'], ['certificate', 'Interest certificate']];
+const TABS = [['tax', 'Tax summary'], ['calendar', 'Cash calendar'], ['review', 'Annual review'], ['anomalies', 'Spending insights'], ['allocation', 'Allocation goal'], ['certificate', 'Interest certificate']];
 const rerender = () => window.dispatchEvent(new Event('rerender'));
 const st = { fy: null, months: 12, year: null, month: null, who: 'all' };
 const signed = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + money(Math.abs(n));
@@ -311,7 +311,7 @@ function needCard(data, rows) {
     gap > 0 ? h('p', { class: 'note' }, `Worked out as shortfall × 12 ÷ (rate × (1 − ${Math.round(tds * 100)}% TDS)), so the interest you keep after tax equals the shortfall.`) : null);
 }
 
-// ---------- 4. Spending anomalies ----------
+// ---------- 4. Spending insights: month pace, higher than usual, regular payments, possible double payments ----------
 function anomalies(root) {
   const { data, all } = S;
   const months = C.ledgerMonths(data).slice().reverse();
@@ -324,6 +324,20 @@ function anomalies(root) {
     stat('Everyday spending', money(a.total), a.basis ? `usual ${money(a.avgTotal)}` : 'no earlier months'),
     stat('Things to look at', String(n), n ? 'listed below' : 'all looks normal')));
   if (a.basis < 2) { root.append(h('div', { class: 'card' }, h('p', { class: 'empty' }, 'Needs at least two earlier months to compare against.'))); return; }
+  // How the month under way is going, against the earlier months by the same day
+  const pc = I.spendingPace(data, all, st.month);
+  if (pc) {
+    const over = pc.ahead > 0, tone = pc.aheadPct != null && pc.aheadPct > 0.15 ? 'bad' : over ? 'warn' : 'good';
+    const bar = (v, of, cls) => h('div', { class: 'pbar ' + (cls || '') }, h('span', { style: { width: (of > 0 ? Math.min(100, Math.max(0, (v / of) * 100)) : 0).toFixed(1) + '%' } }));
+    root.append(section(`This month so far · day ${pc.day} of ${pc.daysIn}`, h('div', null,
+      h('div', { class: 'stats' },
+        stat('Spent so far', money(pc.spent), over ? h('span', { class: 'neg' }, money(pc.ahead) + ' more than usual by now') : h('span', { class: 'pos' }, money(-pc.ahead) + ' less than usual by now')),
+        stat('Usual by this day', money(pc.usualToDate), `average of the last ${pc.basis} months`),
+        stat('Likely month total', money(pc.projected), `a usual month is ${money(pc.usualFull)}`),
+        stat('Days left', String(pc.daysLeft), pc.daysLeft ? (pc.spent >= pc.usualFull ? 'already past a usual month' : money((pc.usualFull - pc.spent) / pc.daysLeft) + ' a day left in a usual month') : 'month ends today')),
+      bar(pc.spent, Math.max(pc.usualFull, pc.spent), tone),
+      h('p', { class: 'note' }, `${money(pc.spent)} spent of a usual ${money(pc.usualFull)} month. Everyday spending only: loan EMIs and tax are left out.`))));
+  }
   const ents = (es) => es.map((e) => `${dateStr(e.date)} ${e.desc || ''} ${money(e.debit)}`.trim()).join(' · ');
   root.append(section('Higher than usual', a.spikes.length ? table([
     { label: 'Category', host: true, get: (x) => x.category },
@@ -337,6 +351,32 @@ function anomalies(root) {
   if (a.big.length) root.append(section('Large single payments', table([{ label: 'Date', get: (e) => dateStr(e.date) }, { label: 'Description', host: true, get: (e) => e.desc }, { label: 'Category', mob: 'under', get: (e) => e.category }, { label: 'Amount', cls: 'r', get: (e) => money(e.debit) }, { label: 'Usual entry', cls: 'r', mob: 'hide', get: (e) => money(e.median) }], a.big, { m: { key: 'anom-big', head: 'Description', sub: ['Date', 'Category'], views: [['Amount', 'Usual entry']],
     sort: [{ value: 'date', label: 'Date', kind: 'date', get: (e) => e.date }, { value: 'amount', label: 'Amount', kind: 'num', get: (e) => e.debit }, { value: 'desc', label: 'Description', kind: 'text', get: (e) => String(e.desc || '').toLowerCase() }], sortDefault: { value: 'date', dir: 'desc' } } })));
   if (a.missing.length) root.append(section('Usual spending that did not happen', h('div', null, table([{ label: 'Category', host: true, get: (x) => x.category }, { label: 'Usual per month', cls: 'r', get: (x) => money(x.avg) }], a.missing, { m: { key: 'anom-missing', head: 'Category', views: [['Usual per month']] } }), note('A regular bill missing can mean it was paid from another account or not yet entered.'))));
+  // Payments that come back every month
+  const rp = I.regularPayments(data, all, st.month);
+  if (rp.rows.length) {
+    const tag = (x) => ({ ok: h('span', { class: 'tag good' }, 'As usual'), changed: h('span', { class: 'tag warn' }, x.diff > 0 ? `Up ${money(x.diff)}` : `Down ${money(-x.diff)}`), part: h('span', { class: 'tag' }, 'So far'), missing: h('span', { class: 'tag bad' }, 'Not paid yet'), due: h('span', { class: 'tag' }, `Due around day ${x.usualDay}`) })[x.status];
+    const cols = [
+      { label: 'Payment', host: true, get: (x) => x.name },
+      { label: 'Usual a month', cls: 'r', get: (x) => money(x.usual), total: () => money(rp.monthly) },
+      { label: 'This month', cls: 'r', mob: 'under', mlabel: 'this month ', get: (x) => (x.thisMonth ? money(x.thisMonth) : '–'), total: () => money(rp.rows.reduce((a, x) => a + x.thisMonth, 0)) },
+      { label: 'Status', render: tag },
+      { label: 'Per year', cls: 'r', mob: 'hide', get: (x) => money(x.yearly), total: () => money(rp.monthly * 12) },
+    ];
+    root.append(section('Regular payments', h('div', null,
+      h('p', { class: 'note' }, `${rp.rows.length} payments came back in at least three of the last ${rp.basis} months. Together they are about ${money(rp.monthly)} a month, ${money(rp.monthly * 12)} a year. Look for a price that went up, or one that has not been paid.`),
+      table(cols, rp.rows, { footer: { label: 'Total' }, m: { key: 'anom-regular', head: 'Payment', mid: 'Status', midHead: 'Status', views: [['Usual a month', 'This month']] } }))));
+  }
+  // The same payment twice in a few days
+  const dup = I.possibleDuplicates(data, st.month);
+  if (dup.length) root.append(section('Possible double payments', h('div', null,
+    h('p', { class: 'note' }, 'The same description and amount, two or more times within three days. It may be fine (two bills), or a payment made or entered twice.'),
+    table([
+      { label: 'Description', host: true, get: (x) => x.desc },
+      { label: 'Amount', cls: 'r', get: (x) => money(x.amount) },
+      { label: 'Times', cls: 'r', mob: 'under', mlabel: '× ', get: (x) => String(x.count) },
+      { label: 'Dates', mob: 'under', get: (x) => x.dates.map((d) => dateStr(d)).join(', ') },
+      { label: 'If a repeat', cls: 'r', get: (x) => money(x.extra) },
+    ], dup, { m: { key: 'anom-dup', head: 'Description', sub: ['Dates'], views: [['Amount', 'Times'], ['If a repeat']] } }))));
   root.append(note(`Compared with the average of the ${a.basis} months before. Loan EMIs and tax are left out.`));
 }
 

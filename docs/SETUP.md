@@ -150,6 +150,15 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.36.0 – Family report holdings in foldable groups; Spending anomalies becomes Spending insights
+
+- **Family report → All holdings and contact notes:** one foldable group per kind of holding (Bonds, Fixed deposits, Private lending, …) with its count, total and monthly income on the bar. On a phone the groups start closed except the first, and the holdings inside are the same two-line rows as Shares & funds (name and holder on the left, value on the right; tap the right side for monthly income; the contact note sits under the name). Tapping a holding still adds or changes its note. Desktop shows every group open. The printed report is unchanged.
+- **Insights → Spending insights** (was Spending anomalies; same address). The old lists stay (higher than usual, new this month, large single payments, usual spending that did not happen) and these are added:
+  - **This month so far:** spent so far against what the earlier months had spent by the same day, the likely month total, days left and a daily allowance, with a bar. Only for the month under way.
+  - **Regular payments:** descriptions that came back in at least three of the last six months (rent, subscriptions, fees). Shows the usual monthly amount, this month, a status (as usual, price up or down, so far, due around day N, not paid yet) and the yearly cost, with the monthly total at the bottom.
+  - **Possible double payments:** the same description and amount twice or more within three days.
+- Nothing is stored; all of it is worked out from your transactions. Tests: `tests/spendinsights.test.mjs`.
+
 ## Release 8.35.0 – Action centre Alerts: risk limits and price alerts, each opening its screen
 
 - **Risk:** every holding, risk group or kind of holding that is over a limit you set now has its own row in Alerts ("Over risk limit: Navi · single holding at 36%, over by ₹1,50,000"). Tapping it opens **Risk limits**.
