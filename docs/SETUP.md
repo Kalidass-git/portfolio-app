@@ -150,6 +150,11 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.37.0 – Spending insights: week by week
+
+- **Insights → Spending insights → Week by week** for the chosen month: stacked bars of each week's spending by category, and a table with each week's spend, the usual for that week (the same week averaged over the earlier months), the difference and what it was mostly on.
+- A note at the top names the week that ran furthest above usual, what it was mostly spent on and its biggest single payment. Weeks are days 1–7, 8–14, 15–21, 22–28 and the rest. The week under way is not judged until it ends, and weeks to come are shown faded. Loan EMIs and tax are left out. Nothing is stored. Tests added to `tests/spendinsights.test.mjs`.
+
 ## Release 8.36.0 – Family report holdings in foldable groups; Spending anomalies becomes Spending insights
 
 - **Family report → All holdings and contact notes:** one foldable group per kind of holding (Bonds, Fixed deposits, Private lending, …) with its count, total and monthly income on the bar. On a phone the groups start closed except the first, and the holdings inside are the same two-line rows as Shares & funds (name and holder on the left, value on the right; tap the right side for monthly income; the contact note sits under the name). Tapping a holding still adds or changes its note. Desktop shows every group open. The printed report is unchanged.
