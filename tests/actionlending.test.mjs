@@ -30,6 +30,7 @@ ok(car && car.date === '2026-10-20' && car.days < 0 && /overdue/.test(car.title)
 const pay = up.filter((u) => u.kind === 'Money to receive');
 ok(pay.length === 2 && pay[0].date === '2026-11-05' && pay[0].amount === 5000 && pay[1].date === '2026-11-06', 'each lending payment received this month is listed individually at next month’s date');
 ok(pay[0].ref === 'rc:r1|2026-11-05', 'lending items have a stable ref');
+ok(pay.every((u) => u.recurring === true) && emi.recurring === false, 'monthly lending is flagged recurring (Home keeps it to the next 7 days); an EMI is not');
 
 // ---- 1 Nov: nothing received yet this month ----
 dat = mk(); all = computeAll(dat, { asOf: '2026-11-01' }); up = upcoming(dat, all, 60);

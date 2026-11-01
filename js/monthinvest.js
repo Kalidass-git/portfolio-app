@@ -64,7 +64,7 @@ export function monthInvest(data, all, outlooks) {
 }
 
 // ---------- 8.9.34: the redesigned "Investing this month" ----------
-import { monthCashflow, accountBalances, daysInMonthOf, receivableStatus, monthStart } from './calc.js';
+import { monthCashflow, accountBalances, daysInMonthOf, receivableStatus, monthStart, bondBankGap } from './calc.js';
 
 const monthsBetween = (a, b) => (Number(b.slice(0, 4)) - Number(a.slice(0, 4))) * 12 + Number(b.slice(5, 7)) - Number(a.slice(5, 7));
 /** Total of a chit's payments in a month ('YYYY-MM'). */
@@ -168,18 +168,24 @@ export function expenseProjection(mc, asOf) {
 export const isWallet = (a) => a.wallet === true || /wallet|\bcash\b/i.test(a.name || '');
 
 /**
- * Interest still to come this month: exactly what Home's "This month in detail" card lists as waiting.
- * Money to receive entries that are due this month and not received (overdue and due today included, part months at their part amount),
- * plus the income lines (bonds, monthly lending) that are expected but not yet received. One rule, used by that card and by the Investable balance.
+ * Interest still to come into the bank this month, worked out from Home's "This month in detail":
+ *  1) the income that is not received yet: each income line's expected minus received (bonds not due yet, lending payments not marked received),
+ *  2) Money to receive entries due this month and not received that no income line already covers (overdue and due today included, part months at their part amount),
+ *  3) Income Bond that counts as received there but is not in the bank yet (the "not in the bank yet" figure, shown when it is ₹300 or more).
+ * A lending payment is counted once: it is in the income line, so its own Money to receive entry is not added again. Used by the card and by the Investable balance.
  */
 export function pendingToReceive(data, all, mc) {
   const month = monthKey(all.asOf), monthEnd = addMonths(monthStart(all.asOf), 1);
-  const rows = (data.receivables || []).filter((x) => x.active !== false && x.balanceDue > 0).map((x) => receivableStatus(x, all.asOf))
-    .filter((r) => !r.received && !r.notStarted && r.due < monthEnd).sort((a, b) => (a.due < b.due ? -1 : 1));
   const cash = mc || monthCashflow(data, all, month);
   const lines = cash.income.filter((x) => x.expected - x.received > 1).map((x) => ({ name: x.name, expected: x.expected - x.received, received: x.received, total: x.expected, bonds: x.bonds }));
-  const total = rows.reduce((a, r) => a + (r.dueAmount ?? r.expected ?? 0), 0) + lines.reduce((a, r) => a + r.expected, 0);
-  return { month, rows, lines, total };
+  const covered = new Set(cash.income.flatMap((x) => (x.payments || []).map((p) => p.id)));
+  // `rows` is the list Home shows under Income ("Due to you, not received yet"); `extra` is the part of it no income line already counts.
+  const rows = (data.receivables || []).filter((x) => x.active !== false && x.balanceDue > 0).map((x) => receivableStatus(x, all.asOf))
+    .filter((r) => !r.received && !r.notStarted && r.due < monthEnd).sort((a, b) => (a.due < b.due ? -1 : 1));
+  const extra = rows.filter((r) => !covered.has(r.id));
+  const gap = bondBankGap(cash, month, all.asOf), notInBank = gap && gap.short ? gap.gap : 0;
+  const total = extra.reduce((a, r) => a + (r.dueAmount ?? r.expected ?? 0), 0) + lines.reduce((a, r) => a + r.expected, 0) + notInBank;
+  return { month, rows, extra, lines, notInBank, total };
 }
 
 /** Everything the redesigned card shows. */
@@ -192,7 +198,7 @@ export function monthPlan(data, all, outlooks) {
   const banks = accountBalances(data).filter((a) => !isWallet(a)), wallets = accountBalances(data).filter(isWallet);
   const bank = sum(banks, (a) => a.balance), cash = sum(wallets, (a) => a.balance);
   // interest still to come this month (bonds and lending not received yet); expenses still to come are a projection
-  const interest = Math.max(0, pendingToReceive(data, all, mc).total);
+  const pend = pendingToReceive(data, all, mc), interest = Math.max(0, pend.total);
   const current = bank + cash + interest - mandatory.total - proj.total;
   const by = investedByMonth(data);
   const goneByRules = hasRules(base.rows);   // a fixed amount or a priority is set in the plan: the allocation rules decide, gold and chits included
@@ -220,5 +226,5 @@ export function monthPlan(data, all, outlooks) {
     for (const r of alloc) r.share = current > 0 ? r.amount / current : 0;
     free = Math.max(0, current);
   }
-  return { ...base, mandatory, mc, proj, bank, banks, wallets, cash, interest, current, goldWanted, free, alloc, rules: goneByRules, hasLines: alloc.length > 0 };
+  return { ...base, mandatory, mc, proj, bank, banks, wallets, cash, interest, pend, current, goldWanted, free, alloc, rules: goneByRules, hasLines: alloc.length > 0 };
 }

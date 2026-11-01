@@ -64,12 +64,14 @@ export const canEdit = () => S.role === 'owner';
 
 // ---------- toast ----------
 let toastTimer;
-export function toast(msg, kind = '') {
+/** A short message at the bottom. With `action` ({ label, onClick }) it also has a button (for example Undo) and stays a little longer. */
+export function toast(msg, kind = '', action = null) {
   let t = $('#toast');
   if (!t) { t = h('div', { id: 'toast', role: 'status' }); document.body.append(t); }
-  t.textContent = msg; t.className = 'show ' + kind;
+  t.replaceChildren(...(action ? [h('span', { class: 'toast-ok', 'aria-hidden': 'true' }, '✓'), h('span', { class: 'toast-msg' }, msg), h('button', { type: 'button', class: 'toast-act', onclick: () => { clearTimeout(toastTimer); t.className = ''; action.onClick(); } }, action.label)] : [msg]));
+  t.className = 'show ' + kind + (action ? ' act' : '');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (t.className = ''), kind === 'bad' ? 6000 : 2600);
+  toastTimer = setTimeout(() => (t.className = ''), action ? 6000 : kind === 'bad' ? 6000 : 2600);
 }
 
 // ---------- dialogs ----------

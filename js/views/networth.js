@@ -116,6 +116,8 @@ let mixDrill = null;
 function mixChart(data, all, months, lbl) {
   const cur = C.monthKey(all.asOf);
   const by = new Map();
+  // Saved month-end snapshots with their asset classes, plus today's live position for the current month (a snapshot saved for the current month is replaced by it).
+  // Two points are enough to draw: a saved month and today. (Before, saved months had to be before the current month, so Oct + Nov saved on 1 Nov counted as one.)
   for (const s of (data.projector && data.projector.snapshots) || []) if (s.classes && s.month < cur) by.set(s.month, s.classes);
   const live = P.baseline(data, all);
   by.set(cur, live.values);
@@ -127,8 +129,8 @@ function mixChart(data, all, months, lbl) {
     const series = keys.map((k, i) => ({ id: mixDrill ? k.key : k.id, name: k.label, color: i, values: ms.map((m) => val(by.get(m), mixDrill ? k.key : k.id)) }));
     const title = mixDrill ? (I.GOAL_GROUPS.find((g) => g.id === mixDrill) || {}).label : 'All groups';
     box.replaceChildren(...[
-      mixDrill && ms.filter((m) => m < cur).length >= 2 ? h('div', { style: { marginBottom: '6px' } }, btn('← All groups', () => { mixDrill = null; draw(); }, 'small'), h('b', { style: { marginLeft: '8px' } }, title)) : ms.filter((m) => m < cur).length >= 2 ? h('p', { class: 'note', style: { marginTop: 0 } }, 'Tap a colour to see what is inside it.') : null,
-      ms.filter((m) => m < cur).length < 2 ? h('p', { class: 'note', style: { margin: 0 } }, 'Not enough history to draw this yet. It needs at least two saved month-end check-ins (Wealth outlook → Month-end check-in). Each one keeps how much sat in debts, equity, gold and others, and the chart then shows how that mix moved.')
+      mixDrill && ms.length >= 2 ? h('div', { style: { marginBottom: '6px' } }, btn('← All groups', () => { mixDrill = null; draw(); }, 'small'), h('b', { style: { marginLeft: '8px' } }, title)) : ms.length >= 2 ? h('p', { class: 'note', style: { marginTop: 0 } }, 'Tap a colour to see what is inside it.') : null,
+      ms.length < 2 ? h('p', { class: 'note', style: { margin: 0 } }, 'Not enough history to draw this yet. It needs at least one saved month-end check-in before this month, besides today (Wealth outlook → Month-end check-in). Each one keeps how much sat in debts, equity, gold and others, and the chart then shows how that mix moved.')
         : stackedArea({ labels: ms.map((m) => lbl(m, months.indexOf(m))), series, fmt: money, height: 240, onSelect: mixDrill ? null : (sr) => { mixDrill = sr.id; draw(); } })].filter(Boolean));
   };
   draw();

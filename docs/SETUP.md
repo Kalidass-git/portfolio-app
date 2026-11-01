@@ -150,6 +150,15 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.30.0 – Action centre: close icon, Undo, slimmer rows; Investable interest fixed; Net worth mix chart; Cash transactions restyled
+
+- **Action centre rows:** the Dismiss button is now a small × (Restore is a ↺ in the Dismissed view). Dismissing shows a toast with **Undo** (`toast(msg, kind, { label, onClick })` in `ui.js`). Rows are slimmer: about 52px on a phone (was about 82px), the kind icon is hidden on phones, titles drop the repeated words ("Alagu Pandi", "Home loan"; the second line says Lending, EMI or Bond).
+- **Monthly items only in Next 7 days:** monthly lending and monthly or quarterly bond interest are no longer listed under Later or in the 60-day total (`upcoming()` flags them `recurring`). Yearly lending and maturities are as before. Phone reminders are unchanged.
+- **Investable balance → Interest income still expected** now follows This month in detail: income not received yet (bonds not due, lending not marked received), plus Money to receive entries no income line covers, plus Income Bond not in the bank yet (the ₹300-or-more gap). Before, a lending payment was counted twice (its income line and its own Money to receive entry). `pendingToReceive` returns `rows` (Home's "Due to you" list), `extra`, `lines`, `notInBank` and `total`.
+- **Net worth → What you own, month by month** now draws with one saved month before this month plus today. It needed two saved months before this one, so October and November saved on 1 Nov counted as one.
+- **Cash & banks → Transactions:** Filter and Sort are labelled groups with icons (Account, Period, Category, Amount, Search; Sort by, Order with wording that fits the field). Summary tiles (Entries, Received, Paid out / Spent / Invested). Header band, zebra rows, a coloured edge (green in, red out, blue investment), a round ↓ / ↑ badge and a category pill on each row. On phones: icon Sort and Filter buttons, a search box with an icon, summary tiles, and each transaction as a bordered card. No behaviour changed.
+- New test: `tests/investinterest.test.mjs`. `tests/actionlending.test.mjs` also checks the `recurring` flag.
+
 ## Release 8.29.0 – Action centre: dates ahead of time and Dismiss; lending income follows Money to receive marks
 
 - **Loan EMIs and lending payments show ahead of their day.** Once this month's EMI or lending payment was in, next month's was not listed until the 1st, so anything due on the 1st–5th only appeared on the day. Both now show at next month's date (`C.upcoming`; the loan EMI date uses that month's length). Each lending payment is its own row in Next 7 days.
