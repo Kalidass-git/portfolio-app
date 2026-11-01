@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.35.0 – Action centre Alerts: risk limits and price alerts, each opening its screen
+
+- **Risk:** every holding, risk group or kind of holding that is over a limit you set now has its own row in Alerts ("Over risk limit: Navi · single holding at 36%, over by ₹1,50,000"). Tapping it opens **Risk limits**.
+- **Price alerts:** each triggered share or fund alert is its own row ("Price alert: AAA Ltd · Price ₹90 is at or below ₹95"), instead of one combined row. Tapping it opens **Shares & funds → Watch → Alerts** (before, it opened the overview).
+- They count towards the red bell and "N need attention" on Home, can be hidden until tomorrow with the close icon (Undo works), and clear when the holding is back within its limit or the alert stops being true. No stored data changed.
+
 ## Release 8.34.0 – Action centre: matured holdings stay as overdue
 
 - A bond, fixed deposit, private lending line, chit or other saving whose maturity date has passed is **no longer cleared from Action centre**. It moves to **Overdue** ("matured (overdue)", "N days late") and stays there until you **close** the holding or **move its maturity date** (extend). Then it goes by itself.
