@@ -1,6 +1,6 @@
 // Spending insights: month pace, regular payments, possible double payments. Synthetic data.
 import { computeAll } from '../js/calc.js';
-import { spendingPace, regularPayments, possibleDuplicates, payKey } from '../js/insights.js';
+import { weeklySpending, spendingPace, regularPayments, possibleDuplicates, payKey } from '../js/insights.js';
 let bad = 0; const ok = (c, m) => { if (!c) { bad++; console.log('FAIL', m); } else console.log('ok  ', m); };
 const led = []; let id = 1;
 const add = (date, desc, debit, category = 'Groceries') => led.push({ id: id++, date, acct: 'a1', desc, category, credit: 0, debit });
@@ -33,4 +33,14 @@ ok(missing && missing.status === 'missing', 'a regular payment that has not happ
 const d = possibleDuplicates(data, '2026-11');
 ok(d.length === 1 && /pharmacy/i.test(d[0].desc) && d[0].extra === 850, 'same payment twice within three days is flagged');
 ok(possibleDuplicates(data, '2026-10').every((x) => !/big basket/i.test(x.desc)), 'ten days apart is not flagged');
+// weekly trend: October has the same four weeks every month; November's second week has the big basket and the pharmacy lines
+const wkn = weeklySpending(data, all, '2026-11');
+ok(wkn.weeks.length === 5 && wkn.weeks[0].label === '1–7' && wkn.weeks[4].label === '29–30', 'five weeks, the last one short');
+ok(wkn.weeks[0].total === 26499 && Math.round(wkn.weeks[0].usual) === 20649, 'week 1 total (rent, basket, Netflix, pharmacy) and usual (rent + Netflix)');
+ok(wkn.weeks[0].top[0].category === 'Rent' && wkn.weeks[1].total === 20 && Math.round(wkn.weeks[1].usual) === 3000, 'biggest category of week 1; week 2 has only the chai so far against a usual 3000');
+ok(wkn.weeks[2].future && wkn.weeks[3].future, 'weeks not started are marked future');
+ok(wkn.weeks[1].current, 'the week under way is marked');
+ok(wkn.over === 1, 'the highest week above usual is found among finished ones (week 1; the week under way is not judged)');
+const wko = weeklySpending(data, all, '2026-10');
+ok(wko.weeks.every((w) => !w.future && !w.current), 'a finished month has no future or current weeks');
 console.log(bad ? bad + ' failed' : 'all passed'); process.exit(bad ? 1 : 0);

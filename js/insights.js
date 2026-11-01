@@ -363,6 +363,31 @@ export function spendingPace(data, all, month, { back = 6 } = {}) {
 }
 
 /**
+ * Spending week by week inside one month (days 1-7, 8-14, 15-21, 22-28, then the rest), against the same weeks of the earlier months.
+ * Each week: total, usual (average of the earlier months' same week), the difference, the categories behind it and its biggest entry.
+ * `over` marks the week that ran furthest above usual. Weeks that have not started yet (the month under way) come back with `future`.
+ */
+export function weeklySpending(data, all, month, { back = 6 } = {}) {
+  const dim = daysInMonth(month), cur = C.monthKey(all.asOf);
+  const prior = C.ledgerMonths(data).filter((m) => m < month).slice(-back);
+  const wk = (d) => Math.min(5, Math.ceil(dayOf(d) / 7));
+  const spans = [[1, 7], [8, 14], [15, 21], [22, 28], [29, dim]].filter(([a]) => a <= dim);
+  const mine = everyday(data, month);
+  const weeks = spans.map(([a, b], i) => {
+    const n = i + 1, es = mine.filter((e) => wk(e.date) === n);
+    const cats = new Map(); for (const e of es) cats.set(e.category || 'Unknown', (cats.get(e.category || 'Unknown') || 0) + e.debit);
+    const top = [...cats.entries()].map(([category, amount]) => ({ category, amount })).sort((x, y) => y.amount - x.amount);
+    const hist = prior.map((m) => sum(everyday(data, m).filter((e) => wk(e.date) === n && dayOf(e.date) <= daysInMonth(m)), (e) => e.debit));
+    const usual = hist.length ? sum(hist) / hist.length : null, total = sum(es, (e) => e.debit);
+    const future = month === cur && `${month}-${String(a).padStart(2, '0')}` > all.asOf;
+    return { n, from: a, to: b, label: a + (b > a ? '–' + b : ''), total, usual, diff: usual == null ? null : total - usual, top, biggest: es.slice().sort((x, y) => y.debit - x.debit)[0] || null, future, current: month === cur && !future && all.asOf <= `${month}-${String(b).padStart(2, '0')}` };
+  });
+  let over = null;
+  for (const w of weeks) if (!w.future && !w.current && w.diff != null && w.diff > 0 && (!over || w.diff > over.diff)) over = w;
+  return { weeks, basis: prior.length, over: over ? over.n : null, total: sum(weeks, (w) => w.total) };
+}
+
+/**
  * Payments that come back month after month (rent, subscriptions, school fees, a regular transfer): the same description in at least three of the last six months.
  * Shows the usual monthly amount, what this month had, and whether it changed or has not happened yet.
  */

@@ -351,6 +351,29 @@ function anomalies(root) {
   if (a.big.length) root.append(section('Large single payments', table([{ label: 'Date', get: (e) => dateStr(e.date) }, { label: 'Description', host: true, get: (e) => e.desc }, { label: 'Category', mob: 'under', get: (e) => e.category }, { label: 'Amount', cls: 'r', get: (e) => money(e.debit) }, { label: 'Usual entry', cls: 'r', mob: 'hide', get: (e) => money(e.median) }], a.big, { m: { key: 'anom-big', head: 'Description', sub: ['Date', 'Category'], views: [['Amount', 'Usual entry']],
     sort: [{ value: 'date', label: 'Date', kind: 'date', get: (e) => e.date }, { value: 'amount', label: 'Amount', kind: 'num', get: (e) => e.debit }, { value: 'desc', label: 'Description', kind: 'text', get: (e) => String(e.desc || '').toLowerCase() }], sortDefault: { value: 'date', dir: 'desc' } } })));
   if (a.missing.length) root.append(section('Usual spending that did not happen', h('div', null, table([{ label: 'Category', host: true, get: (x) => x.category }, { label: 'Usual per month', cls: 'r', get: (x) => money(x.avg) }], a.missing, { m: { key: 'anom-missing', head: 'Category', views: [['Usual per month']] } }), note('A regular bill missing can mean it was paid from another account or not yet entered.'))));
+  // Week by week: where in the month the spending went over
+  const wk = I.weeklySpending(data, all, st.month);
+  if (wk.total > 0) {
+    const cats = [...new Set(wk.weeks.flatMap((w) => w.top.slice(0, 3).map((t) => t.category)))].slice(0, 6);
+    const partsOf = (w) => cats.map((c) => ({ name: c, value: (w.top.find((t) => t.category === c) || {}).amount || 0 })).concat([{ name: 'Other', value: w.total - cats.reduce((a, c) => a + ((w.top.find((t) => t.category === c) || {}).amount || 0), 0) }]);
+    const names = cats.concat(['Other']);
+    const worst = wk.weeks.find((w) => w.n === wk.over);
+    root.append(section('Week by week', h('div', null,
+      worst ? h('div', { class: 'alert warn' }, h('b', null, `Week ${worst.n} (days ${worst.label}) ran highest above usual: ${money(worst.total)}, ${money(worst.diff)} more than the usual ${money(worst.usual)}.`),
+        worst.top.length ? h('p', null, 'Mostly ' + worst.top.slice(0, 3).map((t) => `${t.category} ${money(t.amount)}`).join(', ') + (worst.biggest ? `. Biggest single payment: ${worst.biggest.desc || worst.biggest.category} ${money(worst.biggest.debit)} on ${dateStr(worst.biggest.date)}.` : '.')) : null)
+        : h('p', { class: 'note' }, wk.basis ? 'No week ran above its usual level.' : 'Earlier months are needed to say what is usual for a week.'),
+      stackedBars({ names: ['Spending'], colors: [2], partColors: Object.fromEntries(names.map((n, i) => [n, color(i + 1)])), fmt: money, height: 220,
+        groups: wk.weeks.map((w) => ({ label: 'Wk ' + w.n, title: `Days ${w.label}`, faded: w.future, bars: [partsOf(w).filter((x) => x.value > 0)] })) }),
+      h('div', { class: 'legend-row', style: { display: 'flex', gap: '14px', flexWrap: 'wrap', margin: '6px 0' } }, names.map((n, i) => h('span', null, h('i', { style: { display: 'inline-block', width: '10px', height: '10px', borderRadius: '2px', marginRight: '5px', background: color(i + 1) } }), n))),
+      table([
+        { label: 'Week', host: true, render: (w) => h('span', null, `Week ${w.n} · days ${w.label}`, w.current ? h('span', { class: 'tag' }, 'now') : null, w.n === wk.over ? h('span', { class: 'tag warn' }, 'highest') : null) },
+        { label: 'Spent', cls: 'r', key: true, get: (w) => (w.future ? '–' : money(w.total)), total: () => money(wk.total) },
+        { label: 'Usual', cls: 'r', mob: 'under', mlabel: 'usual ', get: (w) => (w.usual == null ? '–' : money(w.usual)) },
+        { label: 'Difference', cls: 'r', mob: 'under', mlabel: '', render: (w) => (w.future || w.diff == null ? '–' : h('span', { class: w.diff > 0 ? 'neg' : 'pos' }, (w.diff > 0 ? '+' : '−') + money(Math.abs(w.diff)))) },
+        { label: 'Mostly', mob: 'hide', get: (w) => w.top.slice(0, 2).map((t) => `${t.category} ${money(t.amount)}`).join(', ') || '–' },
+      ], wk.weeks, { footer: { label: 'Month' }, m: { key: 'anom-weeks', head: 'Week', views: [['Spent', 'Usual'], ['Difference', 'Mostly']] } }),
+      h('p', { class: 'note' }, 'Weeks are days 1–7, 8–14, 15–21, 22–28 and the rest of the month. “Usual” is the same week averaged over the earlier months. The week under way is not counted as high until it has ended. Loan EMIs and tax are left out.'))));
+  }
   // Payments that come back every month
   const rp = I.regularPayments(data, all, st.month);
   if (rp.rows.length) {
