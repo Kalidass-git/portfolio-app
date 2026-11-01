@@ -1310,7 +1310,7 @@ html.native .ptr.spin { animation: ptr-spin .8s linear infinite; }
 .tt-clear { justify-self: start; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border: 1px solid var(--neg); border-radius: 8px; background: transparent; color: var(--neg); font: inherit; font-size: .85rem; cursor: pointer; }
 .tx-sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 10px 0 12px; }
 .tx-tile { --tc: var(--brand); display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--tc) 30%, var(--line)); border-left: 4px solid var(--tc); border-radius: 12px; background: color-mix(in srgb, var(--tc) 7%, var(--surface)); min-width: 0; }
-.tx-tile.pos { --tc: var(--pos); } .tx-tile.neg { --tc: var(--neg); } .tx-tile.inv { --tc: var(--brand); }
+.tx-tile.pos { --tc: var(--pos); } .tx-tile.neg { --tc: var(--neg); } .tx-tile.inv { --tc: var(--s1); }
 .tx-ti { width: 32px; height: 32px; border-radius: 50%; display: inline-grid; place-items: center; background: color-mix(in srgb, var(--tc) 16%, transparent); color: var(--tc); flex: 0 0 auto; }
 .tx-ti .txi { width: 17px; height: 17px; }
 .tx-tt { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
@@ -1318,12 +1318,12 @@ html.native .ptr.spin { animation: ptr-spin .8s linear infinite; }
 .tx-tt b { font-size: 1.12rem; color: var(--tc); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tx-line { display: flex; gap: 8px; align-items: flex-start; }
 .tx-bd { --bc: var(--muted); width: 22px; height: 22px; border-radius: 50%; display: inline-grid; place-items: center; flex: 0 0 auto; margin-top: 1px; color: var(--bc); background: color-mix(in srgb, var(--bc) 15%, transparent); }
-.tx-bd.pos { --bc: var(--pos); } .tx-bd.neg { --bc: var(--neg); } .tx-bd.inv { --bc: var(--brand); }
+.tx-bd.pos { --bc: var(--pos); } .tx-bd.neg { --bc: var(--neg); } .tx-bd.inv { --bc: var(--s1); }
 .tx-bd .txi { width: 13px; height: 13px; stroke-width: 2.4; }
 .tx-cat { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: .72rem; font-weight: 600; background: var(--line-2); color: var(--muted); }
-.tx-cat.pos { background: color-mix(in srgb, var(--pos) 13%, transparent); color: var(--pos); } .tx-cat.neg { background: color-mix(in srgb, var(--neg) 12%, transparent); color: var(--neg); } .tx-cat.inv { background: color-mix(in srgb, var(--brand) 13%, transparent); color: var(--brand); }
+.tx-cat.pos { background: color-mix(in srgb, var(--pos) 13%, transparent); color: var(--pos); } .tx-cat.neg { background: color-mix(in srgb, var(--neg) 12%, transparent); color: var(--neg); } .tx-cat.inv { background: color-mix(in srgb, var(--s1) 13%, transparent); color: var(--s1); }
 .txn-card .tbl thead th { background: var(--brand-soft); color: var(--brand); text-transform: uppercase; letter-spacing: .04em; font-size: .7rem; padding-top: 9px; padding-bottom: 9px; border-bottom: 2px solid var(--brand); }
-.txn-card .tbl tbody tr.tx-in, .txn-card .mrow.tx-in { --ac: var(--pos); } .txn-card .tbl tbody tr.tx-out, .txn-card .mrow.tx-out { --ac: var(--neg); } .txn-card .tbl tbody tr.tx-inv, .txn-card .mrow.tx-inv { --ac: var(--brand); }
+.txn-card .tbl tbody tr.tx-in, .txn-card .mrow.tx-in { --ac: var(--pos); } .txn-card .tbl tbody tr.tx-out, .txn-card .mrow.tx-out { --ac: var(--neg); } .txn-card .tbl tbody tr.tx-inv, .txn-card .mrow.tx-inv { --ac: var(--s1); }
 .txn-card .tbl tbody tr.tx td { border-bottom: 1px solid var(--line); padding-top: 10px; padding-bottom: 10px; }
 .txn-card .tbl tbody tr.tx:nth-child(even) td { background: color-mix(in srgb, var(--brand-soft) 45%, var(--surface)); }
 .txn-card .tbl tbody tr.tx.click:hover td { background: var(--brand-soft); }
@@ -1345,3 +1345,30 @@ html.native .ptr.spin { animation: ptr-spin .8s linear infinite; }
   .txn-card .mr-title .tx-bd { display: inline-grid; vertical-align: -5px; margin: 0 6px 0 0; }
   .txn-card .mr-subline .tx-cat { font-size: .68rem; padding: 0 7px; }
 }
+
+/* Cash & banks → Accounts: a total, then one card per account */
+.acc-hero { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: center; justify-content: space-between; padding: 16px 18px; margin-bottom: 14px; border-radius: 14px; color: var(--brand-ink); background: linear-gradient(135deg, var(--brand), color-mix(in srgb, var(--brand) 70%, #000)); }
+.acc-hero-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.acc-hl { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; opacity: .85; }
+.acc-ht { font-size: clamp(1.7rem, 7vw, 2.3rem); line-height: 1.1; font-variant-numeric: tabular-nums; } .acc-ht.neg { color: #ffb4ab; }
+.acc-hs { font-size: .82rem; opacity: .8; }
+.acc-split { display: flex; gap: 10px; flex-wrap: wrap; }
+.acc-chip { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border-radius: 10px; background: rgba(255,255,255,.14); min-width: 120px; }
+.acc-chip small { display: inline-flex; align-items: center; gap: 5px; font-size: .72rem; opacity: .85; } .acc-chip b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.acc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 12px; }
+.acc-card { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--line); border-left: 4px solid var(--brand); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); cursor: pointer; min-width: 0; }
+.acc-card:hover, .acc-card:focus-visible { border-color: var(--brand); outline: none; background: color-mix(in srgb, var(--brand-soft) 40%, var(--surface)); }
+.acc-card.wallet { border-left-color: var(--s4); } .acc-card.neg { border-left-color: var(--neg); }
+.acc-top { display: flex; align-items: center; gap: 10px; }
+.acc-ic { width: 38px; height: 38px; border-radius: 11px; display: inline-grid; place-items: center; flex: 0 0 auto; background: var(--brand-soft); color: var(--brand); } .acc-ic .txi { width: 20px; height: 20px; }
+.acc-card.wallet .acc-ic { background: color-mix(in srgb, var(--s4) 18%, transparent); color: var(--s4); }
+.acc-nm { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; line-height: 1.25; } .acc-nm b { font-size: 1rem; overflow-wrap: anywhere; } .acc-nm small { color: var(--muted); font-size: .8rem; }
+.acc-bal { font-size: 1.5rem; line-height: 1.1; font-variant-numeric: tabular-nums; } .acc-bal.neg { color: var(--neg); }
+.acc-share { display: flex; flex-direction: column; gap: 4px; } .acc-share small { color: var(--muted); font-size: .74rem; }
+.acc-bar { height: 6px; border-radius: 99px; background: var(--line-2); overflow: hidden; } .acc-bar span { display: block; height: 100%; border-radius: 99px; background: var(--brand); }
+.acc-card.wallet .acc-bar span { background: var(--s4); }
+.acc-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 10px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: .78rem; color: var(--muted); }
+.acc-last { display: inline-flex; align-items: center; gap: 5px; } .acc-last .txi { width: 14px; height: 14px; }
+.acc-flow { display: inline-flex; gap: 10px; font-style: normal; font-variant-numeric: tabular-nums; } .acc-flow i { display: inline-flex; align-items: center; gap: 2px; font-style: normal; font-weight: 600; } .acc-flow .txi { width: 13px; height: 13px; }
+.acc-flow .pos { color: var(--pos); } .acc-flow .neg { color: var(--neg); }
+@media (max-width: 700px) { .acc-hero { padding: 14px; } .acc-grid { grid-template-columns: 1fr; gap: 10px; } .acc-chip { flex: 1 1 0; min-width: 0; } .acc-split { width: 100%; } }

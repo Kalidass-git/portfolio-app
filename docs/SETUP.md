@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.31.0 – Cash & banks → Accounts as cards; investments in blue on Transactions
+
+- **Accounts is no longer a table.** A green total card (Total cash, with In banks and Cash in hand when you have a wallet), then one card per account: bank or wallet icon, name and holder, balance, its share of your cash as a bar, last entry with how long ago, and this month's money in and out. Tap a card for its transactions; the pencil edits the account; negative balances show red. Phones get one card per row. Add account is unchanged.
+- **Transactions: investments are blue** (the app's investment blue) on the summary tile, badge, category pill and row edge, matching the rest of the app. Expenses (red) and income (green) are unchanged.
+- No data or calculation changes.
+
 ## Release 8.30.0 – Action centre: close icon, Undo, slimmer rows; Investable interest fixed; Net worth mix chart; Cash transactions restyled
 
 - **Action centre rows:** the Dismiss button is now a small × (Restore is a ↺ in the Dismissed view). Dismissing shows a toast with **Undo** (`toast(msg, kind, { label, onClick })` in `ui.js`). Rows are slimmer: about 52px on a phone (was about 82px), the kind icon is hidden on phones, titles drop the repeated words ("Alagu Pandi", "Home loan"; the second line says Lending, EMI or Bond).

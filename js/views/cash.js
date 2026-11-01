@@ -6,7 +6,7 @@ import { hbars } from '../charts.js';
 import { closeForm, reopen } from './closing.js';
 import { openBankImport } from './cash-import.js';
 import { confirmDialog, pct, posNeg, stat, datalistId, icon, rowList } from '../ui.js';
-import { chitCards } from '../monthinvest.js';
+import { chitCards, isWallet } from '../monthinvest.js';
 import { sortFilterBar } from '../mobilebar.js';
 import { monthGroups } from '../ui.js';
 
@@ -76,18 +76,34 @@ function accountForm(acct) {
 function accounts() {
   const { all, data } = S;
   const wrap = h('div');
+  const banks = all.banks, total = all.cashTotal, cashInHand = banks.filter(isWallet).reduce((a, x) => a + x.balance, 0), bankSum = total - cashInHand;
+  const posSum = banks.reduce((a, x) => a + Math.max(0, x.balance), 0);
+  const ym = C.monthKey(all.asOf), flow = new Map();
+  for (const e of data.ledger) if (C.monthKey(e.date) === ym) { const f = flow.get(e.acct) || { i: 0, o: 0 }; f.i += e.credit || 0; f.o += e.debit || 0; flow.set(e.acct, f); }
+  const ago = (d) => { const n = Math.max(0, Math.round((Date.parse(all.asOf) - Date.parse(d)) / 864e5)); return n === 0 ? 'today' : n === 1 ? 'yesterday' : n + ' days ago'; };
+  const hero = h('div', { class: 'acc-hero' },
+    h('div', { class: 'acc-hero-main' }, h('span', { class: 'acc-hl' }, txi('bank'), 'Total cash'), h('b', { class: 'acc-ht' + (total < 0 ? ' neg' : '') }, money(total)), h('span', { class: 'acc-hs' }, `across ${banks.length} account${banks.length === 1 ? '' : 's'}`)),
+    cashInHand !== 0 ? h('div', { class: 'acc-split' },
+      h('div', { class: 'acc-chip' }, h('small', null, txi('bank'), 'In banks'), h('b', null, money(bankSum))),
+      h('div', { class: 'acc-chip' }, h('small', null, txi('wallet'), 'Cash in hand'), h('b', null, money(cashInHand)))) : null);
+  const card = (b) => {
+    const wal = isWallet(b), f = flow.get(b.id), share = posSum > 0 ? Math.max(0, b.balance) / posSum : 0;
+    const open = () => openLedger({ acct: b.id });
+    return h('div', { class: 'acc-card' + (wal ? ' wallet' : '') + (b.balance < 0 ? ' neg' : ''), tabindex: 0, role: 'button', 'aria-label': `${b.name}, ${b.holder}. Open its transactions.`, onclick: open, onkeydown: (e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(); } } },
+      h('div', { class: 'acc-top' },
+        h('span', { class: 'acc-ic' }, txi(wal ? 'wallet' : 'bank')),
+        h('div', { class: 'acc-nm' }, h('b', null, b.name), h('small', null, b.holder + (wal ? ' · cash in hand' : ''))),
+        canEdit() ? h('button', { class: 'pencil', title: 'Edit account', 'aria-label': 'Edit ' + b.name, onclick: (e) => { e.stopPropagation(); accountForm(data.accounts.find((x) => x.id === b.id)); } }, icon('edit')) : null),
+      h('b', { class: 'acc-bal' + (b.balance < 0 ? ' neg' : '') }, money(b.balance)),
+      h('div', { class: 'acc-share' }, h('div', { class: 'acc-bar', 'aria-hidden': 'true' }, h('span', { style: { width: (share * 100).toFixed(1) + '%' } })), h('small', null, `${Math.round(share * 100)}% of your cash`)),
+      h('div', { class: 'acc-foot' },
+        h('span', { class: 'acc-last' }, txi('cal'), b.lastDate ? `Last entry ${dateStr(b.lastDate)} · ${ago(b.lastDate)}` : 'No entries yet'),
+        f && (f.i || f.o) ? h('span', { class: 'acc-flow', title: 'This month: money in and money out' }, h('i', { class: 'pos' }, txi('in'), money(f.i)), h('i', { class: 'neg' }, txi('out'), money(f.o))) : null));
+  };
   wrap.append(section('Bank accounts & cash',
-    table([
-      { label: 'Account', host: true, render: (b) => h('span', { class: 'name-edit' }, h('span', { class: 'ne-name' }, `${b.name} · ${b.holder}`), canEdit() ? h('button', { class: 'pencil', title: 'Edit account', 'aria-label': 'Edit ' + b.name, onclick: (e) => { e.stopPropagation(); accountForm(data.accounts.find((x) => x.id === b.id)); } }, icon('edit')) : null) },
-      { label: 'Balance', cls: 'r', get: (b) => money(b.balance), total: () => money(all.cashTotal) },
-      { label: 'Last entry', mob: 'under', mlabel: 'last ', get: (b) => dateStr(b.lastDate) },
-    ], all.banks, { footer: { label: 'Total cash' }, mobile: {
-      key: 'banks', head: 'Account', midHead: 'Last entry',
-      first: (b) => ({ title: b.name, sub: b.holder, extra: null }),
-      mid: (b) => (b.lastDate ? dateStr(b.lastDate) : null),
-      views: [{ label: 'Balance', main: (b) => h('span', { class: 'name-edit' }, money(b.balance), canEdit() ? h('button', { class: 'pencil', title: 'Edit account', 'aria-label': 'Edit ' + b.name, onclick: (e) => { e.stopPropagation(); accountForm(data.accounts.find((x) => x.id === b.id)); } }, icon('edit')) : null), sub: null, total: () => ({ main: money(all.cashTotal) }) }] }, onRow: (b) => openLedger({ acct: b.id }) }),
+    h('div', null, hero, banks.length ? h('div', { class: 'acc-grid' }, banks.map(card)) : h('p', { class: 'empty' }, 'No account yet. Add one to start.')),
     canEdit() ? [btn('Add account', () => accountForm())] : null));
-  wrap.append(h('p', { class: 'note' }, 'Tap an account to see its transactions. Balances come from the transactions, so to correct a balance add or edit a transaction.'));
+  wrap.append(h('p', { class: 'note' }, 'Tap an account to see its transactions. Balances come from the transactions, so to correct a balance add or edit a transaction. The money in and out under each account is for this month.'));
   return wrap;
 }
 
@@ -264,6 +280,7 @@ const TXI = {
   invest: ['M3 17l6-6 4 4 8-8', 'M15 7h6v6'], filter: ['M3 5h18l-7 8v6l-4 2v-8z'], sort: ['M7 4v16', 'M3 16l4 4 4-4', 'M17 20V4', 'M13 8l4-4 4 4'],
   search: ['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M21 21l-4.3-4.3'], bank: ['M3 10l9-6 9 6', 'M5 10v8M9.5 10v8M14.5 10v8M19 10v8', 'M3 20.5h18'],
   cal: ['M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z', 'M16 3v4M8 3v4M4 11h16'], tag: ['M3 12V3h9l9 9-9 9z', 'M7.5 7.5h.01'],
+  wallet: ['M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1', 'M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4'],
   rupee: ['M6 4h12', 'M6 9h12', 'M9 4c5 0 6 5 0 5l7 11'], clear: ['M6 6l12 12', 'M18 6L6 18'], order: ['M3 7h13', 'M3 12h9', 'M3 17h5', 'M18 8v10', 'M15 15l3 3 3-3'],
 };
 const txi = (name) => { const NS = 'http://www.w3.org/2000/svg', e = document.createElementNS(NS, 'svg'); e.setAttribute('viewBox', '0 0 24 24'); e.setAttribute('class', 'txi'); e.setAttribute('aria-hidden', 'true'); for (const d of TXI[name] || []) { const q = document.createElementNS(NS, 'path'); q.setAttribute('d', d); e.append(q); } return e; };
