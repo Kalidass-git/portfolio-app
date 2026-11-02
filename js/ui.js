@@ -75,11 +75,13 @@ export function toast(msg, kind = '', action = null) {
 }
 
 // ---------- dialogs ----------
-export function dialog(title, body, actions = []) {
-  const dlg = h('dialog', { class: 'sheet' });
+export function dialog(title, body, actions = [], { tone = '', sub = '', ic = '' } = {}) {
+  const dlg = h('dialog', { class: 'sheet' + (tone ? ' toned' : '') });
+  if (tone) dlg.dataset.tone = tone;
   const close = () => { dlg.close(); dlg.remove(); };
   dlg.append(
-    h('header', null, h('h2', null, title), h('button', { class: 'icon', 'aria-label': 'Close', onclick: close }, '✕')),
+    h('header', null, tone ? h('span', { class: 'dlg-badge', 'aria-hidden': 'true' }, fieldIcon(ic || 'wallet')) : null,
+      h('div', { class: 'dlg-title' }, h('h2', null, title), sub ? h('p', { class: 'dlg-sub' }, sub) : null), h('button', { class: 'icon', 'aria-label': 'Close', onclick: close }, '✕')),
     h('div', { class: 'dlg-body' }, body),
     ...(actions.length ? [h('footer', null, actions.map((a) => h('button', { class: a.class || '', onclick: () => a.onclick(close) }, a.label)))] : []),
   );
@@ -107,11 +109,58 @@ export function setOptions(sel, options, value) {
   if (![...sel.options].some((o) => o.selected) && sel.options.length) sel.selectedIndex = 0;
 }
 
+
+// ---------- modern entry forms: icons, colour tone, segmented choices ----------
+const FI = {
+  wallet: ['M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2', 'M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4'],
+  up: ['M12 19V5', 'M5 12l7-7 7 7'], down: ['M12 5v14', 'M5 12l7 7 7-7'], chart: ['M3 17l6-6 4 4 8-8', 'M15 7h6v6'],
+  bank: ['M3 10l9-6 9 6', 'M5 10v8M9.5 10v8M14.5 10v8M19 10v8', 'M3 20.5h18'], cal: ['M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z', 'M16 3v4M8 3v4M4 11h16'],
+  tag: ['M3 12V3h9l9 9-9 9z', 'M7.5 7.5h.01'], rupee: ['M6 4h12', 'M6 9h12', 'M9 4c5 0 6 5 0 5l7 11'], note: ['M5 4h14v16H5z', 'M8 9h8M8 13h8M8 17h5'],
+  user: ['M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M4 21a8 8 0 0 1 16 0'], pct: ['M19 5L5 19', 'M7 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4z', 'M17 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z'],
+  gold: ['M4 17l3-8h10l3 8z', 'M9 9l1.5-4h3L15 9'], shield: ['M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z'], bell: ['M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7', 'M10 20a2 2 0 0 0 4 0'],
+  edit: ['M12 20h9', 'M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z'], swap: ['M17 1l4 4-4 4', 'M3 11V9a4 4 0 0 1 4-4h14', 'M7 23l-4-4 4-4', 'M21 13v2a4 4 0 0 1-4 4H3'], cog: ['M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z'],
+};
+export function fieldIcon(name) {
+  const NS = 'http://www.w3.org/2000/svg', e = document.createElementNS(NS, 'svg');
+  e.setAttribute('viewBox', '0 0 24 24'); e.setAttribute('class', 'fi'); e.setAttribute('aria-hidden', 'true');
+  for (const d of FI[name] || FI.wallet) { const q = document.createElementNS(NS, 'path'); q.setAttribute('d', d); e.append(q); }
+  return e;
+}
+/** Colour of an entry screen: red for money going out, green for money coming in, blue for investments, the app green otherwise. */
+export function toneOfTitle(t) {
+  t = String(t || '').toLowerCase();
+  if (/expense|paid out|spend|debit|emi|premium|repay|fee\b|bill/.test(t)) return 'out';
+  if (/income|received|credit|salary|interest|dividend|payout/.test(t)) return 'in';
+  if (/share|stock|fund|etf|bond|sip|invest|gold|jewel|chit|epf|ppf|nps|fd\b|deposit|lending|lend|insurance|policy|buy|sell|holding|trade|rd\b|saving/.test(t)) return 'inv';
+  return '';
+}
+const TONE_ICON = { out: 'down', in: 'up', inv: 'chart', '': 'edit' };
+const ICON_BY_KEY = [[/^(acct|account|bank|from|to|dest)/i, 'bank'], [/date|^(on|since|maturity|start|end|due)$/i, 'cal'], [/^(desc|description|name|title|label|scheme|symbol|issuer|party|borrower)/i, 'tag'],
+  [/rate|pct|percent|return|yield/i, 'pct'], [/^(notes?|remark|memo)/i, 'note'], [/^(person|owner|nominee|member|holder)/i, 'user']];
+const iconForField = (f) => (f.type === 'number' && /amount|principal|value|price|cost|invested|premium|emi|balance|sum|deposit|salary|income|expense|fee/i.test(f.key + ' ' + f.label) ? 'rupee'
+  : (ICON_BY_KEY.find(([re]) => re.test(f.key)) || [])[1] || null);
+const SEG_MAX_LABEL = 26;
+/** A select of two or three short choices shows as tap buttons. The select stays in the form (hidden), so values and listeners work as before. */
+function segmented(select) {
+  const wrap = h('div', { class: 'seg-field', role: 'radiogroup' });
+  const build = () => {
+    wrap.replaceChildren(...[...select.options].map((o) => h('button', { type: 'button', role: 'radio', 'aria-checked': String(o.value === select.value), class: 'seg-opt' + (o.value === select.value ? ' on' : ''), 'data-v': o.value,
+      onclick: () => { if (select.value === o.value) return; select.value = o.value; select.dispatchEvent(new Event('input', { bubbles: true })); select.dispatchEvent(new Event('change', { bubbles: true })); } }, o.textContent)));
+  };
+  build();
+  select.addEventListener('change', build); select.addEventListener('input', build);
+  new MutationObserver(build).observe(select, { childList: true });
+  select.classList.add('seg-src'); select.tabIndex = -1;
+  return wrap;
+}
+const canSegment = (f, input) => f.type === 'select' && f.seg !== false && input.options.length >= 2 && input.options.length <= 3 && !input.querySelector('optgroup')
+  && [...input.options].every((o) => o.textContent.trim() && o.textContent.length <= SEG_MAX_LABEL) && (f.seg === true || [...input.options].reduce((n, o) => n + o.textContent.length, 0) <= 40);
+
 /**
  * Form dialog. fields: [{key,label,type:'text'|'number'|'date'|'select'|'textarea'|'checkbox', options, required, step, hint, half, showIf(values)}]
  * onSave(values) may return false to keep the dialog open.
  */
-export function formDialog({ focus, title, fields, value = {}, onSave, onDelete, extraActions = [], saveLabel = 'Save', deleteMessage = 'Delete this entry? This cannot be undone.' }) {
+export function formDialog({ focus, title, sub = '', tone: toneIn, fields, value = {}, onSave, onDelete, extraActions = [], saveLabel = 'Save', deleteMessage = 'Delete this entry? This cannot be undone.' }) {
   const inputs = {}, labels = {};
   const form = h('form', { class: 'form', novalidate: true });
   for (const f of fields) {
@@ -131,8 +180,11 @@ export function formDialog({ focus, title, fields, value = {}, onSave, onDelete,
     if (f.type === 'date' && v) input.value = v;
     inputs[f.key] = input;
     if (f.onInput) input.addEventListener('input', () => f.onInput(input, inputs));
-    labels[f.key] = h('label', { class: 'field' + (f.type === 'checkbox' ? ' check' : '') + (f.half ? ' half' : '') },
-      h('span', null, f.label), input, f.hint ? h('small', null, f.hint) : null);
+    const seg = canSegment(f, input), ic = f.type === 'checkbox' || seg ? null : iconForField(f);
+    const isAmt = f.type === 'number' && (f.key === 'amount' || /^amount\b/i.test(f.label));
+    const ctl = f.type === 'checkbox' ? input : seg ? h('div', { class: 'ctl-seg' }, input, segmented(input)) : h('div', { class: 'ctl' + (ic ? ' has-ic' : '') + (f.type === 'select' ? ' sel' : '') + (isAmt ? ' amt' : '') }, ic ? fieldIcon(ic) : null, input);
+    labels[f.key] = h('label', { class: 'field' + (f.type === 'checkbox' ? ' check' : '') + (f.half ? ' half' : '') + (isAmt ? ' field-amt' : '') },
+      h('span', null, f.label), ctl, f.hint ? h('small', null, f.hint) : null);
     form.append(labels[f.key]);
   }
   const raw = () => Object.fromEntries(fields.map((f) => [f.key, f.type === 'checkbox' ? inputs[f.key].checked : inputs[f.key].value]));
@@ -177,7 +229,11 @@ export function formDialog({ focus, title, fields, value = {}, onSave, onDelete,
   if (onDelete) actions.push({ label: 'Delete', class: 'danger', onclick: async (c) => { if (await confirmDialog(summary(), 'Yes, delete')) { if (onDelete() !== false) c(); } } });
   for (const a of extraActions) actions.push({ label: a.label, class: a.class || '', onclick: (c) => { c(); a.onclick(); } });
   actions.push({ label: saveLabel, class: 'primary', onclick: submit });
-  const d = dialog(title, form, actions);
+  const kindF = fields.find((f) => f.key === 'kind' && f.type === 'select' && (f.options || []).some((o) => o && o.value === 'credit') && (f.options || []).some((o) => o && o.value === 'debit'));
+  const toneNow = () => (kindF ? (inputs.kind.value === 'credit' ? 'in' : 'out') : toneIn != null ? toneIn : toneOfTitle(title));
+  const tn = toneNow();
+  const d = dialog(title, form, actions, { tone: tn || 'brand', sub, ic: TONE_ICON[tn] || 'edit' });
+  if (kindF) { const setTone = () => { d.el.dataset.tone = toneNow(); const b = d.el.querySelector('.dlg-badge'); if (b) b.replaceChildren(fieldIcon(TONE_ICON[toneNow()])); }; form.addEventListener('change', setTone); form.addEventListener('input', setTone); }
   form.addEventListener('submit', (e) => { e.preventDefault(); submit(d.close); });
   setTimeout(() => (focus && form.querySelector(`[name="${focus}"]`) || form.querySelector('input,select,textarea'))?.focus(), 30);
   return d;

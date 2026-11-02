@@ -150,6 +150,15 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.40.0 – Modern data-entry screens
+
+- Every add / edit screen (transactions, transfers, bonds, FDs and lending, chits, savings, EPF, insurance, shares and funds, gold and jewellery, loans, plan and what-if items, alerts and the rest) shares one new look. This is a visual change only; fields, rules and saving are the same.
+- A coloured header with an icon: **red for money going out, green for money coming in, blue for investments**, the app green for everything else. On the transaction screen the colour follows the Paid out / Received switch.
+- Two or three short choices (for example Paid out / Received) are now tap buttons instead of a dropdown. Longer lists stay as dropdowns.
+- Bigger, rounder fields with icons (account, date, rupee, rate) and a large amount box. The Paid out / Received switch is now the first field of the transaction screen.
+- The main button is one wide, coloured button; Cancel is quiet and Delete sits on the left in red. On phones the screen is a bottom sheet with a grab handle.
+- Works in light and dark mode. No data or stored fields changed.
+
 ## Release 8.39.0 – Alerts on share and fund pages; Watchlists
 
 - **Alerts on the share and fund pages.** Every share and fund you hold now has an Alerts card with Add, Change and Remove. It is the same list as Shares & funds › Watch › Alerts & watchlist, so an alert set in either place shows in both.
