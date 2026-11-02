@@ -10,6 +10,8 @@ import * as holdingView from './equity-holding.js';
 import * as watchView from './watch.js';
 import * as W from '../watch.js';
 import * as fundView from './equity-fund.js';
+import * as watchlistsView from './equity-watchlists.js';
+import * as quoteView from './equity-quote.js';
 import { fundForm, linkFund } from './equity-fund.js';
 import { xirrFor, symKey } from '../trades.js';
 import { stockEditForm } from './equity-holding.js';
@@ -328,6 +330,7 @@ export function render() {
   const root = h('div', { class: 'page' });
   if (route().sub === 'holding') { holdingView.render(root); return root; }
   if (route().sub === 'fund') { fundView.render(root); return root; }
+  if (route().sub === 'quote') { quoteView.render(root); return root; }
   const rsub = route().sub;
   const LEGACY = { today: '#/equity/overview', alerts: '#/equity/watch?v=alerts', funds: '#/equity/holdings?v=funds', insights: '#/equity/watch?v=insights', sold: '#/equity/history?v=sold', dividends: '#/equity/history?v=dividends', sip: '#/equity/manage?v=planner', import: '#/equity/manage?v=import', stocks: '#/equity/holdings?v=stocks&f=shares', etfs: '#/equity/holdings?v=stocks&f=etfs' };
   if (LEGACY[rsub]) { location.replace(LEGACY[rsub]); return root; }
@@ -367,9 +370,9 @@ export function render() {
     sub([['alerts', 'Alerts & watchlist'], ['insights', 'Insights']], v);
     if (v === 'insights') insights(root); else watchView.alertsTab(root);
   } else {
-    const v = view === 'import' ? 'import' : 'planner';
-    sub([['planner', 'Investment planner'], ['import', 'Import']], v);
-    if (v === 'import') importView.render(root); else planner(root);
+    const v = view === 'import' ? 'import' : view === 'watchlists' ? 'watchlists' : 'planner';
+    sub([['planner', 'Investment planner'], ['watchlists', 'Watchlists'], ['import', 'Import']], v);
+    if (v === 'import') importView.render(root); else if (v === 'watchlists') watchlistsView.render(root); else planner(root);
   }
   return root;
 }

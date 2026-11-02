@@ -112,7 +112,7 @@ function doPost(e) {
       case 'mfnav': return json_(mfnav_(req.codes || []));
       case 'quotes': return json_(quotes_(req.symbols || []));
       case 'dividends': return json_(dividends_(req.symbols || []));
-      case 'history': return json_(history_(req.symbol, req.yahoo));
+      case 'history': return json_(history_(req.symbol, req.yahoo, req.ohlc));
       case 'fundamentals': return json_(fundamentals_(req.symbols || []));
       case 'details': return json_(details_(req.symbol, req.yahoo));
       default: return json_({ error: 'Unknown action.' });
@@ -225,8 +225,9 @@ function parse_(r) {
   } catch (e) { return null; }
 }
 
-/** Daily closing prices (up to 10 years) for one share, from Yahoo Finance (NSE first, then BSE). Returns { ok, series: [[date, close], ...] }. */
-function history_(symbol, yahoo) {
+/** Daily closing prices (up to 10 years) for one share, from Yahoo Finance (NSE first, then BSE). Returns { ok, series: [[date, close], ...] }.
+ *  With ohlc = true it also returns { ohlc: [[date, open, high, low, close, volume], ...] } for candlestick charts (days with no trade are left out). */
+function history_(symbol, yahoo, ohlc) {
   if (!symbol && !yahoo) return { error: 'No symbol given.' };
   var tickers = yahoo ? [yahoo] : [symbol + '.NS', symbol + '.BO'];
   for (var i = 0; i < tickers.length; i++) {
@@ -234,9 +235,16 @@ function history_(symbol, yahoo) {
       var r = UrlFetchApp.fetch('https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(tickers[i]) + '?range=10y&interval=1d', { muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0' } });
       if (r.getResponseCode() !== 200) continue;
       var res = JSON.parse(r.getContentText()).chart.result[0];
-      var ts = res.timestamp || [], cl = (res.indicators.quote[0] || {}).close || [], out = [];
-      for (var k = 0; k < ts.length; k++) if (cl[k] > 0) out.push([new Date(ts[k] * 1000).toISOString().slice(0, 10), Math.round(cl[k] * 100) / 100]);
-      if (out.length > 1) return { ok: true, series: out };
+      var q = res.indicators.quote[0] || {};
+      var ts = res.timestamp || [], cl = q.close || [], op = q.open || [], hi = q.high || [], lo = q.low || [], vo = q.volume || [], out = [], cs = [];
+      var r2 = function (x) { return Math.round(x * 100) / 100; };
+      for (var k = 0; k < ts.length; k++) {
+        if (!(cl[k] > 0)) continue;
+        var d = new Date(ts[k] * 1000).toISOString().slice(0, 10);
+        out.push([d, r2(cl[k])]);
+        if (ohlc) cs.push([d, r2(op[k] > 0 ? op[k] : cl[k]), r2(hi[k] > 0 ? hi[k] : cl[k]), r2(lo[k] > 0 ? lo[k] : cl[k]), r2(cl[k]), vo[k] > 0 ? vo[k] : 0]);
+      }
+      if (out.length > 1) return ohlc ? { ok: true, series: out, ohlc: cs } : { ok: true, series: out };
     } catch (e) { /* try the next exchange */ }
   }
   return { error: 'No price history found for ' + (symbol || yahoo) + '.' };

@@ -191,6 +191,47 @@ export function stackedBars({ groups, names, colors, partColors = null, fmt = (v
   return h('div', { class: 'chart-box' }, root, partColors ? null : h('ul', { class: 'legend inline' }, names.map((n, i) => h('li', null, h('i', { style: { background: col(i) } }), h('span', { class: 'lg-name' }, n)))));
 }
 
+/**
+ * Candlestick chart with volume. rows: [{ d, o, h, l, c, v }] oldest first (already joined into days, weeks or months by the caller).
+ * Green candle = closed at or above its open, red = closed lower. Touch or hover shows that candle's figures in the line under the chart.
+ */
+export function candleChart(rows, { height = 300, fmt = (v) => v.toFixed(2), vfmt = (v) => String(Math.round(v)), dateFmt = (d) => d, tickFmt = (d) => d } = {}) {
+  const n = rows.length;
+  if (!n) return h('p', { class: 'empty' }, 'No price history.');
+  const W = defaultWidth(), H = height, pad = { l: 46, r: 8, t: 10, b: 22 };
+  const volH = Math.round((H - pad.t - pad.b) * 0.18), top = pad.t, priceB = H - pad.b - volH - 6;
+  const lo0 = Math.min(...rows.map((r) => r.l)), hi0 = Math.max(...rows.map((r) => r.h)), span = hi0 - lo0 || hi0 * 0.02 || 1;
+  const lo = lo0 - span * 0.05, hi = hi0 + span * 0.05;
+  const y = (v) => top + (1 - (v - lo) / (hi - lo)) * (priceB - top);
+  const vmax = Math.max(1, ...rows.map((r) => r.v || 0)), vy = (v) => H - pad.b - (v / vmax) * volH;
+  const gw = (W - pad.l - pad.r) / n, cw = Math.max(1, Math.min(14, gw * 0.7)), cx = (i) => pad.l + gw * i + gw / 2;
+  const root = svg('svg', { viewBox: `0 0 ${W} ${H}`, class: 'chart candle', role: 'img', 'aria-label': `Candlestick chart, ${n} candles, from ${dateFmt(rows[0].d)} to ${dateFmt(rows[n - 1].d)}` });
+  for (let i = 0; i <= 4; i++) { const v = lo + ((hi - lo) * i) / 4; root.append(svg('line', { x1: pad.l, x2: W - pad.r, y1: y(v), y2: y(v), class: 'grid' }), svg('text', { x: pad.l - 6, y: y(v) + 3.5, class: 'axis', 'text-anchor': 'end' }, fmt(v))); }
+  const ticks = Math.min(W < 520 ? 3 : 5, n), seen = new Set();
+  for (let k = 0; k < ticks; k++) { const i = ticks === 1 ? 0 : Math.round((k * (n - 1)) / (ticks - 1)); if (seen.has(i)) continue; seen.add(i); root.append(svg('text', { x: cx(i), y: H - 6, class: 'axis', 'text-anchor': k === 0 ? 'start' : k === ticks - 1 ? 'end' : 'middle' }, tickFmt(rows[i].d))); }
+  rows.forEach((r, i) => {
+    const up = r.c >= r.o, col = up ? 'var(--pos, #1a7f4b)' : 'var(--neg, #c24141)';
+    root.append(svg('line', { x1: cx(i), x2: cx(i), y1: y(r.h), y2: y(r.l), stroke: col, 'stroke-width': 1 }));
+    const yo = y(r.o), yc = y(r.c);
+    root.append(svg('rect', { x: cx(i) - cw / 2, y: Math.min(yo, yc), width: cw, height: Math.max(1, Math.abs(yo - yc)), fill: col, class: 'cd-body' }));
+    if (r.v > 0) root.append(svg('rect', { x: cx(i) - cw / 2, y: vy(r.v), width: cw, height: H - pad.b - vy(r.v), fill: col, opacity: '.35' }));
+  });
+  const cross = svg('line', { y1: top, y2: H - pad.b, class: 'cross', style: 'display:none' });
+  const read = h('div', { class: 'cd-read', 'aria-live': 'polite' });
+  const show = (i) => {
+    const r = rows[i], prev = i > 0 ? rows[i - 1].c : r.o, ch = r.c - prev;
+    cross.setAttribute('x1', cx(i)); cross.setAttribute('x2', cx(i)); cross.style.display = '';
+    read.replaceChildren(h('b', null, dateFmt(r.d)), ` O ${fmt(r.o)} · H ${fmt(r.h)} · L ${fmt(r.l)} · C ${fmt(r.c)}`, h('span', { class: ch >= 0 ? 'pos' : 'neg' }, ` ${ch >= 0 ? '+' : '−'}${(Math.abs(ch / prev) * 100).toFixed(2)}%`), r.v > 0 ? ` · Vol ${vfmt(r.v)}` : '');
+  };
+  const at = (e) => { const b = root.getBoundingClientRect(), px = ((e.clientX - b.left) / b.width) * W; return Math.max(0, Math.min(n - 1, Math.floor((px - pad.l) / gw))); };
+  const hit = svg('rect', { x: pad.l, y: top, width: W - pad.l - pad.r, height: H - pad.t - pad.b, fill: 'transparent', style: 'touch-action: pan-y' });
+  hit.addEventListener('pointermove', (e) => show(at(e)));
+  hit.addEventListener('pointerdown', (e) => show(at(e)));
+  root.append(cross, hit);
+  show(n - 1); cross.style.display = 'none';
+  return h('div', { class: 'chart-box' }, root, read);
+}
+
 /** Tiny progress bar (value 0..1) */
 export const meter = (v, ci = 0) => h('span', { class: 'meter' }, h('span', { style: { width: Math.min(100, Math.max(0, v * 100)) + '%', background: color(ci) } }));
 
