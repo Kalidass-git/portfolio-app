@@ -150,12 +150,15 @@ export function barChart({ groups, names, fmt = (v) => v, height = 220, width, c
  */
 export function stackedBars({ groups, names, colors, partColors = null, fmt = (v) => v, height = 230, width, onSelect = null, selected = null }) {
   const col = (i) => color(colors ? colors[i] : i);
-  const W = width || defaultWidth(), H = height, pad = { l: 44, r: 8, t: 12, b: 24 };
+  // a group may carry `sub` (a second axis line such as the year); then labels are thinned so they never overlap, and long ranges still draw thin bars
+  const hasSub = groups.some((g) => g.sub);
+  const W = width || defaultWidth(), H = height, pad = { l: 44, r: 8, t: 12, b: hasSub ? 38 : 24 };
   const tot = (b) => b.reduce((a, x) => a + Math.max(0, x.value), 0);
   const hi = niceMax(Math.max(1, ...groups.flatMap((g) => g.bars.map(tot))));
   const y = (v) => pad.t + (1 - v / hi) * (H - pad.t - pad.b);
   const gw = (W - pad.l - pad.r) / groups.length;
-  const bw = Math.min(34, (gw - 8) / names.length - 2);
+  const bw = Math.max(3, Math.min(34, (gw - (gw > 14 ? 8 : 2)) / names.length - 2));
+  const every = hasSub ? Math.max(1, Math.ceil((Math.max(...groups.map((g) => (g.sub || '').length)) * 6.4 + 3) / gw)) : 1;
   const root = svg('svg', { viewBox: `0 0 ${W} ${H}`, class: 'chart', role: 'img', 'aria-label': names.join(', ') });
   for (let i = 0; i <= 4; i++) { const v = (hi * i) / 4; root.append(svg('line', { x1: pad.l, x2: W - pad.r, y1: y(v), y2: y(v), class: 'grid' }), svg('text', { x: pad.l - 6, y: y(v) + 3.5, class: 'axis', 'text-anchor': 'end' }, short(v))); }
   const op = (k) => Math.max(0.28, 1 - k * 0.17);
@@ -179,9 +182,13 @@ export function stackedBars({ groups, names, colors, partColors = null, fmt = (v
         root.append(hit);
       }
     });
-    root.append(svg('text', { x: cx, y: H - 6, class: 'axis', 'text-anchor': 'middle' }, g.label));
+    if (gi % every === 0) {
+      root.append(svg('text', { x: cx, y: hasSub ? H - 20 : H - 6, class: 'axis', 'text-anchor': 'middle' }, g.label));
+      if (g.sub) root.append(svg('text', { x: cx, y: H - 6, class: 'axis axis-sub', 'text-anchor': 'middle' }, g.sub));
+    }
   });
-  return h('div', { class: 'chart-box' }, root, h('ul', { class: 'legend inline' }, names.map((n, i) => h('li', null, h('i', { style: { background: col(i) } }), h('span', { class: 'lg-name' }, n)))));
+  // with coloured parts the screen draws its own key (what each colour is); the series name alone would only repeat the title
+  return h('div', { class: 'chart-box' }, root, partColors ? null : h('ul', { class: 'legend inline' }, names.map((n, i) => h('li', null, h('i', { style: { background: col(i) } }), h('span', { class: 'lg-name' }, n)))));
 }
 
 /** Tiny progress bar (value 0..1) */

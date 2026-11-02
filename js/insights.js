@@ -169,15 +169,17 @@ export function taxCsv(t) {
 }
 
 // ---------- 2. Cash calendar and maturity ladder ----------
+/** The kinds of maturing money the calendar can show, in the order and with the names used for its filter and colours. */
+export const MATURITY_KINDS = [['Bond maturity', 'Bonds'], ['FD maturity', 'Fixed deposits'], ['Lending back', 'Private lending'], ['Chit payout', 'Chits'], ['RD maturity', 'Recurring deposits'], ['Savings maturity', 'Insurance & other savings']];
 export function cashCalendar(data, all, nMonths) {
   const cur = C.monthKey(all.asOf);
   const months = Array.from({ length: nMonths }, (_, i) => C.addMonths(cur + '-01', i).slice(0, 7));
   const by = new Map(months.map((m) => [m, []]));
   const add = (date, title, amount, kind, dir) => { const m = date < all.asOf ? cur : date.slice(0, 7); if (by.has(m)) by.get(m).push({ date: date < all.asOf ? all.asOf : date, title, amount, kind, dir, late: date < all.asOf }); };
   for (const b of all.bonds) if (b.maturityDate) add(b.maturityDate, b.name + ' matures', b.principal, 'Bond maturity', 'in');
-  for (const f of all.fds) if (f.maturityDate) add(f.maturityDate, f.name + ' matures', f.interestType === 'Compound' ? f.principal + f.totalInterest : f.principal, 'FD maturity', 'in');
-  for (const l of all.lending) if (l.maturityDate && l.principal > 0) add(l.maturityDate, l.name + ' due back', l.interestType === 'Compound' ? l.principal + l.totalInterest : l.principal, 'Lending back', 'in');
-  for (const s of all.savings) { const end = C.savingEnd(s); if (end && s.type !== 'EPF' && s.type !== 'PPF') { const m = C.savingMaturity(s); add(end, s.name + (m.kind === 'projected' ? ' matures (projected)' : ' matures'), m.amount, s.type === 'Chit' ? 'Chit payout' : 'Savings maturity', 'in'); } }
+  for (const f of all.fds) if (f.maturityDate) add(f.maturityDate, f.name + ' matures', f.interestType === 'Compound' ? f.principal + (f.totalInterest || 0) : f.principal, 'FD maturity', 'in');
+  for (const l of all.lending) if (l.maturityDate && l.principal > 0) add(l.maturityDate, l.name + ' due back', l.interestType === 'Compound' ? l.principal + (l.totalInterest || 0) : l.principal, 'Lending back', 'in');
+  for (const s of all.savings) { const end = C.savingEnd(s); if (end && s.type !== 'EPF' && s.type !== 'PPF') { const m = C.savingMaturity(s); add(end, s.name + (m.kind === 'projected' ? ' matures (projected)' : ' matures'), m.amount, s.type === 'Chit' ? 'Chit payout' : s.type === 'RD' ? 'RD maturity' : 'Savings maturity', 'in'); } }
   // interest paid out every month while it runs
   for (const m of months) {
     const first = m + '-01';

@@ -3,7 +3,7 @@ import * as C from '../calc.js';
 import { h, money, dateStr, monthLabel, section, table, btn, formDialog, dialog, canEdit, toast, num, segTabs, subTab, route, setOptions, monthOptions } from '../ui.js';
 import * as CAT from '../categories.js';
 import { hbars } from '../charts.js';
-import { closeForm, reopen } from './closing.js';
+import { closeForm, reopen, removeCredits } from './closing.js';
 import { openBankImport } from './cash-import.js';
 import { confirmDialog, pct, posNeg, stat, datalistId, icon, rowList } from '../ui.js';
 import { chitCards, isWallet } from '../monthinvest.js';
@@ -498,7 +498,8 @@ function closeSaving(sv) {
     title: 'Close ' + sv.name, amount: Math.round(C.savingMaturity(sv).amount), desc: `${sv.type} closed: ${sv.name}`,
     dateLabel: 'Money received on', amountLabel: 'Amount you received, after commission (₹)',
     hint: 'Suggested: the expected payout if you entered one, otherwise a projection at the assumed rate. Change it to what actually reached you; the real XIRR is worked out from this date and amount.',
-    apply: (d, v, lid) => { const t = d.savings.find((x) => x.id === sv.id); t.closed = { date: v.date, amount: v.amount, acct: v.acct || '', ledgerId: lid, note: v.note || '' }; },
+    principal: paid > 0 ? paid : 0, word: sv.type || 'Savings',
+    apply: (d, v, lid, iid) => { const t = d.savings.find((x) => x.id === sv.id); t.closed = { date: v.date, amount: v.amount, acct: v.acct || '', ledgerId: lid, ...(iid ? { interestLedgerId: iid } : {}), note: v.note || '' }; },
   });
 }
 export function closedTab() {
@@ -531,7 +532,7 @@ function openClosed(row) {
     table([{ label: 'Date', get: (e) => dateStr(e.date) }, { label: 'Amount', cls: 'r', get: (e) => money(e.amount) }], sv.entries.slice().reverse(), { empty: 'No payments recorded.' }));
   dialog(sv.name, body, canEdit() ? [
     { label: 'Delete', class: 'danger', onclick: async (c) => { if (await confirmDialog('Delete this closed account and its history? The bank entry stays as it is.')) { mutate((d) => { d.savings = d.savings.filter((x) => x.id !== sv.id); }); c(); } } },
-    { label: 'Reopen', onclick: (c) => { c(); reopen(sv.name, (d) => { const t = d.savings.find((x) => x.id === sv.id); const lid = t.closed && t.closed.ledgerId; delete t.closed; if (lid) d.ledger = d.ledger.filter((e) => e.id !== lid); }); } },
+    { label: 'Reopen', onclick: (c) => { c(); reopen(sv.name, (d) => { const t = d.savings.find((x) => x.id === sv.id); const was = t.closed; delete t.closed; removeCredits(d, was); }); } },
     { label: 'Close', onclick: (c) => c() },
   ] : [{ label: 'Close', onclick: (c) => c() }]);
 }
