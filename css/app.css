@@ -1491,3 +1491,6 @@ dialog.sheet .form .field.half { align-content: end; }
 
 /* 8.42: transaction amounts, icons and categories follow the colour rule: expense red, income green, investment blue */
 .txn-card .b.pos, .txn-card .pos { color: var(--pos); } .txn-card .b.neg, .txn-card .neg { color: var(--neg); } .txn-card .b.inv, .txn-card .inv { color: var(--s1); }
+
+/* 8.43: summary cards that open another page */
+.stat.click:hover { background: var(--surface-2); } .stat.click:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }

@@ -150,6 +150,14 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.43.0 – Overview cards and lists open the right page
+
+- **Shares & funds › Overview:** the "What you hold" cards open Holdings with that filter already set (Shares, ETFs or Mutual funds). The "All together" card under Today opens all holdings.
+- **Biggest gains and falls:** tap a row to open that share, ETF or fund page.
+- **Where to look** lists (near highs, lows, cheap and so on) already opened holdings; shares that are only on a watchlist now open their chart page too.
+- The Shares / ETFs / Funds cards in the Today strip still switch the lists below them; they do not leave the page.
+- No data changes.
+
 ## Release 8.42.0 – Cleaner Transactions grid (Cash & banks)
 
 - Removed the alternate-row green shading and the coloured left border on every transaction row (table and phone cards), and the coloured border and tint on the summary tiles above the list.
