@@ -13,7 +13,7 @@ import { openInfo } from '../mobilebar.js';
 
 const TABS = [['tax', 'Tax summary'], ['calendar', 'Cash calendar'], ['review', 'Annual review'], ['anomalies', 'Spending insights'], ['allocation', 'Allocation goal'], ['certificate', 'Interest certificate']];
 const rerender = () => window.dispatchEvent(new Event('rerender'));
-const st = { fy: null, months: 12, year: null, month: null, who: 'all' };
+const st = { fy: null, months: 12, year: null, month: null, who: 'all', calKinds: [] };
 const signed = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + money(Math.abs(n));
 const tone = (n) => (n > 0 ? 'pos' : n < 0 ? 'neg' : '');
 const note = (t) => h('p', { class: 'note' }, t);
@@ -180,30 +180,40 @@ function calendar(root) {
   const al = I.maturityAlerts(data, all);
   if (al.length) root.append(h('div', { class: 'card alert-card', role: 'alert' }, h('h3', null, `Maturing within a month${al.some((x) => x.overdue) ? ' or already due' : ''}`),
     h('ul', { class: 'findings' }, al.map((x) => h('li', { class: x.overdue || x.daysLeft <= 7 ? 'over' : 'amber' }, h('b', null, x.name), ` (${x.kind}) `, x.overdue ? h('span', { class: 'neg' }, `was due ${dateStr(x.date)}`) : h('span', { class: x.daysLeft <= 7 ? 'neg' : 'warn' }, x.daysLeft === 0 ? 'matures today' : `matures in ${x.daysLeft} day${x.daysLeft === 1 ? '' : 's'} (${dateStr(x.date)})`), ' · ', x.basis === 'projected' ? '≈ ' : '', money(x.amount), x.basis === 'projected' ? h('small', { class: 'muted' }, ' projected from the rate') : x.basis === 'entered' ? h('small', { class: 'muted' }, ' expected payout') : x.basis === 'paid' ? h('small', { class: 'muted' }, ' paid in so far (no payout or rate entered)') : null)))));
-  root.append(h('div', { class: 'filters' }, select([3, 6, 12, 24].map((n) => ({ value: String(n), label: `Next ${n} months` })), st.months, 'Months ahead', (v) => { st.months = Number(v); calPick = null; rerender(); })));
-  const MAT = (x) => !['Interest', 'Money to receive', 'Loan EMI'].includes(x.kind);
+  const KL = Object.fromEntries(I.MATURITY_KINDS), KC = Object.fromEntries(I.MATURITY_KINDS.map(([k], i) => [k, color(i + 1)]));
+  const picked = st.calKinds.filter((k) => KL[k]);
+  const monthOpts = [[3, 'Next 3 months'], [6, 'Next 6 months'], [12, 'Next 12 months'], [24, 'Next 24 months'], [36, 'Next 36 months (3 years)'], [60, 'Next 60 months (5 years)']];
+  root.append(h('div', { class: 'filters' }, select(monthOpts.map(([n, l]) => ({ value: String(n), label: l })), st.months, 'Months ahead', (v) => { st.months = Number(v); calPick = null; rerender(); })));
+  // Which kind of holding: all, or any mix of them
+  const flipK = (k) => { const on = picked.includes(k); st.calKinds = on ? picked.filter((x) => x !== k) : picked.concat([k]); if (st.calKinds.length === I.MATURITY_KINDS.length) st.calKinds = []; calPick = null; rerender(); };
+  root.append(h('div', { class: 'chips', role: 'group', 'aria-label': 'Kind of holding' },
+    h('button', { class: 'chip' + (picked.length ? '' : ' on'), type: 'button', 'aria-pressed': String(!picked.length), onclick: () => { st.calKinds = []; calPick = null; rerender(); } }, 'All'),
+    I.MATURITY_KINDS.map(([k, l]) => h('button', { class: 'chip' + (picked.includes(k) ? ' on' : ''), type: 'button', 'aria-pressed': String(picked.includes(k)), onclick: () => flipK(k) }, h('i', { class: 'kdot', style: { background: KC[k] } }), l))));
+  const MAT = (x) => !['Interest', 'Money to receive', 'Loan EMI'].includes(x.kind) && (!picked.length || picked.includes(x.kind));
   const mats = cal.months.map((r) => ({ ...r, mat: r.items.filter(MAT) }));
   const total = mats.reduce((a, r) => a + r.mat.reduce((b, x) => b + x.amount, 0), 0);
+  const present = I.MATURITY_KINDS.filter(([k]) => mats.some((r) => r.mat.some((x) => x.kind === k)));
   if (calPick && !mats.some((r) => r.month === calPick)) calPick = null;
   const box = h('div');
   const draw = () => {
-    const chart = stackedBars({ names: ['Maturing'], colors: [2], fmt: compact, height: 240,
-      groups: mats.map((r) => ({ label: monthLabel(r.month).slice(0, 3), title: monthLabel(r.month, true), bars: [Object.entries(r.mat.reduce((m, x) => ({ ...m, [x.kind]: (m[x.kind] || 0) + x.amount }), {})).map(([name, value]) => ({ name, value }))] })),
+    const chart = stackedBars({ names: ['Maturing'], colors: [2], partColors: KC, fmt: compact, height: 260,
+      groups: mats.map((r) => ({ label: monthLabel(r.month).slice(0, 3), sub: mats.length > 14 ? "'" + r.month.slice(2, 4) : r.month.slice(0, 4), title: monthLabel(r.month, true), bars: [I.MATURITY_KINDS.map(([k]) => ({ name: k, value: r.mat.filter((x) => x.kind === k).reduce((a, x) => a + x.amount, 0) })).filter((x) => x.value > 0)] })),
       selected: calPick ? { g: mats.findIndex((r) => r.month === calPick), s: 0 } : null,
       onSelect: (g) => { calPick = calPick === mats[g].month ? null : mats[g].month; draw(); } });
+    const key = h('div', { class: 'legend-row', style: { display: 'flex', gap: '14px', flexWrap: 'wrap', margin: '6px 0' } }, present.length ? present.map(([k, l]) => h('span', null, h('i', { style: { display: 'inline-block', width: '10px', height: '10px', borderRadius: '2px', marginRight: '5px', background: KC[k] } }), l)) : null);
     let detail;
     if (calPick) {
       const r = mats.find((x) => x.month === calPick);
       detail = h('div', { class: 'card inner', style: { marginTop: '10px' } }, h('h4', { style: { margin: '0 0 6px' } }, `Maturing in ${monthLabel(r.month, true)} · ${money(r.mat.reduce((a, x) => a + x.amount, 0))}`),
         r.mat.length ? table([
-          { label: 'Date', get: (x) => (x.late ? 'Overdue' : dateStr(x.date)) }, { label: 'What', host: true, get: (x) => x.title },
-          { label: 'Kind', mob: 'hide', get: (x) => x.kind }, { label: 'Amount', cls: 'r', get: (x) => money(x.amount) },
+          { label: 'Date', get: (x) => (x.late ? 'Overdue' : dateStr(x.date)) }, { label: 'What', host: true, render: (x) => h('span', null, h('i', { class: 'kdot', style: { background: KC[x.kind] || 'var(--muted)' } }), x.title) },
+          { label: 'Kind', mob: 'hide', get: (x) => KL[x.kind] || x.kind }, { label: 'Amount', cls: 'r', get: (x) => money(x.amount) },
         ], r.mat, { footer: { label: 'Total' }, m: { key: 'cal-mat', head: 'What', sub: ['Date', 'Kind'], views: [['Amount']] } }) : h('p', { class: 'empty' }, 'Nothing matures this month.'));
     } else detail = h('p', { class: 'note' }, 'Tap a column to see what matures in that month.');
-    box.replaceChildren(chart, detail);
+    box.replaceChildren(chart, key, detail);
   };
   draw();
-  root.append(section(`Money maturing, next ${st.months} months · ${money(total)}`, box));
+  root.append(section(`Money maturing, next ${st.months} months${picked.length ? ' · ' + picked.map((k) => KL[k]).join(', ') : ''} · ${money(total)}`, box));
   root.append(note('Bonds, FDs, private lending, chits and other savings by the month they mature. Overdue maturities are shown in this month, since the money is yet to be collected.'));
 }
 

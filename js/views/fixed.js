@@ -2,7 +2,7 @@ import { S, mutate, nextId } from '../store.js';
 import * as C from '../calc.js';
 import { donut, legend, hbars } from '../charts.js';
 import { h, money, setOptions, dateStr, pct, section, table, btn, formDialog, canEdit, toast, stat, segTabs, subTab, dialog, confirmDialog, posNeg, datalistId, compact } from '../ui.js';
-import { closeForm, reopen, creditBank, bankOptions } from './closing.js';
+import { closeForm, reopen, creditBank, bankOptions, removeCredits } from './closing.js';
 import { sortFilterBar } from '../mobilebar.js';
 import * as I from '../insights.js';
 
@@ -18,7 +18,8 @@ function closeItem(key, kind, it, suggested, label) {
   closeForm({
     title: 'Close ' + it.name, amount: suggested, desc: `${label} closed: ${it.name}`,
     hint: key === 'lending' && it.principal < 0 ? 'You borrowed this to lend onward. Enter what you paid back, as a positive amount.' : 'Suggested: the amount plus interest added so far. Change it to what you actually got back.',
-    apply: (d, v, lid) => { const t = d[key].find((x) => x.id === it.id); t.closed = { date: v.date, amount: v.amount, acct: v.acct || '', ledgerId: lid, note: v.note || '' }; },
+    principal: it.principal > 0 ? it.principal : 0, word: key === 'bonds' ? 'Bond' : key === 'fds' ? 'FD' : 'Lending',
+    apply: (d, v, lid, iid) => { const t = d[key].find((x) => x.id === it.id); t.closed = { date: v.date, amount: v.amount, acct: v.acct || '', ledgerId: lid, ...(iid ? { interestLedgerId: iid } : {}), note: v.note || '' }; },
   });
 }
 /** Every payout of a bond from the day it was bought to maturity (with part-closed amounts added together), in a popup. */
@@ -438,7 +439,7 @@ function openClosedItem(key, x) {
   const body = h('p', { class: 'note' }, `Closed on ${dateStr(it.closed.date)}, ${money(it.closed.amount)} came back.${it.closed.note ? ' ' + it.closed.note : ''}`);
   dialog(it.name, body, canEdit() ? [
     { label: 'Delete', class: 'danger', onclick: async (c) => { if (await confirmDialog('Delete this closed record? The bank entry stays as it is.')) { mutate((d) => { d[key] = d[key].filter((y) => y.id !== it.id); }); c(); } } },
-    { label: 'Reopen', onclick: (c) => { c(); reopen(it.name, (d) => { const t = d[key].find((y) => y.id === it.id); const lid = t.closed && t.closed.ledgerId; const par = key === 'bonds' && t.partOf ? d.bonds.find((y) => y.id === t.partOf) : null; if (par) { const full = par.principal + t.principal; if (par.payoutAmount > 0) par.payoutAmount += t.payoutAmount || 0; par.principal = full; par.partials = (par.partials || []).filter((p) => p.id !== t.id); d.bonds = d.bonds.filter((y) => y.id !== t.id); } else delete t.closed; if (lid) d.ledger = d.ledger.filter((e) => e.id !== lid); }); } },
+    { label: 'Reopen', onclick: (c) => { c(); reopen(it.name, (d) => { const t = d[key].find((y) => y.id === it.id); const was = t.closed; const par = key === 'bonds' && t.partOf ? d.bonds.find((y) => y.id === t.partOf) : null; if (par) { const full = par.principal + t.principal; if (par.payoutAmount > 0) par.payoutAmount += t.payoutAmount || 0; par.principal = full; par.partials = (par.partials || []).filter((p) => p.id !== t.id); d.bonds = d.bonds.filter((y) => y.id !== t.id); } else delete t.closed; removeCredits(d, was); }); } },
     { label: 'Close window', onclick: (c) => c() },
   ] : [{ label: 'Close window', onclick: (c) => c() }]);
 }

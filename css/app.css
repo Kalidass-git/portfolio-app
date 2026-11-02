@@ -1417,3 +1417,6 @@ button.info-i { width: 32px; height: 32px; font-size: 1rem; }
 .hg.collapsed .hg-body { display: none; }
 .hg-body { padding: 4px 6px 8px; }
 .hg-body .tbl-wrap, .hg-body .mrows { margin: 0; }
+.kdot { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 6px; vertical-align: baseline; flex: 0 0 auto; }
+.chip .kdot { margin-right: 7px; }
+svg.chart .axis-sub { opacity: .7; }

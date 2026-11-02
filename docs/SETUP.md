@@ -150,6 +150,16 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.38.0 – Closing with interest makes two bank entries; Cash calendar filters, colours and years
+
+- **Closing a bond, fixed deposit, private lending line or a chit / RD / other saving** that comes back with more than was paid in now makes **two entries** in the bank you pick: the principal as a **transfer** (Investment redemption) and the extra as **interest income** under the holding's own category: your existing "Income FD", "Income Lending", "Income Chit", "Income Bond" (any income category whose name matches), or a new "Income <type>" if you have none. The close form says so. If less than or exactly the amount paid in comes back, there is one transfer entry as before. **Reopen removes both entries.** The second entry's id is stored in a new optional field `closed.interestLedgerId`; closed records from before work as they did. Gold chits (which become a gold purchase) are unchanged.
+- **Cash calendar → Money maturing:**
+  - Periods now go up to **36 months (3 years) and 60 months (5 years)**.
+  - New **kind filter** chips: All, Bonds, Fixed deposits, Private lending, Chits, Recurring deposits, Insurance & other savings. Pick one or several; the chart, total and the month's list follow.
+  - **Each kind has its own colour** in the bars, with a key under the chart and a colour dot beside each item in a month's list. (RD maturities are now their own kind instead of "Savings maturity".)
+  - The month axis now shows the **year** under each month (2026; "'26" on long ranges, where labels are also thinned so they never overlap).
+- Tests: `tests/closesplit.test.mjs`. No other stored data changed.
+
 ## Release 8.37.0 – Spending insights: week by week
 
 - **Insights → Spending insights → Week by week** for the chosen month: stacked bars of each week's spending by category, and a table with each week's spend, the usual for that week (the same week averaged over the earlier months), the difference and what it was mostly on.
