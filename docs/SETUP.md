@@ -150,6 +150,13 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.41.0 – Quicker data entry
+
+- **Expense / Income** switch (with down and up arrow icons) replaces "Paid out / Received", and it is the first thing on the transaction screen.
+- **Amount and Date sit on one row**, so the screen is shorter. Every other entry screen now also puts short fields side by side automatically (amount with rate, date with date, short lists and short text) — long fields, notes and anything with a long hint keep a full row.
+- **The cursor moves on by itself when you add something new.** Type an amount and pause for a second: the calendar opens. Pick the date: the cursor goes to the next field. Choosing from a list also moves on. Editing an existing entry never jumps, so you can fix a digit safely.
+- Nothing changes in what is saved.
+
 ## Release 8.40.0 – Modern data-entry screens
 
 - Every add / edit screen (transactions, transfers, bonds, FDs and lending, chits, savings, EPF, insurance, shares and funds, gold and jewellery, loans, plan and what-if items, alerts and the rest) shares one new look. This is a visual change only; fields, rules and saving are the same.

@@ -141,11 +141,11 @@ const iconForField = (f) => (f.type === 'number' && /amount|principal|value|pric
   : (ICON_BY_KEY.find(([re]) => re.test(f.key)) || [])[1] || null);
 const SEG_MAX_LABEL = 26;
 /** A select of two or three short choices shows as tap buttons. The select stays in the form (hidden), so values and listeners work as before. */
-function segmented(select) {
+function segmented(select, icons = {}) {
   const wrap = h('div', { class: 'seg-field', role: 'radiogroup' });
   const build = () => {
     wrap.replaceChildren(...[...select.options].map((o) => h('button', { type: 'button', role: 'radio', 'aria-checked': String(o.value === select.value), class: 'seg-opt' + (o.value === select.value ? ' on' : ''), 'data-v': o.value,
-      onclick: () => { if (select.value === o.value) return; select.value = o.value; select.dispatchEvent(new Event('input', { bubbles: true })); select.dispatchEvent(new Event('change', { bubbles: true })); } }, o.textContent)));
+      onclick: () => { if (select.value === o.value) return; select.value = o.value; select.dispatchEvent(new Event('input', { bubbles: true })); select.dispatchEvent(new Event('change', { bubbles: true })); } }, icons[o.value] ? fieldIcon(icons[o.value]) : null, o.textContent)));
   };
   build();
   select.addEventListener('change', build); select.addEventListener('input', build);
@@ -160,7 +160,7 @@ const canSegment = (f, input) => f.type === 'select' && f.seg !== false && input
  * Form dialog. fields: [{key,label,type:'text'|'number'|'date'|'select'|'textarea'|'checkbox', options, required, step, hint, half, showIf(values)}]
  * onSave(values) may return false to keep the dialog open.
  */
-export function formDialog({ focus, title, sub = '', tone: toneIn, fields, value = {}, onSave, onDelete, extraActions = [], saveLabel = 'Save', deleteMessage = 'Delete this entry? This cannot be undone.' }) {
+export function formDialog({ focus, title, sub = '', tone: toneIn, autoNext, fields, value = {}, onSave, onDelete, extraActions = [], saveLabel = 'Save', deleteMessage = 'Delete this entry? This cannot be undone.' }) {
   const inputs = {}, labels = {};
   const form = h('form', { class: 'form', novalidate: true });
   for (const f of fields) {
@@ -182,18 +182,46 @@ export function formDialog({ focus, title, sub = '', tone: toneIn, fields, value
     if (f.onInput) input.addEventListener('input', () => f.onInput(input, inputs));
     const seg = canSegment(f, input), ic = f.type === 'checkbox' || seg ? null : iconForField(f);
     const isAmt = f.type === 'number' && (f.key === 'amount' || /^amount\b/i.test(f.label));
-    const ctl = f.type === 'checkbox' ? input : seg ? h('div', { class: 'ctl-seg' }, input, segmented(input)) : h('div', { class: 'ctl' + (ic ? ' has-ic' : '') + (f.type === 'select' ? ' sel' : '') + (isAmt ? ' amt' : '') }, ic ? fieldIcon(ic) : null, input);
+    const ctl = f.type === 'checkbox' ? input : seg ? h('div', { class: 'ctl-seg' }, input, segmented(input, Object.fromEntries((f.options || []).filter((o) => o && o.icon).map((o) => [o.value, o.icon])))) : h('div', { class: 'ctl' + (ic ? ' has-ic' : '') + (f.type === 'select' ? ' sel' : '') + (isAmt ? ' amt' : '') }, ic ? fieldIcon(ic) : null, input);
     labels[f.key] = h('label', { class: 'field' + (f.type === 'checkbox' ? ' check' : '') + (f.half ? ' half' : '') + (isAmt ? ' field-amt' : '') },
       h('span', null, f.label), ctl, f.hint ? h('small', null, f.hint) : null);
     form.append(labels[f.key]);
+  }
+  // Short fields sit side by side (amount with date, rate with term ...), so a tall form needs less scrolling. Only the layout changes.
+  const wide = (f) => f.type === 'checkbox' || f.type === 'textarea' || f.full || (f.hint && f.hint.length > 48) || (f.type === 'select' && (labels[f.key].querySelector('.ctl-seg') || (f.options || []).some((o) => o && (o.group || String((o && o.label) ?? o).length > 24))))
+    || (f.type !== 'number' && f.type !== 'date' && f.type !== 'select' && !(f.type === 'text' && !f.hint && !f.list && !f.showIf && String(f.label).length <= 24));
+  for (let i = 0; i < fields.length - 1; i++) {
+    const a = fields[i], b2 = fields[i + 1];
+    if (a.half || b2.half) { if (a.half) i++; continue; }
+    if (!wide(a) && !wide(b2)) { labels[a.key].classList.add('half'); labels[b2.key].classList.add('half'); i++; }
   }
   const raw = () => Object.fromEntries(fields.map((f) => [f.key, f.type === 'checkbox' ? inputs[f.key].checked : inputs[f.key].value]));
   const visible = (f) => !f.showIf || f.showIf(raw());
   const refreshVisibility = () => { for (const f of fields) if (f.showIf) labels[f.key].style.display = visible(f) ? '' : 'none'; };
   form.addEventListener('input', refreshVisibility); form.addEventListener('change', refreshVisibility);
   refreshVisibility();
+  // Quick entry for a new record: after an amount (short pause) or a chosen date or list item, the next field gets the cursor (a date opens its calendar).
+  const advance = autoNext ?? !onDelete;
   const err = h('p', { class: 'form-error', role: 'alert' });
   form.append(err);
+  if (advance) {
+    const order = () => fields.filter((f) => f.type !== 'checkbox' && visible(f) && !labels[f.key].querySelector('.ctl-seg') && !inputs[f.key].readOnly);
+    const goNext = (key) => {
+      const list = order(), i = list.findIndex((f) => f.key === key), nf = list[i + 1];
+      if (!nf) return;
+      const el = inputs[nf.key]; el.focus();
+      if (nf.type === 'date') { try { el.showPicker && el.showPicker(); } catch { /* needs a recent tap or key press; the cursor is there anyway */ } }
+      else if (el.select && nf.type !== 'select') { try { el.select(); } catch { /* not selectable */ } }
+    };
+    const timers = {};
+    for (const f of fields) {
+      const el = inputs[f.key];
+      if (f.type === 'number') el.addEventListener('input', () => { clearTimeout(timers[f.key]); if (el.value === '') return; timers[f.key] = setTimeout(() => { if (document.activeElement === el && el.value !== '') goNext(f.key); }, 900); });
+      else if (f.type === 'date') el.addEventListener('change', () => { clearTimeout(timers[f.key]); const y = Number((el.value || '').slice(0, 4)); if (!(y >= 1990)) return; timers[f.key] = setTimeout(() => goNext(f.key), 500); });
+      else if (f.type === 'select' && !labels[f.key].querySelector('.ctl-seg')) el.addEventListener('change', () => { if (document.activeElement === el) goNext(f.key); });
+      else if (f.type === 'text' && f.list) el.addEventListener('change', () => { if (document.activeElement === el && [...(document.getElementById(f.list)?.options || [])].some((o) => o.value === el.value)) goNext(f.key); });
+    }
+  }
   const collect = () => {
     const out = {};
     for (const f of fields) {
