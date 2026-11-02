@@ -1309,7 +1309,7 @@ html.native .ptr.spin { animation: ptr-spin .8s linear infinite; }
 .tf-row { display: flex; gap: 6px; } .tf-row select { flex: 1 1 0; } .tf-row input { flex: 1 1 0; max-width: none !important; }
 .tt-clear { justify-self: start; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border: 1px solid var(--neg); border-radius: 8px; background: transparent; color: var(--neg); font: inherit; font-size: .85rem; cursor: pointer; }
 .tx-sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 10px 0 12px; }
-.tx-tile { --tc: var(--brand); display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--tc) 30%, var(--line)); border-left: 4px solid var(--tc); border-radius: 12px; background: color-mix(in srgb, var(--tc) 7%, var(--surface)); min-width: 0; }
+.tx-tile { --tc: var(--brand); display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 0; border-radius: 12px; background: var(--surface-2); min-width: 0; }
 .tx-tile.pos { --tc: var(--pos); } .tx-tile.neg { --tc: var(--neg); } .tx-tile.inv { --tc: var(--s1); }
 .tx-ti { width: 32px; height: 32px; border-radius: 50%; display: inline-grid; place-items: center; background: color-mix(in srgb, var(--tc) 16%, transparent); color: var(--tc); flex: 0 0 auto; }
 .tx-ti .txi { width: 17px; height: 17px; }
@@ -1325,9 +1325,8 @@ html.native .ptr.spin { animation: ptr-spin .8s linear infinite; }
 .txn-card .tbl thead th { background: var(--brand-soft); color: var(--brand); text-transform: uppercase; letter-spacing: .04em; font-size: .7rem; padding-top: 9px; padding-bottom: 9px; border-bottom: 2px solid var(--brand); }
 .txn-card .tbl tbody tr.tx-in, .txn-card .mrow.tx-in { --ac: var(--pos); } .txn-card .tbl tbody tr.tx-out, .txn-card .mrow.tx-out { --ac: var(--neg); } .txn-card .tbl tbody tr.tx-inv, .txn-card .mrow.tx-inv { --ac: var(--s1); }
 .txn-card .tbl tbody tr.tx td { border-bottom: 1px solid var(--line); padding-top: 10px; padding-bottom: 10px; }
-.txn-card .tbl tbody tr.tx:nth-child(even) td { background: color-mix(in srgb, var(--brand-soft) 45%, var(--surface)); }
 .txn-card .tbl tbody tr.tx.click:hover td { background: var(--brand-soft); }
-.txn-card .tbl tbody tr.tx td:first-child { box-shadow: inset 4px 0 0 var(--ac); padding-left: 12px; }
+.txn-card .tbl tbody tr.tx td:first-child { padding-left: 12px; }
 .txn-card .tbl thead th:first-child { padding-left: 12px; }
 .txn-search { position: relative; }
 .txn-search .txi { position: absolute; left: 12px; top: 50%; margin-top: 1px; color: var(--muted); pointer-events: none; }
@@ -1336,12 +1335,11 @@ html.native .ptr.spin { animation: ptr-spin .8s linear infinite; }
   .txn-card .sf-btn { border-width: 1.5px; } .txn-card .sf-sort { flex: 1.6 1 0; } .txn-card .sf-tx { font-size: .86rem; }
   .txn-card .sf-ic .txi { width: 20px; height: 20px; }
   .tx-sum { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-  .tx-tile { flex-direction: column; align-items: flex-start; gap: 4px; padding: 8px 8px; border-left-width: 1px; border-top: 4px solid var(--tc); }
+  .tx-tile { flex-direction: column; align-items: flex-start; gap: 4px; padding: 8px 8px; }
   .tx-ti { width: 24px; height: 24px; } .tx-ti .txi { width: 14px; height: 14px; }
   .tx-tt b { font-size: .98rem; } .tx-tt small { font-size: .62rem; }
   .txn-card .mrows .mr-head { background: var(--brand-soft); color: var(--brand); border: 0; border-radius: 8px; padding: 8px 10px; min-height: 0; text-transform: uppercase; letter-spacing: .04em; font-size: .7rem; margin-bottom: 6px; }
-  .txn-card .mrow.tx { margin: 0 0 6px; padding: 9px 10px 9px 12px; border: 1px solid var(--line); border-left: 4px solid var(--ac); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); }
-  .txn-card .mrow.tx:nth-of-type(even) { background: color-mix(in srgb, var(--brand-soft) 45%, var(--surface)); }
+  .txn-card .mrow.tx { margin: 0 0 6px; padding: 9px 10px 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: none; }
   .txn-card .mr-title .tx-bd { display: inline-grid; vertical-align: -5px; margin: 0 6px 0 0; }
   .txn-card .mr-subline .tx-cat { font-size: .68rem; padding: 0 7px; }
 }
@@ -1490,3 +1488,6 @@ dialog.sheet .form .field.half { flex: 1 1 calc(50% - 7px); min-width: 0; }
 }
 @media (min-width: 601px) { dialog.sheet .form { gap: 14px 16px; } dialog.sheet { width: min(620px, calc(100vw - 20px)); } }
 dialog.sheet .form .field.half { align-content: end; }
+
+/* 8.42: transaction amounts, icons and categories follow the colour rule: expense red, income green, investment blue */
+.txn-card .b.pos, .txn-card .pos { color: var(--pos); } .txn-card .b.neg, .txn-card .neg { color: var(--neg); } .txn-card .b.inv, .txn-card .inv { color: var(--s1); }
