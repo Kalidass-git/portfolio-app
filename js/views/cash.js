@@ -347,8 +347,9 @@ function ledger() {
   const acctName = new Map(data.accounts.map((a) => [a.id, `${a.name} · ${a.holder}`]));
   const KINDS = [['all', 'All'], ['expense', 'Expenses'], ['investment', 'Investments'], ['income', 'Income']];
   const seg = h('nav', { class: 'seg', 'aria-label': 'Show' }, KINDS.map(([k, l]) => h('a', { href: 'javascript:void 0', class: k === fKind ? 'on' : '', 'aria-selected': String(k === fKind), onclick: (e) => { e.preventDefault(); fKind = k; limit = 60; rerender(); } }, txi({ all: 'all', expense: 'out', investment: 'invest', income: 'in' }[k]), l)));
-  const tone = (e) => { const k = kindOfCat(e.category); return e.credit ? 'pos' : k === 'investment' ? 'inv' : k === 'expense' ? 'neg' : ''; };
-  const catTone = (e) => (kindOfCat(e.category) === 'investment' ? 'inv' : kindOfCat(e.category) === 'expense' ? 'neg' : kindOfCat(e.category) === 'income' ? 'pos' : '');
+  // red for money out, green for money in, blue for investments; transfers between your own accounts stay neutral
+  const tone = (e) => { const k = kindOfCat(e.category); return k === 'transfer' ? '' : k === 'investment' ? 'inv' : e.credit ? 'pos' : 'neg'; };
+  const catTone = (e) => { const k = kindOfCat(e.category); return k === 'investment' ? 'inv' : k === 'expense' ? 'neg' : k === 'income' ? 'pos' : k === 'transfer' ? '' : e.credit ? 'pos' : 'neg'; };
   const catPill = (e) => h('span', { class: 'tx-cat ' + catTone(e) }, e.category || 'No category');
   const dirBadge = (e) => h('span', { class: 'tx-bd ' + tone(e), title: e.credit ? 'Money in' : 'Money out' }, txi(e.credit ? 'in' : 'out'));
   const tbl = table([

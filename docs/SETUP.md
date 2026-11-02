@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.42.0 – Cleaner Transactions grid (Cash & banks)
+
+- Removed the alternate-row green shading and the coloured left border on every transaction row (table and phone cards), and the coloured border and tint on the summary tiles above the list.
+- The icon, category and amount of each entry now follow one rule: **expense red, income green, investment blue**; transfers between your own accounts stay grey. An entry with no category is red when money goes out and green when it comes in.
+- Nothing else changed; no data is touched.
+
 ## Release 8.41.0 – Quicker data entry
 
 - **Expense / Income** switch (with down and up arrow icons) replaces "Paid out / Received", and it is the first thing on the transaction screen.
