@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.38.1 – Cash calendar: two-digit years, switch to hide empty months
+
+- The year under each month on the Money maturing chart is always two digits ('26, '27), on every range.
+- New switch **Show only months with maturities** above the chart: months where nothing matures (after the kind filter) are left out, so the bars are wider and easy to read. Tapping a bar still lists that month. It works together with the period and kind filters; when nothing matures at all the chart says so.
+- No stored data changed.
+
 ## Release 8.38.0 – Closing with interest makes two bank entries; Cash calendar filters, colours and years
 
 - **Closing a bond, fixed deposit, private lending line or a chit / RD / other saving** that comes back with more than was paid in now makes **two entries** in the bank you pick: the principal as a **transfer** (Investment redemption) and the extra as **interest income** under the holding's own category: your existing "Income FD", "Income Lending", "Income Chit", "Income Bond" (any income category whose name matches), or a new "Income <type>" if you have none. The close form says so. If less than or exactly the amount paid in comes back, there is one transfer entry as before. **Reopen removes both entries.** The second entry's id is stored in a new optional field `closed.interestLedgerId`; closed records from before work as they did. Gold chits (which become a gold purchase) are unchanged.
