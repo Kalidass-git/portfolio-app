@@ -59,19 +59,20 @@ export function screensSection() {
 
 // ---------- alert setup ----------
 function nameOf(kind, ref) { const u = W.universe(S.data, S.all).find((x) => x.kind === kind && String(x.ref) === String(ref)); return u ? u.name : ref; }
-export function alertForm(a) {
+/** lock: the alert is for the share or fund in `a` only (opened from its own page), so the share / fund choice is hidden. */
+export function alertForm(a, { lock = false } = {}) {
   const isNew = !a || !a.id;
   const uni = W.universe(S.data, S.all);
   const opts = (kind) => { const l = uni.filter((u) => u.kind === kind).map((u) => ({ value: String(u.ref), label: u.name + (u.held ? ' (you hold it)' : '') })); return kind === 'stock' ? [{ value: '__new', label: 'A share not in my list…' }, ...l] : l; };
   const rule = (kind) => W.rulesFor(kind).map((r) => ({ value: r.id, label: r.label }));
   const kind0 = a ? a.kind : 'stock';
   formDialog({
-    title: isNew ? 'New alert' : 'Edit alert', value: a ? { kind: a.kind, stockRef: a.kind === 'stock' ? a.ref : '', fundRef: a.kind === 'fund' ? a.ref : '', stockRule: a.kind === 'stock' ? a.rule : '', fundRule: a.kind === 'fund' ? a.rule : '', value: a.value, on: a.on !== false } : { kind: 'stock', on: true },
+    title: (isNew ? 'New alert' : 'Edit alert') + (lock && a && a.name ? ' · ' + a.name : ''), value: a ? { kind: a.kind, stockRef: a.kind === 'stock' ? a.ref : '', fundRef: a.kind === 'fund' ? a.ref : '', stockRule: a.kind === 'stock' ? a.rule : '', fundRule: a.kind === 'fund' ? a.rule : '', value: a.value, on: a.on !== false } : { kind: 'stock', on: true },
     fields: [
-      { key: 'kind', label: 'For a', type: 'select', options: [{ value: 'stock', label: 'Share or ETF' }, { value: 'fund', label: 'Mutual fund' }] },
-      { key: 'stockRef', label: 'Which share', type: 'select', options: opts('stock'), showIf: (v) => v.kind === 'stock', required: false },
+      { key: 'kind', label: 'For a', type: 'select', options: [{ value: 'stock', label: 'Share or ETF' }, { value: 'fund', label: 'Mutual fund' }], showIf: () => !lock },
+      { key: 'stockRef', label: 'Which share', type: 'select', options: opts('stock'), showIf: (v) => !lock && v.kind === 'stock', required: false },
       { key: 'newSymbol', label: 'NSE symbol', hint: 'For example TCS. It is added to your watchlist so its numbers load.', showIf: (v) => v.kind === 'stock' && v.stockRef === '__new' },
-      { key: 'fundRef', label: 'Which fund', type: 'select', options: opts('fund'), showIf: (v) => v.kind === 'fund', hint: opts('fund').length ? '' : 'Add the fund to your watchlist first (Alerts tab → Add fund).' },
+      { key: 'fundRef', label: 'Which fund', type: 'select', options: opts('fund'), showIf: (v) => !lock && v.kind === 'fund', hint: opts('fund').length ? '' : 'Add the fund to your watchlist first (Alerts tab → Add fund).' },
       { key: 'stockRule', label: 'Tell me when', type: 'select', options: rule('stock'), showIf: (v) => v.kind === 'stock' },
       { key: 'fundRule', label: 'Tell me when', type: 'select', options: rule('fund'), showIf: (v) => v.kind === 'fund' },
       { key: 'value', label: 'Level', type: 'number', hint: 'Rupees, times, or percent, as the sentence above says. Leave empty for the “200-day average” rules.' },
@@ -99,6 +100,24 @@ export function alertForm(a) {
     onDelete: isNew ? null : () => mutate((d) => { d.alerts = (d.alerts || []).filter((x) => x.id !== a.id); }),
   });
 }
+/**
+ * Alerts for one share or fund, on its own page: lists them with what the number is now, and lets the owner add, change or remove them.
+ * They are the same alerts as on Shares & funds > Watch > Alerts & watchlist (one list, data.alerts).
+ */
+export function alertsCard(kind, ref, name) {
+  const data = S.data, mine = (data.alerts || []).filter((a) => a.kind === kind && String(a.ref) === String(ref));
+  const hit = new Set(W.evalAlerts(data).hit.map((x) => x.alert.id));
+  const status = (a) => (a.on === false ? h('span', { class: 'muted' }, 'off') : hit.has(a.id) ? h('b', { class: 'neg' }, 'triggered') : h('span', { class: 'muted' }, 'waiting'));
+  const remove = async (a) => { if (!(await confirmDialog(`Remove the alert “${W.alertText(a)}” for ${name}?`, 'Remove'))) return; mutate((d) => { d.alerts = (d.alerts || []).filter((x) => x.id !== a.id); }); toast('Alert removed'); };
+  const preset = { kind, ref: String(ref), name };
+  return section('Alerts' + (mine.length ? ` · ${mine.length}` : ''), h('div', null,
+    mine.length ? rowList(mine.map((a) => ({
+      title: W.alertText(a), sub: ['Now ' + alertNow(a)], value: status(a),
+      extra: canEdit() ? h('span', { class: 'rl-actions' }, btn('Change', () => alertForm(a, { lock: true }), 'small'), btn('Remove', () => remove(a), 'small')) : null,
+    }))) : h('p', { class: 'empty' }, 'No alerts for this ' + (kind === 'fund' ? 'fund' : 'share') + ' yet.'),
+    h('p', { class: 'note' }, 'These are the same alerts as on Shares & funds › Watch › Alerts & watchlist. They are checked when you open that page and when you press Refresh.'),
+    canEdit() ? btn(mine.length ? 'Add another alert' : 'Add an alert', () => alertForm(preset, { lock: true }), 'primary') : null));
+}
 export function fundPicker() {
   const input = h('input', { type: 'search', placeholder: 'Part of the fund name, e.g. parag parikh flexi', autocomplete: 'off', style: { width: '100%' } });
   const list = h('ul', { class: 'pick' }), msg = h('p', { class: 'note' }, 'Type at least three letters, then press Search.');
@@ -117,12 +136,13 @@ export function stockAdder() {
   formDialog({ title: 'Add a share to watch', fields: [{ key: 'symbol', label: 'NSE symbol', required: true, hint: 'For example TCS or HDFCBANK' }, { key: 'name', label: 'Name (optional)' }],
     onSave: (v) => { const ref = v.symbol.toUpperCase().trim(); mutate((d) => { d.watchlist = d.watchlist || []; if (!d.watchlist.some((w) => w.kind === 'stock' && w.ref.toUpperCase() === ref)) d.watchlist.push({ id: nextId('w', d.watchlist), kind: 'stock', ref, name: v.name || ref }); }); toast('Added. Press Refresh indicators to load its numbers.'); } });
 }
+export const alertNow = (a) => { const m = W.metrics()[W.alertKey(a)]; if (!m) return '–'; return /^(price|nav)/.test(a.rule) || /Dma|52|fall|day/.test(a.rule) ? rs(m.price) : /^pe/.test(a.rule) ? (m.pe ? m.pe.toFixed(1) + ' times' : '–') : /^pb/.test(a.rule) ? (m.pb ? m.pb.toFixed(2) : '–') : /^dy/.test(a.rule) ? (m.dy != null ? m.dy.toFixed(2) + '%' : '–') : /ret1y/.test(a.rule) ? pc(m.ret1y) : '–'; };
 export function alertsTab(root) {
   const data = S.data, wl = data.watchlist || [], al = data.alerts || [];
   autoRefresh();
   root.append(triggeredCard({ link: false }));
   const ev = W.evalAlerts(data), hitIds = new Set(ev.hit.map((x) => x.alert.id));
-  const cur = (a) => { const m = W.metrics()[W.alertKey(a)]; if (!m) return '–'; return /^(price|nav)/.test(a.rule) || /Dma|52|fall|day/.test(a.rule) ? rs(m.price) : /^pe/.test(a.rule) ? (m.pe ? m.pe.toFixed(1) + ' times' : '–') : /^pb/.test(a.rule) ? (m.pb ? m.pb.toFixed(2) : '–') : /^dy/.test(a.rule) ? (m.dy != null ? m.dy.toFixed(2) + '%' : '–') : /ret1y/.test(a.rule) ? pc(m.ret1y) : '–'; };
+  const cur = alertNow;
   root.append(section('Your alerts', h('div', null, table([
     { label: 'Share or fund', host: true, get: (a) => a.name },
     { label: 'Rule', mob: 'under', mlabel: '', get: (a) => W.alertText(a) },

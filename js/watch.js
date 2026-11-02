@@ -43,6 +43,8 @@ export function universe(data, all) {
   for (const s of all.stocks.items) add({ kind: 'stock', ref: s.symbol, key: stockKey(s.symbol), name: s.name, yahoo: s.yahoo || '', held: true, value: s.current, ret: s.ret, weight: stockTotal ? s.current / stockTotal : 0, etf: s.assetClass && s.assetClass !== 'equity', href: '#/equity/holding?sym=' + encodeURIComponent(s.symbol) });
   for (const m of all.mf.items) if (m.schemeCode) add({ kind: 'fund', ref: String(m.schemeCode), key: fundKey(m.schemeCode), name: m.name, held: true, value: m.current, ret: m.ret, weight: fundTotal ? m.current / fundTotal : 0, href: '#/equity/fund?id=' + encodeURIComponent(m.id) });
   for (const w of data.watchlist || []) add({ kind: w.kind, ref: String(w.ref), key: w.kind === 'stock' ? stockKey(w.ref) : fundKey(w.ref), name: w.name || w.ref, yahoo: w.yahoo || '', held: false });
+  // shares on the person's own watchlists (Manage > Watchlists) are covered too, so alerts can be set on them
+  for (const l of data.watchlists || []) for (const it of l.items || []) { const sym = String(it.symbol || '').toUpperCase().trim(); if (sym) add({ kind: 'stock', ref: sym, key: stockKey(sym), name: it.name || sym, yahoo: it.yahoo || '', held: false, listed: true }); }
   return out;
 }
 
@@ -147,4 +149,5 @@ export function refreshMetrics(targets, onProgress = () => {}) {
   })().finally(() => { running = null; });
   return running;
 }
-export const targetsOf = (data, all) => universe(data, all).map((u) => ({ kind: u.kind, ref: u.ref, key: u.key, yahoo: u.yahoo, name: u.name }));
+/** What the main Refresh asks for: holdings and the flat watchlist. Shares that are only on the person's own watchlists are refreshed from the Watchlists page instead. */
+export const targetsOf = (data, all) => universe(data, all).filter((u) => !u.listed).map((u) => ({ kind: u.kind, ref: u.ref, key: u.key, yahoo: u.yahoo, name: u.name }));

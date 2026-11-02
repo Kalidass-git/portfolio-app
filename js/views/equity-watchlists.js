@@ -1,0 +1,63 @@
+// Manage > Watchlists: your own lists of shares, a manual price refresh for these lists only, and links to each share's chart and alerts.
+import { S, mutate } from '../store.js';
+import { h, money, dec, pct, section, btn, canEdit, toast, formDialog, confirmDialog, posNeg, icon } from '../ui.js';
+import * as WL from '../watchlists.js';
+import * as W from '../watch.js';
+
+let busy = false, openId = null;
+
+function listForm(l) {
+  formDialog({ title: l ? 'Rename watchlist' : 'New watchlist', fields: [{ key: 'name', label: 'Name', type: 'text', required: true }], value: { name: l ? l.name : '' },
+    onSave: (v) => mutate((d) => { if (l) WL.renameList(d, l.id, v.name); else openId = WL.addList(d, v.name).id; }),
+    onDelete: l ? () => mutate((d) => WL.removeList(d, l.id)) : null, deleteMessage: 'Delete this watchlist? Alerts you set on its shares stay.' });
+}
+function addShare(l) {
+  formDialog({ title: 'Add a share to ' + l.name, fields: [
+    { key: 'symbol', label: 'NSE symbol', type: 'text', required: true, hint: 'For example TCS, RELIANCE or HDFCBANK. Use the symbol the trading app shows.' },
+    { key: 'name', label: 'Name (optional)', type: 'text', required: false }], value: {},
+  onSave: (v) => { let ok = true; mutate((d) => { ok = WL.addItem(d, l.id, { symbol: v.symbol, name: v.name }); }); if (!ok) toast('Already on this list'); } });
+}
+async function refreshAll(btnEl, rerender) {
+  if (busy) return; busy = true; btnEl.disabled = true;
+  try {
+    const r = await WL.refreshQuotes(S.data);
+    const keys = new Set(WL.allSymbols(S.data).map((x) => 'EQ:' + x.symbol));
+    const targets = W.universe(S.data, S.all).filter((u) => u.kind === 'stock' && keys.has(u.key));
+    if (targets.length && S.remote) { try { await W.refreshMetrics(targets); } catch { /* prices still updated */ } }
+    toast(r.errors.length ? (r.n ? `${r.n} updated, ${r.errors.length} failed` : r.errors[0]) : `${r.n} price${r.n === 1 ? '' : 's'} updated`);
+  } finally { busy = false; rerender(); }
+}
+
+export function render(root) {
+  const lists = WL.lists(S.data), rerender = () => window.dispatchEvent(new Event('rerender'));
+  const at = WL.refreshedAt();
+  const bar = h('div', { class: 'card' },
+    h('p', { class: 'note' }, 'Your own lists of shares to follow. Their prices are fetched only when you press Refresh here. The main Refresh never touches them.'),
+    h('div', { class: 'row-actions' },
+      btn('Refresh prices', (e) => refreshAll(e.currentTarget, rerender), canEdit() ? '' : 'primary'),
+      canEdit() ? btn('New watchlist', () => listForm(null), 'primary') : null,
+      h('span', { class: 'stamp' }, at ? 'Prices ' + new Date(at).toLocaleString('en-IN') : 'Not refreshed yet')));
+  root.append(bar);
+  if (!lists.length) { root.append(h('div', { class: 'card' }, h('p', { class: 'empty' }, 'No watchlists yet.'), h('p', { class: 'note' }, canEdit() ? 'Press New watchlist, then add shares by their NSE symbol.' : ''))); return; }
+  if (openId == null || !lists.some((l) => l.id === openId)) openId = lists[0].id;
+  root.append(h('div', { class: 'row-actions', role: 'tablist', 'aria-label': 'Watchlists' }, lists.map((l) => h('button', { type: 'button', class: 'chip-btn' + (l.id === openId ? ' on' : ''), onclick: () => { openId = l.id; rerender(); } }, `${l.name} · ${(l.items || []).length}`))));
+  const l = lists.find((x) => x.id === openId);
+  const alerts = S.data.alerts || [];
+  const cards = (l.items || []).map((it) => {
+    const q = WL.quoteOf(it.symbol), n = alerts.filter((a) => a.kind === 'stock' && WL.norm(a.ref) === WL.norm(it.symbol)).length;
+    return { title: it.name || it.symbol, sub: [it.symbol, n ? `${n} alert${n > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · '),
+      value: q ? money(q.price) : '–', valueSub: q && q.dayPct != null ? h('span', { class: posNeg(q.dayPct) }, (q.dayPct >= 0 ? '+' : '') + pct(q.dayPct, 2)) : '',
+      onClick: () => { location.hash = '#/equity/quote?sym=' + encodeURIComponent(it.symbol); } };
+  });
+  const list = cards.length ? null : h('p', { class: 'empty' }, 'Nothing on this list yet.');
+  root.append(section(l.name, h('div', null, list, cards.length ? rowListSafe(cards) : null,
+    canEdit() ? h('div', { class: 'row-actions' }, btn('Add a share', () => addShare(l), ''), btn('Rename', () => listForm(l), 'small'),
+      btn('Remove a share', () => removePicker(l), 'small')) : null)));
+}
+import { rowList } from '../ui.js';
+const rowListSafe = (c) => rowList(c);
+function removePicker(l) {
+  const items = l.items || []; if (!items.length) return toast('Nothing to remove');
+  formDialog({ title: 'Remove from ' + l.name, fields: [{ key: 'symbol', label: 'Share', type: 'select', options: items.map((i) => ({ value: i.symbol, label: `${i.name || i.symbol} (${i.symbol})` })) }], value: { symbol: items[0].symbol }, saveLabel: 'Remove',
+    onSave: (v) => mutate((d) => WL.removeItem(d, l.id, v.symbol)) });
+}

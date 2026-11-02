@@ -31,6 +31,44 @@ export async function stockCloses(symbol, yahoo) {
   return rows;
 }
 
+/**
+ * Daily open, high, low, close and volume for a candlestick chart: [{d, o, h, l, c, v}] oldest first.
+ * Needs the backend's newer "history" action (it adds the ohlc rows). When the backend is older, returns { rows: [], closesOnly: [...] } so a line can still be drawn.
+ */
+export async function stockOhlc(symbol, yahoo) {
+  const key = 'ohlc:' + symbol;
+  if (cache.has(key)) return cache.get(key);
+  if (!S.cfg || !S.cfg.backendUrl) throw new Error('Price history for shares comes through your backend, which is not connected on this device.');
+  let res;
+  try { res = await call(S.cfg.backendUrl, S.cfg.key, 'history', { symbol, yahoo: yahoo || '', ohlc: true }); }
+  catch (e) { throw new Error(/Unknown action/i.test(e.message) ? 'Your backend needs the newer Code.gs (it adds the “history” action). Copy backend/Code.gs into your Apps Script project and deploy a new version.' : e.message); }
+  if (!res || res.error || !res.series) throw new Error((res && res.error) || 'No price history found for ' + symbol + '.');
+  const out = res.ohlc ? { rows: res.ohlc.map((x) => ({ d: x[0], o: x[1], h: x[2], l: x[3], c: x[4], v: x[5] || 0 })).filter((x) => x.c > 0), closesOnly: null }
+    : { rows: [], closesOnly: res.series.map((x) => ({ d: x[0], v: x[1] })) };
+  cache.set(key, out);
+  return out;
+}
+/**
+ * Fewer, wider candles for long ranges: 'D' keeps days, 'W' joins each ISO week (Monday start), 'M' each month.
+ * Open is the first day's open, close the last day's close, high and low the extremes, volume the sum.
+ */
+export function aggregateOhlc(rows, mode = 'D') {
+  if (mode === 'D' || !rows.length) return rows;
+  const keyOf = (d) => {
+    if (mode === 'M') return d.slice(0, 7);
+    const t = new Date(d + 'T00:00:00Z'), day = (t.getUTCDay() + 6) % 7;
+    return new Date(t.getTime() - day * 86400000).toISOString().slice(0, 10);
+  };
+  const out = []; let cur = null, ck = '';
+  for (const r of rows) {
+    const k = keyOf(r.d);
+    if (!cur || k !== ck) { cur = { d: r.d, o: r.o, h: r.h, l: r.l, c: r.c, v: r.v }; out.push(cur); ck = k; }
+    else { cur.h = Math.max(cur.h, r.h); cur.l = Math.min(cur.l, r.l); cur.c = r.c; cur.v += r.v; cur.d = r.d; }
+  }
+  return out;
+}
+/** The candle size that keeps a chart readable: days up to 6 months, weeks up to 3 years, then months. */
+export const candleMode = (months) => (months && months <= 6 ? 'D' : months && months <= 36 ? 'W' : 'M');
 export const RANGES = [['1M', 1], ['3M', 3], ['6M', 6], ['1Y', 12], ['3Y', 36], ['5Y', 60], ['Max', 0]];
 export function sliceRange(rows, months, asOf = null) {
   if (!months || !rows.length) return rows;

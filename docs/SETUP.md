@@ -150,6 +150,14 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.39.0 – Alerts on share and fund pages; Watchlists
+
+- **Alerts on the share and fund pages.** Every share and fund you hold now has an Alerts card with Add, Change and Remove. It is the same list as Shares & funds › Watch › Alerts & watchlist, so an alert set in either place shows in both.
+- **Manage › Watchlists.** Make your own lists of shares (by NSE symbol), rename or delete them, and add or remove shares. Tap a share to open its page with a **candlestick chart** (1M to Max, with volume), key figures, its alerts, and which lists it is on. You can set alerts on a listed share too.
+- **Refresh prices** on the Watchlists page fetches prices for the listed shares only. The main Refresh no longer includes shares that are only on these lists.
+- **Update `backend/Code.gs`.** Candles need the newer script: paste it into Apps Script and deploy a new version of the same web app. Until then the chart falls back to closing prices with a note.
+- Data: adds an optional `watchlists` field. Old files work unchanged. Prices for the lists are kept on each device, not in the data file.
+
 ## Release 8.38.1 – Cash calendar: two-digit years, switch to hide empty months
 
 - The year under each month on the Money maturing chart is always two digits ('26, '27), on every range.
