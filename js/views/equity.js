@@ -141,6 +141,12 @@ function summaryCards(label, g, xi) {
       stat('Today', dayOk ? h('span', { class: posNeg(g.day) }, signedMoney(g.day)) : '–', dayOk ? signedPct(g.dayPct) : 'refresh prices')));
 }
 
+/** A share or ETF opens its holding page, a fund its fund page. */
+const detailHref = (x) => (isFund(x) ? '#/equity/fund?id=' + encodeURIComponent(x.id) : '#/equity/holding?sym=' + encodeURIComponent(x.symbol));
+const goDetail = (r) => { if (r.href) location.hash = r.href; };
+/** Makes a summary card open a page (keyboard and screen readers too). */
+const cardLink = (el, href, label) => { el.classList.add('click'); el.setAttribute('role', 'link'); el.tabIndex = 0; el.setAttribute('aria-label', label); el.style.cursor = 'pointer'; el.addEventListener('click', () => { location.hash = href; }); el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); location.hash = href; } }); return el; };
+const HOLD_HREF = { shares: '#/equity/holdings?v=stocks&f=shares', etfs: '#/equity/holdings?v=stocks&f=etfs', funds: '#/equity/holdings?v=funds' };
 function today(root) {
   const { all, data } = S;
   const g = groups();
@@ -158,10 +164,10 @@ function today(root) {
     h('span', { class: 'stat-label' }, GROUP_LABEL[k]), h('strong', { class: 'stat-value ' + posNeg(t.day) }, t.dayCount ? signedMoney(t.day) : '–'),
     h('span', { class: 'stat-sub ' + posNeg(t.day) }, t.dayCount ? signedPct(t.dayPct) + ` · ${t.dayCount} of ${t.items.length} priced` : 'no day price yet')); };
   root.append(h('div', { class: 'stats' }, tile('shares'), tile('etfs'), tile('funds'),
-    h('div', { class: 'stat today' }, h('span', { class: 'stat-label' }, 'All together'), h('strong', { class: 'stat-value ' + posNeg(total) }, signedMoney(total)), h('span', { class: 'stat-sub ' + posNeg(total) }, signedPct(base ? total / base : 0)))));
+    cardLink(h('div', { class: 'stat today' }, h('span', { class: 'stat-label' }, 'All together'), h('strong', { class: 'stat-value ' + posNeg(total) }, signedMoney(total)), h('span', { class: 'stat-sub ' + posNeg(total) }, signedPct(base ? total / base : 0))), '#/equity/holdings?v=all', 'Open all holdings')));
   root.append(h('nav', { class: 'seg', 'aria-label': 'Group' }, Object.keys(GROUP_LABEL).map((k) => h('a', { href: 'javascript:void 0', class: k === todayScope ? 'on' : '', 'aria-selected': String(k === todayScope), onclick: (e) => { e.preventDefault(); todayScope = k; rerender(); } }, GROUP_LABEL[k]))));
   const t = g[todayScope];
-  const movers = t.items.filter((x) => x.day != null).map((x) => ({ name: x.name, day: x.day, dayPct: x.dayPct, value: x.current }));
+  const movers = t.items.filter((x) => x.day != null).map((x) => ({ name: x.name, day: x.day, dayPct: x.dayPct, value: x.current, href: detailHref(x) }));
   const cols = [
     { label: 'Name', get: (x) => x.name },
     { label: 'Today', cls: 'r', render: dayCell },
@@ -171,8 +177,8 @@ function today(root) {
   const lose = movers.filter((x) => x.day < 0).sort((a, b) => a.day - b.day).slice(0, 5);
   const noun = GROUP_LABEL[todayScope].toLowerCase();
   root.append(h('div', { class: 'grid2' },
-    section(`Biggest gains today · ${noun}`, table(cols, gain, { m: { key: 'eq-movers', head: 'Name', views: [['Today', 'Value']] }, empty: `No ${noun} are up today.` })),
-    section(`Biggest falls today · ${noun}`, table(cols, lose, { m: { key: 'eq-movers', head: 'Name', views: [['Today', 'Value']] }, empty: `No ${noun} are down today.` }))));
+    section(`Biggest gains today · ${noun}`, table(cols, gain, { onRow: goDetail, m: { key: 'eq-movers', head: 'Name', views: [['Today', 'Value']] }, empty: `No ${noun} are up today.` })),
+    section(`Biggest falls today · ${noun}`, table(cols, lose, { onRow: goDetail, m: { key: 'eq-movers', head: 'Name', views: [['Today', 'Value']] }, empty: `No ${noun} are down today.` }))));
   const flat = t.items.length - t.dayCount;
   root.append(h('p', { class: 'note' }, `${when ? 'Prices refreshed ' + when + '. ' : ''}Shares, ETFs and funds are listed separately because they behave differently. Change is against the previous close (shares, ETFs) or the previous NAV (funds), in rupees for the quantity you hold. Funds publish one NAV a day, usually in the evening, so a fund can show yesterday’s move until then.${flat ? ` ${flat} ${noun === 'mutual funds' ? 'fund' : 'holding'}${flat > 1 ? 's have' : ' has'} no day-by-day price yet and ${flat > 1 ? 'are' : 'is'} left out.` : ''}`));
 }
@@ -353,7 +359,7 @@ export function render() {
     today(root);
     const g = groups();
     root.append(section('What you hold', h('div', { class: 'stats' },
-      ...['shares', 'etfs', 'funds'].map((k) => stat(GROUP_LABEL[k], money(g[k].current), h('span', null, 'invested ', money(g[k].invested), ' · ', gainText(g[k].pl), ' (', pct(g[k].ret), ')', xiText(k === 'funds' ? all.mf.xirr : groupXirr(g[k].items))))))));
+      ...['shares', 'etfs', 'funds'].map((k) => cardLink(stat(GROUP_LABEL[k], money(g[k].current), h('span', null, 'invested ', money(g[k].invested), ' · ', gainText(g[k].pl), ' (', pct(g[k].ret), ')', xiText(k === 'funds' ? all.mf.xirr : groupXirr(g[k].items)))), HOLD_HREF[k], 'Open ' + GROUP_LABEL[k] + ' in Holdings'))))); 
     root.append(watchView.screensSection());
   } else if (tab === 'holdings') {
     // old links: v=funds, v=stocks&f=etfs, f=shares ... pick the type; old sold / dividends links go to History

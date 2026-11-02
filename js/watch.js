@@ -42,9 +42,9 @@ export function universe(data, all) {
   const stockTotal = all.stocks.items.reduce((a, x) => a + (x.current || 0), 0), fundTotal = all.mf.items.reduce((a, x) => a + (x.current || 0), 0);
   for (const s of all.stocks.items) add({ kind: 'stock', ref: s.symbol, key: stockKey(s.symbol), name: s.name, yahoo: s.yahoo || '', held: true, value: s.current, ret: s.ret, weight: stockTotal ? s.current / stockTotal : 0, etf: s.assetClass && s.assetClass !== 'equity', href: '#/equity/holding?sym=' + encodeURIComponent(s.symbol) });
   for (const m of all.mf.items) if (m.schemeCode) add({ kind: 'fund', ref: String(m.schemeCode), key: fundKey(m.schemeCode), name: m.name, held: true, value: m.current, ret: m.ret, weight: fundTotal ? m.current / fundTotal : 0, href: '#/equity/fund?id=' + encodeURIComponent(m.id) });
-  for (const w of data.watchlist || []) add({ kind: w.kind, ref: String(w.ref), key: w.kind === 'stock' ? stockKey(w.ref) : fundKey(w.ref), name: w.name || w.ref, yahoo: w.yahoo || '', held: false });
+  for (const w of data.watchlist || []) add({ kind: w.kind, ref: String(w.ref), key: w.kind === 'stock' ? stockKey(w.ref) : fundKey(w.ref), name: w.name || w.ref, yahoo: w.yahoo || '', held: false, ...(w.kind === 'stock' ? { href: '#/equity/quote?sym=' + encodeURIComponent(String(w.ref).toUpperCase()) } : {}) });
   // shares on the person's own watchlists (Manage > Watchlists) are covered too, so alerts can be set on them
-  for (const l of data.watchlists || []) for (const it of l.items || []) { const sym = String(it.symbol || '').toUpperCase().trim(); if (sym) add({ kind: 'stock', ref: sym, key: stockKey(sym), name: it.name || sym, yahoo: it.yahoo || '', held: false, listed: true }); }
+  for (const l of data.watchlists || []) for (const it of l.items || []) { const sym = String(it.symbol || '').toUpperCase().trim(); if (sym) add({ kind: 'stock', ref: sym, key: stockKey(sym), name: it.name || sym, yahoo: it.yahoo || '', held: false, listed: true, href: '#/equity/quote?sym=' + encodeURIComponent(sym) }); }
   return out;
 }
 
