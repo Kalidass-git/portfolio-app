@@ -1477,3 +1477,16 @@ dialog.sheet footer button:not(.primary):not(.danger) { background: transparent;
 
 input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; } dialog.sheet input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .fi { fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+/* ---------- 8.41: side-by-side short fields, icons in tap buttons ---------- */
+.seg-opt { display: inline-flex; align-items: center; justify-content: center; gap: 7px; } .seg-opt .fi { width: 18px; height: 18px; }
+dialog.sheet .form .field.half { flex: 1 1 calc(50% - 7px); min-width: 0; }
+.field-amt.half .ctl.amt input { font-size: 1.3rem; min-height: 54px; padding-left: 38px !important; padding-right: 6px; } .field-amt.half .ctl.amt .fi { left: 11px; width: 20px; height: 20px; }
+@media (max-width: 480px) {
+  dialog.sheet .form .field.half .ctl.has-ic:not(.amt) .fi { display: none; } dialog.sheet .form .field.half .ctl.has-ic:not(.amt) input, dialog.sheet .form .field.half .ctl.has-ic:not(.amt) select { padding-left: 12px !important; }
+  dialog.sheet .form .field.half input:not([type=checkbox]), dialog.sheet .form .field.half select { padding-left: 12px; padding-right: 8px; font-size: .95rem; }
+  dialog.sheet .form .field.half select { padding-right: 30px; background-position: right 8px center; background-size: 16px; }
+  dialog.sheet .form .field.half > span { line-height: 1.25; }
+}
+@media (min-width: 601px) { dialog.sheet .form { gap: 14px 16px; } dialog.sheet { width: min(620px, calc(100vw - 20px)); } }
+dialog.sheet .form .field.half { align-content: end; }
