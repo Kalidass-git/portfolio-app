@@ -1420,3 +1420,60 @@ button.info-i { width: 32px; height: 32px; font-size: 1rem; }
 .kdot { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 6px; vertical-align: baseline; flex: 0 0 auto; }
 .chip .kdot { margin-right: 7px; }
 svg.chart .axis-sub { opacity: .7; }
+
+/* ---------- modern entry screens (8.40): tinted header, roomy fields, tap choices, big amount box ---------- */
+dialog.sheet { --tone: var(--brand); --tone-soft: var(--brand-soft); --tone-ink: var(--brand-ink); border-radius: 20px; border: 0; box-shadow: 0 24px 60px rgba(10, 18, 14, .28); }
+dialog.sheet[data-tone="out"] { --tone: var(--neg); --tone-soft: color-mix(in srgb, var(--neg) 12%, var(--surface)); --tone-ink: #fff; }
+dialog.sheet[data-tone="in"] { --tone: var(--pos); --tone-soft: color-mix(in srgb, var(--pos) 13%, var(--surface)); --tone-ink: #fff; }
+dialog.sheet[data-tone="inv"] { --tone: var(--s1); --tone-soft: color-mix(in srgb, var(--s1) 13%, var(--surface)); --tone-ink: #fff; }
+:root[data-theme="dark"] dialog.sheet[data-tone="out"], :root[data-theme="dark"] dialog.sheet[data-tone="in"], :root[data-theme="dark"] dialog.sheet[data-tone="inv"] { --tone-ink: #07140f; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) dialog.sheet[data-tone="out"], :root:not([data-theme="light"]) dialog.sheet[data-tone="in"], :root:not([data-theme="light"]) dialog.sheet[data-tone="inv"] { --tone-ink: #07140f; } }
+dialog.sheet.toned header { gap: 12px; padding: 16px 14px 12px 18px; border-bottom: 0; background: linear-gradient(180deg, var(--tone-soft), transparent); justify-content: flex-start; }
+dialog.sheet.toned header .icon { margin-left: auto; background: color-mix(in srgb, var(--ink) 7%, transparent); border-radius: 50%; width: 36px; height: 36px; }
+.dlg-badge { width: 44px; height: 44px; flex: none; display: grid; place-items: center; border-radius: 14px; background: var(--tone-soft); color: var(--tone); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 22%, transparent); }
+.dlg-badge .fi { width: 22px; height: 22px; }
+.dlg-title { min-width: 0; } .dlg-title h2 { font-size: 1.12rem; line-height: 1.25; } .dlg-sub { color: var(--muted); font-size: .85rem; margin-top: 1px; }
+dialog.sheet .dlg-body { padding: 6px 18px 16px; }
+dialog.sheet .form { gap: 14px; }
+dialog.sheet .field { gap: 6px; }
+dialog.sheet .field > span { font-size: .84rem; font-weight: 600; color: var(--ink); letter-spacing: .01em; }
+dialog.sheet .field small { margin-top: 1px; line-height: 1.35; }
+.ctl { position: relative; display: flex; align-items: center; }
+.ctl .fi, .field .ctl > .fi { position: absolute; left: 13px; width: 19px; height: 19px; color: var(--tone); opacity: .85; pointer-events: none; }
+dialog.sheet .form input:not([type=checkbox]), dialog.sheet .form select, dialog.sheet .form textarea { width: 100%; min-height: 48px; padding: 11px 14px; border-radius: 14px; background: var(--surface-2); border: 1.5px solid var(--line); font-size: 1rem; transition: border-color .15s, box-shadow .15s, background .15s; }
+dialog.sheet .form textarea { min-height: 84px; line-height: 1.4; }
+.ctl.has-ic input, .ctl.has-ic select { padding-left: 42px !important; }
+dialog.sheet .form input:focus, dialog.sheet .form select:focus, dialog.sheet .form textarea:focus { outline: 0; background: var(--surface); border-color: var(--tone); box-shadow: 0 0 0 4px color-mix(in srgb, var(--tone) 16%, transparent); }
+dialog.sheet .form select { appearance: none; -webkit-appearance: none; padding-right: 40px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23788' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 13px center; background-size: 18px; }
+/* amount: the big number */
+.field-amt .ctl.amt { background: var(--tone-soft); border-radius: 16px; }
+.field-amt .ctl.amt input { background: transparent !important; border-color: transparent !important; font-size: 1.7rem; font-weight: 700; min-height: 62px; letter-spacing: .01em; color: var(--ink); padding-left: 46px !important; }
+.field-amt .ctl.amt .fi { left: 15px; width: 24px; height: 24px; opacity: 1; }
+.field-amt .ctl.amt:focus-within { box-shadow: 0 0 0 4px color-mix(in srgb, var(--tone) 18%, transparent); } .field-amt .ctl.amt input:focus { box-shadow: none !important; }
+/* two or three short choices become tap buttons */
+.ctl-seg { display: block; } .seg-src { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.seg-field { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 6px; padding: 5px; background: var(--surface-2); border: 1.5px solid var(--line); border-radius: 16px; }
+.seg-opt { min-height: 42px; border: 0 !important; border-radius: 12px; background: transparent; color: var(--muted); font-weight: 600; font-size: .93rem; padding: 8px 10px; text-align: center; line-height: 1.2; }
+.seg-opt:hover { background: color-mix(in srgb, var(--tone) 8%, transparent); }
+.seg-opt.on { background: var(--tone); color: var(--tone-ink); box-shadow: 0 2px 8px color-mix(in srgb, var(--tone) 35%, transparent); }
+dialog.sheet .field.check { padding: 12px 14px; background: var(--surface-2); border: 1.5px solid var(--line); border-radius: 14px; align-items: center; }
+dialog.sheet .field.check input { width: 22px; height: 22px; accent-color: var(--tone); }
+dialog.sheet .field.check > span { font-weight: 500; }
+dialog.sheet .form-error { padding: 0; font-weight: 600; } dialog.sheet .form-error:empty { display: none; }
+/* footer: one strong action, quiet others */
+dialog.sheet footer { gap: 10px; padding: 12px 18px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line-2); background: var(--surface); flex-wrap: nowrap; }
+dialog.sheet footer button { min-height: 48px; border-radius: 14px; padding: 0 18px; font-weight: 600; }
+dialog.sheet footer button.primary { flex: 1 1 auto; min-width: 38%; background: var(--tone); border-color: var(--tone); color: var(--tone-ink); font-size: 1rem; box-shadow: 0 6px 16px color-mix(in srgb, var(--tone) 30%, transparent); }
+dialog.sheet footer button.danger { margin-right: auto; background: transparent; border-color: transparent; color: var(--neg); }
+dialog.sheet footer button.danger:hover { background: color-mix(in srgb, var(--neg) 10%, transparent); }
+dialog.sheet footer button:not(.primary):not(.danger) { background: transparent; }
+@media (max-width: 600px) {
+  dialog.sheet { border-radius: 24px 24px 0 0; max-height: 94vh; }
+  dialog.sheet.toned header::before { content: ""; position: absolute; top: 7px; left: 50%; width: 38px; height: 4px; margin-left: -19px; border-radius: 3px; background: color-mix(in srgb, var(--ink) 18%, transparent); }
+  dialog.sheet header { position: relative; }
+  dialog.sheet footer { flex-wrap: wrap; } dialog.sheet footer:has(button:nth-child(3)) button.primary { order: 9; flex: 1 1 100%; }
+  dialog.sheet footer:has(button:nth-child(3)) button:not(.primary) { flex: 1 1 auto; } dialog.sheet footer button.danger { margin-right: 0; }
+}
+
+input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; } dialog.sheet input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+.fi { fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; flex: none; }

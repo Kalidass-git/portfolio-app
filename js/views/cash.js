@@ -243,10 +243,10 @@ export function txnForm(entry, preset) {
   formDialog({ focus: 'amount',
     title: !isNew ? 'Edit transaction' : preset && preset.title ? preset.title : 'Add transaction', value: base, saveLabel: isNew ? 'Add' : 'Save',
     fields: [
-      { key: 'acct', label: 'Account', type: 'select', options: accts, required: true },
-      { key: 'date', label: 'Date', type: 'date', required: true },
       { key: 'kind', label: 'Money', type: 'select', options: [{ value: 'debit', label: 'Paid out (expense)' }, { value: 'credit', label: 'Received (income)' }],
         onInput: (el, inputs) => setOptions(inputs.category, categoryOptions(data, el.value), '') },
+      { key: 'acct', label: 'Account', type: 'select', options: accts, required: true },
+      { key: 'date', label: 'Date', type: 'date', required: true },
       { key: 'amount', label: 'Amount (₹)', type: 'number', required: true },
       { key: 'desc', label: 'Description', type: 'text', required: true, list: descListId, hint: 'Pick a known description to fill the category automatically.',
         onInput: (el, inputs) => { const c = known.get(el.value.trim().toLowerCase()); if (c && [...inputs.category.options].some((o) => o.value === c)) inputs.category.value = c; } },
