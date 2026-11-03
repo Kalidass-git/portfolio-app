@@ -201,7 +201,15 @@ export function render() {
   if (tab === 'loans') { loans.view(root); return root; }
   const f = all.fixed;
   const stats = {
-    bonds: () => h('div', { class: 'stats' }, stat('Bonds', money(f.bondPrincipal), `${all.bonds.length} bonds`), stat('Interest to receive', green(money(all.bonds.reduce((a, b) => a + b.monthNet, 0))), 'after ' + money(all.bonds.reduce((a, b) => a + b.monthGross - b.monthNet, 0)) + ' TDS')),
+    bonds: () => {
+      const tds = data.settings.tdsRate ?? 0.1, sp = C.bondMonthSplit(all.bonds, all.asOf, tds), acc = all.bonds.reduce((a, b) => a + C.bondAccrued(b, all.asOf, tds), 0);
+      const mon = new Date(all.asOf + 'T00:00:00Z').toLocaleDateString('en-IN', { month: 'long', timeZone: 'UTC' });
+      return h('div', { class: 'stats' }, stat('Bonds', money(f.bondPrincipal), `${all.bonds.length} bonds`),
+        stat(`Interest due in ${mon}`, green(money(sp.due)), 'after TDS, quarterly bonds included'),
+        stat('Received so far', green(money(sp.received)), `${sp.nReceived} payment${sp.nReceived === 1 ? '' : 's'} whose due day has come`),
+        stat('Still to come', money(sp.pending), `${sp.nPending} payment${sp.nPending === 1 ? '' : 's'} due later this month`),
+        stat('Receivable today', money(acc), 'earned, not yet paid'));
+    },
     fds: () => h('div', { class: 'stats' }, stat('Fixed deposits', money(f.fdPrincipal), `${all.fds.length} FDs`), stat('Interest so far', green(money(sumInterest(all.fds, all.asOf))), 'interest only, paid-out included')),
     lending: () => h('div', { class: 'stats' }, stat('Lent out', money(f.lendPrincipal), `${all.lending.filter((l) => l.principal > 0).length} loans given`), stat('Interest so far', green(money(sumInterest(all.lending, all.asOf))), 'interest only, paid-out included')),
   };

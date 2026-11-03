@@ -150,6 +150,11 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.46.0 – Bond interest this month: due, received, pending
+
+- Bonds page now shows **Interest due in <month>** (after TDS; quarterly bonds count in the months they pay), split into **Received so far** (due day has come) and **Still to come**, plus **Receivable today**: interest earned since each bond's last payment day that has not been paid yet.
+- Received means the due day has passed, by each bond's due-date rule; it does not read the bank ledger. No stored fields changed.
+
 ## Release 8.45.0 – Stock terminal, historical P/E, indexes
 
 - **Terminal-style share page** (held shares and watchlist shares): price chart with ranges 1M–5Y and "Since my first buy", Line / % change / Candles, volume, buy/sell markers and your dashed gold average-cost line, performance chips (1W–3Y), a much bigger Key figures grid (day and 52-week range, volume, market cap, P/E, forward P/E, P/B, EPS, dividend yield, margins, growth, debt, revenue, free cash flow, analyst target) and a business description.

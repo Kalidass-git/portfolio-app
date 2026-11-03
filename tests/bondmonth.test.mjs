@@ -110,3 +110,17 @@ ok(bondDaysIn(first, '2026-09') === 0 && bondDaysIn(first, '2026-10') === 24, 'f
 const last = r({ dueDay: 13, maturityDate: '2026-12-05' });
 ok(bondDaysIn(last, '2026-12') === 21 && bondDaysIn(last, '2027-01') === 0, 'last payment ends the day before maturity: 14 Nov to 4 Dec = 21 days');
 console.log(bad ? 'FAILED' : 'all passed'); process.exit(bad ? 1 : 0);
+{
+  const { bondMonthSplit, bondAccrued } = await import('../js/calc.js');
+  const m = { principal: 100000, rate: 0.1, credit: 'Monthly', depositDate: '2025-01-01', dueRule: 'last', maturityDate: '2030-01-01' };
+  const q = { principal: 100000, rate: 0.1, credit: 'Quarterly', quarterMonth: 0, depositDate: '2025-01-01', dueRule: 'last', maturityDate: '2030-01-01' };
+  const q2 = { ...q, quarterMonth: 1 };
+  const s = bondMonthSplit([m, q, q2], '2026-10-15', 0.1);
+  ok(near(s.due, s.received + s.pending), 'due = received + pending');
+  ok(s.nPending === 2 && s.nReceived === 0, 'Oct: monthly and Jan/Apr/Jul/Oct quarterly pay at month end; the Nov quarterly pays nothing');
+  const s2 = bondMonthSplit([m, q], '2026-10-31', 0.1);
+  ok(s2.pending === 0 && near(s2.received, s2.due), 'on the due day it counts as received');
+  ok(near(bondAccrued(m, '2026-10-15', 0.1), 100000 * 0.1 / 365 * 15 * 0.9), 'monthly bond: 15 days earned by 15 Oct');
+  ok(near(bondAccrued(q, '2026-10-15', 0.1), 100000 * 0.1 / 365 * 76 * 0.9), 'quarterly bond: 1 Aug to 15 Oct = 76 days earned');
+  ok(bondAccrued({ ...m, depositDate: '2027-01-01' }, '2026-10-15', 0.1) === 0, 'a bond not yet bought accrues nothing');
+}
