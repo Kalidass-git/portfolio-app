@@ -150,6 +150,11 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.49.0 – Adjustable trendlines
+
+- Tap a trendline to select it (round handles appear at both ends). Drag the line to move it, or drag a handle to change that end. The change is saved when you let go. Candle charts snap an end to a nearby high, low, open or close. Delete line still removes the selected one.
+- While a line is selected the chart does not scroll the page on touch screens; tap empty chart to deselect. No stored fields changed.
+
 ## Release 8.48.0 – Watch from the share page, search before you add
 
 - **☆ Watch / ★ Watching** button on every share and index page (next to Reload chart). With one watchlist a tap adds or removes; with several (or none yet) a small sheet lets you tick the lists or name a new one.
