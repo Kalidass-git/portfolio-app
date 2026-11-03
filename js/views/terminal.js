@@ -74,22 +74,25 @@ function chartCard({ symbol, name, yahoo, index, avgCost, firstBuy, trades, quot
     const align = (m) => (m ? rows.map((r) => (m.has(r.d) ? m.get(r.d) : null)) : null);
     const wantPe = !index && st.pe && peFull;
     const peM = wantPe ? new Map(all.map((r, i) => [r.d, peFull[i]])) : null;
-    const chips = h('div', { class: 'row-actions', role: 'group', 'aria-label': 'Time range' }, [...RANGES.filter((r) => r[0] !== 'Max' || true).map(([l]) => l), ...(firstBuy ? ['Mine'] : [])].map((l) => h('button', { type: 'button', class: 'chip-btn' + (st.range === l ? ' on' : ''), onclick: () => { st.range = l; save(st); draw(); } }, l === 'Mine' ? 'Since my first buy' : l)));
-    const tg = (key, label, col, extra = '') => h('button', { type: 'button', class: 'chip-btn tm-tg' + (st[key] ? ' on' : ''), 'aria-pressed': String(!!st[key]), onclick: () => { st[key] = !st[key]; save(st); if (key === 'pe') ensureEps(); draw(); } }, h('i', { style: { background: col } }), label, extra);
-    const modes = h('div', { class: 'row-actions', role: 'group', 'aria-label': 'Chart type' },
-      [['line', 'Line'], ['pct', '% change'], ['candle', 'Candles']].map(([k, l]) => h('button', { type: 'button', class: 'chip-btn' + (st.mode === k ? ' on' : ''), onclick: () => { st.mode = k; save(st); draw(); } }, l)),
-      h('span', { class: 'tm-gap' }), tg('dma50', '50d', LINE_COLORS.dma50), tg('dma200', '200d', LINE_COLORS.dma200), index ? null : tg('pe', 'P/E', LINE_COLORS.pe, eps.state === 'loading' ? ' …' : ''));
-    const ivs = h('div', { class: 'row-actions', role: 'group', 'aria-label': 'Candle size' }, h('span', { class: 'muted tm-sub' }, 'Each bar is'),
-      [['auto', 'Auto'], ['D', 'Day'], ['W', 'Week'], ['M', 'Month']].map(([k, l]) => h('button', { type: 'button', class: 'chip-btn' + (st.iv === k ? ' on' : ''), onclick: () => { st.iv = k; save(st); draw(); } }, l)));
+    // a segmented group: one rounded strip, the chosen option filled
+    const seg = (label, opts, cur, pick) => h('div', { class: 'tm-seg', role: 'group', 'aria-label': label }, opts.map(([k, l, tip]) => h('button', { type: 'button', class: k === cur ? 'on' : '', title: tip || null, 'aria-pressed': String(k === cur), onclick: () => pick(k) }, l)));
+    const ranges = seg('Time range', [...RANGES.map(([l]) => [l, l]), ...(firstBuy ? [['Mine', 'My buy', 'Since my first buy']] : [])], st.range, (k) => { st.range = k; save(st); draw(); });
+    ranges.classList.add('scroll');
+    const type = seg('Chart type', [['line', 'Line'], ['pct', '%', 'Percent change'], ['candle', 'Candles']], st.mode, (k) => { st.mode = k; save(st); draw(); });
+    const size = seg('Bar size: each candle or point covers', [['auto', 'Auto', 'Chosen from the range'], ['D', 'Day'], ['W', 'Week'], ['M', 'Month']], st.iv, (k) => { st.iv = k; save(st); draw(); });
+    const tg = (key, label, col, extra = '') => h('button', { type: 'button', class: 'tm-tg' + (st[key] ? ' on' : ''), 'aria-pressed': String(!!st[key]), title: 'Show or hide the ' + label + ' line', onclick: () => { st[key] = !st[key]; save(st); if (key === 'pe') ensureEps(); draw(); } }, h('i', { style: { background: col } }), label, extra);
     const sel = mm.sel && myLines().some((l) => l.id === mm.sel) ? mm.sel : null;
-    const tools = h('div', { class: 'row-actions tm-tools', role: 'group', 'aria-label': 'Zoom and drawing' },
-      h('button', { type: 'button', class: 'chip-btn', 'aria-label': 'Zoom out', onclick: () => chart && chart.zoom(1.4) }, '−'), h('button', { type: 'button', class: 'chip-btn', 'aria-label': 'Zoom in', onclick: () => chart && chart.zoom(0.7) }, '+'),
-      h('button', { type: 'button', class: 'chip-btn', onclick: () => chart && chart.reset() }, 'Reset zoom'),
-      h('span', { class: 'tm-gap' }),
-      mode !== 'pct' && canEdit() ? h('button', { type: 'button', class: 'chip-btn tm-tg' + (tool === 'line' ? ' on' : ''), 'aria-pressed': String(tool === 'line'), onclick: () => { tool = tool === 'line' ? 'none' : 'line'; draw(); } }, h('i', { style: { background: LINE_COLORS.trend } }), tool === 'line' ? 'Tap two points…' : 'Trendline') : null,
-      sel && canEdit() ? h('button', { type: 'button', class: 'chip-btn', onclick: () => { mutate((d) => { d.trendlines[symKey] = (d.trendlines[symKey] || []).filter((l) => l.id !== sel); if (!d.trendlines[symKey].length) delete d.trendlines[symKey]; }); mm.sel = null; } }, 'Delete line') : null,
-      !sel && myLines().length && canEdit() ? h('button', { type: 'button', class: 'chip-btn', onclick: () => { if (confirm('Remove all ' + myLines().length + ' trendlines on ' + name + '?')) mutate((d) => { delete d.trendlines[symKey]; if (!Object.keys(d.trendlines).length) delete d.trendlines; }); } }, `Clear lines (${myLines().length})`) : null);
-    body.append(chips, ivs, modes, tools);
+    const ib = (label, text, fn, extra = '') => h('button', { type: 'button', class: 'tm-ib' + extra, 'aria-label': label, title: label, onclick: fn }, text);
+    const zoom = h('div', { class: 'tm-seg', role: 'group', 'aria-label': 'Zoom' }, ib('Zoom out', '−', () => chart && chart.zoom(1.4)), ib('Zoom in', '+', () => chart && chart.zoom(0.7)), ib('Show everything', 'Reset', () => chart && chart.reset()));
+    const draws = [];
+    if (mode !== 'pct' && canEdit()) draws.push(h('button', { type: 'button', class: 'tm-tg tm-draw' + (tool === 'line' ? ' on' : ''), 'aria-pressed': String(tool === 'line'), onclick: () => { tool = tool === 'line' ? 'none' : 'line'; draw(); } }, h('i', { style: { background: LINE_COLORS.trend } }), tool === 'line' ? 'Tap two points…' : 'Trendline'));
+    if (sel && canEdit()) draws.push(h('button', { type: 'button', class: 'tm-tg', onclick: () => { mutate((d) => { d.trendlines[symKey] = (d.trendlines[symKey] || []).filter((l) => l.id !== sel); if (!d.trendlines[symKey].length) delete d.trendlines[symKey]; }); mm.sel = null; } }, 'Delete line'));
+    else if (myLines().length && canEdit()) draws.push(h('button', { type: 'button', class: 'tm-tg', onclick: () => { if (confirm('Remove all ' + myLines().length + ' trendlines on ' + name + '?')) mutate((d) => { delete d.trendlines[symKey]; if (!Object.keys(d.trendlines).length) delete d.trendlines; }); } }, `Clear lines (${myLines().length})`));
+    body.append(h('div', { class: 'tm-bar' },
+      ranges,
+      h('div', { class: 'tm-row' }, type, h('span', { class: 'tm-lab' }, 'Bars'), size),
+      h('div', { class: 'tm-row' }, h('span', { class: 'tm-lab' }, 'Lines'), tg('dma50', '50d', LINE_COLORS.dma50), tg('dma200', '200d', LINE_COLORS.dma200), index ? null : tg('pe', 'P/E', LINE_COLORS.pe, eps.state === 'loading' ? ' …' : '')),
+      h('div', { class: 'tm-row' }, zoom, ...draws)));
     if (data.closesOnly) body.append(h('p', { class: 'note' }, 'Candles and volume need the newer Code.gs in your Apps Script (Settings explains how to paste and redeploy it). Showing closing prices until then.'));
     if (!index && st.pe && eps.state === 'err') body.append(h('p', { class: 'note' }, 'P/E history: ' + eps.msg));
     chart = marketChart({ rows, mode, dma50: st.dma50 ? align(data.ma50) : null, dma200: st.dma200 ? align(data.ma200) : null, pe: wantPe ? align(peM) : null,
