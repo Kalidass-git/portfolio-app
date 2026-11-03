@@ -87,6 +87,7 @@ export function openFilter(filters) {
     body.replaceChildren(...filters.fields.filter((f) => !f.showIf || f.showIf(vals)).map((f) => {
       const id = 'mf-' + f.key;
       if (f.type === 'chips') return h('div', { class: 'ms-field' }, h('label', null, f.label), chipGroup(f.options, vals[f.key], (list) => { vals[f.key] = list; draw(); }, { label: f.label }));
+      if (f.type === 'text') return h('div', { class: 'ms-field' }, h('label', { for: id }, f.label), h('input', { id, type: 'search', placeholder: f.placeholder || '', value: vals[f.key] ?? '', autocomplete: 'off', oninput: (e) => { vals[f.key] = e.target.value; } }));
       const input = f.type === 'number'
         ? h('input', { id, type: 'number', min: '0', step: 'any', inputmode: 'decimal', placeholder: f.placeholder || '', value: vals[f.key] ?? '', oninput: (e) => { vals[f.key] = e.target.value; } })
         : h('select', { id, onchange: (e) => { vals[f.key] = e.target.value; draw(); } }, optNodes(f.options, vals[f.key]));
@@ -104,7 +105,7 @@ function activeChips(filters) {
   for (const f of filters.fields) {
     const v = filters.values[f.key];
     if (sameVal(v, f.default) || f.count === false && !f.chip) continue;
-    const text = f.chip ? f.chip(filters.values) : f.type === 'select' ? `${f.label}: ${optLabel(f.options, v) ?? v}` : null;
+    const text = f.chip ? f.chip(filters.values) : f.type === 'select' ? `${f.label}: ${optLabel(f.options, v) ?? v}` : f.type === 'text' ? `${f.label}: “${String(v).slice(0, 18)}”` : null;
     if (!text) continue;
     out.push({ text, clear: () => { const nv = { ...filters.values }; nv[f.key] = f.default; for (const g of filters.fields) if (g.showIf && !g.showIf(nv)) nv[g.key] = g.default; filters.apply(nv); } });
   }

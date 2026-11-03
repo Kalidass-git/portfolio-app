@@ -164,7 +164,7 @@ function chitBestCard(c, actualRate, scheme) {
       mocked ? h('p', { class: 'note', style: { marginTop: 0 } }, `What-if only. Today's actual rate is ${money(actualRate)} / g.`) : null,
       h('div', { class: 'stats' },
         mk('Take it by value', dec(o.byValueGrams, 2) + ' g', `${money(o.paid)} paid in, buys this much at ${money(rate)} / g`, o.best === 'value', profit(0)),
-        o.known ? mk('Take it by gold saved', dec(o.grams, 2) + ' g', `worth ${money(o.goldValue)} at ${money(rate)} / g${o.complete ? '' : ' (only payments with a rate are counted)'}`, o.best === 'gold', profit(o.goldValue - o.paid))
+        o.known ? mk('Take it by gold saved', dec(o.grams, 2) + ' g', `worth ${money(o.goldValue)} · avg price you paid ${money(o.rated / o.grams)} / g${o.complete ? '' : ' (only payments with a rate are counted)'}`, o.best === 'gold', profit(o.goldValue - o.paid))
           : mk('Take it by gold saved', '–', 'add the gold rate on the payments to compare')),
       h('p', { class: 'note' }, o.known
         ? (o.best === 'gold'

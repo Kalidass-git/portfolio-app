@@ -150,6 +150,16 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.44.0 – Transfer fix, desktop pop-ups, bulk entry, search
+
+- **Fixed:** the Amount box was missing from Cash & banks › Transfer (it was dropped by mistake in 8.41.0). It is back, next to Date.
+- **Pop-ups on desktop** now fit the window: one scroll area only (inside the form), no sideways scroll, a little wider, and the buttons never wrap their words. Delete and the extra actions (Payout schedule, Part-close, Close it, Split) sit on the left; Cancel and Save on the right.
+- **Side bar** is wider and grows with the text size, so there is no sideways scroll even at the largest text size. "Family Wealth" stays on one line and the logo grows with the text.
+- **Gold chits › Take it by gold saved** now shows the average gold price you paid per gram. "Profit over what you paid" is unchanged.
+- **Description type-ahead** in Add income / Add expense: start typing, Tab fills the first match (arrows and Enter also pick) and the category fills in by itself.
+- **Income & expenses › Add many:** add several income and expense lines in one go. Each line has type, date, account, description (with Tab to fill), category and amount. A new line starts with the previous line's type, date and account and the cursor goes straight to the description; if the category is known the cursor goes to the amount, if not the category list opens. Enter after the amount starts the next line. Works on phones too (each line becomes a card).
+- **Fixed income › Bonds, FDs and Lending:** a Find box (right of the filters on desktop, inside Filter on phones) searches every word written on a record: name, company, holder, platform, account and more.
+
 ## Release 8.43.0 – Overview cards and lists open the right page
 
 - **Shares & funds › Overview:** the "What you hold" cards open Holdings with that filter already set (Shares, ETFs or Mutual funds). The "All together" card under Today opens all holdings.

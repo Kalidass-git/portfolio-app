@@ -108,9 +108,9 @@ function accounts() {
 }
 
 // ----- ledger -----
-const NEW = '__new__';
+export const NEW = '__new__';
 /** Category choices: money received shows income categories only, money paid out shows expenses (and investments). */
-function categoryOptions(data, direction, current) {
+export function categoryOptions(data, direction, current) {
   const list = CAT.categoryList(data).filter((c) => c.name.toLowerCase() !== 'transfer' || (current || '').toLowerCase() === 'transfer');
   const names = (arr) => arr.map((c) => c.name).sort((a, b) => a.localeCompare(b));
   const keep = (c) => c.name === current;
@@ -141,7 +141,8 @@ export function transferForm(entry) {
     fields: [
       { key: 'from', label: 'From account (debited)', type: 'select', options: accts, required: true },
       { key: 'to', label: 'To account (credited)', type: 'select', options: accts, required: true },
-      { key: 'date', label: 'Date', type: 'date', required: true },
+      { key: 'amount', label: 'Amount (₹)', type: 'number', required: true, half: true },
+      { key: 'date', label: 'Date', type: 'date', required: true, half: true },
       { key: 'note', label: 'Note (optional)', type: 'text' },
     ],
     onSave: (v) => {
@@ -246,7 +247,7 @@ export function txnForm(entry, preset) {
         onInput: (el, inputs) => setOptions(inputs.category, categoryOptions(data, el.value), '') },
       { key: 'amount', label: 'Amount (₹)', type: 'number', required: true, half: true },
       { key: 'date', label: 'Date', type: 'date', required: true, half: true },
-      { key: 'desc', label: 'Description', type: 'text', required: true, list: descListId, hint: 'Pick a known description to fill the category automatically.',
+      { key: 'desc', label: 'Description', type: 'text', required: true, suggest: () => data.categories.map((c) => c.desc), hint: 'Start typing, then press Tab to fill the first match. The category fills in by itself.',
         onInput: (el, inputs) => { const c = known.get(el.value.trim().toLowerCase()); if (c && [...inputs.category.options].some((o) => o.value === c)) inputs.category.value = c; } },
       { key: 'category', label: 'Category', type: 'select', options: categoryOptions(data, base.kind, base.category), required: true },
       { key: 'acct', label: 'Account', type: 'select', options: accts, required: true },
