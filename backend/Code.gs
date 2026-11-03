@@ -115,6 +115,7 @@ function doPost(e) {
       case 'history': return json_(history_(req.symbol, req.yahoo, req.ohlc));
       case 'fundamentals': return json_(fundamentals_(req.symbols || []));
       case 'details': return json_(details_(req.symbol, req.yahoo));
+      case 'eps': return json_(eps_(req.symbol, req.yahoo));
       default: return json_({ error: 'Unknown action.' });
     }
   } catch (err) {
@@ -318,10 +319,35 @@ function details_(symbol, yahoo) {
       var fd = r.financialData || {}, ks = r.defaultKeyStatistics || {}, ap = r.assetProfile || {}, sd = r.summaryDetail || {};
       function v(o) { return o && o.raw != null ? num_(o.raw) : null; }
       return { ok: true, details: { roe: v(fd.returnOnEquity), roa: v(fd.returnOnAssets), de: v(fd.debtToEquity), margin: v(fd.profitMargins), opMargin: v(fd.operatingMargins), revGrowth: v(fd.revenueGrowth), earnGrowth: v(fd.earningsGrowth),
-        currentRatio: v(fd.currentRatio), beta: v(ks.beta) != null ? v(ks.beta) : v(sd.beta), bookValue: v(ks.bookValue), payout: v(sd.payoutRatio), sector: ap.sector || null, industry: ap.industry || null, target: v(fd.targetMeanPrice), recommendation: fd.recommendationKey || null } };
+        currentRatio: v(fd.currentRatio), beta: v(ks.beta) != null ? v(ks.beta) : v(sd.beta), bookValue: v(ks.bookValue), payout: v(sd.payoutRatio), sector: ap.sector || null, industry: ap.industry || null, target: v(fd.targetMeanPrice), recommendation: fd.recommendationKey || null,
+        revenue: v(fd.totalRevenue), fcf: v(fd.freeCashflow), analysts: v(fd.numberOfAnalystOpinions), employees: num_(ap.fullTimeEmployees), summary: ap.longBusinessSummary || null, website: ap.website || null,
+        avgVolume: v(sd.averageVolume), dayLow: v(sd.dayLow), dayHigh: v(sd.dayHigh), fpe: v(sd.forwardPE) != null ? v(sd.forwardPE) : v(ks.forwardPE), pb: v(ks.priceToBook), eps: v(ks.trailingEps), shares: v(ks.sharesOutstanding), pegRatio: v(ks.pegRatio) } };
     } catch (e) { if (i === tickers.length - 1) return { error: 'Backend error: ' + e.message }; }
   }
   return { error: 'No details found for ' + (symbol || yahoo) + '.' };
+}
+
+
+/** Reported earnings per share by period, for the historical P/E line. Returns { ok, quarterly: [{date, eps}], annual: [{date, eps}] } (what Yahoo shares for free is often only the last few years). */
+function eps_(symbol, yahoo) {
+  if (!symbol && !yahoo) return { error: 'No symbol given.' };
+  var tickers = yahoo ? [yahoo] : [symbol + '.NS', symbol + '.BO'];
+  var types = 'quarterlyDilutedEPS,quarterlyBasicEPS,annualDilutedEPS,annualBasicEPS';
+  for (var i = 0; i < tickers.length; i++) {
+    try {
+      var j = yahooGet_('/ws/fundamentals-timeseries/v1/finance/timeseries/' + encodeURIComponent(tickers[i]), 'type=' + types + '&merge=false&padTimeSeries=false&period1=946684800&period2=' + Math.floor(Date.now() / 1000));
+      var res = (j.timeseries && j.timeseries.result) || [];
+      var by = {};
+      res.forEach(function (r) {
+        var t = r.meta && r.meta.type && r.meta.type[0]; if (!t || !r[t]) return;
+        by[t] = r[t].filter(function (x) { return x && x.asOfDate && x.reportedValue && x.reportedValue.raw != null; }).map(function (x) { return { date: x.asOfDate, eps: Number(x.reportedValue.raw) }; });
+      });
+      var q = (by.quarterlyDilutedEPS && by.quarterlyDilutedEPS.length ? by.quarterlyDilutedEPS : by.quarterlyBasicEPS) || [];
+      var a = (by.annualDilutedEPS && by.annualDilutedEPS.length ? by.annualDilutedEPS : by.annualBasicEPS) || [];
+      if (q.length || a.length) return { ok: true, quarterly: q, annual: a };
+    } catch (e) { if (i === tickers.length - 1) return { error: 'Backend error: ' + e.message }; }
+  }
+  return { error: 'No earnings history found for ' + (symbol || yahoo) + '.' };
 }
 
 /** Dividends per share paid by each company, from Yahoo Finance (NSE first, then BSE). symbols: [{symbol:'INFY', yahoo:''}] */

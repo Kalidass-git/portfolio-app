@@ -1,0 +1,63 @@
+// Moving averages and a historical P/E line, worked out from daily closes and reported earnings. Pure functions (no screen code).
+
+/** Simple moving average of closes[i] over the last n values. Entries before n values exist are null. */
+export function sma(closes, n) {
+  const out = new Array(closes.length).fill(null);
+  let sum = 0;
+  for (let i = 0; i < closes.length; i++) {
+    sum += closes[i];
+    if (i >= n) sum -= closes[i - n];
+    if (i >= n - 1) out[i] = sum / n;
+  }
+  return out;
+}
+
+const addDays = (iso, n) => { const [y, m, d] = iso.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10); };
+
+/**
+ * Earnings per share as it was known on each date. quarterly / annual: [{ date: 'YYYY-MM-DD' (period end), eps }] from the company's reports.
+ * A result is only used from some weeks after its period ends (results come out late), so the line never uses numbers nobody had yet.
+ * Trailing twelve months = the latest four quarters added up. Years before the quarterly data starts use the yearly EPS.
+ * Returns [{ from: 'YYYY-MM-DD', eps }] oldest first (use the last one whose `from` is on or before the day).
+ */
+export function epsTimeline({ quarterly = [], annual = [] } = {}, { quarterLag = 45, yearLag = 75 } = {}) {
+  const pts = [];
+  for (const a of annual) if (a && a.date && Number.isFinite(a.eps)) pts.push({ from: addDays(a.date, yearLag), eps: a.eps, src: 'year' });
+  const q = quarterly.filter((x) => x && x.date && Number.isFinite(x.eps)).sort((a, b) => (a.date < b.date ? -1 : 1));
+  for (let i = 3; i < q.length; i++) {
+    // four consecutive quarters: period ends roughly three months apart
+    const span = (Date.parse(q[i].date) - Date.parse(q[i - 3].date)) / 864e5;
+    if (span < 200 || span > 320) continue;
+    pts.push({ from: addDays(q[i].date, quarterLag), eps: q[i].eps + q[i - 1].eps + q[i - 2].eps + q[i - 3].eps, src: 'ttm' });
+  }
+  pts.sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : 0));
+  return pts;
+}
+
+/** P/E for each row (price / EPS known on that day). Null where there was no EPS yet or the company made a loss (P/E means nothing then). */
+export function peSeries(rows, timeline, { cap = 400 } = {}) {
+  const out = new Array(rows.length).fill(null);
+  if (!timeline || !timeline.length) return out;
+  let k = -1;
+  for (let i = 0; i < rows.length; i++) {
+    while (k + 1 < timeline.length && timeline[k + 1].from <= rows[i].d) k++;
+    if (k < 0) continue;
+    const e = timeline[k].eps;
+    if (e > 0) { const pe = rows[i].c / e; if (pe > 0 && pe <= cap) out[i] = pe; }
+  }
+  return out;
+}
+
+/** Change over fixed look-backs, from the last row: [{ label, pct }] (only those the history is long enough for). */
+export function performance(rows, spans = [['1W', 7], ['1M', 30], ['3M', 91], ['6M', 182], ['1Y', 365], ['3Y', 1095]]) {
+  if (!rows.length) return [];
+  const last = rows[rows.length - 1], t1 = Date.parse(last.d), out = [];
+  for (const [label, days] of spans) {
+    const target = t1 - days * 864e5;
+    if (Date.parse(rows[0].d) > target + 4 * 864e5) continue; // history does not reach back that far
+    let base = rows[0];
+    for (let i = rows.length - 1; i >= 0; i--) if (Date.parse(rows[i].d) <= target) { base = rows[i]; break; }
+    if (base.c > 0) out.push({ label, pct: last.c / base.c - 1 });
+  }
+  return out;
+}

@@ -150,6 +150,14 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.45.0 – Stock terminal, historical P/E, indexes
+
+- **Terminal-style share page** (held shares and watchlist shares): price chart with ranges 1M–5Y and "Since my first buy", Line / % change / Candles, volume, buy/sell markers and your dashed gold average-cost line, performance chips (1W–3Y), a much bigger Key figures grid (day and 52-week range, volume, market cap, P/E, forward P/E, P/B, EPS, dividend yield, margins, growth, debt, revenue, free cash flow, analyst target) and a business description.
+- **50-day, 200-day and historical P/E** lines, each with an on/off chip (remembered). P/E is drawn in its own panel under the price from trailing-twelve-month EPS, using each result only after it was reported.
+- **Indexes on watchlists**: Manage › Watchlists › Add an index (Nifty 50, Sensex, Bank, Next 50, 500, Midcap, Smallcap 100/250, sector indexes, India VIX) or type any Yahoo symbol. Index pages show the chart and price figures only.
+- **Redeploy `backend/Code.gs`** (new `eps` action and richer `details`). Until you do, the chart shows closing prices only and says so. No stored fields changed; indexes just carry an optional `index` flag.
+- Yahoo's free EPS history may cover only a few years, and some index symbols may need correcting. A wrong symbol shows "no price" on refresh.
+
 ## Release 8.44.0 – Transfer fix, desktop pop-ups, bulk entry, search
 
 - **Fixed:** the Amount box was missing from Cash & banks › Transfer (it was dropped by mistake in 8.41.0). It is back, next to Date.

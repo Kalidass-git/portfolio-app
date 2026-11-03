@@ -48,6 +48,33 @@ export async function stockOhlc(symbol, yahoo) {
   cache.set(key, out);
   return out;
 }
+/** Forget what was loaded for a share, so the next view asks the backend again. */
+export function dropCache(symbol) { for (const k of ['eq:', 'ohlc:', 'eps:', 'info:']) cache.delete(k + symbol); }
+/** Reported earnings per share for the P/E line: { quarterly: [{date, eps}], annual: [{date, eps}] }. Needs the newer Code.gs ("eps" action). */
+export async function stockEps(symbol, yahoo) {
+  const key = 'eps:' + symbol;
+  if (cache.has(key)) return cache.get(key);
+  if (!S.cfg || !S.cfg.backendUrl) throw new Error('Earnings history comes through your backend, which is not connected on this device.');
+  let res;
+  try { res = await call(S.cfg.backendUrl, S.cfg.key, 'eps', { symbol, yahoo: yahoo || '' }); }
+  catch (e) { throw new Error(/Unknown action/i.test(e.message) ? 'Your backend needs the newer Code.gs (it adds the “eps” action) to draw the P/E history.' : e.message); }
+  if (!res || res.error || !(res.quarterly || res.annual)) throw new Error((res && res.error && !/Unknown action/i.test(res.error)) ? res.error : 'Your backend needs the newer Code.gs (it adds the “eps” action) to draw the P/E history.');
+  const out = { quarterly: res.quarterly || [], annual: res.annual || [] };
+  cache.set(key, out);
+  return out;
+}
+/** Quote figures (P/E, 52-week range, volume ...) and deeper numbers (margins, growth, debt, target) for one share: { q, d } (either may be null). */
+export async function stockInfo(symbol, yahoo) {
+  const key = 'info:' + symbol, hit = cache.get(key);
+  if (hit && Date.now() - hit.at < 10 * 60e3) return hit.v;
+  if (!S.cfg || !S.cfg.backendUrl) throw new Error('Key figures come through your backend, which is not connected on this device.');
+  const ask = (a, p) => call(S.cfg.backendUrl, S.cfg.key, a, p).catch(() => null);
+  const [f, d] = await Promise.all([ask('fundamentals', { symbols: [{ symbol, yahoo: yahoo || '' }] }), ask('details', { symbol, yahoo: yahoo || '' })]);
+  const v = { q: f && f.data ? f.data[symbol] || null : null, d: d && d.details ? d.details : null };
+  if (!v.q && !v.d) throw new Error('No figures found for ' + symbol + '.');
+  cache.set(key, { at: Date.now(), v });
+  return v;
+}
 /**
  * Fewer, wider candles for long ranges: 'D' keeps days, 'W' joins each ISO week (Monday start), 'M' each month.
  * Open is the first day's open, close the last day's close, high and low the extremes, volume the sum.
