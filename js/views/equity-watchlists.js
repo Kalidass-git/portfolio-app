@@ -17,6 +17,20 @@ function addShare(l) {
     { key: 'name', label: 'Name (optional)', type: 'text', required: false }], value: {},
   onSave: (v) => { let ok = true; mutate((d) => { ok = WL.addItem(d, l.id, { symbol: v.symbol, name: v.name }); }); if (!ok) toast('Already on this list'); } });
 }
+function addIndex(l) {
+  const have = new Set((l.items || []).map((i) => WL.norm(i.symbol)));
+  const opts = WL.INDEXES.filter((x) => !have.has(x.symbol)).map((x) => ({ value: x.symbol, label: x.name }));
+  formDialog({ title: 'Add an index to ' + l.name, fields: [
+    { key: 'pick', label: 'Index', type: 'select', options: [...opts, { value: '', label: 'Other (type the Yahoo symbol below)' }] },
+    { key: 'yahoo', label: 'Yahoo symbol (only for Other)', type: 'text', required: false, hint: 'For example ^NSEI. Find it on finance.yahoo.com.' },
+    { key: 'name', label: 'Name (only for Other)', type: 'text', required: false }], value: { pick: opts.length ? opts[0].value : '' },
+  onSave: (v) => {
+    const p = WL.INDEXES.find((x) => x.symbol === v.pick);
+    const it = p ? { ...p } : { symbol: String(v.yahoo || '').replace(/[^A-Za-z0-9]/g, ''), name: v.name, yahoo: String(v.yahoo || '').trim() };
+    if (!it.symbol) return toast('Type a Yahoo symbol');
+    let ok = true; mutate((d) => { ok = WL.addItem(d, l.id, { ...it, index: true }); }); if (!ok) toast('Already on this list');
+  } });
+}
 async function refreshAll(btnEl, rerender) {
   if (busy) return; busy = true; btnEl.disabled = true;
   try {
@@ -45,13 +59,13 @@ export function render(root) {
   const alerts = S.data.alerts || [];
   const cards = (l.items || []).map((it) => {
     const q = WL.quoteOf(it.symbol), n = alerts.filter((a) => a.kind === 'stock' && WL.norm(a.ref) === WL.norm(it.symbol)).length;
-    return { title: it.name || it.symbol, sub: [it.symbol, n ? `${n} alert${n > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · '),
+    return { title: it.name || it.symbol, sub: [it.index ? 'Index' : it.symbol, n ? `${n} alert${n > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · '),
       value: q ? money(q.price) : '–', valueSub: q && q.dayPct != null ? h('span', { class: posNeg(q.dayPct) }, (q.dayPct >= 0 ? '+' : '') + pct(q.dayPct, 2)) : '',
       onClick: () => { location.hash = '#/equity/quote?sym=' + encodeURIComponent(it.symbol); } };
   });
   const list = cards.length ? null : h('p', { class: 'empty' }, 'Nothing on this list yet.');
   root.append(section(l.name, h('div', null, list, cards.length ? rowListSafe(cards) : null,
-    canEdit() ? h('div', { class: 'row-actions' }, btn('Add a share', () => addShare(l), ''), btn('Rename', () => listForm(l), 'small'),
+    canEdit() ? h('div', { class: 'row-actions' }, btn('Add a share', () => addShare(l), ''), btn('Add an index', () => addIndex(l), ''), btn('Rename', () => listForm(l), 'small'),
       btn('Remove a share', () => removePicker(l), 'small')) : null)));
 }
 import { rowList } from '../ui.js';

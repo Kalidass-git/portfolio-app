@@ -14,6 +14,16 @@ export const lists = (data) => (data && data.watchlists) || [];
 export const norm = (s) => String(s || '').toUpperCase().trim().replace(/\.(NS|BO)$/, '');
 const nextId = (arr, p) => p + (Math.max(0, ...arr.map((x) => Number(String(x.id || '').replace(/\D/g, '')) || 0)) + 1);
 
+/** Indexes you can add from a list (Yahoo Finance symbols; any other index can be typed in). */
+export const INDEXES = [
+  { symbol: 'NIFTY50', name: 'Nifty 50', yahoo: '^NSEI' }, { symbol: 'SENSEX', name: 'Sensex', yahoo: '^BSESN' }, { symbol: 'NIFTYBANK', name: 'Nifty Bank', yahoo: '^NSEBANK' },
+  { symbol: 'NIFTYNEXT50', name: 'Nifty Next 50', yahoo: '^NSMIDCP' }, { symbol: 'NIFTY500', name: 'Nifty 500', yahoo: '^CRSLDX' },
+  { symbol: 'NIFTYMIDCAP100', name: 'Nifty Midcap 100', yahoo: '^CNXMIDCAP' }, { symbol: 'NIFTYMIDCAP150', name: 'Nifty Midcap 150', yahoo: 'NIFTYMIDCAP150.NS' },
+  { symbol: 'NIFTYSMALLCAP100', name: 'Nifty Smallcap 100', yahoo: '^CNXSC' }, { symbol: 'NIFTYSMALLCAP250', name: 'Nifty Smallcap 250', yahoo: 'NIFTYSMLCAP250.NS' },
+  { symbol: 'NIFTYIT', name: 'Nifty IT', yahoo: '^CNXIT' }, { symbol: 'NIFTYAUTO', name: 'Nifty Auto', yahoo: '^CNXAUTO' }, { symbol: 'NIFTYFMCG', name: 'Nifty FMCG', yahoo: '^CNXFMCG' },
+  { symbol: 'NIFTYPHARMA', name: 'Nifty Pharma', yahoo: '^CNXPHARMA' }, { symbol: 'NIFTYMETAL', name: 'Nifty Metal', yahoo: '^CNXMETAL' }, { symbol: 'NIFTYENERGY', name: 'Nifty Energy', yahoo: '^CNXENERGY' },
+  { symbol: 'NIFTYREALTY', name: 'Nifty Realty', yahoo: '^CNXREALTY' }, { symbol: 'INDIAVIX', name: 'India VIX', yahoo: '^INDIAVIX' },
+];
 /** Every symbol on any list, once each: [{ symbol, yahoo }]. */
 export function allSymbols(data) {
   const seen = new Map();
@@ -28,11 +38,11 @@ export function addList(d, name) { d.watchlists = d.watchlists || []; const l = 
 export function renameList(d, id, name) { const l = lists(d).find((x) => x.id === id); if (l && String(name || '').trim()) l.name = String(name).trim(); }
 export function removeList(d, id) { d.watchlists = lists(d).filter((x) => x.id !== id); }
 /** Adds a share to a list (once). Returns false when it was already there. */
-export function addItem(d, id, { symbol, name = '', yahoo = '' }) {
+export function addItem(d, id, { symbol, name = '', yahoo = '', index = false }) {
   const l = lists(d).find((x) => x.id === id), sym = norm(symbol); if (!l || !sym) return false;
   l.items = l.items || [];
   if (l.items.some((it) => norm(it.symbol) === sym)) return false;
-  l.items.push({ symbol: sym, name: String(name || '').trim() || sym, ...(yahoo ? { yahoo } : {}) });
+  l.items.push({ symbol: sym, name: String(name || '').trim() || sym, ...(yahoo ? { yahoo } : {}), ...(index ? { index: true } : {}) });
   return true;
 }
 export function removeItem(d, id, symbol) { const l = lists(d).find((x) => x.id === id); if (l) l.items = (l.items || []).filter((it) => norm(it.symbol) !== norm(symbol)); }

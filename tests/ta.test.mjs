@@ -1,0 +1,26 @@
+// Moving averages, EPS timeline, historical P/E and performance look-backs. Synthetic data.
+import { sma, epsTimeline, peSeries, performance } from '../js/ta.js';
+let bad = 0; const ok = (c, m) => { if (!c) { bad++; console.log('FAIL', m); } else console.log('ok  ', m); };
+const s = sma([1, 2, 3, 4, 5, 6], 3);
+ok(s[0] === null && s[1] === null && s[2] === 2 && s[5] === 5, 'sma starts after n values and averages the last n');
+ok(sma([1, 2], 5).every((x) => x === null), 'sma with short history is empty');
+const q = [{ date: '2025-03-31', eps: 10 }, { date: '2025-06-30', eps: 11 }, { date: '2025-09-30', eps: 12 }, { date: '2025-12-31', eps: 13 }, { date: '2026-03-31', eps: 14 }];
+const tl = epsTimeline({ quarterly: q, annual: [{ date: '2024-03-31', eps: 30 }, { date: '2025-03-31', eps: 40 }] });
+ok(tl.length === 4 && tl[0].src === 'year', 'year points plus a TTM point for each full set of four quarters');
+const ttm = tl.filter((x) => x.src === 'ttm');
+ok(ttm.length === 2 && ttm[0].eps === 46 && ttm[1].eps === 50, 'TTM = last four quarters added');
+ok(ttm[0].from === '2026-02-14', 'a result counts from 45 days after its quarter ends');
+const rows = [{ d: '2024-05-01', c: 600 }, { d: '2025-06-30', c: 800 }, { d: '2026-03-01', c: 920 }, { d: '2026-06-01', c: 1000 }];
+const pe = peSeries(rows, tl);
+ok(pe[0] === null, 'no P/E before any EPS was known (2024-05-01 is before the first report counts)');
+ok(Math.abs(pe[1] - 800 / 30) < 1e-9 || Math.abs(pe[1] - 800 / 40) < 1e-9, 'before the first TTM, the yearly EPS is used');
+ok(Math.abs(pe[2] - 920 / 46) < 1e-9, 'uses the TTM known on that day, not a later one');
+ok(Math.abs(pe[3] - 1000 / 50) < 1e-9, 'later days use the newer TTM');
+ok(peSeries(rows, [{ from: '2020-01-01', eps: -5 }]).every((x) => x === null), 'a loss gives no P/E');
+ok(peSeries(rows, []).every((x) => x === null), 'no EPS data gives no P/E');
+ok(epsTimeline({ quarterly: [{ date: '2025-03-31', eps: 1 }, { date: '2025-06-30', eps: 1 }, { date: '2026-03-31', eps: 1 }, { date: '2026-06-30', eps: 1 }] }).length === 0, 'quarters that are not consecutive are not added up');
+const long = Array.from({ length: 800 }, (_, i) => ({ d: new Date(Date.UTC(2024, 0, 1 + i)).toISOString().slice(0, 10), c: 100 + i }));
+const perf = performance(long);
+ok(perf.find((p) => p.label === '1M') && perf.find((p) => p.label === '1Y') && !perf.find((p) => p.label === '3Y'), 'performance only lists look-backs the history reaches');
+ok(Math.abs(perf.find((p) => p.label === '1W').pct - (long[799].c / long[792].c - 1)) < 1e-9, '1W compares with 7 days earlier');
+process.exit(bad ? 1 : 0);

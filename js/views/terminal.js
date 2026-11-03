@@ -1,0 +1,145 @@
+// The share page "terminal": price chart (line, % change or candles) with 50 / 200-day averages and a historical P/E panel, performance chips,
+// key figures and a short business description. Used by the page of a share you hold and by the page of a watchlist share or index.
+import { h, money, dec, pct, dateStr, section, btn, posNeg, toast } from '../ui.js';
+import { marketChart, LINE_COLORS } from '../mchart.js';
+import { stockOhlc, stockEps, stockInfo, aggregateOhlc, candleMode, sliceRange, dropCache, RANGES } from '../history.js';
+import { sma, epsTimeline, peSeries, performance } from '../ta.js';
+
+const KEY = 'fw.term';
+const defaults = { range: '6M', mode: 'line', dma50: true, dma200: true, pe: true };
+const load = () => { try { return { ...defaults, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { return { ...defaults }; } };
+const save = (s) => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* private window */ } };
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const short = (d) => { const [y, m, dd] = d.split('-'); return `${+dd} ${MON[+m - 1]} '${y.slice(2)}`; };
+const tick = (d) => { const [y, m] = d.split('-'); return MON[+m - 1] + " '" + y.slice(2); };
+const vfmt = (v) => (v >= 1e7 ? (v / 1e7).toFixed(2) + ' Cr' : v >= 1e5 ? (v / 1e5).toFixed(2) + ' L' : v >= 1e3 ? (v / 1e3).toFixed(1) + ' K' : String(Math.round(v)));
+const pxf = (v) => (v >= 1000 ? Math.round(v).toLocaleString('en-IN') : dec(v, v < 10 ? 2 : 1));
+const rs = (v, d = 2) => (v == null ? '–' : '₹' + dec(v, d));
+const pc = (v, d = 1) => (v == null ? '–' : (v * 100).toFixed(d) + '%');
+const crore = (v) => (v == null ? '–' : v >= 1e12 ? '₹' + (v / 1e12).toFixed(2) + ' L Cr' : '₹' + Math.round(v / 1e7).toLocaleString('en-IN') + ' Cr');
+const ago = (t) => { const m = Math.max(0, Math.round((Date.now() - t) / 60000)); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' days ago'; };
+
+/** Daily rows [{d,o,h,l,c,v}] from whatever the backend gave (older backends give closes only). */
+const normalise = (res) => (res.rows && res.rows.length ? { rows: res.rows, closesOnly: false } : { rows: (res.closesOnly || []).map((x) => ({ d: x.d, o: x.v, h: x.v, l: x.v, c: x.v, v: 0 })), closesOnly: true });
+
+function chartCard({ symbol, name, yahoo, index, avgCost, firstBuy, trades, quote }) {
+  const st = load();
+  const body = h('div', null, h('p', { class: 'note' }, 'Loading the price history…'));
+  const headBox = h('div', { class: 'tm-head' });
+  let data = null, eps = { state: index ? 'none' : 'idle', msg: '', tl: null }, peFull = null;
+
+  const header = () => {
+    const rows = data ? data.rows : [], last = rows[rows.length - 1], prev = rows[rows.length - 2];
+    const price = quote && quote.price != null ? quote.price : last ? last.c : null;
+    const pv = quote && quote.prev != null ? quote.prev : prev ? prev.c : null;
+    const ch = price != null && pv ? price - pv : null, cp = ch != null ? ch / pv : null;
+    headBox.replaceChildren(
+      h('div', { class: 'tm-price' }, price != null ? h('b', null, '₹' + dec(price, 2)) : h('b', { class: 'muted' }, '–'),
+        cp != null ? h('span', { class: 'tm-badge ' + posNeg(ch) }, `${ch >= 0 ? '▲' : '▼'} ${ch >= 0 ? '+' : '−'}${Math.abs(cp * 100).toFixed(2)}%`) : null,
+        ch != null ? h('span', { class: 'muted tm-sub' }, `${ch >= 0 ? '+' : '−'}${dec(Math.abs(ch), 2)} today`) : null,
+        quote && quote.at ? h('span', { class: 'muted tm-sub' }, 'price ' + ago(Date.parse(quote.at))) : last ? h('span', { class: 'muted tm-sub' }, 'last close ' + dateStr(last.d)) : null),
+      h('div', { class: 'tm-actions' }, btn('Reload chart', () => { dropCache(symbol); data = null; peFull = null; eps = { state: index ? 'none' : 'idle', msg: '', tl: null }; body.replaceChildren(h('p', { class: 'note' }, 'Loading the price history…')); start(); toast('Reloading'); }, 'small')));
+  };
+
+  const ensureEps = () => {
+    if (index || !st.pe || eps.state !== 'idle') return;
+    eps.state = 'loading'; draw();
+    stockEps(symbol, yahoo).then((e) => {
+      eps.tl = epsTimeline({ quarterly: e.quarterly.map((x) => ({ date: x.date, eps: x.eps })), annual: e.annual.map((x) => ({ date: x.date, eps: x.eps })) });
+      if (!eps.tl.length) { eps.state = 'err'; eps.msg = 'No earnings history is available for this company, so a P/E line cannot be drawn.'; } else { eps.state = 'ok'; peFull = peSeries(data.rows, eps.tl); }
+      draw();
+    }).catch((e) => { eps.state = 'err'; eps.msg = e.message || 'Could not load the earnings history.'; draw(); });
+  };
+
+  const draw = () => {
+    if (!data) return;
+    body.replaceChildren();
+    const all = data.rows, mode = st.mode === 'candle' && data.closesOnly ? 'line' : st.mode;
+    const months = st.range === 'Mine' ? null : (RANGES.find((r) => r[0] === st.range) || [0, 6])[1];
+    let cut;
+    if (st.range === 'Mine' && firstBuy) cut = all.filter((r) => r.d >= firstBuy); else cut = months ? sliceRange(all, months) : all;
+    if (cut.length < 2) cut = all.slice(-2);
+    const spanM = months || Math.max(1, Math.round((Date.parse(cut[cut.length - 1].d) - Date.parse(cut[0].d)) / (30 * 864e5)));
+    const agg = mode === 'candle' ? candleMode(spanM) : spanM <= 6 ? 'D' : spanM <= 72 ? 'W' : 'M';
+    const rows = agg === 'D' ? cut : aggregateOhlc(cut, agg);
+    const align = (m) => (m ? rows.map((r) => (m.has(r.d) ? m.get(r.d) : null)) : null);
+    const wantPe = !index && st.pe && peFull;
+    const peM = wantPe ? new Map(all.map((r, i) => [r.d, peFull[i]])) : null;
+    const chips = h('div', { class: 'row-actions', role: 'group', 'aria-label': 'Time range' }, [...RANGES.filter((r) => r[0] !== 'Max' || true).map(([l]) => l), ...(firstBuy ? ['Mine'] : [])].map((l) => h('button', { type: 'button', class: 'chip-btn' + (st.range === l ? ' on' : ''), onclick: () => { st.range = l; save(st); draw(); } }, l === 'Mine' ? 'Since my first buy' : l)));
+    const tg = (key, label, col, extra = '') => h('button', { type: 'button', class: 'chip-btn tm-tg' + (st[key] ? ' on' : ''), 'aria-pressed': String(!!st[key]), onclick: () => { st[key] = !st[key]; save(st); if (key === 'pe') ensureEps(); draw(); } }, h('i', { style: { background: col } }), label, extra);
+    const modes = h('div', { class: 'row-actions', role: 'group', 'aria-label': 'Chart type' },
+      [['line', 'Line'], ['pct', '% change'], ['candle', 'Candles']].map(([k, l]) => h('button', { type: 'button', class: 'chip-btn' + (st.mode === k ? ' on' : ''), onclick: () => { st.mode = k; save(st); draw(); } }, l)),
+      h('span', { class: 'tm-gap' }), tg('dma50', '50d', LINE_COLORS.dma50), tg('dma200', '200d', LINE_COLORS.dma200), index ? null : tg('pe', 'P/E', LINE_COLORS.pe, eps.state === 'loading' ? ' …' : ''));
+    body.append(chips, modes);
+    if (data.closesOnly) body.append(h('p', { class: 'note' }, 'Candles and volume need the newer Code.gs in your Apps Script (Settings explains how to paste and redeploy it). Showing closing prices until then.'));
+    if (!index && st.pe && eps.state === 'err') body.append(h('p', { class: 'note' }, 'P/E history: ' + eps.msg));
+    body.append(marketChart({ rows, mode, dma50: st.dma50 ? align(data.ma50) : null, dma200: st.dma200 ? align(data.ma200) : null, pe: wantPe ? align(peM) : null,
+      avg: avgCost && mode !== 'pct' ? avgCost : mode === 'pct' ? avgCost : null, trades: trades || [], height: window.innerWidth < 640 ? 230 : 280, fmt: pxf, vfmt, dateFmt: short, tickFmt: tick }));
+    const perf = performance(all);
+    if (perf.length) body.append(h('div', { class: 'tm-perf', 'aria-label': 'Returns over different periods' }, perf.map((p) => h('span', { class: 'tm-pf ' + posNeg(p.pct) }, h('small', null, p.label), `${p.pct >= 0 ? '▲' : '▼'} ${p.pct >= 0 ? '+' : '−'}${Math.abs(p.pct * 100).toFixed(1)}%`))));
+    const legend = [];
+    if (avgCost && trades) legend.push(h('span', { class: 'mc-chip' }, h('i', { class: 'dash', style: { borderColor: LINE_COLORS.avg } }), 'Your average cost'));
+    if (trades && trades.length) legend.push(h('span', { class: 'mc-chip' }, h('b', { class: 'pos' }, '▲'), ' your buys ', h('b', { class: 'neg' }, '▼'), ' your sells'));
+    if (legend.length) body.append(h('div', { class: 'mc-chips tm-legend' }, legend));
+    body.append(h('p', { class: 'note' }, `Each ${agg === 'D' ? 'point is a day' : agg === 'W' ? 'point is a week' : 'point is a month'}. The 50 and 200-day averages are the average closing price over the last 50 or 200 trading days${index ? '' : '; P/E is the price divided by the last twelve months of reported earnings per share, as known on that day (a company that made a loss has no P/E)'}. Past prices do not predict the future.`));
+  };
+
+  const start = () => {
+    stockOhlc(symbol, yahoo).then((res) => {
+      const n = normalise(res); if (n.rows.length < 2) throw new Error('No price history found for ' + symbol + '.');
+      const closes = n.rows.map((r) => r.c), m50 = sma(closes, 50), m200 = sma(closes, 200);
+      data = { rows: n.rows, closesOnly: n.closesOnly, ma50: new Map(n.rows.map((r, i) => [r.d, m50[i]]).filter((x) => x[1] != null)), ma200: new Map(n.rows.map((r, i) => [r.d, m200[i]]).filter((x) => x[1] != null)) };
+      header(); draw(); ensureEps();
+    }).catch((e) => body.replaceChildren(h('p', { class: 'empty' }, e.message || 'Could not load the price history.')));
+  };
+  header(); start();
+  return h('section', { class: 'card tm-card' }, h('header', { class: 'card-head' }, h('h2', null, name), h('span', { class: 'muted tm-tick' }, symbol)), headBox, body);
+}
+
+const tile = (label, value, sub, cls = '') => h('div', { class: 'tm-fig' }, h('span', { class: 'tm-fl' }, label), h('b', { class: cls }, value == null || value === '' ? '–' : value), sub ? h('small', null, sub) : null);
+const rangeBar = (lo, hi, px) => (lo != null && hi != null && hi > lo && px != null ? h('span', { class: 'tm-rng' }, h('i', { style: { left: Math.max(0, Math.min(100, ((px - lo) / (hi - lo)) * 100)) + '%' } })) : null);
+
+function figuresCard({ symbol, yahoo, index, price }) {
+  const body = h('div', null, h('p', { class: 'note' }, 'Loading the figures…'));
+  const wrap = section('Key figures', body);
+  const draw = (v) => {
+    const { q, d } = v, px = price != null ? price : q && q.price;
+    const near = (x) => (x == null ? null : x);
+    const grid = [];
+    grid.push(tile('Day range', d && d.dayLow != null ? `${dec(d.dayLow, 2)} – ${dec(d.dayHigh, 2)}` : '–'),
+      tile('Previous close', q && q.prevClose != null ? dec(q.prevClose, 2) : '–'),
+      tile('52-week range', q && q.lo52 != null ? `${dec(q.lo52, 2)} – ${dec(q.hi52, 2)}` : '–', null), 
+      tile('From 52-week high', q && q.hi52 && px ? `${((px / q.hi52 - 1) * 100).toFixed(1)}%` : '–', q && q.lo52 && px ? `${((px / q.lo52 - 1) * 100).toFixed(1)}% above the low` : '', q && q.hi52 && px && px < q.hi52 * 0.9 ? 'neg' : ''),
+      tile('Volume', q && q.volume != null ? vfmt(q.volume) : '–', d && d.avgVolume != null ? 'avg ' + vfmt(d.avgVolume) : ''));
+    if (!index) {
+      grid.push(tile('Market cap', crore(q && q.mcap)), tile('P/E (trailing)', q && q.pe != null ? q.pe.toFixed(1) : '–', (q && q.fpe != null ? q.fpe : d && d.fpe) != null ? 'forward ' + (q && q.fpe != null ? q.fpe : d.fpe).toFixed(1) : 'profit-making companies only'),
+        tile('Price to book', q && q.pb != null ? q.pb.toFixed(2) : '–'), tile('EPS (12 months)', q && q.eps != null ? rs(q.eps) : '–'), tile('Book value', d && d.bookValue != null ? rs(d.bookValue) : '–'),
+        tile('Dividend yield', q && q.dy != null ? q.dy.toFixed(2) + '%' : '–'), tile('Beta', d && d.beta != null ? d.beta.toFixed(2) : '–'),
+        tile('Return on equity', pc(d && d.roe), null, d && d.roe < 0 ? 'neg' : ''), tile('Return on assets', pc(d && d.roa)), tile('Profit margin', pc(d && d.margin)), tile('Operating margin', pc(d && d.opMargin)),
+        tile('Revenue growth', pc(d && d.revGrowth), null, d && d.revGrowth < 0 ? 'neg' : ''), tile('Earnings growth', pc(d && d.earnGrowth), null, d && d.earnGrowth < 0 ? 'neg' : ''),
+        tile('Debt to equity', d && d.de != null ? (d.de / 100).toFixed(2) : '–'), tile('Current ratio', d && d.currentRatio != null ? d.currentRatio.toFixed(2) : '–'),
+        tile('Revenue', crore(d && d.revenue)), tile('Free cash flow', crore(d && d.fcf)),
+        tile('Analyst target', d && d.target != null ? rs(d.target) : '–', d && d.target && px ? `${((d.target / px - 1) * 100).toFixed(1)}% ${d.target >= px ? 'above' : 'below'} the price${d.analysts ? ' · ' + d.analysts + ' analysts' : ''}${d.recommendation ? ' · ' + d.recommendation : ''}` : '', d && d.target && px ? posNeg(d.target - px) : ''));
+      const bits = [d && d.sector, d && d.industry, d && d.employees ? Number(d.employees).toLocaleString('en-IN') + ' employees' : null].filter(Boolean);
+      body.replaceChildren(h('div', { class: 'tm-figs' }, grid), h('p', { class: 'note' }, 'From Yahoo Finance. Numbers can lag or be missing for some companies.'));
+      if (bits.length || (d && d.summary)) {
+        const long = d && d.summary ? d.summary : '';
+        const p = h('p', { class: 'tm-about clamp' }, long);
+        body.append(h('h4', null, 'About'), bits.length ? h('p', { class: 'note' }, bits.join(' · ')) : null, long ? p : null,
+          long.length > 260 ? h('button', { type: 'button', class: 'chip-btn small', onclick: (e) => { p.classList.toggle('clamp'); e.currentTarget.textContent = p.classList.contains('clamp') ? 'Read more' : 'Show less'; } }, 'Read more') : null);
+      }
+    } else body.replaceChildren(h('div', { class: 'tm-figs' }, grid), h('p', { class: 'note' }, 'An index has no P/E, earnings or company figures here; the chart shows its price level with the 50 and 200-day averages.'));
+    // the 52-week position bar is drawn inside its tile
+    const t = body.querySelectorAll('.tm-fig')[2]; const bar = q && rangeBar(q.lo52, q.hi52, px); if (t && bar) t.append(bar);
+  };
+  stockInfo(symbol, yahoo).then(draw).catch((e) => body.replaceChildren(h('p', { class: 'empty' }, e.message || 'Could not load the figures.')));
+  return wrap;
+}
+
+/**
+ * The terminal for one symbol. Returns the elements to add to a page: [chart card, key figures card].
+ * held: your holding (or null); trades: [{ d, side, price, qty }]; quote: { price, prev, at } if known; index: true for an index.
+ */
+export function terminal({ symbol, name, yahoo = '', index = false, avgCost = null, firstBuy = null, trades = [], quote = null }) {
+  return [chartCard({ symbol, name, yahoo, index, avgCost, firstBuy, trades, quote }), figuresCard({ symbol, yahoo, index, price: quote ? quote.price : null })];
+}

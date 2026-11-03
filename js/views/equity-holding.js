@@ -1,7 +1,6 @@
 // One holding: lots, trades, dividends, and the buttons to buy, sell, add a split or edit details.
-import { historyCard } from './histcard.js';
-import { stockFundamentals, alertsCard } from './watch.js';
-import { stockCloses } from '../history.js';
+import { alertsCard } from './watch.js';
+import { terminal } from './terminal.js';
 import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
 import { h, money, dec, pct, num, dateStr, section, table, stat, btn, canEdit, route, gainText, posNeg, formDialog } from '../ui.js';
@@ -43,8 +42,11 @@ export function render(root) {
     stat('Gain', gainText(s.pl), pct(s.ret, 1)),
     stat('XIRR', xi == null ? '–' : h('span', { class: posNeg(xi) }, pct(xi, 1)), eq ? (flows.length ? 'yearly return including timing' : 'no buy dates for this share') : 'import your history to see it'),
     realized || divTotal ? stat('Already earned', money(realized + divTotal), `${money(realized)} from sales · ${money(divTotal)} dividends`) : null));
-  root.append(historyCard({ title: 'Price history', load: () => stockCloses(s.symbol, s.yahoo), avg: s.avgPrice || null, firstBuy: flows.length ? flows.map((f) => f.date).sort()[0] : null }));
-  root.append(stockFundamentals(s));
+  // price chart (line, % change or candles with 50 / 200-day averages and P/E history) and key figures
+  const myTrades = (data.trades || []).filter((t) => symKey(t.symbol) === sym).map((t) => ({ d: t.date, side: t.type === 'SELL' ? 'SELL' : 'BUY', price: t.qty ? t.amount / t.qty : null, qty: t.qty }));
+  const pricesAt = data.settings && data.settings.pricesUpdatedAt;
+  root.append(...terminal({ symbol: s.symbol, name: s.name, yahoo: s.yahoo || '', avgCost: s.avgPrice || null, firstBuy: flows.length ? flows.map((f) => f.date).sort()[0] : null, trades: myTrades,
+    quote: { price: s.livePrice, prev: s.day != null && s.qty ? s.livePrice - s.day / s.qty : null, at: pricesAt || null } }));
   root.append(alertsCard('stock', s.symbol, s.name));
   if (eq) {
     const h0 = eq.holdings.find((x) => x.symbol === sym);
