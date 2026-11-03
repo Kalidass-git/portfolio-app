@@ -29,9 +29,9 @@ export function render(root) {
   for (const l of WL.lists(data)) for (const it of l.items || []) if (!item && WL.norm(it.symbol) === symbol) item = it;
   const held = all.stocks.items.find((x) => WL.norm(x.symbol) === symbol);
   const preset = WL.INDEXES.find((x) => x.symbol === symbol);
-  const index = !!(item && item.index) || !!preset;
-  const name = (item && item.name) || (held && held.name) || (preset && preset.name) || symbol;
-  const yahoo = (item && item.yahoo) || (held && held.yahoo) || (preset && preset.yahoo) || '';
+  const index = !!(item && item.index) || !!preset || q.get('index') === '1';
+  const name = (item && item.name) || (held && held.name) || (preset && preset.name) || q.get('name') || symbol;
+  const yahoo = (item && item.yahoo) || (held && held.yahoo) || (preset && preset.yahoo) || q.get('y') || '';
   const qt = WL.quoteOf(symbol);
   root.append(...terminal({ symbol, name, yahoo, index, quote: qt ? { price: qt.price, prev: qt.prev, at: qt.at } : null, avgCost: held ? held.avgPrice : null }));
   root.append(alertsCard('stock', symbol, name), listsCard(symbol, name, yahoo, index));

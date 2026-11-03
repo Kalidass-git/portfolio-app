@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.48.0 – Watch from the share page, search before you add
+
+- **☆ Watch / ★ Watching** button on every share and index page (next to Reload chart). With one watchlist a tap adds or removes; with several (or none yet) a small sheet lets you tick the lists or name a new one.
+- **Search first**: Manage › Watchlists has a search box (your holdings, listed shares, indexes, or any NSE symbol). It opens the share's page so you can look at the chart and figures before deciding to watch it.
+- Adding straight from a list (Add a share, Add an index) still works. No stored fields changed.
+
 ## Release 8.47.0 – Chart tools: zoom, trendlines, candle size; watchlist details
 
 - **Shares & funds overview**: the Shares, ETFs and Funds tiles under Today now open that group in Holdings. The Shares / ETFs / Funds switch below them still only changes the gainers and fallers list.

@@ -2,6 +2,7 @@
 // key figures and a short business description. Used by the page of a share you hold and by the page of a watchlist share or index.
 import { h, money, dec, pct, dateStr, section, btn, posNeg, toast, canEdit } from '../ui.js';
 import { S, mutate } from '../store.js';
+import { watchButton } from './watchbtn.js';
 import { marketChart, LINE_COLORS } from '../mchart.js';
 import { stockOhlc, stockEps, stockInfo, aggregateOhlc, candleMode, sliceRange, dropCache, RANGES } from '../history.js';
 import { sma, epsTimeline, peSeries, performance } from '../ta.js';
@@ -44,7 +45,7 @@ function chartCard({ symbol, name, yahoo, index, avgCost, firstBuy, trades, quot
         cp != null ? h('span', { class: 'tm-badge ' + posNeg(ch) }, `${ch >= 0 ? '▲' : '▼'} ${ch >= 0 ? '+' : '−'}${Math.abs(cp * 100).toFixed(2)}%`) : null,
         ch != null ? h('span', { class: 'muted tm-sub' }, `${ch >= 0 ? '+' : '−'}${dec(Math.abs(ch), 2)} today`) : null,
         quote && quote.at ? h('span', { class: 'muted tm-sub' }, 'price ' + ago(Date.parse(quote.at))) : last ? h('span', { class: 'muted tm-sub' }, 'last close ' + dateStr(last.d)) : null),
-      h('div', { class: 'tm-actions' }, btn('Reload chart', () => { dropCache(symbol); data = null; peFull = null; eps = { state: index ? 'none' : 'idle', msg: '', tl: null }; body.replaceChildren(h('p', { class: 'note' }, 'Loading the price history…')); start(); toast('Reloading'); }, 'small')));
+      h('div', { class: 'tm-actions' }, watchButton({ symbol, name, yahoo, index }), btn('Reload chart', () => { dropCache(symbol); data = null; peFull = null; eps = { state: index ? 'none' : 'idle', msg: '', tl: null }; body.replaceChildren(h('p', { class: 'note' }, 'Loading the price history…')); start(); toast('Reloading'); }, 'small')));
   };
 
   const ensureEps = () => {
