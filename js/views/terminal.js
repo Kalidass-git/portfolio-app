@@ -96,6 +96,7 @@ function chartCard({ symbol, name, yahoo, index, avgCost, firstBuy, trades, quot
       avg: avgCost || null, trades: trades || [], height: window.innerWidth < 640 ? 230 : 280, fmt: pxf, vfmt, dateFmt: short, tickFmt: tick,
       lines: myLines(), tool: canEdit() ? tool : 'none', selected: sel, view: mm.view, onView: (v) => { mm.view = v; },
       onLine: { select: (id) => { mm.sel = id; draw(); },
+        update: !canEdit() ? undefined : (id, L) => { mm.sel = id; try { mutate((d) => { const x = ((d.trendlines || {})[symKey] || []).find((l) => l.id === id); if (x) Object.assign(x, L, { p1: Math.round(L.p1 * 100) / 100, p2: Math.round(L.p2 * 100) / 100 }); }); } catch (e) { toast(e.message); draw(); } },
         add: (L) => { const id = 'tl' + Date.now().toString(36); mm.sel = id; tool = 'none'; try { mutate((d) => { d.trendlines = d.trendlines || {}; (d.trendlines[symKey] = d.trendlines[symKey] || []).push({ id, ...L, p1: Math.round(L.p1 * 100) / 100, p2: Math.round(L.p2 * 100) / 100 }); }); toast('Trendline saved'); } catch (e) { toast(e.message); draw(); } } } });
     body.append(chart);
     const perf = performance(all);
@@ -105,7 +106,7 @@ function chartCard({ symbol, name, yahoo, index, avgCost, firstBuy, trades, quot
     if (myLines().length && mode !== 'pct') legend.push(h('span', { class: 'mc-chip' }, h('i', { style: { background: LINE_COLORS.trend } }), `${myLines().length} trendline${myLines().length > 1 ? 's' : ''}`));
     if (trades && trades.length) legend.push(h('span', { class: 'mc-chip' }, h('b', { class: 'pos' }, '▲'), ' your buys ', h('b', { class: 'neg' }, '▼'), ' your sells'));
     if (legend.length) body.append(h('div', { class: 'mc-chips tm-legend' }, legend));
-    body.append(h('p', { class: 'note' }, `Each ${agg === 'D' ? (mode === 'candle' ? 'candle is a day' : 'point is a day') : agg === 'W' ? (mode === 'candle' ? 'candle is a week' : 'point is a week') : (mode === 'candle' ? 'candle is a month' : 'point is a month')}. Scroll or pinch to zoom, drag to move${canEdit() && mode !== 'pct' ? '; Trendline then two taps draws a line that is saved for this share' : ''}. The 50 and 200-day averages are the average closing price over the last 50 or 200 trading days${index ? '' : '; P/E is the price divided by the last twelve months of reported earnings per share, as known on that day (a company that made a loss has no P/E)'}. Past prices do not predict the future.`));
+    body.append(h('p', { class: 'note' }, `Each ${agg === 'D' ? (mode === 'candle' ? 'candle is a day' : 'point is a day') : agg === 'W' ? (mode === 'candle' ? 'candle is a week' : 'point is a week') : (mode === 'candle' ? 'candle is a month' : 'point is a month')}. Scroll or pinch to zoom, drag to move${canEdit() && mode !== 'pct' ? '; Trendline then two taps draws a line that is saved for this share, and you can drag it or its end points to adjust it' : ''}. The 50 and 200-day averages are the average closing price over the last 50 or 200 trading days${index ? '' : '; P/E is the price divided by the last twelve months of reported earnings per share, as known on that day (a company that made a loss has no P/E)'}. Past prices do not predict the future.`));
   };
 
   const start = () => {
