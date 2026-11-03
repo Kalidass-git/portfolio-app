@@ -59,7 +59,17 @@ export function render(root) {
   const alerts = S.data.alerts || [];
   const cards = (l.items || []).map((it) => {
     const q = WL.quoteOf(it.symbol), n = alerts.filter((a) => a.kind === 'stock' && WL.norm(a.ref) === WL.norm(it.symbol)).length;
-    return { title: it.name || it.symbol, sub: [it.index ? 'Index' : it.symbol, n ? `${n} alert${n > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · '),
+    const m = W.metrics()[W.stockKey(it.symbol)], px = q ? q.price : m ? m.price : null;
+    const bits = [];
+    if (m && m.pe > 0) bits.push('P/E ' + m.pe.toFixed(1));
+    if (m && m.mcap > 0) bits.push('Mcap ' + (m.mcap >= 1e12 ? '₹' + (m.mcap / 1e12).toFixed(2) + ' L Cr' : '₹' + Math.round(m.mcap / 1e7).toLocaleString('en-IN') + ' Cr'));
+    if (m && m.dy > 0) bits.push('Yield ' + m.dy.toFixed(1) + '%');
+    if (m && m.dma200 > 0 && px) bits.push(px >= m.dma200 ? 'above 200d' : 'below 200d');
+    const pos = m && m.hi52 > m.lo52 && px != null ? Math.max(0, Math.min(1, (px - m.lo52) / (m.hi52 - m.lo52))) : null;
+    const extra = bits.length || pos != null ? h('span', { class: 'wl-info' },
+      bits.length ? h('span', { class: 'rl-sub' }, bits.join(' · ')) : null,
+      pos != null ? h('span', { class: 'wl-52' }, h('small', null, dec(m.lo52, 0)), h('span', { class: 'tm-rng' }, h('i', { style: { left: pos * 100 + '%' } })), h('small', null, dec(m.hi52, 0)), h('small', { class: 'wl-hi' }, (px / m.hi52 - 1 >= 0 ? '+' : '−') + Math.abs((px / m.hi52 - 1) * 100).toFixed(0) + '% from high')) : null) : null;
+    return { extra, title: it.name || it.symbol, sub: [it.index ? 'Index' : it.symbol, n ? `${n} alert${n > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · '),
       value: q ? money(q.price) : '–', valueSub: q && q.dayPct != null ? h('span', { class: posNeg(q.dayPct) }, (q.dayPct >= 0 ? '+' : '') + pct(q.dayPct, 2)) : '',
       onClick: () => { location.hash = '#/equity/quote?sym=' + encodeURIComponent(it.symbol); } };
   });
