@@ -141,6 +141,36 @@ export function bondPaidSoFar(b, asOf, tdsRate = 0.1) {
   return t;
 }
 
+/**
+ * This month's bond interest, split. Each bond that pays in the month (monthly bonds every month, quarterly bonds in their payout months and the month they end)
+ * counts its payment after TDS: "received" when the due day has come, "pending" when it is still ahead. Returns { due, received, pending, nReceived, nPending }.
+ */
+export function bondMonthSplit(bonds, asOf, tdsRate = 0.1) {
+  const month = asOf.slice(0, 7), out = { due: 0, received: 0, pending: 0, nReceived: 0, nPending: 0 };
+  for (const b of bonds) {
+    const amt = bondDueAmount(b, month, tdsRate);
+    if (!(amt > 0)) continue;
+    out.due += amt;
+    if (bondDueDate(b, month) <= asOf) { out.received += amt; out.nReceived++; } else { out.pending += amt; out.nPending++; }
+  }
+  return out;
+}
+/**
+ * Interest a bond has earned since its last payment day up to `asOf` (after TDS) that has not reached the bank yet: the part of the next payment already earned.
+ * Added up over the bonds this is the "receivable today" figure; it is 0 for a bond that has not started or has ended.
+ */
+export function bondAccrued(b, asOf, tdsRate = 0.1) {
+  if (!b.principal || (b.depositDate && b.depositDate > asOf)) return 0;
+  for (let i = 0, m = asOf.slice(0, 7); i < 5; i++, m = addMonths(m + '-01', 1).slice(0, 7)) {
+    if (!bondPaysIn(b, m) || bondDueDate(b, m) <= asOf) continue;
+    const p = bondPeriod(b, m);
+    if (!p) continue;
+    const days = Math.round((Math.min(toMs(asOf), toMs(p.to)) - toMs(p.from)) / DAY) + 1;
+    return days > 0 ? ((b.principal * b.rate) / 365) * days * (1 - tdsRate) : 0;
+  }
+  return 0;
+}
+
 /** FDs and private lending (Fixed Income!A27:P31 and A35:P45). */
 export function calcDeposit(it, asOf) {
   const f = tenureFactor(it.tenureType);
