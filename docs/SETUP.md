@@ -150,6 +150,15 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.47.0 – Chart tools: zoom, trendlines, candle size; watchlist details
+
+- **Shares & funds overview**: the Shares, ETFs and Funds tiles under Today now open that group in Holdings. The Shares / ETFs / Funds switch below them still only changes the gainers and fallers list.
+- **Candle size**: Auto / Day / Week / Month under the ranges; one bar (candle or line point) is then one day, week or month. The 50 and 200-day averages and P/E follow the bars.
+- **Zoom and move**: mouse wheel or pinch zooms, drag moves, − / + / Reset zoom buttons. The price scale follows what is on screen.
+- **Trendlines**: owner taps Trendline, then two points (candles snap to a nearby high, low, open or close). Lines are saved per share in the data file as an optional `trendlines` field (older files simply have none), shown to family viewers too, tap a line to select and Delete. Hidden in % change view.
+- **Colours**: 50d blue, 200d orange, P/E purple, your average cost grey dashed, trendlines cyan.
+- **Watchlist rows** now also show P/E, market cap, dividend yield, above/below 200-day average, and the 52-week range with where the price sits and the distance from the high (after Refresh prices).
+
 ## Release 8.46.0 – Bond interest this month: due, received, pending
 
 - Bonds page now shows **Interest due in <month>** (after TDS; quarterly bonds count in the months they pay), split into **Received so far** (due day has come) and **Still to come**, plus **Receivable today**: interest earned since each bond's last payment day that has not been paid yet.

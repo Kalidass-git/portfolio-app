@@ -1583,3 +1583,5 @@ dialog.sheet.bulk { width: min(1180px, 96vw); }
 .tm-rng { position: relative; display: block; height: 4px; border-radius: 3px; background: var(--line); margin-top: 6px; } .tm-rng i { position: absolute; top: -3px; width: 4px; height: 10px; border-radius: 2px; background: var(--brand); transform: translateX(-50%); }
 .tm-about { line-height: 1.5; } .tm-about.clamp { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 @media (max-width: 480px) { .tm-figs { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tm-price b { font-size: 1.6rem; } }
+.tm-tools .chip-btn { min-width: 40px; } .mchart { touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.wl-info { display: flex; flex-direction: column; gap: 4px; margin-top: 3px; } .wl-52 { display: flex; align-items: center; gap: 6px; max-width: 280px; } .wl-52 small { color: var(--muted); font-size: .72rem; white-space: nowrap; } .wl-52 .tm-rng { flex: 1; margin-top: 0; min-width: 60px; } .wl-52 .wl-hi { margin-left: 4px; }

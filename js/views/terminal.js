@@ -1,12 +1,14 @@
 // The share page "terminal": price chart (line, % change or candles) with 50 / 200-day averages and a historical P/E panel, performance chips,
 // key figures and a short business description. Used by the page of a share you hold and by the page of a watchlist share or index.
-import { h, money, dec, pct, dateStr, section, btn, posNeg, toast } from '../ui.js';
+import { h, money, dec, pct, dateStr, section, btn, posNeg, toast, canEdit } from '../ui.js';
+import { S, mutate } from '../store.js';
 import { marketChart, LINE_COLORS } from '../mchart.js';
 import { stockOhlc, stockEps, stockInfo, aggregateOhlc, candleMode, sliceRange, dropCache, RANGES } from '../history.js';
 import { sma, epsTimeline, peSeries, performance } from '../ta.js';
 
 const KEY = 'fw.term';
-const defaults = { range: '6M', mode: 'line', dma50: true, dma200: true, pe: true };
+const defaults = { range: '6M', mode: 'line', iv: 'auto', dma50: true, dma200: true, pe: true };
+const mem = new Map();   // per symbol: the zoom you left the chart at and the line you had selected (the page is rebuilt after every save)
 const load = () => { try { return { ...defaults, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { return { ...defaults }; } };
 const save = (s) => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* private window */ } };
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -26,6 +28,10 @@ function chartCard({ symbol, name, yahoo, index, avgCost, firstBuy, trades, quot
   const st = load();
   const body = h('div', null, h('p', { class: 'note' }, 'Loading the price history…'));
   const headBox = h('div', { class: 'tm-head' });
+  const symKey = String(symbol).toUpperCase().trim();
+  const mm = mem.get(symKey) || {}; mem.set(symKey, mm);
+  let tool = 'none', chart = null;
+  const myLines = () => ((S.data && S.data.trendlines) || {})[symKey] || [];
   let data = null, eps = { state: index ? 'none' : 'idle', msg: '', tl: null }, peFull = null;
 
   const header = () => {
@@ -60,7 +66,9 @@ function chartCard({ symbol, name, yahoo, index, avgCost, firstBuy, trades, quot
     if (st.range === 'Mine' && firstBuy) cut = all.filter((r) => r.d >= firstBuy); else cut = months ? sliceRange(all, months) : all;
     if (cut.length < 2) cut = all.slice(-2);
     const spanM = months || Math.max(1, Math.round((Date.parse(cut[cut.length - 1].d) - Date.parse(cut[0].d)) / (30 * 864e5)));
-    const agg = mode === 'candle' ? candleMode(spanM) : spanM <= 6 ? 'D' : spanM <= 72 ? 'W' : 'M';
+    const agg = ['D', 'W', 'M'].includes(st.iv) ? st.iv : mode === 'candle' ? candleMode(spanM) : spanM <= 6 ? 'D' : spanM <= 72 ? 'W' : 'M';
+    const vkey = st.range + '|' + agg;
+    if (mm.key !== vkey) { mm.key = vkey; mm.view = null; }
     const rows = agg === 'D' ? cut : aggregateOhlc(cut, agg);
     const align = (m) => (m ? rows.map((r) => (m.has(r.d) ? m.get(r.d) : null)) : null);
     const wantPe = !index && st.pe && peFull;
@@ -70,18 +78,33 @@ function chartCard({ symbol, name, yahoo, index, avgCost, firstBuy, trades, quot
     const modes = h('div', { class: 'row-actions', role: 'group', 'aria-label': 'Chart type' },
       [['line', 'Line'], ['pct', '% change'], ['candle', 'Candles']].map(([k, l]) => h('button', { type: 'button', class: 'chip-btn' + (st.mode === k ? ' on' : ''), onclick: () => { st.mode = k; save(st); draw(); } }, l)),
       h('span', { class: 'tm-gap' }), tg('dma50', '50d', LINE_COLORS.dma50), tg('dma200', '200d', LINE_COLORS.dma200), index ? null : tg('pe', 'P/E', LINE_COLORS.pe, eps.state === 'loading' ? ' …' : ''));
-    body.append(chips, modes);
+    const ivs = h('div', { class: 'row-actions', role: 'group', 'aria-label': 'Candle size' }, h('span', { class: 'muted tm-sub' }, 'Each bar is'),
+      [['auto', 'Auto'], ['D', 'Day'], ['W', 'Week'], ['M', 'Month']].map(([k, l]) => h('button', { type: 'button', class: 'chip-btn' + (st.iv === k ? ' on' : ''), onclick: () => { st.iv = k; save(st); draw(); } }, l)));
+    const sel = mm.sel && myLines().some((l) => l.id === mm.sel) ? mm.sel : null;
+    const tools = h('div', { class: 'row-actions tm-tools', role: 'group', 'aria-label': 'Zoom and drawing' },
+      h('button', { type: 'button', class: 'chip-btn', 'aria-label': 'Zoom out', onclick: () => chart && chart.zoom(1.4) }, '−'), h('button', { type: 'button', class: 'chip-btn', 'aria-label': 'Zoom in', onclick: () => chart && chart.zoom(0.7) }, '+'),
+      h('button', { type: 'button', class: 'chip-btn', onclick: () => chart && chart.reset() }, 'Reset zoom'),
+      h('span', { class: 'tm-gap' }),
+      mode !== 'pct' && canEdit() ? h('button', { type: 'button', class: 'chip-btn tm-tg' + (tool === 'line' ? ' on' : ''), 'aria-pressed': String(tool === 'line'), onclick: () => { tool = tool === 'line' ? 'none' : 'line'; draw(); } }, h('i', { style: { background: LINE_COLORS.trend } }), tool === 'line' ? 'Tap two points…' : 'Trendline') : null,
+      sel && canEdit() ? h('button', { type: 'button', class: 'chip-btn', onclick: () => { mutate((d) => { d.trendlines[symKey] = (d.trendlines[symKey] || []).filter((l) => l.id !== sel); if (!d.trendlines[symKey].length) delete d.trendlines[symKey]; }); mm.sel = null; } }, 'Delete line') : null,
+      !sel && myLines().length && canEdit() ? h('button', { type: 'button', class: 'chip-btn', onclick: () => { if (confirm('Remove all ' + myLines().length + ' trendlines on ' + name + '?')) mutate((d) => { delete d.trendlines[symKey]; if (!Object.keys(d.trendlines).length) delete d.trendlines; }); } }, `Clear lines (${myLines().length})`) : null);
+    body.append(chips, ivs, modes, tools);
     if (data.closesOnly) body.append(h('p', { class: 'note' }, 'Candles and volume need the newer Code.gs in your Apps Script (Settings explains how to paste and redeploy it). Showing closing prices until then.'));
     if (!index && st.pe && eps.state === 'err') body.append(h('p', { class: 'note' }, 'P/E history: ' + eps.msg));
-    body.append(marketChart({ rows, mode, dma50: st.dma50 ? align(data.ma50) : null, dma200: st.dma200 ? align(data.ma200) : null, pe: wantPe ? align(peM) : null,
-      avg: avgCost && mode !== 'pct' ? avgCost : mode === 'pct' ? avgCost : null, trades: trades || [], height: window.innerWidth < 640 ? 230 : 280, fmt: pxf, vfmt, dateFmt: short, tickFmt: tick }));
+    chart = marketChart({ rows, mode, dma50: st.dma50 ? align(data.ma50) : null, dma200: st.dma200 ? align(data.ma200) : null, pe: wantPe ? align(peM) : null,
+      avg: avgCost || null, trades: trades || [], height: window.innerWidth < 640 ? 230 : 280, fmt: pxf, vfmt, dateFmt: short, tickFmt: tick,
+      lines: myLines(), tool: canEdit() ? tool : 'none', selected: sel, view: mm.view, onView: (v) => { mm.view = v; },
+      onLine: { select: (id) => { mm.sel = id; draw(); },
+        add: (L) => { const id = 'tl' + Date.now().toString(36); mm.sel = id; tool = 'none'; try { mutate((d) => { d.trendlines = d.trendlines || {}; (d.trendlines[symKey] = d.trendlines[symKey] || []).push({ id, ...L, p1: Math.round(L.p1 * 100) / 100, p2: Math.round(L.p2 * 100) / 100 }); }); toast('Trendline saved'); } catch (e) { toast(e.message); draw(); } } } });
+    body.append(chart);
     const perf = performance(all);
     if (perf.length) body.append(h('div', { class: 'tm-perf', 'aria-label': 'Returns over different periods' }, perf.map((p) => h('span', { class: 'tm-pf ' + posNeg(p.pct) }, h('small', null, p.label), `${p.pct >= 0 ? '▲' : '▼'} ${p.pct >= 0 ? '+' : '−'}${Math.abs(p.pct * 100).toFixed(1)}%`))));
     const legend = [];
     if (avgCost && trades) legend.push(h('span', { class: 'mc-chip' }, h('i', { class: 'dash', style: { borderColor: LINE_COLORS.avg } }), 'Your average cost'));
+    if (myLines().length && mode !== 'pct') legend.push(h('span', { class: 'mc-chip' }, h('i', { style: { background: LINE_COLORS.trend } }), `${myLines().length} trendline${myLines().length > 1 ? 's' : ''}`));
     if (trades && trades.length) legend.push(h('span', { class: 'mc-chip' }, h('b', { class: 'pos' }, '▲'), ' your buys ', h('b', { class: 'neg' }, '▼'), ' your sells'));
     if (legend.length) body.append(h('div', { class: 'mc-chips tm-legend' }, legend));
-    body.append(h('p', { class: 'note' }, `Each ${agg === 'D' ? 'point is a day' : agg === 'W' ? 'point is a week' : 'point is a month'}. The 50 and 200-day averages are the average closing price over the last 50 or 200 trading days${index ? '' : '; P/E is the price divided by the last twelve months of reported earnings per share, as known on that day (a company that made a loss has no P/E)'}. Past prices do not predict the future.`));
+    body.append(h('p', { class: 'note' }, `Each ${agg === 'D' ? (mode === 'candle' ? 'candle is a day' : 'point is a day') : agg === 'W' ? (mode === 'candle' ? 'candle is a week' : 'point is a week') : (mode === 'candle' ? 'candle is a month' : 'point is a month')}. Scroll or pinch to zoom, drag to move${canEdit() && mode !== 'pct' ? '; Trendline then two taps draws a line that is saved for this share' : ''}. The 50 and 200-day averages are the average closing price over the last 50 or 200 trading days${index ? '' : '; P/E is the price divided by the last twelve months of reported earnings per share, as known on that day (a company that made a loss has no P/E)'}. Past prices do not predict the future.`));
   };
 
   const start = () => {

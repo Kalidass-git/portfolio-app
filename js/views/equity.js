@@ -160,9 +160,10 @@ function today(root) {
       h('p', { class: 'note' }, 'Share prices come through your Google Drive backend (Settings). Fund NAVs need each fund to be linked once on the Funds tab.'))));
     return;
   }
-  const tile = (k) => { const t = g[k]; return h('a', { class: 'stat' + (todayScope === k ? ' on' : ''), href: 'javascript:void 0', onclick: (e) => { e.preventDefault(); todayScope = k; rerender(); }, style: { textDecoration: 'none', color: 'inherit', cursor: 'pointer' } },
+  // each tile opens that group in Holdings; the Shares / ETFs / Funds switch below only changes which movers are listed
+  const tile = (k) => { const t = g[k]; return cardLink(h('div', { class: 'stat' + (todayScope === k ? ' on' : '') },
     h('span', { class: 'stat-label' }, GROUP_LABEL[k]), h('strong', { class: 'stat-value ' + posNeg(t.day) }, t.dayCount ? signedMoney(t.day) : '–'),
-    h('span', { class: 'stat-sub ' + posNeg(t.day) }, t.dayCount ? signedPct(t.dayPct) + ` · ${t.dayCount} of ${t.items.length} priced` : 'no day price yet')); };
+    h('span', { class: 'stat-sub ' + posNeg(t.day) }, t.dayCount ? signedPct(t.dayPct) + ` · ${t.dayCount} of ${t.items.length} priced` : 'no day price yet')), HOLD_HREF[k], 'Open ' + GROUP_LABEL[k] + ' in Holdings'); };
   root.append(h('div', { class: 'stats' }, tile('shares'), tile('etfs'), tile('funds'),
     cardLink(h('div', { class: 'stat today' }, h('span', { class: 'stat-label' }, 'All together'), h('strong', { class: 'stat-value ' + posNeg(total) }, signedMoney(total)), h('span', { class: 'stat-sub ' + posNeg(total) }, signedPct(base ? total / base : 0))), '#/equity/holdings?v=all', 'Open all holdings')));
   root.append(h('nav', { class: 'seg', 'aria-label': 'Group' }, Object.keys(GROUP_LABEL).map((k) => h('a', { href: 'javascript:void 0', class: k === todayScope ? 'on' : '', 'aria-selected': String(k === todayScope), onclick: (e) => { e.preventDefault(); todayScope = k; rerender(); } }, GROUP_LABEL[k]))));
