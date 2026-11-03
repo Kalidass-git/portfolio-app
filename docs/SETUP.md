@@ -150,6 +150,10 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.50.0 – Tidier chart controls
+
+- The controls above the share chart are regrouped: time range strip (scrolls sideways on phones), then Line / % / Candles with the bar size (Auto, Day, Week, Month), then the 50d, 200d and P/E toggles, then zoom and trendline tools. Same functions, no data changes.
+
 ## Release 8.49.0 – Adjustable trendlines
 
 - Tap a trendline to select it (round handles appear at both ends). Drag the line to move it, or drag a handle to change that end. The change is saved when you let go. Candle charts snap an end to a nearby high, low, open or close. Delete line still removes the selected one.
