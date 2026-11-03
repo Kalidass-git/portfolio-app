@@ -162,6 +162,7 @@ const canSegment = (f, input) => f.type === 'select' && f.seg !== false && input
  */
 export function formDialog({ focus, title, sub = '', tone: toneIn, autoNext, fields, value = {}, onSave, onDelete, extraActions = [], saveLabel = 'Save', deleteMessage = 'Delete this entry? This cannot be undone.' }) {
   const inputs = {}, labels = {};
+  let nextFn = null;
   const form = h('form', { class: 'form', novalidate: true });
   for (const f of fields) {
     let input;
@@ -186,10 +187,11 @@ export function formDialog({ focus, title, sub = '', tone: toneIn, autoNext, fie
     labels[f.key] = h('label', { class: 'field' + (f.type === 'checkbox' ? ' check' : '') + (f.half ? ' half' : '') + (isAmt ? ' field-amt' : '') },
       h('span', null, f.label), ctl, f.hint ? h('small', null, f.hint) : null);
     form.append(labels[f.key]);
+    if (f.suggest && f.type !== 'select') typeahead(input, typeof f.suggest === 'function' ? f.suggest : () => f.suggest, { onPick: (v, viaTab) => { if (f.onInput) f.onInput(input, inputs); if (!viaTab && nextFn) nextFn(f.key); } });
   }
   // Short fields sit side by side (amount with date, rate with term ...), so a tall form needs less scrolling. Only the layout changes.
   const wide = (f) => f.type === 'checkbox' || f.type === 'textarea' || f.full || (f.hint && f.hint.length > 48) || (f.type === 'select' && (labels[f.key].querySelector('.ctl-seg') || (f.options || []).some((o) => o && (o.group || String((o && o.label) ?? o).length > 24))))
-    || (f.type !== 'number' && f.type !== 'date' && f.type !== 'select' && !(f.type === 'text' && !f.hint && !f.list && !f.showIf && String(f.label).length <= 24));
+    || (f.type !== 'number' && f.type !== 'date' && f.type !== 'select' && !(f.type === 'text' && !f.list && !f.showIf && String(f.label).length <= 24));
   for (let i = 0; i < fields.length - 1; i++) {
     const a = fields[i], b2 = fields[i + 1];
     if (a.half || b2.half) { if (a.half) i++; continue; }
@@ -213,6 +215,7 @@ export function formDialog({ focus, title, sub = '', tone: toneIn, autoNext, fie
       if (nf.type === 'date') { try { el.showPicker && el.showPicker(); } catch { /* needs a recent tap or key press; the cursor is there anyway */ } }
       else if (el.select && nf.type !== 'select') { try { el.select(); } catch { /* not selectable */ } }
     };
+    nextFn = goNext;
     const timers = {};
     for (const f of fields) {
       const el = inputs[f.key];
@@ -255,7 +258,7 @@ export function formDialog({ focus, title, sub = '', tone: toneIn, autoNext, fie
     return h('div', null, h('p', null, deleteMessage), rows.length ? h('ul', { class: 'del-sum' }, rows) : null, h('p', { class: 'note' }, 'A restore point is saved every day, so a mistake can be undone from Settings.'));
   };
   if (onDelete) actions.push({ label: 'Delete', class: 'danger', onclick: async (c) => { if (await confirmDialog(summary(), 'Yes, delete')) { if (onDelete() !== false) c(); } } });
-  for (const a of extraActions) actions.push({ label: a.label, class: a.class || '', onclick: (c) => { c(); a.onclick(); } });
+  for (const a of extraActions) actions.push({ label: a.label, class: (a.class || '') + ' left', onclick: (c) => { c(); a.onclick(); } });
   actions.push({ label: saveLabel, class: 'primary', onclick: submit });
   const kindF = fields.find((f) => f.key === 'kind' && f.type === 'select' && (f.options || []).some((o) => o && o.value === 'credit') && (f.options || []).some((o) => o && o.value === 'debit'));
   const toneNow = () => (kindF ? (inputs.kind.value === 'credit' ? 'in' : 'out') : toneIn != null ? toneIn : toneOfTitle(title));
@@ -265,6 +268,41 @@ export function formDialog({ focus, title, sub = '', tone: toneIn, autoNext, fie
   form.addEventListener('submit', (e) => { e.preventDefault(); submit(d.close); });
   setTimeout(() => (focus && form.querySelector(`[name="${focus}"]`) || form.querySelector('input,select,textarea'))?.focus(), 30);
   return d;
+}
+
+
+/**
+ * Type-ahead for a text box. getList() gives the known values; matches show in a small list under the box. Tab fills the first (or the highlighted) match and moves on;
+ * arrows and Enter pick too. onPick(value) runs after a pick. The box itself stays a normal input.
+ */
+export function typeahead(input, getList, { onPick, host } = {}) {
+  const box = h('ul', { class: 'typeahead', role: 'listbox', hidden: true });
+  (host || input.parentElement).append(box);
+  let items = [], on = -1;
+  const find = () => {
+    const q = input.value.trim().toLowerCase(); if (!q) return [];
+    const all = [...new Set((getList() || []).map((x) => String(x || '').trim()).filter(Boolean))];
+    const pre = all.filter((x) => x.toLowerCase().startsWith(q)), mid = all.filter((x) => !x.toLowerCase().startsWith(q) && x.toLowerCase().includes(q));
+    return [...pre.sort((a, b) => a.length - b.length || a.localeCompare(b)), ...mid.sort((a, b) => a.localeCompare(b))].slice(0, 6);
+  };
+  const hide = () => { box.hidden = true; on = -1; };
+  const draw = () => {
+    items = find().filter((x, i, a) => !(a.length === 1 && x.toLowerCase() === input.value.trim().toLowerCase()));
+    if (!items.length || document.activeElement !== input) return hide();
+    box.replaceChildren(...items.map((x, i) => h('li', { role: 'option', class: i === on ? 'on' : '', onmousedown: (e) => { e.preventDefault(); pick(x); } }, x)));
+    box.hidden = false;
+  };
+  const pick = (v) => { input.value = v; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); hide(); if (onPick) onPick(v); };
+  input.addEventListener('input', () => { on = -1; draw(); });
+  input.addEventListener('focus', draw);
+  input.addEventListener('blur', () => setTimeout(hide, 120));
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { if (box.hidden) draw(); if (!items.length) return; e.preventDefault(); on = (on + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length; draw(); }
+    else if (e.key === 'Enter' && !box.hidden && on >= 0) { e.preventDefault(); e.stopPropagation(); pick(items[on]); }
+    else if (e.key === 'Tab' && !e.shiftKey && !box.hidden && items.length) { const v = items[on >= 0 ? on : 0]; input.value = v; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); hide(); if (onPick) onPick(v, true); }
+    else if (e.key === 'Escape' && !box.hidden) { e.preventDefault(); e.stopPropagation(); hide(); }
+  });
+  return { hide };
 }
 
 /** A <datalist> of suggestions for a form field. Form fields take the id of one, not an array. Returns the id. */

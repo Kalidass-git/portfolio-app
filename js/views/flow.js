@@ -1,4 +1,5 @@
 // Income & expenses: overview for any period, category filter, and a drill-down page for one category.
+import { bulkForm } from './bulk.js';
 import { S } from '../store.js';
 import * as C from '../calc.js';
 import { h, money, pct, dateStr, monthLabel, section, stat, table, dialog, segTabs, btn, canEdit, dec, route, setOptions, monthGroups } from '../ui.js';
@@ -101,7 +102,7 @@ function overview() {
   const name = periodName(period, range);
   const root = h('div', { class: 'page' });
   root.append(h('div', { class: 'pagebar' }, segTabs(TABS, 'month', 'Expense views'),
-    canEdit() ? h('span', { class: 'btn-row' }, btn('Add income', () => txnForm(null, { kind: 'credit', title: 'Add income' }), '', { keep: true }), btn('Add expense', () => txnForm(null, { kind: 'debit', title: 'Add expense' }), 'primary', { keep: true })) : null));
+    canEdit() ? h('span', { class: 'btn-row' }, btn('Add many', () => bulkForm(), '', { keep: true }), btn('Add income', () => txnForm(null, { kind: 'credit', title: 'Add income' }), '', { keep: true }), btn('Add expense', () => txnForm(null, { kind: 'debit', title: 'Add expense' }), 'primary', { keep: true })) : null));
   root.append(controls(months, data));
   root.append(h('div', { class: 'stats' },
     stat('Income', money(s.totalIncome), name, 'inc'),

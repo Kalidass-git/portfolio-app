@@ -150,7 +150,9 @@ const TABS = [['bonds', 'Bonds'], ['fds', 'FDs'], ['lending', 'Lendings'], ['loa
 /** Interest paid so far, after TDS: each payment whose due date has come, counted by days since the previous payment day. */
 const bondReceived = (b) => C.bondPaidSoFar(b, S.all.asOf, S.data.settings.tdsRate ?? 0.1);
 const shortD = (d) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-const flt = { bonds: { holder: 'all', via: 'all', sort: 'none', dir: 'asc' }, fds: { holder: 'all', via: 'all' }, lending: { holder: 'all', via: 'all' } };
+const flt = { bonds: { holder: 'all', via: 'all', sort: 'none', dir: 'asc', q: '' }, fds: { holder: 'all', via: 'all', q: '' }, lending: { holder: 'all', via: 'all', q: '' } };
+/** Everything written on a record (name, company, holder, platform, account ...) as one lower-case string, for the search box. */
+const haystack = (x) => Object.values(x).filter((v) => typeof v === 'string' || typeof v === 'number').join(' ').toLowerCase();
 const rerenderFixed = () => window.dispatchEvent(new Event('rerender'));
 /** Quick filters above a list: account holder and where it was bought. Default is everything. Returns the bar and the rows that pass. */
 function quickFilter(tab, items, holderOf, viaOf, viaLabel, sorts) {
@@ -160,7 +162,8 @@ function quickFilter(tab, items, holderOf, viaOf, viaLabel, sorts) {
   if (f.holder !== 'all' && !holders.includes(f.holder)) f.holder = 'all';
   if (f.via !== 'all' && !vias.includes(f.via)) f.via = 'all';
   const mk = (label, key, opts) => { const sel = h('select', { class: 'month-select', 'aria-label': label, onchange: (e) => { f[key] = e.target.value; rerenderFixed(); } }); setOptions(sel, [{ value: 'all', label: `${label}: all` }, ...opts.map((o) => ({ value: o, label: o }))], f[key]); return sel; };
-  let rows = items.filter((x) => (f.holder === 'all' || String(holderOf(x) || '').trim() === f.holder) && (f.via === 'all' || String(viaOf(x) || '').trim() === f.via));
+  const q = String(f.q || '').trim().toLowerCase(), words = q ? q.split(/\s+/) : [];
+  let rows = items.filter((x) => (!words.length || words.every((w) => haystack(x).includes(w))) && (f.holder === 'all' || String(holderOf(x) || '').trim() === f.holder) && (f.via === 'all' || String(viaOf(x) || '').trim() === f.via));
   // optional sorting: pick what to sort by and which way. Rows with nothing to sort on (no next due date) always go last.
   let sortBar = null;
   if (sorts) {
@@ -176,13 +179,15 @@ function quickFilter(tab, items, holderOf, viaOf, viaLabel, sorts) {
     sortBar = [pick, dir];
   }
   // phone: one Sort button and one Filter button that open bottom sheets over the same f.sort / f.dir / f.holder / f.via
-  const fields = [holders.length > 1 ? { key: 'holder', label: 'Holder', type: 'select', default: 'all', options: [{ value: 'all', label: 'All' }, ...holders.map((o) => ({ value: o, label: o }))] } : null,
+  const fields = [{ key: 'q', label: 'Find', type: 'text', default: '', placeholder: 'Name, company, holder, platform…', chip: (v) => (v.q ? `Find: “${String(v.q).slice(0, 18)}”` : null) }, holders.length > 1 ? { key: 'holder', label: 'Holder', type: 'select', default: 'all', options: [{ value: 'all', label: 'All' }, ...holders.map((o) => ({ value: o, label: o }))] } : null,
     vias.length > 1 ? { key: 'via', label: viaLabel, type: 'select', default: 'all', options: [{ value: 'all', label: 'All' }, ...vias.map((o) => ({ value: o, label: o }))] } : null].filter(Boolean);
   const mbar = fields.length || sorts ? sortFilterBar({
     sort: sorts ? { value: f.sort, dir: f.dir, apply: (v, d) => { f.sort = v; f.dir = d; rerenderFixed(); }, options: [{ value: 'none', label: 'As entered', kind: 'none' }, ...sorts.map((x) => ({ value: x.value, label: x.label, kind: x.kind || 'num' }))] } : null,
-    filters: fields.length ? { fields, values: { holder: f.holder, via: f.via }, apply: (v) => { f.holder = v.holder ?? 'all'; f.via = v.via ?? 'all'; rerenderFixed(); } } : null }) : null;
-  const dbar = holders.length > 1 || vias.length > 1 || sorts ? h('div', { class: 'filters desk-ctl' }, holders.length > 1 ? mk('Holder', 'holder', holders) : null, vias.length > 1 ? mk(viaLabel, 'via', vias) : null, sortBar,
-    rows.length !== items.length ? h('span', { class: 'muted' }, `${rows.length} of ${items.length}`) : null) : null;
+    filters: fields.length ? { fields, values: { q: f.q || '', holder: f.holder, via: f.via }, apply: (v) => { f.q = String(v.q || '').trim(); f.holder = v.holder ?? 'all'; f.via = v.via ?? 'all'; rerenderFixed(); } } : null }) : null;
+  const find = h('input', { type: 'search', class: 'find-box', placeholder: 'Find: name, company, holder, platform…', 'aria-label': 'Find in this list', value: f.q || '', autocomplete: 'off',
+    oninput: (e) => { f.q = e.target.value; clearTimeout(window.__fq); window.__fq = setTimeout(() => { rerenderFixed(); const i = document.querySelector('input.find-box'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 250); } });
+  const dbar = h('div', { class: 'filters desk-ctl find-row' }, holders.length > 1 ? mk('Holder', 'holder', holders) : null, vias.length > 1 ? mk(viaLabel, 'via', vias) : null, sortBar,
+    rows.length !== items.length ? h('span', { class: 'muted' }, `${rows.length} of ${items.length}`) : null, find);
   const bar = mbar || dbar ? h('div', null, mbar, rows.length !== items.length ? h('p', { class: 'muted phone-only', style: { margin: '0 0 8px' } }, `${rows.length} of ${items.length} shown`) : null, dbar) : null;
   return { bar, rows };
 }
