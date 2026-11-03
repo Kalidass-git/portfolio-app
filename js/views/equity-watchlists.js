@@ -1,6 +1,6 @@
 // Manage > Watchlists: your own lists of shares, a manual price refresh for these lists only, and links to each share's chart and alerts.
 import { S, mutate } from '../store.js';
-import { h, money, dec, pct, section, btn, canEdit, toast, formDialog, confirmDialog, posNeg, icon } from '../ui.js';
+import { typeahead, h, money, dec, pct, section, btn, canEdit, toast, formDialog, confirmDialog, posNeg, icon } from '../ui.js';
 import * as WL from '../watchlists.js';
 import * as W from '../watch.js';
 
@@ -42,6 +42,29 @@ async function refreshAll(btnEl, rerender) {
   } finally { busy = false; rerender(); }
 }
 
+/** Look a share or index up before deciding to watch it: type a name or symbol, pick or press Enter, and its page opens (the star there adds it to a list). */
+function searchCard() {
+  const known = new Map();
+  const put = (symbol, name, yahoo, index) => { const sym = WL.norm(symbol); if (sym && !known.has(sym)) known.set(sym, { symbol: sym, name: name || sym, yahoo: yahoo || '', index: !!index }); };
+  for (const x of S.all.stocks.items) put(x.symbol, x.name, x.yahoo, false);
+  for (const l of WL.lists(S.data)) for (const it of l.items || []) put(it.symbol, it.name, it.yahoo, it.index);
+  for (const x of WL.INDEXES) put(x.symbol, x.name, x.yahoo, true);
+  const label = (k) => `${k.name}${k.name !== k.symbol ? ' · ' + k.symbol : ''}${k.index ? ' (index)' : ''}`;
+  const input = h('input', { type: 'search', class: 'find-box', placeholder: 'Search a share or index: TCS, Karnataka Bank, Nifty 50…', 'aria-label': 'Search a share or index', autocomplete: 'off' });
+  const go = (text) => {
+    const t = String(text || '').trim(); if (!t) return;
+    const k = [...known.values()].find((x) => label(x) === t) || known.get(WL.norm(t)) || [...known.values()].find((x) => x.name.toLowerCase() === t.toLowerCase());
+    const sym = k ? k.symbol : WL.norm(t).replace(/[^A-Z0-9&-]/g, '');
+    if (!sym) return;
+    const qs = k ? (k.index && !WL.INDEXES.some((i) => i.symbol === k.symbol) ? `&index=1&y=${encodeURIComponent(k.yahoo)}&name=${encodeURIComponent(k.name)}` : '') : '';
+    location.hash = '#/equity/quote?sym=' + encodeURIComponent(sym) + qs;
+  };
+  const wrap = h('div', { class: 'card' }, h('div', { class: 'find-row' }, input), h('p', { class: 'note' }, 'Open any NSE share or index to see its chart and figures first. The ☆ Watch button on that page puts it on the watchlist you choose. You can also add straight from a list below.'));
+  typeahead(input, () => [...known.values()].map(label), { onPick: go, host: wrap.firstChild });
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(input.value); } });
+  return wrap;
+}
+
 export function render(root) {
   const lists = WL.lists(S.data), rerender = () => window.dispatchEvent(new Event('rerender'));
   const at = WL.refreshedAt();
@@ -52,6 +75,7 @@ export function render(root) {
       canEdit() ? btn('New watchlist', () => listForm(null), 'primary') : null,
       h('span', { class: 'stamp' }, at ? 'Prices ' + new Date(at).toLocaleString('en-IN') : 'Not refreshed yet')));
   root.append(bar);
+  root.append(searchCard());
   if (!lists.length) { root.append(h('div', { class: 'card' }, h('p', { class: 'empty' }, 'No watchlists yet.'), h('p', { class: 'note' }, canEdit() ? 'Press New watchlist, then add shares by their NSE symbol.' : ''))); return; }
   if (openId == null || !lists.some((l) => l.id === openId)) openId = lists[0].id;
   root.append(h('div', { class: 'row-actions', role: 'tablist', 'aria-label': 'Watchlists' }, lists.map((l) => h('button', { type: 'button', class: 'chip-btn' + (l.id === openId ? ' on' : ''), onclick: () => { openId = l.id; rerender(); } }, `${l.name} · ${(l.items || []).length}`))));
