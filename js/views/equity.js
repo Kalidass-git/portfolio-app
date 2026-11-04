@@ -378,7 +378,7 @@ export function render() {
   } else if (tab === 'watchlists') {
     watchlistsView.render(root);
   } else {
-    const items = [...(canEdit() ? [['planner', 'Investment planner']] : []), ['alerts', 'Alerts'], ['insights', 'Insights'], ...(canEdit() ? [['import', 'Import']] : [])];
+    const items = [['insights', 'Insights'], ['alerts', 'Alerts'], ...(canEdit() ? [['planner', 'Investment planner'], ['import', 'Import']] : [])];   // Insights opens first
     const v = items.some((x) => x[0] === view) ? view : items[0][0];
     sub(items, v);
     if (v === 'import') importView.render(root); else if (v === 'insights') insights(root); else if (v === 'alerts') watchView.alertsTab(root); else planner(root);
