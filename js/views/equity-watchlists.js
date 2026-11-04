@@ -4,7 +4,6 @@ import { typeahead, h, money, dec, pct, section, btn, canEdit, toast, formDialog
 import * as WL from '../watchlists.js';
 import * as W from '../watch.js';
 import { table } from '../ui.js';
-import { tradeForm } from './eqshared.js';
 
 let busy = false, openId = null;
 
@@ -110,10 +109,10 @@ export function render(root) {
     { label: 'P/E · Cap', cls: 'r', mob: 'under', render: (r) => (r.pe || r.mcap ? h('div', null, h('div', null, r.pe ? r.pe.toFixed(1) : '–'), r.mcap ? h('small', null, crore(r.mcap)) : null) : '–') },
     { label: 'Target · Distance', cls: 'r', mob: 'under', render: (r) => (r.target ? h('div', null, h('div', null, (r.target >= (r.price || 0) ? '≥ ' : '≤ ') + rs(r.target)), r.price ? h('small', { class: 'wl-away' }, `${r.target >= r.price ? '+' : '−'}${Math.abs((r.target / r.price - 1) * 100).toFixed(1)}% away`) : null) : '–') },
     { label: 'Note', mob: 'hide', render: (r) => h('span', { class: 'wl-note' }, r.note || '') },
-    { label: 'Trade', cls: 'r', mob: 'hide', render: (r) => (canEdit() ? h('div', { class: 'wl-trade' }, h('button', { type: 'button', class: 'chip-btn small', onclick: (e) => { e.stopPropagation(); itemForm(l, r.it); } }, 'Edit'), r.it.index ? null : h('button', { type: 'button', class: 'chip-btn small buy', onclick: (e) => { e.stopPropagation(); tradeForm(null, { type: 'BUY', symbol: r.sym, name: r.name }); } }, 'Buy')) : '') },
+    { label: 'Edit', cls: 'r', mob: 'hide', render: (r) => (canEdit() ? h('div', { class: 'wl-trade' }, h('button', { type: 'button', class: 'chip-btn small', onclick: (e) => { e.stopPropagation(); itemForm(l, r.it); } }, 'Edit')) : '') },
   ];
   const nA = (r) => alerts.filter((a) => a.kind === 'stock' && WL.norm(a.ref) === WL.norm(r.sym)).length;
-  const tbl = rows.length ? table(cols, rows, { onRow: (r) => { location.hash = '#/equity/quote?sym=' + encodeURIComponent(r.sym); }, mobile: null, m: { key: 'wl', head: 'Share', views: [['Price · Today', 'Day range'], ['52-week', 'P/E · Cap'], ['Target · Distance', 'Note']], extra: 'Trade' }, empty: 'Nothing on this list yet.' }) : h('p', { class: 'empty' }, 'Nothing on this list yet.');
+  const tbl = rows.length ? table(cols, rows, { onRow: (r) => { location.hash = '#/equity/quote?sym=' + encodeURIComponent(r.sym); }, mobile: null, m: { key: 'wl', head: 'Share', views: [['Price · Today', 'Day range'], ['52-week', 'P/E · Cap'], ['Target · Distance', 'Note']], extra: 'Edit' }, empty: 'Nothing on this list yet.' }) : h('p', { class: 'empty' }, 'Nothing on this list yet.');
   root.append(h('section', { class: 'card' },
     h('header', { class: 'card-head wl-head' }, h('h2', null, l.name),
       h('div', { class: 'row-actions' }, canEdit() ? btn('Add share', () => addShare(l), 'primary') : null, canEdit() ? btn('Add index', () => addIndex(l), '') : null, btn('Get prices', (e) => refreshAll(e.currentTarget, rerender), canEdit() ? 'small' : 'primary'))),

@@ -335,9 +335,7 @@ const iconFor = (l) => (/^(Add|Record|Buy)\b/.test(l) ? 'plus' : /^Sell\b/.test(
   : /^Download\b/.test(l) ? 'download' : /^Upload\b/.test(l) ? 'upload' : /^(Refresh|Sync)\b/.test(l) ? 'refresh' : /^Fetch\b/.test(l) ? 'download' : /^Copy\b/.test(l) ? 'copy' : null);
 /** Button. In page headers on a phone, buttons with an icon show only the icon (keep: true keeps the words). */
 export const btn = (label, onclick, cls = '', { keep = false } = {}) => {
-  const ic = keep ? null : iconFor(label);
-  if (!ic) return h('button', { class: cls, onclick, type: 'button' }, label);
-  return h('button', { class: (cls + ' ib').trim(), onclick, type: 'button', 'aria-label': label, title: label }, h('span', { class: 'ic' }, icon(ic)), h('span', { class: 'lb' }, label));
+  return h('button', { class: cls, onclick, type: 'button' }, label);   // words only: a label says more than an icon does
 };
 export const empty = (msg) => h('p', { class: 'empty' }, msg);
 

@@ -361,16 +361,31 @@ function indexPe_(name, years) {
   var MON = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
   var NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   function fmt(d) { return ('0' + d.getDate()).slice(-2) + '-' + NAMES[d.getMonth()] + '-' + d.getFullYear(); }
-  var lastErr = '';
+  var lastErr = '', cookie = '', UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+  // the site hands out a session cookie on its own page and expects it back on the data call, so ask for the page first
+  var HOSTS = ['https://www.niftyindices.com', 'https://niftyindices.com'], host = HOSTS[0];
+  for (var hi = 0; hi < HOSTS.length && !cookie; hi++) {
+    try {
+      var pg = UrlFetchApp.fetch(HOSTS[hi] + '/reports/historical-data', { muteHttpExceptions: true, headers: { 'User-Agent': UA, 'Accept': 'text/html' } });
+      var hd = pg.getAllHeaders(), sc = hd['Set-Cookie'] || hd['set-cookie'] || [];
+      if (typeof sc === 'string') sc = [sc];
+      cookie = sc.map(function (c) { return String(c).split(';')[0]; }).join('; ');
+      host = HOSTS[hi];
+      if (!cookie) lastErr = 'NSE page answered ' + pg.getResponseCode() + ' without a session';
+    } catch (e) { lastErr = e.message; }
+  }
+  var firstBody = '';
   for (var k = 0; k < y; k++) {       // one request per year: the site limits how much it returns at once
     var end = new Date(now.getFullYear() - k, k === 0 ? now.getMonth() : 11, k === 0 ? now.getDate() : 31);
     var start = new Date(now.getFullYear() - k, 0, 1);
     try {
       var payload = { cinfo: "{'name':'" + name + "','startDate':'" + fmt(start) + "','endDate':'" + fmt(end) + "','indexName':'" + name + "'}" };
-      var r = UrlFetchApp.fetch('https://niftyindices.com/Backpage.aspx/getpepbHistoricalDataDBtoJSON', { method: 'post', contentType: 'application/json; charset=UTF-8', payload: JSON.stringify(payload), muteHttpExceptions: true,
-        headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://niftyindices.com/reports/historical-data', 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json, text/javascript, */*; q=0.01' } });
+      var hdrs = { 'User-Agent': UA, 'Referer': host + '/reports/historical-data', 'Origin': host, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json, text/javascript, */*; q=0.01' };
+      if (cookie) hdrs['Cookie'] = cookie;
+      var r = UrlFetchApp.fetch(host + '/Backpage.aspx/getpepbHistoricalDataDBtoJSON', { method: 'post', contentType: 'application/json; charset=UTF-8', payload: JSON.stringify(payload), muteHttpExceptions: true, headers: hdrs });
       if (r.getResponseCode() !== 200) { lastErr = 'NSE site answered ' + r.getResponseCode(); continue; }
-      var list = JSON.parse(JSON.parse(r.getContentText()).d || '[]');
+      var txt = r.getContentText(); if (!firstBody) firstBody = txt.slice(0, 120);
+      var list = JSON.parse(JSON.parse(txt).d || '[]');
       list.forEach(function (x) {
         var m = /^(\d{1,2}) (\w{3}) (\d{4})$/.exec(String(x.DATE || '').trim()); if (!m) return;
         var iso = m[3] + '-' + MON[m[2]] + '-' + ('0' + m[1]).slice(-2), pe = parseFloat(x.pe);
@@ -379,6 +394,7 @@ function indexPe_(name, years) {
       });
     } catch (e) { lastErr = e.message; }
   }
+  if (!rows.length && !lastErr && firstBody) lastErr = 'unexpected reply: ' + firstBody;
   if (!rows.length) return { error: 'No P/E history came back for ' + name + (lastErr ? ' (' + lastErr + ')' : '') + '.' };
   rows.sort(function (a, b) { return a[0] < b[0] ? -1 : 1; });
   return { ok: true, rows: rows };
