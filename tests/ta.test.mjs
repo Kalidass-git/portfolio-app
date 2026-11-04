@@ -1,5 +1,5 @@
 // Moving averages, EPS timeline, historical P/E and performance look-backs. Synthetic data.
-import { sma, epsTimeline, peSeries, performance, rollingReturns, rollStats } from '../js/ta.js';
+import { sma, epsTimeline, peSeries, performance, rollingReturns, rollStats, lineValueAt, closedCandles, lineCross } from '../js/ta.js';
 let bad = 0; const ok = (c, m) => { if (!c) { bad++; console.log('FAIL', m); } else console.log('ok  ', m); };
 const s = sma([1, 2, 3, 4, 5, 6], 3);
 ok(s[0] === null && s[1] === null && s[2] === 2 && s[5] === 5, 'sma starts after n values and averages the last n');
@@ -33,5 +33,23 @@ ok(Math.abs(perf.find((p) => p.label === '1W').pct - (long[799].c / long[792].c 
   const st = rollStats(r1);
   ok(st && Math.abs(st.median - 0.1) < 0.002 && st.positive === 1 && st.worst <= st.best, 'stats: median, share positive, best and worst');
   ok(rollStats([null, null]) === null, 'no stats without values');
+}
+// trendline alerts
+{
+  const L = { d1: '2026-01-01', p1: 100, d2: '2026-01-11', p2: 110 };       // +1 a day
+  ok(Math.abs(lineValueAt(L, '2026-01-21') - 120) < 1e-9 && Math.abs(lineValueAt(L, '2025-12-22') - 90) < 1e-9, 'the line carries on past both ends');
+  const days = []; for (let k = 0; k < 14; k++) { const d = new Date(Date.UTC(2026, 0, 5) + k * 864e5); if (d.getUTCDay() % 6 === 0) continue; days.push({ d: d.toISOString().slice(0, 10), o: 100, h: 130, l: 90, c: 100 + k }); }
+  ok(closedCandles(days, 'D', days[days.length - 1].d, false).length === days.length - 1, 'today is not a finished day before the close');
+  ok(closedCandles(days, 'D', days[days.length - 1].d, true).length === days.length, 'after the close it is');
+  const wk = closedCandles(days, 'W', '2026-01-18', false);
+  ok(wk.length === 2 && wk[0].c === days.find((x) => x.d === '2026-01-09').c, 'weekly candle takes the last close of the week; both weeks are over on the Sunday after');
+  ok(closedCandles(days, 'W', '2026-01-14', false).length === 1, 'the running week is not finished');
+  ok(closedCandles(days, 'M', '2026-01-18', false).length === 0 && closedCandles(days, 'M', '2026-02-02', false).length === 1, 'a month finishes when the next begins');
+  // closes: 99 then 101 vs the line 100+: crosses above on the second day
+  const cs = [{ d: '2026-01-01', c: 98 }, { d: '2026-01-02', c: 99.5 }, { d: '2026-01-03', c: 104 }, { d: '2026-01-04', c: 105 }];
+  const up = lineCross(cs, L, 'above'), down = lineCross(cs, L, 'below');
+  ok(up.hit && up.d === '2026-01-03' && !down.hit, 'a close above the line after one below it is a cross above, not below');
+  ok(!lineCross(cs, L, 'above', { recent: 1 }).hit, 'only the latest candle counts when recent is 1');
+  ok(!lineCross(cs, L, 'above', { since: '2026-01-04' }).hit, 'candles before the alert was set do not count');
 }
 process.exit(bad ? 1 : 0);

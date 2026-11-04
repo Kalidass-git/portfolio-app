@@ -1615,3 +1615,10 @@ dialog.sheet.bulk { width: min(1180px, 96vw); }
 .wl-trade { display: flex; gap: 6px; justify-content: flex-end; } .wl-trade .buy { background: var(--pos); color: #fff; border-color: var(--pos); } .wl-note { color: var(--muted); font-size: .85rem; }
 .wl-trade .chip-btn { white-space: nowrap; padding: 5px 12px; min-height: 32px; } .wl-trade .chip-btn.buy { background: var(--pos); color: #fff; border-color: var(--pos); font-weight: 650; }
 .wl-search .find-row input { width: 100%; max-width: 520px; } .wl-search .note { margin: 6px 0 0; }
+/* trendline popup */
+.tm-chartwrap { position: relative; }
+.tm-pop { position: absolute; z-index: 6; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 10px 28px 10px 10px; display: flex; flex-direction: column; gap: 8px; min-width: 200px; max-width: calc(100% - 8px); }
+.tm-pop-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; } .tm-pop-alerts { display: flex; gap: 6px; flex-wrap: wrap; }
+.tm-al { border: 1px solid var(--line); background: var(--surface-2, #f3f4f6); border-radius: 999px; padding: 3px 10px; font: inherit; font-size: .82rem; cursor: pointer; } .tm-al.hit { border-color: var(--neg); color: var(--neg); font-weight: 700; } .tm-al.off { opacity: .55; }
+.tm-x { position: absolute; top: 4px; right: 4px; border: 0; background: transparent; cursor: pointer; font-size: .9rem; color: var(--muted); padding: 4px 6px; }
+.tm-sw { flex: 0 0 26px; }

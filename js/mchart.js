@@ -260,6 +260,7 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
     }
     ctx.show(ctx.barAt(sv.x));
   });
+  const here = (e) => { const bb = box.getBoundingClientRect(); return { x: e.clientX - bb.left, y: e.clientY - bb.top }; };   // where on the chart the pointer is, for a popup
   const finish = (e) => {
     ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null;
     if (!drag) return;
@@ -271,11 +272,11 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
     if (ctx.drawing) {
       const pt = ctx.point(s.x, s.y);
       if (!pending) { pending = pt; preview = null; redraw(); }
-      else if (onLine && onLine.add) { const L = { d1: pending.d, p1: pending.p, d2: pt.d, p2: pt.p }; pending = null; preview = null; onLine.add(L); }
+      else if (onLine && onLine.add) { const L = { d1: pending.d, p1: pending.p, d2: pt.d, p2: pt.p }; pending = null; preview = null; onLine.add(L, here(e)); }
       return;
     }
     const id = ctx.near(s.x, s.y);
-    if (id && onLine && onLine.select) { sel = id === selected ? null : id; onLine.select(sel); }
+    if (id && onLine && onLine.select) { sel = id === selected ? null : id; onLine.select(sel, here(e)); }
     else if (selected && onLine && onLine.select) onLine.select(null);
   };
   box.addEventListener('pointerup', finish);

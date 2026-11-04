@@ -3,12 +3,19 @@
 //  Alert rules are saved in the data file (data.alerts, data.watchlist). The latest indicators are kept on this device only.
 import { S } from './store.js';
 import { call } from './remote.js';
-import { fundNavs, fundMeta } from './history.js';
+import { fundNavs, fundMeta, stockOhlc } from './history.js';
+import { closedCandles, lineCross, lineValueAt } from './ta.js';
 
 const KEY = 'fw.metrics', KEYAT = 'fw.metricsAt';
 let M = {};
 try { M = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { M = {}; }
 const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(M)); localStorage.setItem(KEYAT, String(Date.now())); } catch { /* private window */ } };
+// results of the trendline alerts (they need the price history, so they are worked out on refresh and kept on this device): { alertId: { hit, text, at, ... } }
+const LKEY = 'fw.linealerts';
+let LA = {};
+try { LA = JSON.parse(localStorage.getItem(LKEY) || '{}'); } catch { LA = {}; }
+const lpersist = () => { try { localStorage.setItem(LKEY, JSON.stringify(LA)); } catch { /* private window */ } };
+export const lineAlertResult = (id) => LA[id] || null;
 export const metrics = () => M;
 export const metricsAt = () => { try { return Number(localStorage.getItem(KEYAT)) || 0; } catch { return 0; } };
 export const isStale = (ms = 4 * 3600e3) => !metricsAt() || Date.now() - metricsAt() > ms;
@@ -55,6 +62,7 @@ const both = ['stock', 'fund'];
 export const RULES = [
   { id: 'priceBelow', label: 'Price falls to or below', kinds: ['stock'], unit: '₹', test: (m, v) => m.price != null && m.price <= v, text: (m, v) => `Price ${R(m.price)} is at or below ${R(v)}` },
   { id: 'priceAbove', label: 'Price rises to or above', kinds: ['stock'], unit: '₹', test: (m, v) => m.price != null && m.price >= v, text: (m, v) => `Price ${R(m.price)} is at or above ${R(v)}` },
+  { id: 'trendline', label: 'A candle closes above or below your trendline', kinds: ['stock'], unit: '', noValue: true, hidden: true, test: () => false, text: () => '' },
   { id: 'navBelow', label: 'NAV falls to or below', kinds: ['fund'], unit: '₹', test: (m, v) => m.price != null && m.price <= v, text: (m, v) => `NAV ${R(m.price)} is at or below ${R(v)}` },
   { id: 'navAbove', label: 'NAV rises to or above', kinds: ['fund'], unit: '₹', test: (m, v) => m.price != null && m.price >= v, text: (m, v) => `NAV ${R(m.price)} is at or above ${R(v)}` },
   { id: 'peBelow', label: 'P/E falls to or below', kinds: ['stock'], unit: 'times', test: (m, v) => m.pe > 0 && m.pe <= v, text: (m, v) => `P/E ${m.pe.toFixed(1)} is at or below ${v}` },
@@ -71,9 +79,9 @@ export const RULES = [
   { id: 'ret1yBelow', label: '1-year return falls to or below', kinds: ['fund'], unit: '%', test: (m, v) => m.ret1y != null && m.ret1y <= v / 100, text: (m, v) => `1-year return ${P(m.ret1y)} is at or below ${v}%` },
   { id: 'ret1yAbove', label: '1-year return rises to or above', kinds: ['fund'], unit: '%', test: (m, v) => m.ret1y != null && m.ret1y >= v / 100, text: (m, v) => `1-year return ${P(m.ret1y)} is at or above ${v}%` },
 ];
-export const ruleTag = (id) => ({ priceBelow: 'Price low', priceAbove: 'Price high', navBelow: 'NAV low', navAbove: 'NAV high', peBelow: 'Low P/E', peAbove: 'High P/E', pbBelow: 'Low P/B', dyAbove: 'High yield', near52High: '52w high', near52Low: '52w low', fallFromHigh: 'Big fall', belowDma200: 'Below trend', aboveDma200: 'Above trend', dayDrop: 'Day drop', dayRise: 'Day rise', ret1yBelow: 'Weak 1y', ret1yAbove: 'Strong 1y' }[id] || id);
+export const ruleTag = (id) => ({ trendline: 'Trendline', priceBelow: 'Price low', priceAbove: 'Price high', navBelow: 'NAV low', navAbove: 'NAV high', peBelow: 'Low P/E', peAbove: 'High P/E', pbBelow: 'Low P/B', dyAbove: 'High yield', near52High: '52w high', near52Low: '52w low', fallFromHigh: 'Big fall', belowDma200: 'Below trend', aboveDma200: 'Above trend', dayDrop: 'Day drop', dayRise: 'Day rise', ret1yBelow: 'Weak 1y', ret1yAbove: 'Strong 1y' }[id] || id);
 export const ruleOf = (id) => RULES.find((r) => r.id === id);
-export const rulesFor = (kind) => RULES.filter((r) => r.kinds.includes(kind));
+export const rulesFor = (kind) => RULES.filter((r) => r.kinds.includes(kind) && !r.hidden);
 export const alertKey = (a) => (a.kind === 'stock' ? stockKey(a.ref) : fundKey(a.ref));
 
 /** Alerts whose rule is true now. `waiting` are ones with no indicator yet. */
@@ -81,6 +89,7 @@ export function evalAlerts(data, store = M) {
   const hit = [], quiet = [], waiting = [];
   for (const a of data.alerts || []) {
     if (a.on === false) continue;
+    if (a.rule === 'trendline') { const res = LA[a.id]; if (!res) waiting.push(a); else if (res.hit) hit.push({ alert: a, m: {}, text: res.text }); else quiet.push({ alert: a, m: {} }); continue; }
     const r = ruleOf(a.rule), m = store[alertKey(a)];
     if (!r || !m) { waiting.push(a); continue; }
     const v = Number(a.value);
@@ -89,7 +98,50 @@ export function evalAlerts(data, store = M) {
   }
   return { hit, quiet, waiting };
 }
-export const alertText = (a) => { const r = ruleOf(a.rule); return r ? r.label + (r.noValue ? '' : r.unit === '₹' ? ' ₹' + a.value : ' ' + a.value + (r.unit === '%' ? '%' : r.unit === 'times' ? ' times' : '')) : a.rule; };
+export const TF_NAME = { D: 'Daily', W: 'Weekly', M: 'Monthly' };
+export const alertText = (a) => { if (a.rule === 'trendline') return `${TF_NAME[a.tf] || 'Daily'} candle closes ${a.dir === 'below' ? 'below' : 'above'} your trendline`; const r = ruleOf(a.rule); return r ? r.label + (r.noValue ? '' : r.unit === '₹' ? ' ₹' + a.value : ' ' + a.value + (r.unit === '%' ? '%' : r.unit === 'times' ? ' times' : '')) : a.rule; };
+
+/** What a trendline alert shows for "now": the latest finished candle against the line. */
+export function lineNow(a) {
+  const res = LA[a.id];
+  if (!res) return '–';
+  if (res.gone) return 'line was deleted';
+  return res.last ? `${res.last.d.slice(8)}/${res.last.d.slice(5, 7)} close ₹${res.last.close.toFixed(2)} · line ₹${res.last.line.toFixed(2)}` : '–';
+}
+const istNow = () => { const t = new Date(Date.now() + 5.5 * 3600e3), iso = t.toISOString(); return { today: iso.slice(0, 10), afterClose: t.getUTCHours() * 60 + t.getUTCMinutes() >= 15 * 60 + 45 }; };
+/** Check every trendline alert against the price history. Returns the number that are triggered. Safe to call often (the history is cached for the session). */
+export async function refreshLineAlerts(data = S.data) {
+  const list = (data.alerts || []).filter((a) => a.rule === 'trendline' && a.on !== false);
+  if (!list.length || !S.remote) return 0;
+  const { today, afterClose } = istNow(), at = new Date().toISOString();
+  let hits = 0;
+  const seen = {};
+  for (const a of list) {
+    const sym = String(a.ref).toUpperCase().trim(), L = ((data.trendlines || {})[sym] || []).find((x) => x.id === a.lineId);
+    if (!L) { LA[a.id] = { gone: true, hit: false, at }; continue; }
+    try {
+      const it = a.yahoo || '';
+      seen[sym] = seen[sym] || stockOhlc(sym, it);
+      const res = await seen[sym];
+      const rows = res.rows && res.rows.length ? res.rows : (res.closesOnly || []).map((x) => ({ d: x.d, o: x.v, h: x.v, l: x.v, c: x.v }));
+      const candles = closedCandles(rows, a.tf || 'D', today, afterClose);
+      const x = lineCross(candles, L, a.dir === 'below' ? 'below' : 'above', { since: a.created || '', recent: 3 });
+      const word = a.dir === 'below' ? 'below' : 'above';
+      LA[a.id] = { hit: x.hit, at, last: x.last, text: x.hit ? `${TF_NAME[a.tf] || 'Daily'} candle of ${x.d.slice(8)}/${x.d.slice(5, 7)} closed ${word} your trendline (₹${x.close.toFixed(2)} vs line ₹${x.line.toFixed(2)})` : '' };
+      if (x.hit) hits++;
+    } catch (e) { LA[a.id] = { hit: false, at, error: e.message }; }
+  }
+  lpersist();
+  return hits;
+}
+let lastLine = 0;
+/** Re-check the trendline alerts at most every 20 minutes, and redraw the page when the answer changed. */
+export function lineAlertsAuto() {
+  if (Date.now() - lastLine < 20 * 60e3 || !(S.data.alerts || []).some((a) => a.rule === 'trendline' && a.on !== false)) return;
+  lastLine = Date.now();
+  const before = JSON.stringify(Object.values(LA).map((x) => !!x.hit));
+  refreshLineAlerts(S.data).then(() => { if (JSON.stringify(Object.values(LA).map((x) => !!x.hit)) !== before) window.dispatchEvent(new Event('rerender')); }).catch(() => {});
+}
 
 // ---------- screens ----------
 const first = (arr, n = 5) => arr.slice(0, n);
@@ -145,6 +197,7 @@ export function refreshMetrics(targets, onProgress = () => {}) {
     };
     await Promise.all([worker(), worker(), worker()]);
     persist();
+    try { await refreshLineAlerts(S.data); } catch { /* alerts are checked again later */ }
     return out;
   })().finally(() => { running = null; });
   return running;

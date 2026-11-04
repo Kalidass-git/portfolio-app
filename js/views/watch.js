@@ -4,6 +4,7 @@ import { h, money, dec, pct, dateStr, section, table, stat, btn, canEdit, toast,
 import * as W from '../watch.js';
 import { searchScheme } from '../prices.js';
 import { call } from '../remote.js';
+import { lineAlertForm } from './linealert.js';
 
 const rerender = () => window.dispatchEvent(new Event('rerender'));
 const ago = (ms) => { const m = Math.floor((Date.now() - ms) / 6e4); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.floor(m / 60) + ' h ago' : Math.floor(m / 1440) + ' d ago'; };
@@ -22,6 +23,7 @@ export async function refreshIndicators(onProgress) {
 }
 /** Quietly refreshes the P/E, 52-week and alert numbers once per visit when they are old. The Refresh button next to the tabs does it on request. */
 export function autoRefresh() {
+  W.lineAlertsAuto();
   if (!auto && W.isStale() && (W.targetsOf(S.data, S.all).length)) { auto = true; setTimeout(() => { if (!busy) refreshIndicators().catch(() => {}); }, 300); }
 }
 
@@ -61,6 +63,7 @@ export function screensSection() {
 function nameOf(kind, ref) { const u = W.universe(S.data, S.all).find((x) => x.kind === kind && String(x.ref) === String(ref)); return u ? u.name : ref; }
 /** lock: the alert is for the share or fund in `a` only (opened from its own page), so the share / fund choice is hidden. */
 export function alertForm(a, { lock = false } = {}) {
+  if (a && a.rule === 'trendline') return lineAlertForm({ alert: a, name: a.name });
   const isNew = !a || !a.id;
   const uni = W.universe(S.data, S.all);
   const opts = (kind) => { const l = uni.filter((u) => u.kind === kind).map((u) => ({ value: String(u.ref), label: u.name + (u.held ? ' (you hold it)' : '') })); return kind === 'stock' ? [{ value: '__new', label: 'A share not in my list…' }, ...l] : l; };
@@ -136,7 +139,7 @@ export function stockAdder() {
   formDialog({ title: 'Add a share to watch', fields: [{ key: 'symbol', label: 'NSE symbol', required: true, hint: 'For example TCS or HDFCBANK' }, { key: 'name', label: 'Name (optional)' }],
     onSave: (v) => { const ref = v.symbol.toUpperCase().trim(); mutate((d) => { d.watchlist = d.watchlist || []; if (!d.watchlist.some((w) => w.kind === 'stock' && w.ref.toUpperCase() === ref)) d.watchlist.push({ id: nextId('w', d.watchlist), kind: 'stock', ref, name: v.name || ref }); }); toast('Added. Press Refresh indicators to load its numbers.'); } });
 }
-export const alertNow = (a) => { const m = W.metrics()[W.alertKey(a)]; if (!m) return '–'; return /^(price|nav)/.test(a.rule) || /Dma|52|fall|day/.test(a.rule) ? rs(m.price) : /^pe/.test(a.rule) ? (m.pe ? m.pe.toFixed(1) + ' times' : '–') : /^pb/.test(a.rule) ? (m.pb ? m.pb.toFixed(2) : '–') : /^dy/.test(a.rule) ? (m.dy != null ? m.dy.toFixed(2) + '%' : '–') : /ret1y/.test(a.rule) ? pc(m.ret1y) : '–'; };
+export const alertNow = (a) => { if (a.rule === 'trendline') return W.lineNow(a); const m = W.metrics()[W.alertKey(a)]; if (!m) return '–'; return /^(price|nav)/.test(a.rule) || /Dma|52|fall|day/.test(a.rule) ? rs(m.price) : /^pe/.test(a.rule) ? (m.pe ? m.pe.toFixed(1) + ' times' : '–') : /^pb/.test(a.rule) ? (m.pb ? m.pb.toFixed(2) : '–') : /^dy/.test(a.rule) ? (m.dy != null ? m.dy.toFixed(2) + '%' : '–') : /ret1y/.test(a.rule) ? pc(m.ret1y) : '–'; };
 export function alertsTab(root) {
   const data = S.data, wl = data.watchlist || [], al = data.alerts || [];
   autoRefresh();
