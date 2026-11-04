@@ -85,3 +85,49 @@ export function rollStats(vals) {
   const b = v.slice().sort((x, y) => x - y), m = b.length >> 1;
   return { n: v.length, median: b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2, avg: v.reduce((a, x) => a + x, 0) / v.length, best: b[b.length - 1], worst: b[0], latest: v[v.length - 1], positive: v.filter((x) => x > 0).length / v.length };
 }
+
+/** The price of a trendline on a date. The line carries on past its two end points in both directions: { d1, p1, d2, p2 } with ISO dates. */
+export function lineValueAt(L, date) {
+  const t1 = Date.parse(L.d1), t2 = Date.parse(L.d2), t = Date.parse(date);
+  if (!(t2 !== t1)) return L.p1;
+  return L.p1 + ((L.p2 - L.p1) * (t - t1)) / (t2 - t1);
+}
+/**
+ * Candles that are finished, for a candle size. rows: daily [{ d, o, h, l, c }] oldest first; tf: 'D' | 'W' | 'M'; today: ISO date; afterClose: has today's market closed.
+ * A day is finished once it is over (or the market has closed on it), a week once its Friday is over (or on Friday after the close, or past Sunday), a month once the next one starts.
+ */
+export function closedCandles(rows, tf, today, afterClose = false) {
+  const wk = (d) => { const t = new Date(d + 'T00:00:00Z'), day = (t.getUTCDay() + 6) % 7; return new Date(t.getTime() - day * 864e5).toISOString().slice(0, 10); };
+  let c = rows;
+  if (tf !== 'D') {
+    const out = []; let cur = null, ck = '';
+    for (const r of rows) {
+      const k = tf === 'M' ? r.d.slice(0, 7) : wk(r.d);
+      if (!cur || k !== ck) { cur = { d: r.d, o: r.o, h: r.h, l: r.l, c: r.c, key: k }; out.push(cur); ck = k; } else { cur.h = Math.max(cur.h, r.h); cur.l = Math.min(cur.l, r.l); cur.c = r.c; cur.d = r.d; }
+    }
+    c = out;
+  }
+  const over = (r) => {
+    if (tf === 'D') return r.d < today || (r.d === today && afterClose);
+    if (tf === 'M') return r.key < today.slice(0, 7);
+    const end = new Date(Date.parse(r.key + 'T00:00:00Z') + 6 * 864e5).toISOString().slice(0, 10), fri = new Date(r.d + 'T00:00:00Z').getUTCDay() === 5;
+    return end < today || (fri && (r.d < today || (r.d === today && afterClose)));
+  };
+  return c.filter(over);
+}
+/**
+ * Did a candle close above (dir 'above') or below ('below') the trendline, having been on the other side the candle before?
+ * candles: finished candles [{ d, c }]; since: ignore candles before this date; recent: how many of the latest candles count as "just happened".
+ * Returns { hit, d, close, line } for the latest such cross among the recent candles, plus { last: { d, close, line, beyond } } for the most recent candle.
+ */
+export function lineCross(candles, L, dir, { since = '', recent = 3 } = {}) {
+  const beyond = (r) => (dir === 'above' ? r.c > lineValueAt(L, r.d) : r.c < lineValueAt(L, r.d));
+  const n = candles.length, lastR = n ? candles[n - 1] : null;
+  const last = lastR ? { d: lastR.d, close: lastR.c, line: lineValueAt(L, lastR.d), beyond: beyond(lastR) } : null;
+  for (let i = n - 1; i >= Math.max(1, n - recent); i--) {
+    const r = candles[i];
+    if (since && r.d < since) break;
+    if (beyond(r) && !beyond(candles[i - 1])) return { hit: true, d: r.d, close: r.c, line: lineValueAt(L, r.d), last };
+  }
+  return { hit: false, last };
+}
