@@ -404,7 +404,7 @@ function refreshBar() {
   const upd = S.data.settings.pricesUpdatedAt, ms = upd ? Date.now() - new Date(upd).getTime() : null, stale = ms == null || ms > 864e5;
   return h('div', { class: 'price-bar inline mk-refresh' },
     h('span', { class: 'stamp' + (stale ? ' warn' : ''), title: upd ? 'Prices ' + new Date(upd).toLocaleString('en-IN') : '' }, stale ? '⚠ ' : '', ms == null ? 'Prices not fetched yet' : 'Prices updated ' + agoText(ms)),
-    h('button', { class: 'refresh-btn small', type: 'button', title: 'Fetch the latest prices of shares, ETFs, funds and gold', 'aria-label': 'Refresh all market prices', onclick: (e) => { e.stopPropagation(); refreshPrices(e.currentTarget); } }, h('span', { class: 'ic' }, uiIcon('refresh')), h('span', { class: 'lb' }, 'Refresh')));
+    h('button', { class: 'refresh-btn small', type: 'button', title: 'Fetch the latest prices of shares, ETFs, funds and gold', 'aria-label': 'Refresh all market prices', onclick: (e) => { e.stopPropagation(); refreshPrices(e.currentTarget); } }, h('span', { class: 'lb' }, 'Refresh')));
 }
 const MARKET_LINK = { Shares: '#/equity/holdings?f=shares', ETFs: '#/equity/holdings?f=etfs', 'Mutual funds': '#/equity/holdings?v=funds', Gold: '#/gold' };
 /** `go(href)` opens a page and closes the popover or sheet the list is shown in. Each line opens its own list: shares, ETFs or funds on Holdings with that filter on, gold on the Gold page. */

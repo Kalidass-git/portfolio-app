@@ -132,7 +132,7 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
       h('div', { class: 'tm-row tm-tools' }, zoom, ...draws), swatches));
     if (showCol) body.append(colourPanel([['dma50', '50-day average'], ['dma200', '200-day average'], ...(canPe ? [['pe', index ? 'Index P/E' : 'P/E'], ['median', 'Median P/E']] : []), ['avg', 'Your average cost']], draw));
     if (data.closesOnly) body.append(h('p', { class: 'note' }, 'Candles and volume need the newer Code.gs in your Apps Script (Settings explains how to paste and redeploy it). Showing closing prices until then.'));
-    if (canPe && st.pe && eps.state === 'err') body.append(h('p', { class: 'note' }, 'P/E history: ' + eps.msg));
+    if (canPe && st.pe && eps.state === 'err') body.append(h('p', { class: 'note' }, 'P/E history: ' + eps.msg + ' ', h('button', { type: 'button', class: 'chip-btn small', onclick: () => { eps = { state: 'idle', msg: '', tl: null }; ensureEps(); } }, 'Try again')));
     chart = marketChart({ rows, mode, dma50: st.dma50 ? align(data.ma50) : null, dma200: st.dma200 ? align(data.ma200) : null, pe: wantPe ? align(peM) : null, peMedian: wantPe ? median(peFull.slice(Math.max(0, all.findIndex((r) => r.d >= cut[0].d))).filter((x) => x != null)) : null, peLabel: index ? 'Index P/E' : 'P/E', newColor: st.tc || null,
       avg: avgCost || null, trades: trades || [], ...fv.size(window.innerWidth < 640 ? 230 : 280), fmt: pxf, vfmt, dateFmt: short, tickFmt: tick,
       lines: myLines(), tool: canEdit() ? tool : 'none', selected: sel, view: mm.view, onView: (v) => { mm.view = v; },

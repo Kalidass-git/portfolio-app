@@ -354,7 +354,7 @@ export function render() {
     // on phones the refresh button and its time only show on Overview
     h('div', { class: 'price-bar inline' + (tab === 'overview' ? '' : ' desk-ctl') },
       h('span', { class: 'stamp' + (stale ? ' warn' : ''), title: (upd ? 'Prices ' + new Date(upd).toLocaleString('en-IN') : '') + (W.metricsAt() ? ' · P/E, 52-week data ' + new Date(W.metricsAt()).toLocaleString('en-IN') : '') }, stale ? '⚠ ' : '', ageMs == null ? 'Prices not fetched yet' : 'Prices updated ' + agoText(ageMs)),
-      h('button', { class: 'refresh-btn small', type: 'button', title: 'Fetch latest prices, NAVs, P/E and 52-week data', onclick: (e) => refresh(e.currentTarget) }, h('span', { class: 'ic' }, icon('refresh')), h('span', { class: 'lb' }, 'Refresh')))));
+      h('button', { class: 'refresh-btn small', type: 'button', title: 'Fetch latest prices, NAVs, P/E and 52-week data', onclick: (e) => refresh(e.currentTarget) }, h('span', { class: 'lb' }, 'Refresh')))));
 
   const sub = (items, cur, extra) => root.append(viewBar(tab, items, cur, extra));
   if (tab === 'overview') {

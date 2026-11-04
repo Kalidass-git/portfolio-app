@@ -150,6 +150,14 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.55.0 – Terminal-style charts, text-only buttons
+
+- **Charts** look like a trading terminal: light grid lines on round prices (every second line bold) and vertical lines at years, quarters and months (Mondays on short ranges); the **price axis is on the right**; a filled **last-price tag** with a dotted line across; **High** and **Low** tags for what is on screen; hovering or touching shows an outlined **price tag** on the axis and a dark **date tag** on the time axis. Candles and volume use teal and red. Dark theme gets its own grid and tag colours. Zoom, pan, axis drag, trendlines and full view work as before (the price-axis drag zone moved to the right).
+- **Buttons are words only** across the app (no icons beside Buy, Sell, Refresh, Add, Edit and so on). Pure icon controls such as full view stay.
+- **Watchlist rows** keep only **Edit** (Buy removed; trade from the share's page or Holdings).
+- **Index P/E**: the backend now opens NSE's page first to get its session cookie (the data call needs it), tries both site addresses and reports what the site answered when there is nothing. Redeploy `backend/Code.gs`. If the chart still shows a message, a **Try again** button sits beside it. Indexes you add by name now get a P/E toggle too.
+- No data changes.
+
 ## Release 8.54.0 – Chart colours
 
 - New **Colours** button in the chart toolbar (share, index and fund charts, also in full view). It opens a panel with a swatch row and a colour picker for each line: 50-day, 200-day, P/E (or the fund's rolling return), **Median P/E** (now its own colour instead of sharing the P/E colour), and your average cost. **Reset to default** puts them all back.

@@ -1644,3 +1644,14 @@ body.tm-lock { overflow: hidden; }
 .cc-sw { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; } .cc-sw .tm-sw { flex: 0 0 22px; width: 22px; height: 22px; min-width: 0; min-height: 0; padding: 0; border-radius: 50%; }
 .cc-in { flex: 0 0 30px; width: 30px; height: 24px; min-height: 0; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; cursor: pointer; }
 .cc-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; margin-top: 2px; }
+
+/* Chart look: light grid on round numbers, price axis on the right with bold major labels, tags like a trading terminal */
+:root { --mc-grid: #e7eaee; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --mc-grid: rgba(255, 255, 255, .09); } }
+:root[data-theme="dark"] { --mc-grid: rgba(255, 255, 255, .09); }
+.mchart .grid { stroke: var(--mc-grid); stroke-width: 1; shape-rendering: crispEdges; }
+.mchart text.axis { font-size: 11px; font-variant-numeric: tabular-nums; }
+.mchart text.axis.major { font-weight: 700; fill: var(--ink); }
+.mchart .tagtxt { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.mchart .hl-lab { font-size: 10.5px; }
+.mchart .cross { stroke: var(--muted); stroke-dasharray: 3 3; opacity: .8; }

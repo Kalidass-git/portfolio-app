@@ -41,7 +41,7 @@ function rateStat() {
   const change = prev && last ? last.rate - prev.rate : 0;
   const open = () => {
     let close = () => {};
-    const refreshBtn = canEdit() ? h('button', { type: 'button', class: 'primary', onclick: (e) => readGoldRate(e.currentTarget, () => close()) }, h('span', { class: 'ic' }, icon('refresh')), ' Refresh now') : null;
+    const refreshBtn = canEdit() ? h('button', { type: 'button', class: 'primary', onclick: (e) => readGoldRate(e.currentTarget, () => close()) }, 'Refresh now') : null;
     const body = h('div', null,
       h('p', { style: { margin: 0 } }, h('span', { class: 'hero-num', style: { fontSize: 'clamp(1.8rem, 8vw, 2.4rem)' } }, money(all.gold.rate)), ' per gram'),
       h('p', { class: old > 3 ? 'warn' : 'muted', style: { margin: '4px 0' } }, last ? `Read ${ageText(last.date)} (${dateStr(last.date)})` + (prev ? ` · ${change >= 0 ? 'up' : 'down'} ${money(Math.abs(change))} (${pct(Math.abs(change) / prev.rate, 1)}) since ${dateStr(prev.date)}` : '') : 'Not read yet'),
