@@ -25,13 +25,13 @@ const POS = 'var(--pos, #1a7f4b)', NEG = 'var(--neg, #c24141)';
  *   place a new one (onLine.add({ d1, p1, d2, p2 })); tapping a line calls onLine.select(id); selected highlights one.
  */
 export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, pe = null, avg = null, trades = [], height = 250, fmt = nice, vfmt = (v) => String(Math.round(v)), dateFmt = (d) => d, tickFmt = (d) => d,
-  lines = [], tool = 'none', selected = null, onLine = null, view = null, onView = () => {}, peMedian = null, peLabel = 'P/E', peFmt = (v, d = 0) => v.toFixed(d), peSigned = false, newColor = null } = {}) {
+  lines = [], tool = 'none', selected = null, onLine = null, view = null, onView = () => {}, peMedian = null, peLabel = 'P/E', peFmt = (v, d = 0) => v.toFixed(d), peSigned = false, newColor = null, width = 0 } = {}) {
   const N = rows.length;
   if (N < 2) return h('p', { class: 'empty' }, 'Not enough history for this range.');
   const MINBARS = Math.min(12, N);
   let a = 0, z = N - 1;                   // first and last bar shown
   if (view && view.d0) { const i0 = rows.findIndex((r) => r.d >= view.d0); let i1 = N - 1; while (i1 > 0 && rows[i1].d > view.d1) i1--; if (i0 >= 0 && i1 - i0 + 1 >= MINBARS) { a = i0; z = i1; } }
-  const W = typeof window !== 'undefined' && window.innerWidth < 640 ? 380 : 880;
+  const W = width || (typeof window !== 'undefined' && window.innerWidth < 640 ? 380 : 880);
   const box = h('div', { class: 'chart-box' });
   const read = h('div', { class: 'cd-read mc-read', 'aria-live': 'polite' });
   let yz = null;                          // price range chosen by dragging the price axis: { lo, hi } (null = fit what is on screen)

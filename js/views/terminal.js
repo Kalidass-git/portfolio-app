@@ -6,6 +6,7 @@ import { watchButton } from './watchbtn.js';
 import { lineAlertForm } from './linealert.js';
 import * as W from '../watch.js';
 import { marketChart, LINE_COLORS } from '../mchart.js';
+import { fullView } from '../fullview.js';
 import { stockOhlc, stockEps, stockIndexPe, stockInfo, aggregateOhlc, candleMode, sliceRange, dropCache, RANGES } from '../history.js';
 import { sma, epsTimeline, peSeries, performance } from '../ta.js';
 
@@ -35,7 +36,8 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
   const headBox = h('div', { class: 'tm-head' });
   const symKey = String(symbol).toUpperCase().trim();
   const mm = mem.get(symKey) || {}; mem.set(symKey, mm);
-  let tool = 'none', chart = null;
+  let tool = 'none', chart = null, card = null;
+  const fv = fullView(() => card, () => { if (data) { draw(); header(); } });
   const myLines = () => ((S.data && S.data.trendlines) || {})[symKey] || [];
   let data = null, eps = { state: index && !indexPe ? 'none' : 'idle', msg: '', tl: null }, peFull = null;
 
@@ -49,7 +51,7 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
         cp != null ? h('span', { class: 'tm-badge ' + posNeg(ch) }, `${ch >= 0 ? '▲' : '▼'} ${ch >= 0 ? '+' : '−'}${Math.abs(cp * 100).toFixed(2)}%`) : null,
         ch != null ? h('span', { class: 'muted tm-sub' }, `${ch >= 0 ? '+' : '−'}${dec(Math.abs(ch), 2)} today`) : null,
         quote && quote.at ? h('span', { class: 'muted tm-sub' }, 'price ' + ago(Date.parse(quote.at))) : last ? h('span', { class: 'muted tm-sub' }, 'last close ' + dateStr(last.d)) : null),
-      h('div', { class: 'tm-actions' }, watchButton({ symbol, name, yahoo, index }), btn('Reload chart', () => { dropCache(symbol); data = null; peFull = null; eps = { state: index && !indexPe ? 'none' : 'idle', msg: '', tl: null }; body.replaceChildren(h('p', { class: 'note' }, 'Loading the price history…')); start(); toast('Reloading'); }, 'small')));
+      h('div', { class: 'tm-actions' }, fv.button, watchButton({ symbol, name, yahoo, index }), btn('Reload chart', () => { dropCache(symbol); data = null; peFull = null; eps = { state: index && !indexPe ? 'none' : 'idle', msg: '', tl: null }; body.replaceChildren(h('p', { class: 'note' }, 'Loading the price history…')); start(); toast('Reloading'); }, 'small')));
   };
 
   const canPe = !index || !!indexPe;
@@ -130,7 +132,7 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
     if (data.closesOnly) body.append(h('p', { class: 'note' }, 'Candles and volume need the newer Code.gs in your Apps Script (Settings explains how to paste and redeploy it). Showing closing prices until then.'));
     if (canPe && st.pe && eps.state === 'err') body.append(h('p', { class: 'note' }, 'P/E history: ' + eps.msg));
     chart = marketChart({ rows, mode, dma50: st.dma50 ? align(data.ma50) : null, dma200: st.dma200 ? align(data.ma200) : null, pe: wantPe ? align(peM) : null, peMedian: wantPe ? median(peFull.slice(Math.max(0, all.findIndex((r) => r.d >= cut[0].d))).filter((x) => x != null)) : null, peLabel: index ? 'Index P/E' : 'P/E', newColor: st.tc || null,
-      avg: avgCost || null, trades: trades || [], height: window.innerWidth < 640 ? 230 : 280, fmt: pxf, vfmt, dateFmt: short, tickFmt: tick,
+      avg: avgCost || null, trades: trades || [], ...fv.size(window.innerWidth < 640 ? 230 : 280), fmt: pxf, vfmt, dateFmt: short, tickFmt: tick,
       lines: myLines(), tool: canEdit() ? tool : 'none', selected: sel, view: mm.view, onView: (v) => { mm.view = v; },
       onLine: { select: (id, pos) => { mm.sel = id; if (pos) mm.pos = pos; draw(); },
         update: !canEdit() ? undefined : (id, L) => { mm.sel = id; try { mutate((d) => { const x = ((d.trendlines || {})[symKey] || []).find((l) => l.id === id); if (x) Object.assign(x, L, { p1: Math.round(L.p1 * 100) / 100, p2: Math.round(L.p2 * 100) / 100 }); }); } catch (e) { toast(e.message); draw(); } },
@@ -157,7 +159,8 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
     }).catch((e) => body.replaceChildren(h('p', { class: 'empty' }, e.message || 'Could not load the price history.')));
   };
   header(); start();
-  return h('section', { class: 'card tm-card' }, h('header', { class: 'card-head' }, h('h2', null, name), h('span', { class: 'muted tm-tick' }, symbol)), headBox, body);
+  card = h('section', { class: 'card tm-card' }, h('header', { class: 'card-head' }, h('h2', null, name), h('span', { class: 'muted tm-tick' }, symbol)), headBox, body);
+  return card;
 }
 
 const tile = (label, value, sub, cls = '') => h('div', { class: 'tm-fig' }, h('span', { class: 'tm-fl' }, label), h('b', { class: cls }, value == null || value === '' ? '–' : value), sub ? h('small', null, sub) : null);

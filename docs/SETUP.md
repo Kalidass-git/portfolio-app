@@ -150,11 +150,18 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.53.0 – Watchlists tab, tidier Manage, full-view charts
+
+- **Shares & funds tabs** are now Overview, Holdings, **Watchlists**, Manage, History. Watchlists moved out of Manage to sit next to Holdings. The separate **Watch** tab is gone.
+- **Manage** now holds **Alerts** and **Insights** (moved from Watch) next to the Investment planner and Import. Family members who only view see Manage with Alerts and Insights; the planner and Import show for the owner only. Old links (`#/equity/watch…`, `manage?v=watchlists`) redirect to the new places.
+- **Full view** for charts: an expand icon at the top right of a share or index chart and of the fund NAV chart. It fills the screen, puts all the chart controls (range, line/%/candles, bars, lines, zoom, trendline, colours, fund rolling window) in a toolbar along the top and sizes the chart to the screen, on phone and desktop. Esc or the close icon returns. Trendlines, zoom and alerts all work inside it.
+- No data changes. One new file, `js/fullview.js`.
+
 ## Release 8.52.0 – Trendline alerts
 
 - **Tap a trendline** on a share's chart: a small toolbar opens beside it with six colours, **Set alert** and **Delete**. The line can still be dragged to move or reshape.
 - **Alert on a line**: tell me when a **day, week or month candle closes above or below** the line. The line carries on past its end points. A candle counts once it is finished (a day after the market closes at 3:30 pm, a week after Friday, a month after its last day) and the alert fires when a candle closes on the far side having been on the near side the candle before, within the last three candles (and after the alert was set), so an alert on a price that is already above the line does not fire at once.
-- Trendline alerts sit with the other **price alerts**: Shares & funds › Watch › Alerts, the share's own page, the Overview, and the Home **Action centre** ("Trendline alert: name"). They are checked when you press Refresh, when Home or the Watch pages open (at most every 20 minutes), and right after you set one. This needs the backend's price history (candles).
+- Trendline alerts sit with the other **price alerts**: Shares & funds › Manage › Alerts, the share's own page, the Overview, and the Home **Action centre** ("Trendline alert: name"). They are checked when you press Refresh, when Home or the Watch pages open (at most every 20 minutes), and right after you set one. This needs the backend's price history (candles).
 - Deleting a line removes its alerts. Alerts are stored in the existing alert list with optional fields (`lineId`, `dir`, `tf`, `created`); no migration. Lines exist on shares and indexes only; funds have no trendlines yet.
 
 ## Release 8.51.0 – Bonds summary, chart upgrades, watchlist table, rolling returns
