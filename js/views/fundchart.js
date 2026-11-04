@@ -2,6 +2,7 @@
 // The same chart engine as the share terminal (zoom, drag, crosshair). Rolling returns answer "what return would I have got if I had held for N years, starting any day?".
 import { h, dec, pct, dateStr, section, posNeg } from '../ui.js';
 import { marketChart } from '../mchart.js';
+import { fullView } from '../fullview.js';
 import { aggregateOhlc, sliceRange, RANGES } from '../history.js';
 import { rollingReturns, rollStats, performance } from '../ta.js';
 
@@ -19,7 +20,8 @@ const median = (a) => { if (!a.length) return null; const b = a.slice().sort((x,
 /** loadNavs: async () => [{ d, v }] oldest first. avg: what you paid per unit on average. */
 export function fundChart({ title = 'NAV history', loadNavs, avg = null, firstBuy = null }) {
   const st = load(), body = h('div', null, h('p', { class: 'note' }, 'Loading the NAV history…'));
-  let all = null, chart = null, view = null;
+  let all = null, chart = null, view = null, card = null;
+  const fv = fullView(() => card, () => { if (all) draw(); });
   const seg = (label, opts, cur, pick) => h('div', { class: 'tm-seg', role: 'group', 'aria-label': label }, opts.map(([k, l, tip]) => h('button', { type: 'button', class: k === cur ? 'on' : '', title: tip || null, 'aria-pressed': String(k === cur), onclick: () => pick(k) }, l)));
   const draw = () => {
     body.replaceChildren();
@@ -44,7 +46,7 @@ export function fundChart({ title = 'NAV history', loadNavs, avg = null, firstBu
         ...[['Zoom out', '−', () => chart && chart.zoom(1.4)], ['Zoom in', '+', () => chart && chart.zoom(0.7)], ['Show everything', 'Reset', () => chart && chart.reset()]].map(([a, t, fn]) => h('button', { type: 'button', 'aria-label': a, title: a, onclick: fn }, t))))));
     if (years && !shown.length) body.append(h('p', { class: 'note' }, `This fund does not have ${years} years of history in this range yet, so there are no ${years}-year rolling returns to show.`));
     chart = marketChart({ rows: rows.map((r) => ({ d: r.d, o: r.c, h: r.c, l: r.c, c: r.c, v: 0 })), mode: st.mode, dma50: null, dma200: null, pe: shown.length ? rollRows : null, peMedian: stats ? stats.median : null,
-      peLabel: `${years}Y rolling`, peFmt: (v, d) => rp(v, d || 0), peSigned: true, avg: avg || null, trades: [], height: window.innerWidth < 640 ? 230 : 280, fmt: nav, dateFmt: short, tickFmt: tick, view, onView: (v) => { view = v; } });
+      peLabel: `${years}Y rolling`, peFmt: (v, d) => rp(v, d || 0), peSigned: true, avg: avg || null, trades: [], ...fv.size(window.innerWidth < 640 ? 230 : 280), fmt: nav, dateFmt: short, tickFmt: tick, view, onView: (v) => { view = v; } });
     body.append(chart);
     const perf = performance(all.map((r) => ({ d: r.d, c: r.c })));
     if (perf.length) body.append(h('div', { class: 'tm-perf', 'aria-label': 'Returns over different periods' }, perf.map((p) => h('span', { class: 'tm-pf ' + posNeg(p.pct) }, h('small', null, p.label), `${p.pct >= 0 ? '▲' : '▼'} ${p.pct >= 0 ? '+' : '−'}${Math.abs(p.pct * 100).toFixed(1)}%`))));
@@ -60,5 +62,7 @@ export function fundChart({ title = 'NAV history', loadNavs, avg = null, firstBu
   };
   Promise.resolve().then(loadNavs).then((r) => { if (!r || r.length < 2) throw new Error('No NAV history found.'); all = r.map((x) => ({ d: x.d, c: x.v })); draw(); })
     .catch((e) => body.replaceChildren(h('p', { class: 'empty' }, e.message || 'Could not load the NAV history.')));
-  return section(title, body);
+  card = section(title, body, fv.button);
+  card.classList.add('tm-card');
+  return card;
 }

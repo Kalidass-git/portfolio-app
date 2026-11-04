@@ -1622,3 +1622,16 @@ dialog.sheet.bulk { width: min(1180px, 96vw); }
 .tm-al { border: 1px solid var(--line); background: var(--surface-2, #f3f4f6); border-radius: 999px; padding: 3px 10px; font: inherit; font-size: .82rem; cursor: pointer; } .tm-al.hit { border-color: var(--neg); color: var(--neg); font-weight: 700; } .tm-al.off { opacity: .55; }
 .tm-x { position: absolute; top: 4px; right: 4px; border: 0; background: transparent; cursor: pointer; font-size: .9rem; color: var(--muted); padding: 4px 6px; }
 .tm-sw { flex: 0 0 26px; }
+
+/* Full view of a chart: the card fills the screen, controls form a toolbar along the top */
+.tm-ib { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); cursor: pointer; }
+.tm-ib .ico { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tm-ib:hover { background: var(--surface-2); }
+body.tm-lock { overflow: hidden; }
+.tm-card.tm-full { position: fixed; inset: 0; z-index: 300; margin: 0; border-radius: 0; border: 0; overflow: auto; background: var(--bg); padding: 10px 12px 16px; max-width: none; }
+.tm-full .tm-bar { display: flex !important; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 14px; position: sticky; top: 0; z-index: 5; margin: 0 0 8px; padding: 8px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.tm-full .tm-bar > * { grid-column: auto !important; grid-row: auto !important; justify-content: flex-start !important; }
+.tm-full .tm-perf, .tm-full .tm-legend, .tm-full .note, .tm-full .tm-figs, .tm-full h4 { display: none; }
+.tm-full .tm-chartwrap, .tm-full .tm-chartwrap > * { width: 100%; }
+.tm-full .tm-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+@media (max-width: 639px) { .tm-full .tm-bar { padding: 6px; gap: 6px 10px; } }

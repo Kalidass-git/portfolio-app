@@ -453,9 +453,9 @@ function agenda(data, all) {
 /** Notices that have no date: price alerts, old prices, loan interest higher than what you earn. Each can be hidden until tomorrow. */
 function notices(data, all) {
   const out = [];
-  // One row per triggered price alert (shares and funds), each opening Equity > Watch > Alerts.
+  // One row per triggered price alert (shares and funds), each opening Equity > Manage > Alerts.
   lineAlertsAuto();
-  for (const x of evalAlerts(data).hit) out.push({ title: `${x.alert.rule === 'trendline' ? 'Trendline alert' : 'Price alert'}: ${x.alert.name}`, sub: x.text, value: '', tone: 'warn', href: '#/equity/watch?v=alerts' });
+  for (const x of evalAlerts(data).hit) out.push({ title: `${x.alert.rule === 'trendline' ? 'Trendline alert' : 'Price alert'}: ${x.alert.name}`, sub: x.text, value: '', tone: 'warn', href: '#/equity/manage?v=alerts' });
   // One row per holding, group or kind that is over a limit set under Risk; it opens Risk limits.
   try {
     const cfg = R.riskCfg(data), ev = R.evaluate(cfg, R.stateNow(data, all));

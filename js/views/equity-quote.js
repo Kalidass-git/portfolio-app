@@ -22,7 +22,7 @@ function listsCard(symbol, name, yahoo, index) {
 export function render(root) {
   const { data, all } = S, q = route().query;
   const symbol = WL.norm(q.get('sym') || '');
-  const back = q.get('back') === 'watch' ? '#/equity/watch' : '#/equity/manage?v=watchlists';
+  const back = '#/equity/watchlists';
   root.append(h('div', { class: 'pagebar' }, h('a', { class: 'back', href: back }, '← Watchlists')));
   if (!symbol) { root.append(h('div', { class: 'card' }, h('p', { class: 'empty' }, 'No share chosen.'))); return; }
   let item = null;
