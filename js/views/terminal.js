@@ -7,6 +7,7 @@ import { lineAlertForm } from './linealert.js';
 import * as W from '../watch.js';
 import { marketChart, LINE_COLORS } from '../mchart.js';
 import { fullView } from '../fullview.js';
+import { colourPanel } from '../chartcolors.js';
 import { stockOhlc, stockEps, stockIndexPe, stockInfo, aggregateOhlc, candleMode, sliceRange, dropCache, RANGES } from '../history.js';
 import { sma, epsTimeline, peSeries, performance } from '../ta.js';
 
@@ -36,7 +37,7 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
   const headBox = h('div', { class: 'tm-head' });
   const symKey = String(symbol).toUpperCase().trim();
   const mm = mem.get(symKey) || {}; mem.set(symKey, mm);
-  let tool = 'none', chart = null, card = null;
+  let tool = 'none', chart = null, card = null, showCol = false;
   const fv = fullView(() => card, () => { if (data) { draw(); header(); } });
   const myLines = () => ((S.data && S.data.trendlines) || {})[symKey] || [];
   let data = null, eps = { state: index && !indexPe ? 'none' : 'idle', msg: '', tl: null }, peFull = null;
@@ -119,7 +120,7 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
     const sel = mm.sel && myLines().some((l) => l.id === mm.sel) ? mm.sel : null;
     const ib = (label, text, fn, extra = '') => h('button', { type: 'button', class: 'tm-ib' + extra, 'aria-label': label, title: label, onclick: fn }, text);
     const zoom = h('div', { class: 'tm-seg', role: 'group', 'aria-label': 'Zoom' }, ib('Zoom out', '−', () => chart && chart.zoom(1.4)), ib('Zoom in', '+', () => chart && chart.zoom(0.7)), ib('Show everything', 'Reset', () => chart && chart.reset()));
-    const draws = [];
+    const draws = [h('button', { type: 'button', class: 'tm-tg' + (showCol ? ' on' : ''), 'aria-pressed': String(showCol), title: 'Change line colours', onclick: () => { showCol = !showCol; draw(); } }, h('i', { class: 'cc-dot' }), 'Colours')];
     if (mode !== 'pct' && canEdit()) draws.push(h('button', { type: 'button', class: 'tm-tg tm-draw' + (tool === 'line' ? ' on' : ''), 'aria-pressed': String(tool === 'line'), onclick: () => { tool = tool === 'line' ? 'none' : 'line'; draw(); } }, h('i', { style: { background: LINE_COLORS.trend } }), tool === 'line' ? 'Tap two points…' : 'Trendline'));
     if (!sel && myLines().length && canEdit()) draws.push(h('button', { type: 'button', class: 'tm-tg', onclick: () => { if (confirm('Remove all ' + myLines().length + ' trendlines on ' + name + '?')) mutate((d) => { delete d.trendlines[symKey]; if (!Object.keys(d.trendlines).length) delete d.trendlines; }); } }, `Clear lines (${myLines().length})`));
     const swatches = canEdit() && mode !== 'pct' && tool === 'line' ? h('div', { class: 'tm-row tm-colors', role: 'group', 'aria-label': 'Trendline colour' }, h('span', { class: 'tm-lab' }, 'New lines'),
@@ -129,6 +130,7 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
       h('div', { class: 'tm-row tm-type' }, type, h('span', { class: 'tm-lab' }, 'Bars'), size),
       h('div', { class: 'tm-row tm-lines' }, h('span', { class: 'tm-lab' }, 'Lines'), tg('dma50', '50d', LINE_COLORS.dma50), tg('dma200', '200d', LINE_COLORS.dma200), canPe ? tg('pe', index ? 'Index P/E' : 'P/E', LINE_COLORS.pe, eps.state === 'loading' ? ' …' : '') : null),
       h('div', { class: 'tm-row tm-tools' }, zoom, ...draws), swatches));
+    if (showCol) body.append(colourPanel([['dma50', '50-day average'], ['dma200', '200-day average'], ...(canPe ? [['pe', index ? 'Index P/E' : 'P/E'], ['median', 'Median P/E']] : []), ['avg', 'Your average cost']], draw));
     if (data.closesOnly) body.append(h('p', { class: 'note' }, 'Candles and volume need the newer Code.gs in your Apps Script (Settings explains how to paste and redeploy it). Showing closing prices until then.'));
     if (canPe && st.pe && eps.state === 'err') body.append(h('p', { class: 'note' }, 'P/E history: ' + eps.msg));
     chart = marketChart({ rows, mode, dma50: st.dma50 ? align(data.ma50) : null, dma200: st.dma200 ? align(data.ma200) : null, pe: wantPe ? align(peM) : null, peMedian: wantPe ? median(peFull.slice(Math.max(0, all.findIndex((r) => r.d >= cut[0].d))).filter((x) => x != null)) : null, peLabel: index ? 'Index P/E' : 'P/E', newColor: st.tc || null,

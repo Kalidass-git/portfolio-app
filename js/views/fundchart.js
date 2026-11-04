@@ -3,6 +3,7 @@
 import { h, dec, pct, dateStr, section, posNeg } from '../ui.js';
 import { marketChart } from '../mchart.js';
 import { fullView } from '../fullview.js';
+import { colourPanel } from '../chartcolors.js';
 import { aggregateOhlc, sliceRange, RANGES } from '../history.js';
 import { rollingReturns, rollStats, performance } from '../ta.js';
 
@@ -20,7 +21,7 @@ const median = (a) => { if (!a.length) return null; const b = a.slice().sort((x,
 /** loadNavs: async () => [{ d, v }] oldest first. avg: what you paid per unit on average. */
 export function fundChart({ title = 'NAV history', loadNavs, avg = null, firstBuy = null }) {
   const st = load(), body = h('div', null, h('p', { class: 'note' }, 'Loading the NAV history…'));
-  let all = null, chart = null, view = null, card = null;
+  let all = null, chart = null, view = null, card = null, showCol = false;
   const fv = fullView(() => card, () => { if (all) draw(); });
   const seg = (label, opts, cur, pick) => h('div', { class: 'tm-seg', role: 'group', 'aria-label': label }, opts.map(([k, l, tip]) => h('button', { type: 'button', class: k === cur ? 'on' : '', title: tip || null, 'aria-pressed': String(k === cur), onclick: () => pick(k) }, l)));
   const draw = () => {
@@ -43,7 +44,9 @@ export function fundChart({ title = 'NAV history', loadNavs, avg = null, firstBu
       h('div', { class: 'tm-row tm-type' }, seg('Chart type', [['line', 'NAV'], ['pct', '% change']], st.mode, (k) => { st.mode = k; save(st); draw(); }),
         h('span', { class: 'tm-lab' }, 'Rolling'), seg('Rolling return window', [['off', 'Off'], ['1Y', '1Y'], ['3Y', '3Y'], ['5Y', '5Y']], st.roll, (k) => { st.roll = k; save(st); draw(); })),
       h('div', { class: 'tm-row tm-tools' }, h('div', { class: 'tm-seg', role: 'group', 'aria-label': 'Zoom' },
-        ...[['Zoom out', '−', () => chart && chart.zoom(1.4)], ['Zoom in', '+', () => chart && chart.zoom(0.7)], ['Show everything', 'Reset', () => chart && chart.reset()]].map(([a, t, fn]) => h('button', { type: 'button', 'aria-label': a, title: a, onclick: fn }, t))))));
+        ...[['Zoom out', '−', () => chart && chart.zoom(1.4)], ['Zoom in', '+', () => chart && chart.zoom(0.7)], ['Show everything', 'Reset', () => chart && chart.reset()]].map(([a, t, fn]) => h('button', { type: 'button', 'aria-label': a, title: a, onclick: fn }, t))),
+        h('button', { type: 'button', class: 'tm-tg' + (showCol ? ' on' : ''), 'aria-pressed': String(showCol), title: 'Change line colours', onclick: () => { showCol = !showCol; draw(); } }, h('i', { class: 'cc-dot' }), 'Colours')))); 
+    if (showCol) body.append(colourPanel([['pe', 'Rolling return'], ['median', 'Median'], ['avg', 'Your average NAV']], draw));
     if (years && !shown.length) body.append(h('p', { class: 'note' }, `This fund does not have ${years} years of history in this range yet, so there are no ${years}-year rolling returns to show.`));
     chart = marketChart({ rows: rows.map((r) => ({ d: r.d, o: r.c, h: r.c, l: r.c, c: r.c, v: 0 })), mode: st.mode, dma50: null, dma200: null, pe: shown.length ? rollRows : null, peMedian: stats ? stats.median : null,
       peLabel: `${years}Y rolling`, peFmt: (v, d) => rp(v, d || 0), peSigned: true, avg: avg || null, trades: [], ...fv.size(window.innerWidth < 640 ? 230 : 280), fmt: nav, dateFmt: short, tickFmt: tick, view, onView: (v) => { view = v; } });
