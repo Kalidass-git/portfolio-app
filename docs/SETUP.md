@@ -150,6 +150,10 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.58.0 – White full-view charts
+
+- Chart full view now has a **white background** (dark surface in dark mode) instead of grey, and the toolbar sits flat on it with a thin line underneath. No other changes; no data changes.
+
 ## Release 8.57.0 – Manage tab order
 
 - Shares & funds › Manage now reads **Insights** (opens first), **Alerts**, **Investment planner**, **Import**. Family members who only view see Insights and Alerts. No data changes.
