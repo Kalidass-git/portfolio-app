@@ -42,25 +42,28 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
   if (N < 2) return h('p', { class: 'empty' }, 'Not enough history for this range.');
   const MINBARS = Math.min(12, N);
   let a = 0, z = N - 1;                   // first and last bar shown
-  if (view && view.d0) { const i0 = rows.findIndex((r) => r.d >= view.d0); let i1 = N - 1; while (i1 > 0 && rows[i1].d > view.d1) i1--; if (i0 >= 0 && i1 - i0 + 1 >= MINBARS) { a = i0; z = i1; } }
+  if (view && view.d0) { const i0 = rows.findIndex((r) => r.d >= view.d0); let i1 = N - 1; while (i1 > 0 && rows[i1].d > view.d1) i1--; if (i0 >= 0 && i1 - i0 + 1 >= MINBARS) { a = i0 - (view.l || 0); z = i1 + (view.r || 0); } }
   const W = width || (typeof window !== 'undefined' && window.innerWidth < 640 ? 380 : 880);
   const box = h('div', { class: 'chart-box' });
   const read = h('div', { class: 'cd-read mc-read', 'aria-live': 'polite' });
   let yz = null;                          // price range chosen by dragging the price axis: { lo, hi } (null = fit what is on screen)
   let ctx = null, pending = null, preview = null, sel = selected, live = null;   // sel: the selected line; live: a line being dragged { id, line }      // first point of a trendline being drawn, and where the pointer is now
-  const fix = () => { const len = Math.max(MINBARS, Math.min(N, Math.round(z - a + 1))); a = Math.max(0, Math.min(N - len, Math.round(a))); z = a + len - 1; };
-  const redraw = () => { fix(); box.replaceChildren(paint(), read); onView(a === 0 && z === N - 1 ? null : { d0: rows[a].d, d1: rows[z].d }); };
+  // you may drag past either end, up to half a screen of empty space, so the first or last candle can be brought to the middle
+  const room = (len) => { const half = Math.floor(len / 2); return [-half, N - len + half]; };
+  const fix = () => { const len = Math.max(MINBARS, Math.min(N, Math.round(z - a + 1))), [mn, mx] = room(len); a = Math.max(mn, Math.min(mx, Math.round(a))); z = a + len - 1; };
+  const redraw = () => { fix(); box.replaceChildren(paint(), read); onView(a === 0 && z === N - 1 ? null : { d0: rows[Math.max(0, a)].d, d1: rows[Math.min(N - 1, z)].d, l: Math.max(0, -a), r: Math.max(0, z - (N - 1)) }); };
   const zoomAt = (f, frac = 0.5) => { const len = z - a + 1, nl = Math.max(MINBARS, Math.min(N, len * f)); if (Math.round(nl) === len) return; const anchor = a + len * frac; a = anchor - nl * frac; z = a + nl - 1; redraw(); };
   box.zoom = (f) => zoomAt(f, 0.5); box.reset = () => { a = 0; z = N - 1; yz = null; redraw(); }; box.isZoomed = () => !(a === 0 && z === N - 1) || !!yz;
 
   function paint() {
-    const R = rows.slice(a, z + 1), n = R.length, sub = (arr) => (arr ? arr.slice(a, z + 1) : null);
+    const ia = Math.max(0, a), iz = Math.min(N - 1, z), off = Math.max(0, -a), right = Math.max(0, z - (N - 1)), slots = z - a + 1;   // off / right: empty slots before the first and after the last bar
+    const R = rows.slice(ia, iz + 1), n = R.length, sub = (arr) => (arr ? arr.slice(ia, iz + 1) : null);
     const m50 = sub(dma50), m200 = sub(dma200), peS = sub(pe);
     const showPe = !!peS && peS.some((x) => x != null), hasVol = R.some((r) => r.v > 0);
     const padL = 6, padR = W < 520 ? 56 : 64, padT = 8, axisH = 22, gap = 8, peH = showPe ? 66 : 0, volH = hasVol ? 44 : 0;
     const priceT = padT, priceB = padT + height, peT = priceB + gap, peB = peT + peH, volT = (showPe ? peB : priceB) + gap, volB = volT + volH;
     const H = (hasVol ? volB : showPe ? peB : priceB) + axisH, bottom = hasVol ? volB : showPe ? peB : priceB;
-    const gw = (W - padL - padR) / n, cx = (i) => padL + gw * i + gw / 2;
+    const gw = (W - padL - padR) / slots, cx = (i) => padL + gw * (off + i) + gw / 2;
     const base = R[0].c, val = (x) => (mode === 'pct' ? x / base - 1 : x);
     const f = mode === 'pct' ? (v) => `${v >= 0 ? '+' : '−'}${Math.abs(v * 100).toFixed(Math.abs(v) < 0.1 ? 1 : 0)}%` : fmt;
 
@@ -92,7 +95,7 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
       const i = Math.floor(p), t0 = tms(R[i].d), t1 = tms(R[i + 1].d);
       return isoOf(t0 + (t1 - t0) * (p - i));
     };
-    const px = (p) => padL + gw * p + gw / 2;
+    const px = (p) => padL + gw * (off + p) + gw / 2;
 
     const root = svg('svg', { viewBox: `0 0 ${W} ${H}`, class: 'chart mchart', role: 'img', 'aria-label': `Price chart from ${dateFmt(R[0].d)} to ${dateFmt(R[n - 1].d)}` });
     const clip = 'mc-clip-' + Math.random().toString(36).slice(2, 8);
@@ -106,7 +109,7 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
     }
     // time grid: a vertical line and label at each year, quarter, month (or Monday on short ranges); the year is bold
     {
-      const t0 = tms(R[0].d), t1 = tms(R[n - 1].d), spanD = (t1 - t0) / DAY, cand = [];
+      const t0 = tms(R[0].d) - off * perBar * DAY, t1 = tms(R[n - 1].d) + right * perBar * DAY, spanD = (t1 - t0) / DAY, cand = [];
       const d0 = new Date(t0);
       for (let yy = d0.getUTCFullYear(), mm = d0.getUTCMonth(); ; ) {
         const t = Date.UTC(yy, mm, 1); if (t > t1) break;
@@ -199,7 +202,7 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
     const tag = (yy, text, { fill, stroke, ink }) => svg('g', { class: 'mc-tag' }, svg('rect', { x: W - padR + 2, y: yy - 9, width: padR - 4, height: 18, rx: 3, fill, stroke: stroke || 'none' }), svg('text', { x: W - padR + 2 + (padR - 4) / 2, y: yy + 4, 'text-anchor': 'middle', class: 'tagtxt', fill: ink }, text));
     const inPrice = (yy) => yy >= priceT + 6 && yy <= priceB - 6;
     let lastY = null;
-    if (z === N - 1) {
+    if (z >= N - 1) {
       const lc = R[n - 1].c, prevC = n > 1 ? R[n - 2].c : R[n - 1].o, yy = y(lc);
       if (inPrice(yy)) {
         lastY = yy; const col = lc >= prevC ? CUP : CDN;
@@ -245,16 +248,16 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
     };
     const rect = () => root.getBoundingClientRect();
     const toSvg = (e) => { const bb = rect(); return { x: ((e.clientX - bb.left) / bb.width) * W, y: ((e.clientY - bb.top) / bb.height) * H }; };
-    const barAt = (X) => Math.max(0, Math.min(n - 1, Math.floor((X - padL) / gw)));
+    const barAt = (X) => Math.max(0, Math.min(n - 1, Math.floor((X - padL) / gw) - off));
     const drawing = tool === 'line' && mode !== 'pct';
     const hit = svg('rect', { x: padL, y: priceT, width: W - padL - padR, height: bottom - priceT, fill: 'transparent', style: `cursor: ${drawing ? 'crosshair' : 'grab'}` });
     root.style.touchAction = drawing || sel ? 'none' : 'pan-y';
     // what a tap at (X, Y) means when drawing: the date of the bar and the price, snapped to the nearest high, low, open or close when it is close by
     const point = (X, Y) => {
-      const p = (X - padL) / gw - 0.5, i = barAt(X);
+      const p = (X - padL) / gw - off - 0.5, i = barAt(X);
       let price = priceAt(Y);
       if (mode === 'candle') { let best = null; for (const v of [R[i].o, R[i].h, R[i].l, R[i].c]) if (best == null || Math.abs(y(v) - Y) < Math.abs(y(best) - Y)) best = v; if (Math.abs(y(best) - Y) < 12) price = best; }
-      return { d: dateOf(Math.max(0, Math.min(n - 1, p))), p: price };
+      return { d: dateOf(Math.max(-off, Math.min(n - 1 + right, p))), p: price };
     };
     const near = (X, Y) => { let best = null, bd = 12; for (const s of segs) { const dx = s.x2 - s.x1, dy = s.y2 - s.y1, L2 = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((X - s.x1) * dx + (Y - s.y1) * dy) / L2)), d = Math.hypot(X - (s.x1 + t * dx), Y - (s.y1 + t * dy)); if (d < bd) { bd = d; best = s.id; } } return best; };
     // a tap or press on a line: its end handles first (when it is selected), then its body
@@ -318,7 +321,7 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
       if (Math.abs(dx) > 4 || (yz && Math.abs(e.clientY - drag.y) > 4)) drag.moved = true;
       if (drag.moved && (box.isZoomed() || !drag.touch)) {
         if (yz && drag.yz) { const k = (drag.yz.hi - drag.yz.lo) / ctx.plotH, sh = ((e.clientY - drag.y) / (ctx.rect().height / ctx.H)) * k; yz = { lo: drag.yz.lo + sh, hi: drag.yz.hi + sh }; }
-        const bars = Math.round(((dx / ctx.rect().width) * ctx.W) / ctx.gw), len = drag.z - drag.a + 1, na = Math.max(0, Math.min(N - len, drag.a - bars));
+        const bars = Math.round(((dx / ctx.rect().width) * ctx.W) / ctx.gw), len = drag.z - drag.a + 1, na = Math.max(room(len)[0], Math.min(room(len)[1], drag.a - bars));
         if (Math.round(na) !== Math.round(a)) { a = na; z = a + len - 1; redraw(); }
         return;
       }
@@ -351,7 +354,7 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
     const s = inPlot(e); if (!s) return;
     e.preventDefault();
     const frac = Math.max(0, Math.min(1, (s.x - ctx.padL) / (ctx.W - ctx.padL - ctx.padR)));
-    if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) { const len = z - a + 1, step = Math.max(1, Math.round(len * 0.1)) * Math.sign(e.deltaX || e.deltaY); a = Math.max(0, Math.min(N - len, a + step)); z = a + len - 1; redraw(); }
+    if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) { const len = z - a + 1, step = Math.max(1, Math.round(len * 0.1)) * Math.sign(e.deltaX || e.deltaY); a = Math.max(room(len)[0], Math.min(room(len)[1], a + step)); z = a + len - 1; redraw(); }
     else zoomAt(e.deltaY < 0 ? 0.8 : 1.25, frac);
   }, { passive: false });
   box.append(paint(), read);
