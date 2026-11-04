@@ -116,6 +116,7 @@ function doPost(e) {
       case 'fundamentals': return json_(fundamentals_(req.symbols || []));
       case 'details': return json_(details_(req.symbol, req.yahoo));
       case 'eps': return json_(eps_(req.symbol, req.yahoo));
+      case 'indexpe': return json_(indexPe_(req.name, req.years));
       default: return json_({ error: 'Unknown action.' });
     }
   } catch (err) {
@@ -222,7 +223,7 @@ function parse_(r) {
     if (r.getResponseCode() !== 200) return null;
     var m = JSON.parse(r.getContentText()).chart.result[0].meta;
     if (!m || !(m.regularMarketPrice > 0)) return null;
-    return { price: m.regularMarketPrice, prevClose: m.chartPreviousClose || null, high52: m.fiftyTwoWeekHigh || null, low52: m.fiftyTwoWeekLow || null };
+    return { price: m.regularMarketPrice, prevClose: m.chartPreviousClose || null, high52: m.fiftyTwoWeekHigh || null, low52: m.fiftyTwoWeekLow || null, dayHigh: m.regularMarketDayHigh || null, dayLow: m.regularMarketDayLow || null };
   } catch (e) { return null; }
 }
 
@@ -348,6 +349,39 @@ function eps_(symbol, yahoo) {
     } catch (e) { if (i === tickers.length - 1) return { error: 'Backend error: ' + e.message }; }
   }
   return { error: 'No earnings history found for ' + (symbol || yahoo) + '.' };
+}
+
+/**
+ * Historical P/E of an NSE index (Nifty 50, Nifty Bank ...) from NSE's own index site, which publishes P/E, P/B and dividend yield by day.
+ * name: the index name as NSE writes it ("NIFTY 50"). years: how far back (default 10). Returns { ok, rows: [[date 'YYYY-MM-DD', pe, pb, dy], ...] } oldest first.
+ */
+function indexPe_(name, years) {
+  if (!name) return { error: 'No index name given.' };
+  var y = Math.max(1, Math.min(20, Number(years) || 10)), now = new Date(), rows = [], seen = {};
+  var MON = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
+  var NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function fmt(d) { return ('0' + d.getDate()).slice(-2) + '-' + NAMES[d.getMonth()] + '-' + d.getFullYear(); }
+  var lastErr = '';
+  for (var k = 0; k < y; k++) {       // one request per year: the site limits how much it returns at once
+    var end = new Date(now.getFullYear() - k, k === 0 ? now.getMonth() : 11, k === 0 ? now.getDate() : 31);
+    var start = new Date(now.getFullYear() - k, 0, 1);
+    try {
+      var payload = { cinfo: "{'name':'" + name + "','startDate':'" + fmt(start) + "','endDate':'" + fmt(end) + "','indexName':'" + name + "'}" };
+      var r = UrlFetchApp.fetch('https://niftyindices.com/Backpage.aspx/getpepbHistoricalDataDBtoJSON', { method: 'post', contentType: 'application/json; charset=UTF-8', payload: JSON.stringify(payload), muteHttpExceptions: true,
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://niftyindices.com/reports/historical-data', 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json, text/javascript, */*; q=0.01' } });
+      if (r.getResponseCode() !== 200) { lastErr = 'NSE site answered ' + r.getResponseCode(); continue; }
+      var list = JSON.parse(JSON.parse(r.getContentText()).d || '[]');
+      list.forEach(function (x) {
+        var m = /^(\d{1,2}) (\w{3}) (\d{4})$/.exec(String(x.DATE || '').trim()); if (!m) return;
+        var iso = m[3] + '-' + MON[m[2]] + '-' + ('0' + m[1]).slice(-2), pe = parseFloat(x.pe);
+        if (!(pe > 0) || seen[iso]) return; seen[iso] = 1;
+        rows.push([iso, pe, parseFloat(x.pb) || null, parseFloat(x.divYield) || null]);
+      });
+    } catch (e) { lastErr = e.message; }
+  }
+  if (!rows.length) return { error: 'No P/E history came back for ' + name + (lastErr ? ' (' + lastErr + ')' : '') + '.' };
+  rows.sort(function (a, b) { return a[0] < b[0] ? -1 : 1; });
+  return { ok: true, rows: rows };
 }
 
 /** Dividends per share paid by each company, from Yahoo Finance (NSE first, then BSE). symbols: [{symbol:'INFY', yahoo:''}] */

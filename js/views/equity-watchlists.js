@@ -3,6 +3,8 @@ import { S, mutate } from '../store.js';
 import { typeahead, h, money, dec, pct, section, btn, canEdit, toast, formDialog, confirmDialog, posNeg, icon } from '../ui.js';
 import * as WL from '../watchlists.js';
 import * as W from '../watch.js';
+import { table } from '../ui.js';
+import { tradeForm } from './eqshared.js';
 
 let busy = false, openId = null;
 
@@ -59,48 +61,65 @@ function searchCard() {
     const qs = k ? (k.index && !WL.INDEXES.some((i) => i.symbol === k.symbol) ? `&index=1&y=${encodeURIComponent(k.yahoo)}&name=${encodeURIComponent(k.name)}` : '') : '';
     location.hash = '#/equity/quote?sym=' + encodeURIComponent(sym) + qs;
   };
-  const wrap = h('div', { class: 'card' }, h('div', { class: 'find-row' }, input), h('p', { class: 'note' }, 'Open any NSE share or index to see its chart and figures first. The ☆ Watch button on that page puts it on the watchlist you choose. You can also add straight from a list below.'));
+  const wrap = h('div', { class: 'card wl-search' }, h('div', { class: 'find-row' }, input), h('p', { class: 'note' }, 'Search any NSE share or index to look at its chart first; the ☆ Watch button on its page adds it to a list.'));
   typeahead(input, () => [...known.values()].map(label), { onPick: go, host: wrap.firstChild });
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(input.value); } });
   return wrap;
 }
 
+const rs = (v, d = 2) => (v == null ? '–' : '₹' + dec(v, d));
+const crore = (v) => (v == null || !(v > 0) ? '' : v >= 1e12 ? '₹' + (v / 1e12).toFixed(2) + ' L Cr' : '₹' + Math.round(v / 1e7).toLocaleString('en-IN') + ' Cr');
+const badge = (v, d = 2) => h('span', { class: 'wl-badge ' + (v >= 0 ? 'pos' : 'neg') }, (v >= 0 ? '▲ +' : '▼ −') + Math.abs(v * 100).toFixed(d) + '%');
+function itemForm(l, it) {
+  formDialog({ title: 'Edit ' + (it.name || it.symbol), sub: it.symbol, fields: [
+    { key: 'name', label: 'Name', type: 'text', required: true },
+    { key: 'target', label: 'Target price (₹, optional)', type: 'number', required: false, hint: 'The row shows how far the price is from it.' },
+    { key: 'note', label: 'Note (optional)', type: 'text', required: false }],
+  value: { name: it.name || it.symbol, target: it.target || '', note: it.note || '' }, saveLabel: 'Save', deleteLabel: 'Remove from list',
+  onSave: (v) => mutate((d) => WL.updateItem(d, l.id, it.symbol, { name: v.name, target: v.target, note: v.note })),
+  onDelete: () => mutate((d) => WL.removeItem(d, l.id, it.symbol)), deleteMessage: 'Remove ' + (it.name || it.symbol) + ' from ' + l.name + '? Alerts you set on it stay.' });
+}
+/** One row of the table: everything known about a watched share, from the last price refresh and the last fundamentals load. */
+function rowOf(it) {
+  const q = WL.quoteOf(it.symbol), m = W.metrics()[W.stockKey(it.symbol)] || null;
+  const price = q ? q.price : m && m.price > 0 ? m.price : null;
+  const lo = (q && q.lo52) || (m && m.lo52) || null, hi = (q && q.hi52) || (m && m.hi52) || null;
+  return { it, sym: it.symbol, name: it.name || it.symbol, price, dayPct: q ? q.dayPct : null, dayLo: q && q.dayLo, dayHi: q && q.dayHi, lo, hi,
+    fromHigh: price && hi ? price / hi - 1 : null, pos: price && hi > lo ? Math.max(0, Math.min(1, (price - lo) / (hi - lo))) : null, pe: m && m.pe > 0 ? m.pe : null, mcap: m && m.mcap > 0 ? m.mcap : null,
+    target: it.target || null, note: it.note || '' };
+}
+
 export function render(root) {
   const lists = WL.lists(S.data), rerender = () => window.dispatchEvent(new Event('rerender'));
   const at = WL.refreshedAt();
-  const bar = h('div', { class: 'card' },
-    h('p', { class: 'note' }, 'Your own lists of shares to follow. Their prices are fetched only when you press Refresh here. The main Refresh never touches them.'),
-    h('div', { class: 'row-actions' },
-      btn('Refresh prices', (e) => refreshAll(e.currentTarget, rerender), canEdit() ? '' : 'primary'),
-      canEdit() ? btn('New watchlist', () => listForm(null), 'primary') : null,
-      h('span', { class: 'stamp' }, at ? 'Prices ' + new Date(at).toLocaleString('en-IN') : 'Not refreshed yet')));
-  root.append(bar);
   root.append(searchCard());
-  if (!lists.length) { root.append(h('div', { class: 'card' }, h('p', { class: 'empty' }, 'No watchlists yet.'), h('p', { class: 'note' }, canEdit() ? 'Press New watchlist, then add shares by their NSE symbol.' : ''))); return; }
+  if (!lists.length) { root.append(h('div', { class: 'card' }, h('p', { class: 'empty' }, 'No watchlists yet.'), h('p', { class: 'note' }, canEdit() ? 'Press New watchlist, then add shares by their NSE symbol.' : ''), canEdit() ? btn('New watchlist', () => listForm(null), 'primary') : null)); return; }
   if (openId == null || !lists.some((l) => l.id === openId)) openId = lists[0].id;
-  root.append(h('div', { class: 'row-actions', role: 'tablist', 'aria-label': 'Watchlists' }, lists.map((l) => h('button', { type: 'button', class: 'chip-btn' + (l.id === openId ? ' on' : ''), onclick: () => { openId = l.id; rerender(); } }, `${l.name} · ${(l.items || []).length}`))));
   const l = lists.find((x) => x.id === openId);
+  root.append(h('div', { class: 'wl-top' },
+    h('div', { class: 'row-actions', role: 'tablist', 'aria-label': 'Watchlists' }, lists.map((x) => h('button', { type: 'button', class: 'chip-btn' + (x.id === openId ? ' on' : ''), onclick: () => { openId = x.id; rerender(); } }, `${x.name} · ${(x.items || []).length}`))),
+    canEdit() ? h('div', { class: 'row-actions' }, btn('New watchlist', () => listForm(null), ''), btn('Edit list', () => listForm(l), '')) : null));
+  const rows = (l.items || []).map(rowOf);
   const alerts = S.data.alerts || [];
-  const cards = (l.items || []).map((it) => {
-    const q = WL.quoteOf(it.symbol), n = alerts.filter((a) => a.kind === 'stock' && WL.norm(a.ref) === WL.norm(it.symbol)).length;
-    const m = W.metrics()[W.stockKey(it.symbol)], px = q ? q.price : m ? m.price : null;
-    const bits = [];
-    if (m && m.pe > 0) bits.push('P/E ' + m.pe.toFixed(1));
-    if (m && m.mcap > 0) bits.push('Mcap ' + (m.mcap >= 1e12 ? '₹' + (m.mcap / 1e12).toFixed(2) + ' L Cr' : '₹' + Math.round(m.mcap / 1e7).toLocaleString('en-IN') + ' Cr'));
-    if (m && m.dy > 0) bits.push('Yield ' + m.dy.toFixed(1) + '%');
-    if (m && m.dma200 > 0 && px) bits.push(px >= m.dma200 ? 'above 200d' : 'below 200d');
-    const pos = m && m.hi52 > m.lo52 && px != null ? Math.max(0, Math.min(1, (px - m.lo52) / (m.hi52 - m.lo52))) : null;
-    const extra = bits.length || pos != null ? h('span', { class: 'wl-info' },
-      bits.length ? h('span', { class: 'rl-sub' }, bits.join(' · ')) : null,
-      pos != null ? h('span', { class: 'wl-52' }, h('small', null, dec(m.lo52, 0)), h('span', { class: 'tm-rng' }, h('i', { style: { left: pos * 100 + '%' } })), h('small', null, dec(m.hi52, 0)), h('small', { class: 'wl-hi' }, (px / m.hi52 - 1 >= 0 ? '+' : '−') + Math.abs((px / m.hi52 - 1) * 100).toFixed(0) + '% from high')) : null) : null;
-    return { extra, title: it.name || it.symbol, sub: [it.index ? 'Index' : it.symbol, n ? `${n} alert${n > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · '),
-      value: q ? money(q.price) : '–', valueSub: q && q.dayPct != null ? h('span', { class: posNeg(q.dayPct) }, (q.dayPct >= 0 ? '+' : '') + pct(q.dayPct, 2)) : '',
-      onClick: () => { location.hash = '#/equity/quote?sym=' + encodeURIComponent(it.symbol); } };
-  });
-  const list = cards.length ? null : h('p', { class: 'empty' }, 'Nothing on this list yet.');
-  root.append(section(l.name, h('div', null, list, cards.length ? rowListSafe(cards) : null,
-    canEdit() ? h('div', { class: 'row-actions' }, btn('Add a share', () => addShare(l), ''), btn('Add an index', () => addIndex(l), ''), btn('Rename', () => listForm(l), 'small'),
-      btn('Remove a share', () => removePicker(l), 'small')) : null)));
+  const cols = [
+    { label: 'Share', host: true, render: (r) => h('div', null, h('b', null, r.it.index ? r.name : r.sym), r.it.index ? h('div', { class: 'wl-sub' }, 'Index') : r.name !== r.sym ? h('div', { class: 'wl-sub' }, r.name) : null) },
+    { label: 'Price · Today', cls: 'r', render: (r) => h('div', null, h('div', null, rs(r.price)), r.dayPct != null ? badge(r.dayPct) : null) },
+    { label: 'Day range', cls: 'r', mob: 'under', render: (r) => (r.dayLo && r.dayHi ? `${dec(r.dayLo, 2)} – ${dec(r.dayHi, 2)}` : '–') },
+    { label: '52-week', cls: 'r', mob: 'under', render: (r) => (r.lo && r.hi ? h('div', { class: 'wl-52c' }, h('small', null, `${dec(r.lo, 0)} – ${dec(r.hi, 0)}`), r.pos != null ? h('span', { class: 'tm-rng' }, h('i', { style: { left: r.pos * 100 + '%' } })) : null,
+      r.fromHigh != null ? h('div', null, h('span', { class: 'wl-badge ' + (r.fromHigh >= 0 ? 'pos' : 'neg') }, (r.fromHigh >= 0 ? '▲ +' : '▼ −') + Math.abs(r.fromHigh * 100).toFixed(1) + '%'), h('small', null, ' from high')) : null) : '–') },
+    { label: 'P/E · Cap', cls: 'r', mob: 'under', render: (r) => (r.pe || r.mcap ? h('div', null, h('div', null, r.pe ? r.pe.toFixed(1) : '–'), r.mcap ? h('small', null, crore(r.mcap)) : null) : '–') },
+    { label: 'Target · Distance', cls: 'r', mob: 'under', render: (r) => (r.target ? h('div', null, h('div', null, (r.target >= (r.price || 0) ? '≥ ' : '≤ ') + rs(r.target)), r.price ? h('small', { class: 'wl-away' }, `${r.target >= r.price ? '+' : '−'}${Math.abs((r.target / r.price - 1) * 100).toFixed(1)}% away`) : null) : '–') },
+    { label: 'Note', mob: 'hide', render: (r) => h('span', { class: 'wl-note' }, r.note || '') },
+    { label: 'Trade', cls: 'r', mob: 'hide', render: (r) => (canEdit() ? h('div', { class: 'wl-trade' }, h('button', { type: 'button', class: 'chip-btn small', onclick: (e) => { e.stopPropagation(); itemForm(l, r.it); } }, 'Edit'), r.it.index ? null : h('button', { type: 'button', class: 'chip-btn small buy', onclick: (e) => { e.stopPropagation(); tradeForm(null, { type: 'BUY', symbol: r.sym, name: r.name }); } }, 'Buy')) : '') },
+  ];
+  const nA = (r) => alerts.filter((a) => a.kind === 'stock' && WL.norm(a.ref) === WL.norm(r.sym)).length;
+  const tbl = rows.length ? table(cols, rows, { onRow: (r) => { location.hash = '#/equity/quote?sym=' + encodeURIComponent(r.sym); }, mobile: null, m: { key: 'wl', head: 'Share', views: [['Price · Today', 'Day range'], ['52-week', 'P/E · Cap'], ['Target · Distance', 'Note']], extra: 'Trade' }, empty: 'Nothing on this list yet.' }) : h('p', { class: 'empty' }, 'Nothing on this list yet.');
+  root.append(h('section', { class: 'card' },
+    h('header', { class: 'card-head wl-head' }, h('h2', null, l.name),
+      h('div', { class: 'row-actions' }, canEdit() ? btn('Add share', () => addShare(l), 'primary') : null, canEdit() ? btn('Add index', () => addIndex(l), '') : null, btn('Get prices', (e) => refreshAll(e.currentTarget, rerender), canEdit() ? 'small' : 'primary'))),
+    tbl,
+    h('p', { class: 'note' }, 'Tap a share for its page and chart. ', at ? 'Prices fetched ' + new Date(at).toLocaleString('en-IN') + '. ' : 'Prices are fetched only when you press Get prices; adding a share does not fetch anything. ', 'Day range and 52-week range appear after a price fetch; P/E and market cap after Get prices too (or after you open that share’s page). Set a target price or a note with Edit.'),
+    rows.some((r) => nA(r)) ? h('p', { class: 'note' }, 'Shares with price alerts: ' + rows.filter((r) => nA(r)).map((r) => r.sym).join(', ') + '.') : null));
 }
 import { rowList } from '../ui.js';
 const rowListSafe = (c) => rowList(c);

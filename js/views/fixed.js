@@ -202,13 +202,13 @@ export function render() {
   const f = all.fixed;
   const stats = {
     bonds: () => {
-      const tds = data.settings.tdsRate ?? 0.1, sp = C.bondMonthSplit(all.bonds, all.asOf, tds), acc = all.bonds.reduce((a, b) => a + C.bondAccrued(b, all.asOf, tds), 0);
+      const tds = data.settings.tdsRate ?? 0.1, sp = C.bondMonthSplit(all.bonds, all.asOf, tds);
       const mon = new Date(all.asOf + 'T00:00:00Z').toLocaleDateString('en-IN', { month: 'long', timeZone: 'UTC' });
+      // what the bonds earn in an average month: every bond's yearly interest spread over 12 months, so quarterly and yearly payers are counted evenly
+      const perMonth = all.bonds.reduce((a, b) => a + b.principal * b.rate / 12, 0) * (1 - tds);
       return h('div', { class: 'stats' }, stat('Bonds', money(f.bondPrincipal), `${all.bonds.length} bonds`),
-        stat(`Interest due in ${mon}`, green(money(sp.due)), 'after TDS, quarterly bonds included'),
-        stat('Received so far', green(money(sp.received)), `${sp.nReceived} payment${sp.nReceived === 1 ? '' : 's'} whose due day has come`),
-        stat('Still to come', money(sp.pending), `${sp.nPending} payment${sp.nPending === 1 ? '' : 's'} due later this month`),
-        stat('Receivable today', money(acc), 'earned, not yet paid'));
+        stat(`Due in ${mon}`, green(money(sp.due)), h('span', null, money(sp.received), ' received · ', money(sp.pending), ' to come')),
+        stat('Earning a month', green(money(perMonth)), 'average after TDS, spread evenly'));
     },
     fds: () => h('div', { class: 'stats' }, stat('Fixed deposits', money(f.fdPrincipal), `${all.fds.length} FDs`), stat('Interest so far', green(money(sumInterest(all.fds, all.asOf))), 'interest only, paid-out included')),
     lending: () => h('div', { class: 'stats' }, stat('Lent out', money(f.lendPrincipal), `${all.lending.filter((l) => l.principal > 0).length} loans given`), stat('Interest so far', green(money(sumInterest(all.lending, all.asOf))), 'interest only, paid-out included')),

@@ -49,7 +49,7 @@ export async function stockOhlc(symbol, yahoo) {
   return out;
 }
 /** Forget what was loaded for a share, so the next view asks the backend again. */
-export function dropCache(symbol) { for (const k of ['eq:', 'ohlc:', 'eps:', 'info:']) cache.delete(k + symbol); }
+export function dropCache(symbol) { for (const k of ['eq:', 'ohlc:', 'eps:', 'info:']) cache.delete(k + symbol); for (const k of [...cache.keys()]) if (k.startsWith('ipe:')) cache.delete(k); }
 /** Reported earnings per share for the P/E line: { quarterly: [{date, eps}], annual: [{date, eps}] }. Needs the newer Code.gs ("eps" action). */
 export async function stockEps(symbol, yahoo) {
   const key = 'eps:' + symbol;
@@ -60,6 +60,19 @@ export async function stockEps(symbol, yahoo) {
   catch (e) { throw new Error(/Unknown action/i.test(e.message) ? 'Your backend needs the newer Code.gs (it adds the “eps” action) to draw the P/E history.' : e.message); }
   if (!res || res.error || !(res.quarterly || res.annual)) throw new Error((res && res.error && !/Unknown action/i.test(res.error)) ? res.error : 'Your backend needs the newer Code.gs (it adds the “eps” action) to draw the P/E history.');
   const out = { quarterly: res.quarterly || [], annual: res.annual || [] };
+  cache.set(key, out);
+  return out;
+}
+/** Historical P/E of an NSE index from the backend ("indexpe" action): [{ d, pe }] oldest first. name is the NSE index name, for example "NIFTY 50". */
+export async function stockIndexPe(name, years = 10) {
+  const key = 'ipe:' + name, hit = cache.get(key);
+  if (hit) return hit;
+  if (!S.cfg || !S.cfg.backendUrl) throw new Error('Index P/E comes through your backend, which is not connected on this device.');
+  let res;
+  const old = 'Your backend needs the newer Code.gs (it adds the “indexpe” action) to draw the index P/E.';
+  try { res = await call(S.cfg.backendUrl, S.cfg.key, 'indexpe', { name, years }); } catch (e) { throw new Error(/Unknown action/i.test(e.message) ? old : e.message); }
+  if (!res || res.error || !res.rows) throw new Error((res && res.error && !/Unknown action/i.test(res.error)) ? res.error : old);
+  const out = res.rows.map((x) => ({ d: x[0], pe: x[1] }));
   cache.set(key, out);
   return out;
 }

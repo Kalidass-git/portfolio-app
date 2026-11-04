@@ -150,6 +150,17 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.51.0 – Bonds summary, chart upgrades, watchlist table, rolling returns
+
+- **Bonds**: the month cards are merged into one short card (**Due in <month>**: received and still to come in its line) and a new **Earning a month** card shows the average monthly interest after TDS, with quarterly and yearly bonds spread evenly over the months. "Receivable today" is removed.
+- **P/E chart**: a dashed **median P/E** line for the range shown. **Nifty 50** and the other NSE indexes now have an **Index P/E** line (needs the new backend `indexpe` action, which reads NSE's index site).
+- **Zoom with the axes**: drag the month labels sideways to stretch time, drag the price labels up or down to stretch the price scale; double-click an axis to undo. Wheel, pinch and the buttons still work, and Reset zoom restores both.
+- **Desktop controls** use both sides: ranges and chart type on the left, line toggles and zoom/trendline tools on the right.
+- **Trendline colours**: six colours; pick one before drawing, or select a line and tap a colour to change it. Stored as an optional `color` on each line.
+- **Watchlists** are now a table: share, price and day change, day range, 52-week bar with distance from the high, P/E and market cap, target price and distance, note, Edit and Buy. Phones show cards. Edit sets an optional target and note on the item. Search stays on top.
+- **Mutual funds**: the NAV chart now has **rolling returns** (1, 3 or 5 years, yearly rate) in a panel under it with the median line, plus median, average, best, worst and share of positive periods.
+- **Redeploy `backend/Code.gs`** (index P/E, day range). The NSE index endpoint and the Yahoo day range could not be tested from here.
+
 ## Release 8.50.0 – Tidier chart controls
 
 - The controls above the share chart are regrouped: time range strip (scrolls sideways on phones), then Line / % / Candles with the bar size (Auto, Day, Week, Month), then the 50d, 200d and P/E toggles, then zoom and trendline tools. Same functions, no data changes.
