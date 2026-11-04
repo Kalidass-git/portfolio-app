@@ -10,7 +10,14 @@ const svg = (tag, attrs = {}, ...kids) => {
   return el;
 };
 // terminal-style colours, one clearly different hue per line: 50-day blue, 200-day orange, P/E purple, your average cost grey (dashed), trendlines cyan
-export const LINE_COLORS = { dma50: '#2962ff', dma200: '#ff9100', pe: '#aa00ff', avg: '#8a94a6', trend: '#00b8d4' };
+export const DEFAULT_COLORS = { dma50: '#2962ff', dma200: '#ff9800', pe: '#9c27b0', median: '#e91e63', avg: '#b08900', trend: '#00b8d4' };
+/** The line colours in use: the defaults, with anything the person changed (kept on this device only). */
+export const LINE_COLORS = { ...DEFAULT_COLORS };
+const CK = 'fw.chartcolors';
+try { Object.assign(LINE_COLORS, JSON.parse(localStorage.getItem(CK) || '{}')); } catch (e) { /* defaults */ }
+const keepColors = () => { try { const d = {}; for (const k in DEFAULT_COLORS) if (LINE_COLORS[k] !== DEFAULT_COLORS[k]) d[k] = LINE_COLORS[k]; if (Object.keys(d).length) localStorage.setItem(CK, JSON.stringify(d)); else localStorage.removeItem(CK); } catch (e) { /* not kept */ } };
+export const setLineColor = (k, v) => { if (/^#[0-9a-f]{6}$/i.test(v) && k in DEFAULT_COLORS) { LINE_COLORS[k] = v; keepColors(); } };
+export const resetLineColors = () => { Object.assign(LINE_COLORS, DEFAULT_COLORS); keepColors(); };
 const nice = (v) => (Math.abs(v) >= 1000 ? Math.round(v).toLocaleString('en-IN') : v.toFixed(Math.abs(v) < 10 ? 2 : 1));
 const DAY = 864e5, tms = (d) => Date.parse(d + 'T00:00:00Z'), isoOf = (t) => new Date(t).toISOString().slice(0, 10);
 const POS = 'var(--pos, #1a7f4b)', NEG = 'var(--neg, #c24141)';
@@ -133,7 +140,7 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
         svg('text', { x: padL - 6, y: peT + 9, class: 'axis', 'text-anchor': 'end' }, peFmt(phi)), svg('text', { x: padL - 6, y: peB, class: 'axis', 'text-anchor': 'end' }, peFmt(plo)),
         svg('text', { x: padL + 4, y: peT + 11, class: 'axis', fill: LINE_COLORS.pe, style: 'font-weight:700' }, peLabel));
       if (peSigned && plo < 0 && phi > 0) root.append(svg('line', { x1: padL, x2: W - padR, y1: peY(0), y2: peY(0), stroke: 'var(--muted, #888)', 'stroke-width': 1, opacity: '.6' }));
-      if (peMedian != null && peMedian >= plo && peMedian <= phi) root.append(svg('line', { x1: padL, x2: W - padR, y1: peY(peMedian), y2: peY(peMedian), stroke: LINE_COLORS.pe, 'stroke-width': 1.2, 'stroke-dasharray': '5 4', opacity: '.8' }), svg('text', { x: W - padR - 2, y: peY(peMedian) - 3, class: 'axis', 'text-anchor': 'end', fill: LINE_COLORS.pe }, 'Median ' + peFmt(peMedian, 1)));
+      if (peMedian != null && peMedian >= plo && peMedian <= phi) root.append(svg('line', { x1: padL, x2: W - padR, y1: peY(peMedian), y2: peY(peMedian), stroke: LINE_COLORS.median, 'stroke-width': 1.2, 'stroke-dasharray': '5 4', opacity: '.8' }), svg('text', { x: W - padR - 2, y: peY(peMedian) - 3, class: 'axis', 'text-anchor': 'end', fill: LINE_COLORS.median }, 'Median ' + peFmt(peMedian, 1)));
       let seg = [];
       const flush = () => { if (seg.length > 1) root.append(svg('polyline', { points: seg.join(' '), fill: 'none', stroke: LINE_COLORS.pe, 'stroke-width': 2.2, 'stroke-linejoin': 'round' })); seg = []; };
       peS.forEach((x, i) => { if (x == null) flush(); else seg.push(`${cx(i).toFixed(1)},${peY(x).toFixed(1)}`); });

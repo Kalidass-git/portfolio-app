@@ -150,6 +150,13 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.54.0 – Chart colours
+
+- New **Colours** button in the chart toolbar (share, index and fund charts, also in full view). It opens a panel with a swatch row and a colour picker for each line: 50-day, 200-day, P/E (or the fund's rolling return), **Median P/E** (now its own colour instead of sharing the P/E colour), and your average cost. **Reset to default** puts them all back.
+- Cleaner defaults: blue 50d, orange 200d, purple P/E, pink median, dark-gold average cost. Choices are kept on this device only (`fw.chartcolors`), not in your data.
+- Trendline colours are unchanged: the six-colour palette stays, choose per line when you draw it or tap it.
+- New file `js/chartcolors.js`.
+
 ## Release 8.53.0 – Watchlists tab, tidier Manage, full-view charts
 
 - **Shares & funds tabs** are now Overview, Holdings, **Watchlists**, Manage, History. Watchlists moved out of Manage to sit next to Holdings. The separate **Watch** tab is gone.
