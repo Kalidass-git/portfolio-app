@@ -150,6 +150,10 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.57.0 – Manage tab order
+
+- Shares & funds › Manage now reads **Insights** (opens first), **Alerts**, **Investment planner**, **Import**. Family members who only view see Insights and Alerts. No data changes.
+
 ## Release 8.56.0 – Pan past the ends of the chart
 
 - You can now drag (or scroll sideways) past either end of a chart into **empty space**, up to half a screen, so the **last or first candle can sit in the middle** while you analyse it. The grid, month labels and the last-price line carry on into the empty part, and trendlines can be drawn there too.
