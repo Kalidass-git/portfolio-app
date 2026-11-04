@@ -36,7 +36,7 @@ export function triggeredCard({ link = true } = {}) {
   return section(`Price alerts${hit.length ? ` · ${hit.length} triggered` : ''}`, h('div', null,
     hit.length ? rowList(rows) : h('p', { class: 'empty' }, total ? 'None of your alerts has triggered right now.' : 'No alerts yet. Set one up to be told when a share or fund reaches a price, P/E or 52-week mark.'),
     waiting.length ? h('p', { class: 'note' }, `${waiting.length} alert${waiting.length > 1 ? 's are' : ' is'} waiting for the first indicator fetch.`) : null,
-    link ? h('p', null, h('a', { href: '#/equity/watch?v=alerts' }, total ? 'Manage alerts and watchlist' : 'Set up alerts')) : null));
+    link ? h('p', null, h('a', { href: '#/equity/manage?v=alerts' }, total ? 'Manage alerts and watchlist' : 'Set up alerts')) : null));
 }
 
 // ---------- screens ----------
@@ -105,7 +105,7 @@ export function alertForm(a, { lock = false } = {}) {
 }
 /**
  * Alerts for one share or fund, on its own page: lists them with what the number is now, and lets the owner add, change or remove them.
- * They are the same alerts as on Shares & funds > Watch > Alerts & watchlist (one list, data.alerts).
+ * They are the same alerts as on Shares & funds > Manage > Alerts (one list, data.alerts).
  */
 export function alertsCard(kind, ref, name) {
   const data = S.data, mine = (data.alerts || []).filter((a) => a.kind === kind && String(a.ref) === String(ref));
@@ -118,7 +118,7 @@ export function alertsCard(kind, ref, name) {
       title: W.alertText(a), sub: ['Now ' + alertNow(a)], value: status(a),
       extra: canEdit() ? h('span', { class: 'rl-actions' }, btn('Change', () => alertForm(a, { lock: true }), 'small'), btn('Remove', () => remove(a), 'small')) : null,
     }))) : h('p', { class: 'empty' }, 'No alerts for this ' + (kind === 'fund' ? 'fund' : 'share') + ' yet.'),
-    h('p', { class: 'note' }, 'These are the same alerts as on Shares & funds › Watch › Alerts & watchlist. They are checked when you open that page and when you press Refresh.'),
+    h('p', { class: 'note' }, 'These are the same alerts as on Shares & funds › Manage › Alerts. They are checked when you open that page and when you press Refresh.'),
     canEdit() ? btn(mine.length ? 'Add another alert' : 'Add an alert', () => alertForm(preset, { lock: true }), 'primary') : null));
 }
 export function fundPicker() {

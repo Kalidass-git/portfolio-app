@@ -22,7 +22,7 @@ import { monthlyBuys, lastMonths, byName, planDone } from '../buys.js';
 import { barChart } from '../charts.js';
 
 let sortKey = 'current', sortDir = 'desc', busy = false;
-const TABS = [['overview', 'Overview'], ['holdings', 'Holdings'], ['watch', 'Watch'], ['manage', 'Manage'], ['history', 'History']];
+const TABS = [['overview', 'Overview'], ['holdings', 'Holdings'], ['watchlists', 'Watchlists'], ['manage', 'Manage'], ['history', 'History']];
 const rerender = () => window.dispatchEvent(new Event('rerender'));
 
 function stockForm(s, kind) {
@@ -339,9 +339,12 @@ export function render() {
   if (route().sub === 'fund') { fundView.render(root); return root; }
   if (route().sub === 'quote') { quoteView.render(root); return root; }
   const rsub = route().sub;
-  const LEGACY = { today: '#/equity/overview', alerts: '#/equity/watch?v=alerts', funds: '#/equity/holdings?v=funds', insights: '#/equity/watch?v=insights', sold: '#/equity/history?v=sold', dividends: '#/equity/history?v=dividends', sip: '#/equity/manage?v=planner', import: '#/equity/manage?v=import', stocks: '#/equity/holdings?v=stocks&f=shares', etfs: '#/equity/holdings?v=stocks&f=etfs' };
+  const LEGACY = { today: '#/equity/overview', alerts: '#/equity/manage?v=alerts', funds: '#/equity/holdings?v=funds', insights: '#/equity/manage?v=insights', sold: '#/equity/history?v=sold', dividends: '#/equity/history?v=dividends', sip: '#/equity/manage?v=planner', import: '#/equity/manage?v=import', stocks: '#/equity/holdings?v=stocks&f=shares', etfs: '#/equity/holdings?v=stocks&f=etfs' };
   if (LEGACY[rsub]) { location.replace(LEGACY[rsub]); return root; }
-  const visible = TABS.filter((t) => t[0] !== 'manage' || canEdit());
+  // the old Watch tab became Manage > Alerts / Insights, and Manage > Watchlists became a tab of its own
+  if (rsub === 'watch') { location.replace('#/equity/manage?v=' + (route().query.get('v') === 'insights' ? 'insights' : 'alerts')); return root; }
+  if (rsub === 'manage' && route().query.get('v') === 'watchlists') { location.replace('#/equity/watchlists'); return root; }
+  const visible = TABS;   // everyone sees every tab; Manage shows the owner-only parts (planner, import) to the owner alone
   const tab = visible.some((t) => t[0] === rsub) ? rsub : 'overview';
   const q = route().query, view = q.get('v') || (tab === 'holdings' && q.get('f')) || '';
   const st = all.stocks, mf = all.mf;
@@ -372,14 +375,13 @@ export function render() {
     const v = view === 'dividends' ? 'dividends' : 'sold';
     sub([['sold', 'Sold shares'], ['dividends', 'Dividends']], v);
     if (v === 'dividends') dividends.render(root); else sold(root);
-  } else if (tab === 'watch') {
-    const v = view === 'insights' ? 'insights' : 'alerts';
-    sub([['alerts', 'Alerts & watchlist'], ['insights', 'Insights']], v);
-    if (v === 'insights') insights(root); else watchView.alertsTab(root);
+  } else if (tab === 'watchlists') {
+    watchlistsView.render(root);
   } else {
-    const v = view === 'import' ? 'import' : view === 'watchlists' ? 'watchlists' : 'planner';
-    sub([['planner', 'Investment planner'], ['watchlists', 'Watchlists'], ['import', 'Import']], v);
-    if (v === 'import') importView.render(root); else if (v === 'watchlists') watchlistsView.render(root); else planner(root);
+    const items = [...(canEdit() ? [['planner', 'Investment planner']] : []), ['alerts', 'Alerts'], ['insights', 'Insights'], ...(canEdit() ? [['import', 'Import']] : [])];
+    const v = items.some((x) => x[0] === view) ? view : items[0][0];
+    sub(items, v);
+    if (v === 'import') importView.render(root); else if (v === 'insights') insights(root); else if (v === 'alerts') watchView.alertsTab(root); else planner(root);
   }
   return root;
 }
