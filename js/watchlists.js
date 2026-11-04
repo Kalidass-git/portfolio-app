@@ -16,13 +16,13 @@ const nextId = (arr, p) => p + (Math.max(0, ...arr.map((x) => Number(String(x.id
 
 /** Indexes you can add from a list (Yahoo Finance symbols; any other index can be typed in). */
 export const INDEXES = [
-  { symbol: 'NIFTY50', name: 'Nifty 50', yahoo: '^NSEI' }, { symbol: 'SENSEX', name: 'Sensex', yahoo: '^BSESN' }, { symbol: 'NIFTYBANK', name: 'Nifty Bank', yahoo: '^NSEBANK' },
-  { symbol: 'NIFTYNEXT50', name: 'Nifty Next 50', yahoo: '^NSMIDCP' }, { symbol: 'NIFTY500', name: 'Nifty 500', yahoo: '^CRSLDX' },
-  { symbol: 'NIFTYMIDCAP100', name: 'Nifty Midcap 100', yahoo: '^CNXMIDCAP' }, { symbol: 'NIFTYMIDCAP150', name: 'Nifty Midcap 150', yahoo: 'NIFTYMIDCAP150.NS' },
-  { symbol: 'NIFTYSMALLCAP100', name: 'Nifty Smallcap 100', yahoo: '^CNXSC' }, { symbol: 'NIFTYSMALLCAP250', name: 'Nifty Smallcap 250', yahoo: 'NIFTYSMLCAP250.NS' },
-  { symbol: 'NIFTYIT', name: 'Nifty IT', yahoo: '^CNXIT' }, { symbol: 'NIFTYAUTO', name: 'Nifty Auto', yahoo: '^CNXAUTO' }, { symbol: 'NIFTYFMCG', name: 'Nifty FMCG', yahoo: '^CNXFMCG' },
-  { symbol: 'NIFTYPHARMA', name: 'Nifty Pharma', yahoo: '^CNXPHARMA' }, { symbol: 'NIFTYMETAL', name: 'Nifty Metal', yahoo: '^CNXMETAL' }, { symbol: 'NIFTYENERGY', name: 'Nifty Energy', yahoo: '^CNXENERGY' },
-  { symbol: 'NIFTYREALTY', name: 'Nifty Realty', yahoo: '^CNXREALTY' }, { symbol: 'INDIAVIX', name: 'India VIX', yahoo: '^INDIAVIX' },
+  { pe: 'NIFTY 50', symbol: 'NIFTY50', name: 'Nifty 50', yahoo: '^NSEI' }, { symbol: 'SENSEX', name: 'Sensex', yahoo: '^BSESN' }, { pe: 'NIFTY BANK', symbol: 'NIFTYBANK', name: 'Nifty Bank', yahoo: '^NSEBANK' },
+  { pe: 'NIFTY NEXT 50', symbol: 'NIFTYNEXT50', name: 'Nifty Next 50', yahoo: '^NSMIDCP' }, { pe: 'NIFTY 500', symbol: 'NIFTY500', name: 'Nifty 500', yahoo: '^CRSLDX' },
+  { pe: 'NIFTY MIDCAP 100', symbol: 'NIFTYMIDCAP100', name: 'Nifty Midcap 100', yahoo: '^CNXMIDCAP' }, { pe: 'NIFTY MIDCAP 150', symbol: 'NIFTYMIDCAP150', name: 'Nifty Midcap 150', yahoo: 'NIFTYMIDCAP150.NS' },
+  { pe: 'NIFTY SMALLCAP 100', symbol: 'NIFTYSMALLCAP100', name: 'Nifty Smallcap 100', yahoo: '^CNXSC' }, { pe: 'NIFTY SMALLCAP 250', symbol: 'NIFTYSMALLCAP250', name: 'Nifty Smallcap 250', yahoo: 'NIFTYSMLCAP250.NS' },
+  { pe: 'NIFTY IT', symbol: 'NIFTYIT', name: 'Nifty IT', yahoo: '^CNXIT' }, { pe: 'NIFTY AUTO', symbol: 'NIFTYAUTO', name: 'Nifty Auto', yahoo: '^CNXAUTO' }, { pe: 'NIFTY FMCG', symbol: 'NIFTYFMCG', name: 'Nifty FMCG', yahoo: '^CNXFMCG' },
+  { pe: 'NIFTY PHARMA', symbol: 'NIFTYPHARMA', name: 'Nifty Pharma', yahoo: '^CNXPHARMA' }, { pe: 'NIFTY METAL', symbol: 'NIFTYMETAL', name: 'Nifty Metal', yahoo: '^CNXMETAL' }, { pe: 'NIFTY ENERGY', symbol: 'NIFTYENERGY', name: 'Nifty Energy', yahoo: '^CNXENERGY' },
+  { pe: 'NIFTY REALTY', symbol: 'NIFTYREALTY', name: 'Nifty Realty', yahoo: '^CNXREALTY' }, { symbol: 'INDIAVIX', name: 'India VIX', yahoo: '^INDIAVIX' },
 ];
 /** Every symbol on any list, once each: [{ symbol, yahoo }]. */
 export function allSymbols(data) {
@@ -45,6 +45,14 @@ export function addItem(d, id, { symbol, name = '', yahoo = '', index = false })
   l.items.push({ symbol: sym, name: String(name || '').trim() || sym, ...(yahoo ? { yahoo } : {}), ...(index ? { index: true } : {}) });
   return true;
 }
+/** Change a watched share's name, target price or note (all optional; an empty value removes it). */
+export function updateItem(d, id, symbol, { name, target, note }) {
+  const l = lists(d).find((x) => x.id === id), it = l && (l.items || []).find((x) => norm(x.symbol) === norm(symbol)); if (!it) return false;
+  if (name != null && String(name).trim()) it.name = String(name).trim();
+  if (target !== undefined) { const t = Number(target); if (t > 0) it.target = t; else delete it.target; }
+  if (note !== undefined) { const n = String(note || '').trim(); if (n) it.note = n; else delete it.note; }
+  return true;
+}
 export function removeItem(d, id, symbol) { const l = lists(d).find((x) => x.id === id); if (l) l.items = (l.items || []).filter((it) => norm(it.symbol) !== norm(symbol)); }
 
 // ---- live prices (this device only) ----
@@ -62,7 +70,7 @@ export async function refreshQuotes(data = S.data) {
     for (const [sym, q] of Object.entries(res.quotes || {})) {
       if (!(q && q.price > 0)) continue;
       const prev = q.prevClose > 0 ? q.prevClose : null;
-      Q[norm(sym)] = { price: q.price, prev, change: prev ? q.price - prev : null, dayPct: prev ? q.price / prev - 1 : null, hi52: q.high52 || null, lo52: q.low52 || null, at };
+      Q[norm(sym)] = { price: q.price, prev, change: prev ? q.price - prev : null, dayPct: prev ? q.price / prev - 1 : null, hi52: q.high52 || null, lo52: q.low52 || null, dayHi: q.dayHigh || null, dayLo: q.dayLow || null, at };
       out.n++;
     }
     for (const [sym, msg] of Object.entries(res.errors || {})) out.errors.push(`${sym}: ${msg}`);

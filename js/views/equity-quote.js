@@ -33,6 +33,6 @@ export function render(root) {
   const name = (item && item.name) || (held && held.name) || (preset && preset.name) || q.get('name') || symbol;
   const yahoo = (item && item.yahoo) || (held && held.yahoo) || (preset && preset.yahoo) || q.get('y') || '';
   const qt = WL.quoteOf(symbol);
-  root.append(...terminal({ symbol, name, yahoo, index, quote: qt ? { price: qt.price, prev: qt.prev, at: qt.at } : null, avgCost: held ? held.avgPrice : null }));
+  root.append(...terminal({ symbol, name, yahoo, index, indexPe: (preset && preset.pe) || '', quote: qt ? { price: qt.price, prev: qt.prev, at: qt.at } : null, avgCost: held ? held.avgPrice : null }));
   root.append(alertsCard('stock', symbol, name), listsCard(symbol, name, yahoo, index));
 }

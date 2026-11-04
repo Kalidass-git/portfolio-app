@@ -1,5 +1,5 @@
 // Mutual funds: the fund page (buy and redeem history, XIRR) and the forms to add, edit and link a fund.
-import { historyCard } from './histcard.js';
+import { fundChart } from './fundchart.js';
 import { fundFundamentals, alertsCard } from './watch.js';
 import { fundNavs } from '../history.js';
 import { S, mutate, nextId } from '../store.js';
@@ -107,7 +107,7 @@ export function render(root) {
     stat('Gain', gainText(m.pl), pct(m.ret, 1)),
     stat('XIRR', m.xirr == null ? '–' : h('span', { class: posNeg(m.xirr) }, pct(m.xirr, 1)), m.xirr == null ? (raw.opening ? 'part of this fund has no purchase dates' : txns.length ? 'needs a purchase over a month old' : 'record purchases with dates to see it') : 'yearly return including timing'),
     realized ? stat('Already earned', money(realized), 'profit booked on units sold') : null));
-  if (m.schemeCode) root.append(historyCard({ title: 'NAV history', load: () => fundNavs(m.schemeCode), avg: m.units ? m.invested / m.units : null, firstBuy: txns.length ? txns[txns.length - 1].date : null, unit: 'NAV' }));
+  if (m.schemeCode) root.append(fundChart({ title: 'NAV history and rolling returns', loadNavs: () => fundNavs(m.schemeCode), avg: m.units ? m.invested / m.units : null, firstBuy: txns.length ? txns[txns.length - 1].date : null }));
   else root.append(h('div', { class: 'card' }, h('p', { class: 'note' }, 'Link this fund to its live NAV to see its price history.')));
   if (m.schemeCode) root.append(fundFundamentals(m, m.schemeCode));
   if (m.schemeCode) root.append(alertsCard('fund', m.schemeCode, m.name));

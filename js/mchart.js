@@ -25,7 +25,7 @@ const POS = 'var(--pos, #1a7f4b)', NEG = 'var(--neg, #c24141)';
  *   place a new one (onLine.add({ d1, p1, d2, p2 })); tapping a line calls onLine.select(id); selected highlights one.
  */
 export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, pe = null, avg = null, trades = [], height = 250, fmt = nice, vfmt = (v) => String(Math.round(v)), dateFmt = (d) => d, tickFmt = (d) => d,
-  lines = [], tool = 'none', selected = null, onLine = null, view = null, onView = () => {} } = {}) {
+  lines = [], tool = 'none', selected = null, onLine = null, view = null, onView = () => {}, peMedian = null, peLabel = 'P/E', peFmt = (v, d = 0) => v.toFixed(d), peSigned = false, newColor = null } = {}) {
   const N = rows.length;
   if (N < 2) return h('p', { class: 'empty' }, 'Not enough history for this range.');
   const MINBARS = Math.min(12, N);
@@ -34,11 +34,12 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
   const W = typeof window !== 'undefined' && window.innerWidth < 640 ? 380 : 880;
   const box = h('div', { class: 'chart-box' });
   const read = h('div', { class: 'cd-read mc-read', 'aria-live': 'polite' });
+  let yz = null;                          // price range chosen by dragging the price axis: { lo, hi } (null = fit what is on screen)
   let ctx = null, pending = null, preview = null, sel = selected, live = null;   // sel: the selected line; live: a line being dragged { id, line }      // first point of a trendline being drawn, and where the pointer is now
   const fix = () => { const len = Math.max(MINBARS, Math.min(N, Math.round(z - a + 1))); a = Math.max(0, Math.min(N - len, Math.round(a))); z = a + len - 1; };
   const redraw = () => { fix(); box.replaceChildren(paint(), read); onView(a === 0 && z === N - 1 ? null : { d0: rows[a].d, d1: rows[z].d }); };
   const zoomAt = (f, frac = 0.5) => { const len = z - a + 1, nl = Math.max(MINBARS, Math.min(N, len * f)); if (Math.round(nl) === len) return; const anchor = a + len * frac; a = anchor - nl * frac; z = a + nl - 1; redraw(); };
-  box.zoom = (f) => zoomAt(f, 0.5); box.reset = () => { a = 0; z = N - 1; redraw(); }; box.isZoomed = () => !(a === 0 && z === N - 1);
+  box.zoom = (f) => zoomAt(f, 0.5); box.reset = () => { a = 0; z = N - 1; yz = null; redraw(); }; box.isZoomed = () => !(a === 0 && z === N - 1) || !!yz;
 
   function paint() {
     const R = rows.slice(a, z + 1), n = R.length, sub = (arr) => (arr ? arr.slice(a, z + 1) : null);
@@ -58,6 +59,8 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
     let lo = Math.min(...vals), hi = Math.max(...vals);
     if (avg != null && avg > lo - (hi - lo) * 0.5 && avg < hi + (hi - lo) * 0.5) { lo = Math.min(lo, avg); hi = Math.max(hi, avg); }
     const span = hi - lo || hi * 0.02 || 1; lo -= span * 0.06; hi += span * 0.06;
+    const fitLo = lo, fitHi = hi;
+    if (yz && mode !== 'pct') { lo = yz.lo; hi = yz.hi; }
     const y = (v) => priceT + (1 - (val(v) - val(lo)) / (val(hi) - val(lo))) * (priceB - priceT);
     const priceAt = (py) => lo + (1 - (py - priceT) / (priceB - priceT)) * (hi - lo);
 
@@ -124,11 +127,13 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
     // P/E panel
     let peY = null;
     if (showPe) {
-      const pv = peS.filter((x) => x != null), plo0 = Math.min(...pv), phi0 = Math.max(...pv), ps = phi0 - plo0 || phi0 * 0.1 || 1, plo = Math.max(0, plo0 - ps * 0.12), phi = phi0 + ps * 0.12;
+      const pv = peS.filter((x) => x != null), plo0 = Math.min(...pv), phi0 = Math.max(...pv), ps = phi0 - plo0 || phi0 * 0.1 || 1, plo = peSigned ? plo0 - ps * 0.12 : Math.max(0, plo0 - ps * 0.12), phi = phi0 + ps * 0.12;
       peY = (v) => peT + (1 - (v - plo) / (phi - plo)) * (peB - peT);
       root.append(svg('line', { x1: padL, x2: W - padR, y1: peT, y2: peT, class: 'grid' }), svg('line', { x1: padL, x2: W - padR, y1: peB, y2: peB, class: 'grid' }),
-        svg('text', { x: padL - 6, y: peT + 9, class: 'axis', 'text-anchor': 'end' }, phi.toFixed(0)), svg('text', { x: padL - 6, y: peB, class: 'axis', 'text-anchor': 'end' }, plo.toFixed(0)),
-        svg('text', { x: padL + 4, y: peT + 11, class: 'axis', fill: LINE_COLORS.pe, style: 'font-weight:700' }, 'P/E'));
+        svg('text', { x: padL - 6, y: peT + 9, class: 'axis', 'text-anchor': 'end' }, peFmt(phi)), svg('text', { x: padL - 6, y: peB, class: 'axis', 'text-anchor': 'end' }, peFmt(plo)),
+        svg('text', { x: padL + 4, y: peT + 11, class: 'axis', fill: LINE_COLORS.pe, style: 'font-weight:700' }, peLabel));
+      if (peSigned && plo < 0 && phi > 0) root.append(svg('line', { x1: padL, x2: W - padR, y1: peY(0), y2: peY(0), stroke: 'var(--muted, #888)', 'stroke-width': 1, opacity: '.6' }));
+      if (peMedian != null && peMedian >= plo && peMedian <= phi) root.append(svg('line', { x1: padL, x2: W - padR, y1: peY(peMedian), y2: peY(peMedian), stroke: LINE_COLORS.pe, 'stroke-width': 1.2, 'stroke-dasharray': '5 4', opacity: '.8' }), svg('text', { x: W - padR - 2, y: peY(peMedian) - 3, class: 'axis', 'text-anchor': 'end', fill: LINE_COLORS.pe }, 'Median ' + peFmt(peMedian, 1)));
       let seg = [];
       const flush = () => { if (seg.length > 1) root.append(svg('polyline', { points: seg.join(' '), fill: 'none', stroke: LINE_COLORS.pe, 'stroke-width': 2.2, 'stroke-linejoin': 'round' })); seg = []; };
       peS.forEach((x, i) => { if (x == null) flush(); else seg.push(`${cx(i).toFixed(1)},${peY(x).toFixed(1)}`); });
@@ -144,14 +149,14 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
     const lineLayer = svg('g', { 'clip-path': `url(#${clip})` }), segs = [];
     if (mode !== 'pct') {
       const draw = (L, sel, ghost) => {
-        const x1 = px(posOf(L.d1)), x2 = px(posOf(L.d2)), y1 = y(L.p1), y2 = y(L.p2);
-        lineLayer.append(svg('line', { x1, y1, x2, y2, stroke: LINE_COLORS.trend, 'stroke-width': sel ? 2.8 : 1.8, 'stroke-linecap': 'round', 'stroke-dasharray': ghost ? '5 4' : null, opacity: ghost ? '.8' : null }));
-        if (sel) for (const [xx, yy] of [[x1, y1], [x2, y2]]) lineLayer.append(svg('circle', { cx: xx, cy: yy, r: 5, fill: 'var(--surface, #fff)', stroke: LINE_COLORS.trend, 'stroke-width': 2 }));
+        const col = L.color || LINE_COLORS.trend, x1 = px(posOf(L.d1)), x2 = px(posOf(L.d2)), y1 = y(L.p1), y2 = y(L.p2);
+        lineLayer.append(svg('line', { x1, y1, x2, y2, stroke: col, 'stroke-width': sel ? 2.8 : 1.8, 'stroke-linecap': 'round', 'stroke-dasharray': ghost ? '5 4' : null, opacity: ghost ? '.8' : null }));
+        if (sel) for (const [xx, yy] of [[x1, y1], [x2, y2]]) lineLayer.append(svg('circle', { cx: xx, cy: yy, r: 5, fill: 'var(--surface, #fff)', stroke: col, 'stroke-width': 2 }));
         return { x1, y1, x2, y2 };
       };
       for (const L0 of lines || []) { const L = live && live.id === L0.id ? { ...L0, ...live.line } : L0; segs.push({ id: L.id, ...draw(L, L.id === sel, false) }); }
-      if (pending && preview) draw({ d1: pending.d, p1: pending.p, d2: preview.d, p2: preview.p }, false, true);
-      else if (pending) lineLayer.append(svg('circle', { cx: px(posOf(pending.d)), cy: y(pending.p), r: 4.5, fill: LINE_COLORS.trend }));
+      if (pending && preview) draw({ d1: pending.d, p1: pending.p, d2: preview.d, p2: preview.p, color: newColor }, false, true);
+      else if (pending) lineLayer.append(svg('circle', { cx: px(posOf(pending.d)), cy: y(pending.p), r: 4.5, fill: newColor || LINE_COLORS.trend }));
     }
     root.append(lineLayer);
 
@@ -171,7 +176,7 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
       read.replaceChildren(h('b', null, dateFmt(r.d)), mode === 'candle' ? ` O ${fmt(r.o)} · H ${fmt(r.h)} · L ${fmt(r.l)} · C ${fmt(r.c)}` : ` ${fmt(r.c)}`,
         h('span', { class: ch >= 0 ? 'pos' : 'neg' }, ` ${ch >= 0 ? '+' : '−'}${(Math.abs(ch / prev) * 100).toFixed(2)}%`),
         mode === 'pct' ? h('span', { class: r.c >= base ? 'pos' : 'neg' }, ` · since start ${r.c >= base ? '+' : '−'}${(Math.abs(r.c / base - 1) * 100).toFixed(1)}%`) : '', r.v > 0 ? ` · Vol ${vfmt(r.v)}` : '',
-        h('div', { class: 'mc-chips' }, chip('50d', m50 && m50[i] != null ? fmt(m50[i]) : null, LINE_COLORS.dma50), chip('200d', m200 && m200[i] != null ? fmt(m200[i]) : null, LINE_COLORS.dma200), chip('P/E', showPe && peS[i] != null ? peS[i].toFixed(1) : null, LINE_COLORS.pe)));
+        h('div', { class: 'mc-chips' }, chip('50d', m50 && m50[i] != null ? fmt(m50[i]) : null, LINE_COLORS.dma50), chip('200d', m200 && m200[i] != null ? fmt(m200[i]) : null, LINE_COLORS.dma200), chip(peLabel, showPe && peS[i] != null ? peFmt(peS[i], 1) : null, LINE_COLORS.pe)));
     };
     const rect = () => root.getBoundingClientRect();
     const toSvg = (e) => { const bb = rect(); return { x: ((e.clientX - bb.left) / bb.width) * W, y: ((e.clientY - bb.top) / bb.height) * H }; };
@@ -195,8 +200,11 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
     };
     // the line with the whole of it moved by the distance from (X0, Y0) to (X, Y)
     const shift = (L, X0, Y0, X, Y) => { const dp = (X - X0) / gw, dq = priceAt(Y) - priceAt(Y0); return { d1: dateOf(posOf(L.d1) + dp), p1: L.p1 + dq, d2: dateOf(posOf(L.d2) + dp), p2: L.p2 + dq }; };
-    ctx = { hitLine, shift, show, point, near, barAt, toSvg, drawing, gw, padL, padR, W, rect, plot: [padL, priceT, W - padR, bottom] };
-    root.append(cross, dots, hit);
+    ctx = { H, lo, hi, plotH: priceB - priceT, zone: (X, Y) => (Y >= bottom && Y <= H && X >= padL ? 'x' : X < padL && Y >= priceT && Y <= priceB && mode !== 'pct' ? 'y' : null), hitLine, shift, show, point, near, barAt, toSvg, drawing, gw, padL, padR, W, rect, plot: [padL, priceT, W - padR, bottom] };
+    // dragging the month labels stretches time, dragging the price labels stretches the price scale (double-click either to undo)
+    const axX = svg('rect', { x: padL, y: bottom, width: W - padL - padR, height: axisH + 4, fill: 'transparent', style: 'cursor: ew-resize' });
+    const axY = svg('rect', { x: 0, y: priceT, width: padL, height: priceB - priceT, fill: 'transparent', style: 'cursor: ns-resize' });
+    root.append(axX, axY, cross, dots, hit);
     show(n - 1); cross.style.display = 'none'; dots.replaceChildren();
     return root;
   }
@@ -204,11 +212,12 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
   const inPlot = (e) => { if (!ctx) return null; const s = ctx.toSvg(e), [x0, y0, x1, y1] = ctx.plot; return s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1 ? s : null; };
   const ptrs = new Map(); let drag = null, pinch = null;
   box.addEventListener('pointerdown', (e) => {
+    if (ctx) { const zs = ctx.toSvg(e), zone = ctx.zone(zs.x, zs.y); if (zone) { try { box.setPointerCapture(e.pointerId); } catch { /* not supported */ } drag = { zone, x: e.clientX, y: e.clientY, a, z, lo: ctx.lo, hi: ctx.hi, moved: true }; ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); return; } }
     const s = inPlot(e); if (!s) return;
     try { box.setPointerCapture(e.pointerId); } catch { /* not supported */ }
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (ptrs.size === 2) { const [p, q] = [...ptrs.values()]; pinch = { d: Math.hypot(p.x - q.x, p.y - q.y), a, z }; drag = null; return; }
-    drag = { x: e.clientX, y: e.clientY, a, z, moved: false, touch: e.pointerType === 'touch' };
+    drag = { x: e.clientX, y: e.clientY, a, z, moved: false, touch: e.pointerType === 'touch', yz: yz ? { ...yz } : null };
     if (!ctx.drawing) {
       const hl = ctx.hitLine(s.x, s.y), L = hl && (lines || []).find((q) => q.id === hl.id);
       if (hl && L && onLine && onLine.update) { drag.edit = { ...hl, X0: s.x, Y0: s.y, orig: L }; sel = hl.id; }
@@ -221,6 +230,11 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
       const [p, q] = [...ptrs.values()], d = Math.hypot(p.x - q.x, p.y - q.y), len0 = pinch.z - pinch.a + 1, nl = Math.max(MINBARS, Math.min(N, len0 * (pinch.d / (d || 1))));
       const bb = ctx.rect(), mid = (p.x + q.x) / 2, frac = Math.max(0, Math.min(1, (((mid - bb.left) / bb.width) * ctx.W - ctx.padL) / (ctx.W - ctx.padL - ctx.padR))), anchor = pinch.a + len0 * frac;
       a = anchor - nl * frac; z = a + nl - 1; redraw(); return;
+    }
+    if (drag && drag.zone) {
+      if (drag.zone === 'x') { const len0 = drag.z - drag.a + 1, nl = Math.max(MINBARS, Math.min(N, len0 * Math.exp(-(e.clientX - drag.x) / 150))); z = drag.z; a = z - nl + 1; if (a < 0) { a = 0; z = nl - 1; } redraw(); }
+      else { const r0 = drag.hi - drag.lo, mid = (drag.hi + drag.lo) / 2, r = r0 * Math.exp((e.clientY - drag.y) / 150); yz = { lo: mid - r / 2, hi: mid + r / 2 }; redraw(); }
+      return;
     }
     const s = inPlot(e); if (!s && !drag) return;
     const sv = s || ctx.toSvg(e);
@@ -236,8 +250,9 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
     }
     if (drag && ptrs.size === 1 && (e.buttons || drag.touch)) {
       const dx = e.clientX - drag.x;
-      if (Math.abs(dx) > 4) drag.moved = true;
+      if (Math.abs(dx) > 4 || (yz && Math.abs(e.clientY - drag.y) > 4)) drag.moved = true;
       if (drag.moved && (box.isZoomed() || !drag.touch)) {
+        if (yz && drag.yz) { const k = (drag.yz.hi - drag.yz.lo) / ctx.plotH, sh = ((e.clientY - drag.y) / (ctx.rect().height / ctx.H)) * k; yz = { lo: drag.yz.lo + sh, hi: drag.yz.hi + sh }; }
         const bars = Math.round(((dx / ctx.rect().width) * ctx.W) / ctx.gw), len = drag.z - drag.a + 1, na = Math.max(0, Math.min(N - len, drag.a - bars));
         if (Math.round(na) !== Math.round(a)) { a = na; z = a + len - 1; redraw(); }
         return;
@@ -248,6 +263,7 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
   const finish = (e) => {
     ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null;
     if (!drag) return;
+    if (drag.zone) { drag = null; return; }
     const moved = drag.moved, ed = drag.edit; drag = null;
     if (moved && ed) { const L = live && live.line; live = null; if (L) onLine.update(ed.id, L); return; }
     if (moved) return;
@@ -263,6 +279,7 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
     else if (selected && onLine && onLine.select) onLine.select(null);
   };
   box.addEventListener('pointerup', finish);
+  box.addEventListener('dblclick', (e) => { if (!ctx) return; const zs = ctx.toSvg(e), zone = ctx.zone(zs.x, zs.y); if (zone === 'y') { yz = null; redraw(); } else if (zone === 'x') { a = 0; z = N - 1; redraw(); } });
   box.addEventListener('pointercancel', (e) => { ptrs.delete(e.pointerId); pinch = null; drag = null; if (live) { live = null; redraw(); } });
   box.addEventListener('wheel', (e) => {
     const s = inPlot(e); if (!s) return;

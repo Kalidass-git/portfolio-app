@@ -1599,3 +1599,19 @@ dialog.sheet.bulk { width: min(1180px, 96vw); }
 .tm-tg i { width: 14px; height: 4px; border-radius: 2px; display: inline-block; } .tm-tg:not(.on) i { opacity: .4; }
 @media (max-width: 480px) { .tm-seg button { padding: 7px 10px; font-size: .86rem; } .tm-lab { display: none; } .tm-row { gap: 8px; } }
 .tm-actions { display: flex; gap: 8px; align-items: center; }
+.tm-sw { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--line); cursor: pointer; padding: 0; } .tm-sw.on { box-shadow: 0 0 0 2px var(--ink); }
+.tm-colors { grid-column: 1 / -1; }
+/* desktop: controls use both sides: ranges and chart type on the left, line toggles and tools on the right */
+@media (min-width: 900px) {
+  .tm-bar { display: grid; grid-template-columns: 1fr auto; gap: 10px 20px; align-items: center; }
+  .tm-bar > .tm-seg.scroll { grid-column: 1; grid-row: 1; } .tm-bar > .tm-type { grid-column: 1; grid-row: 2; }
+  .tm-bar > .tm-lines { grid-column: 2; grid-row: 1; justify-content: flex-end; } .tm-bar > .tm-tools { grid-column: 2; grid-row: 2; justify-content: flex-end; }
+}
+/* watchlist table */
+.wl-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 12px; margin: 0 0 10px; }
+.wl-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.wl-sub { color: var(--muted); font-size: .8rem; font-weight: 400; } .wl-badge { display: inline-block; font-weight: 700; font-size: .78rem; padding: 1px 7px; border-radius: 6px; margin-top: 3px; } .wl-badge.pos { background: color-mix(in srgb, var(--pos) 14%, transparent); color: var(--pos); } .wl-badge.neg { background: color-mix(in srgb, var(--neg) 14%, transparent); color: var(--neg); }
+.wl-52c { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; min-width: 120px; } .wl-52c small, .wl-away { color: var(--muted); font-size: .78rem; } .wl-52c .tm-rng { width: 100px; margin-top: 2px; }
+.wl-trade { display: flex; gap: 6px; justify-content: flex-end; } .wl-trade .buy { background: var(--pos); color: #fff; border-color: var(--pos); } .wl-note { color: var(--muted); font-size: .85rem; }
+.wl-trade .chip-btn { white-space: nowrap; padding: 5px 12px; min-height: 32px; } .wl-trade .chip-btn.buy { background: var(--pos); color: #fff; border-color: var(--pos); font-weight: 650; }
+.wl-search .find-row input { width: 100%; max-width: 520px; } .wl-search .note { margin: 6px 0 0; }

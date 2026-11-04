@@ -1,5 +1,5 @@
 // Moving averages, EPS timeline, historical P/E and performance look-backs. Synthetic data.
-import { sma, epsTimeline, peSeries, performance } from '../js/ta.js';
+import { sma, epsTimeline, peSeries, performance, rollingReturns, rollStats } from '../js/ta.js';
 let bad = 0; const ok = (c, m) => { if (!c) { bad++; console.log('FAIL', m); } else console.log('ok  ', m); };
 const s = sma([1, 2, 3, 4, 5, 6], 3);
 ok(s[0] === null && s[1] === null && s[2] === 2 && s[5] === 5, 'sma starts after n values and averages the last n');
@@ -23,4 +23,15 @@ const long = Array.from({ length: 800 }, (_, i) => ({ d: new Date(Date.UTC(2024,
 const perf = performance(long);
 ok(perf.find((p) => p.label === '1M') && perf.find((p) => p.label === '1Y') && !perf.find((p) => p.label === '3Y'), 'performance only lists look-backs the history reaches');
 ok(Math.abs(perf.find((p) => p.label === '1W').pct - (long[799].c / long[792].c - 1)) < 1e-9, '1W compares with 7 days earlier');
+// rolling returns: a fund that grows 10% a year, daily from 2020-01-01
+{
+  const rows = []; for (let k = 0; k < 365 * 4; k++) { const d = new Date(Date.UTC(2020, 0, 1) + k * 864e5).toISOString().slice(0, 10); rows.push({ d, c: 100 * Math.pow(1.1, k / 365.25) }); }
+  const r1 = rollingReturns(rows, 1), r3 = rollingReturns(rows, 3);
+  ok(r1[100] === null && r1[400] != null, 'rolling 1Y is empty until a year of history');
+  ok(Math.abs(r1[1000] - 0.1) < 0.002 && Math.abs(r3[1400] - 0.1) < 0.002, 'steady 10% growth reads 10% a year for any window');
+  ok(r3[900] === null && r3[1200] != null, 'rolling 3Y starts after three years');
+  const st = rollStats(r1);
+  ok(st && Math.abs(st.median - 0.1) < 0.002 && st.positive === 1 && st.worst <= st.best, 'stats: median, share positive, best and worst');
+  ok(rollStats([null, null]) === null, 'no stats without values');
+}
 process.exit(bad ? 1 : 0);

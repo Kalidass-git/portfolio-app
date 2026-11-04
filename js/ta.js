@@ -61,3 +61,27 @@ export function performance(rows, spans = [['1W', 7], ['1M', 30], ['3M', 91], ['
   }
   return out;
 }
+
+/**
+ * Rolling returns: for each row, the yearly rate (CAGR) earned over the `years` ending on that row, from the row `years` earlier (or the nearest one before it).
+ * rows: [{ d, c }] oldest first. Returns an array the same length (null until the history is long enough). 0.12 = 12% a year.
+ */
+export function rollingReturns(rows, years) {
+  const out = new Array(rows.length).fill(null), days = years * 365.25;
+  let j = 0;
+  for (let i = 0; i < rows.length; i++) {
+    const target = Date.parse(rows[i].d) - days * 864e5;
+    if (Date.parse(rows[0].d) > target + 4 * 864e5) continue;   // the history does not reach back that far yet
+    while (j + 1 < i && Date.parse(rows[j + 1].d) <= target) j++;
+    const b = rows[j];
+    if (b.c > 0 && rows[i].c > 0) out[i] = Math.pow(rows[i].c / b.c, 1 / years) - 1;
+  }
+  return out;
+}
+/** Median, average, best, worst, latest and the share of periods above zero of a list of rolling returns (nulls ignored). null when there are none. */
+export function rollStats(vals) {
+  const v = vals.filter((x) => x != null);
+  if (!v.length) return null;
+  const b = v.slice().sort((x, y) => x - y), m = b.length >> 1;
+  return { n: v.length, median: b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2, avg: v.reduce((a, x) => a + x, 0) / v.length, best: b[b.length - 1], worst: b[0], latest: v[v.length - 1], positive: v.filter((x) => x > 0).length / v.length };
+}

@@ -4,10 +4,12 @@ import { h, money, dec, pct, dateStr, section, btn, posNeg, toast, canEdit } fro
 import { S, mutate } from '../store.js';
 import { watchButton } from './watchbtn.js';
 import { marketChart, LINE_COLORS } from '../mchart.js';
-import { stockOhlc, stockEps, stockInfo, aggregateOhlc, candleMode, sliceRange, dropCache, RANGES } from '../history.js';
+import { stockOhlc, stockEps, stockIndexPe, stockInfo, aggregateOhlc, candleMode, sliceRange, dropCache, RANGES } from '../history.js';
 import { sma, epsTimeline, peSeries, performance } from '../ta.js';
 
 const KEY = 'fw.term';
+const median = (a) => { if (!a.length) return null; const b = a.slice().sort((x, y) => x - y), m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; };
+export const TL_COLORS = ['#00b8d4', '#e91e63', '#ffb300', '#7cb342', '#546e7a', '#ff5722'];
 const defaults = { range: '6M', mode: 'line', iv: 'auto', dma50: true, dma200: true, pe: true };
 const mem = new Map();   // per symbol: the zoom you left the chart at and the line you had selected (the page is rebuilt after every save)
 const load = () => { try { return { ...defaults, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { return { ...defaults }; } };
@@ -25,7 +27,7 @@ const ago = (t) => { const m = Math.max(0, Math.round((Date.now() - t) / 60000))
 /** Daily rows [{d,o,h,l,c,v}] from whatever the backend gave (older backends give closes only). */
 const normalise = (res) => (res.rows && res.rows.length ? { rows: res.rows, closesOnly: false } : { rows: (res.closesOnly || []).map((x) => ({ d: x.d, o: x.v, h: x.v, l: x.v, c: x.v, v: 0 })), closesOnly: true });
 
-function chartCard({ symbol, name, yahoo, index, avgCost, firstBuy, trades, quote }) {
+function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy, trades, quote }) {
   const st = load();
   const body = h('div', null, h('p', { class: 'note' }, 'Loading the price history…'));
   const headBox = h('div', { class: 'tm-head' });
@@ -33,7 +35,7 @@ function chartCard({ symbol, name, yahoo, index, avgCost, firstBuy, trades, quot
   const mm = mem.get(symKey) || {}; mem.set(symKey, mm);
   let tool = 'none', chart = null;
   const myLines = () => ((S.data && S.data.trendlines) || {})[symKey] || [];
-  let data = null, eps = { state: index ? 'none' : 'idle', msg: '', tl: null }, peFull = null;
+  let data = null, eps = { state: index && !indexPe ? 'none' : 'idle', msg: '', tl: null }, peFull = null;
 
   const header = () => {
     const rows = data ? data.rows : [], last = rows[rows.length - 1], prev = rows[rows.length - 2];
@@ -45,12 +47,23 @@ function chartCard({ symbol, name, yahoo, index, avgCost, firstBuy, trades, quot
         cp != null ? h('span', { class: 'tm-badge ' + posNeg(ch) }, `${ch >= 0 ? '▲' : '▼'} ${ch >= 0 ? '+' : '−'}${Math.abs(cp * 100).toFixed(2)}%`) : null,
         ch != null ? h('span', { class: 'muted tm-sub' }, `${ch >= 0 ? '+' : '−'}${dec(Math.abs(ch), 2)} today`) : null,
         quote && quote.at ? h('span', { class: 'muted tm-sub' }, 'price ' + ago(Date.parse(quote.at))) : last ? h('span', { class: 'muted tm-sub' }, 'last close ' + dateStr(last.d)) : null),
-      h('div', { class: 'tm-actions' }, watchButton({ symbol, name, yahoo, index }), btn('Reload chart', () => { dropCache(symbol); data = null; peFull = null; eps = { state: index ? 'none' : 'idle', msg: '', tl: null }; body.replaceChildren(h('p', { class: 'note' }, 'Loading the price history…')); start(); toast('Reloading'); }, 'small')));
+      h('div', { class: 'tm-actions' }, watchButton({ symbol, name, yahoo, index }), btn('Reload chart', () => { dropCache(symbol); data = null; peFull = null; eps = { state: index && !indexPe ? 'none' : 'idle', msg: '', tl: null }; body.replaceChildren(h('p', { class: 'note' }, 'Loading the price history…')); start(); toast('Reloading'); }, 'small')));
   };
 
+  const canPe = !index || !!indexPe;
   const ensureEps = () => {
-    if (index || !st.pe || eps.state !== 'idle') return;
+    if (!canPe || !st.pe || eps.state !== 'idle') return;
     eps.state = 'loading'; draw();
+    if (index) {
+      stockIndexPe(indexPe).then((rowsPe) => {
+        // the P/E known on each day: the latest reading on or before it
+        let j = 0, last = null; const out = [];
+        for (const r of data.rows) { while (j < rowsPe.length && rowsPe[j].d <= r.d) { last = rowsPe[j].pe; j++; } out.push(last); }
+        peFull = out; eps.state = peFull.some((x) => x != null) ? 'ok' : 'err'; if (eps.state === 'err') eps.msg = 'No index P/E readings were found for these dates.';
+        draw();
+      }).catch((e) => { eps.state = 'err'; eps.msg = e.message || 'Could not load the index P/E.'; draw(); });
+      return;
+    }
     stockEps(symbol, yahoo).then((e) => {
       eps.tl = epsTimeline({ quarterly: e.quarterly.map((x) => ({ date: x.date, eps: x.eps })), annual: e.annual.map((x) => ({ date: x.date, eps: x.eps })) });
       if (!eps.tl.length) { eps.state = 'err'; eps.msg = 'No earnings history is available for this company, so a P/E line cannot be drawn.'; } else { eps.state = 'ok'; peFull = peSeries(data.rows, eps.tl); }
@@ -72,7 +85,7 @@ function chartCard({ symbol, name, yahoo, index, avgCost, firstBuy, trades, quot
     if (mm.key !== vkey) { mm.key = vkey; mm.view = null; }
     const rows = agg === 'D' ? cut : aggregateOhlc(cut, agg);
     const align = (m) => (m ? rows.map((r) => (m.has(r.d) ? m.get(r.d) : null)) : null);
-    const wantPe = !index && st.pe && peFull;
+    const wantPe = canPe && st.pe && peFull;
     const peM = wantPe ? new Map(all.map((r, i) => [r.d, peFull[i]])) : null;
     // a segmented group: one rounded strip, the chosen option filled
     const seg = (label, opts, cur, pick) => h('div', { class: 'tm-seg', role: 'group', 'aria-label': label }, opts.map(([k, l, tip]) => h('button', { type: 'button', class: k === cur ? 'on' : '', title: tip || null, 'aria-pressed': String(k === cur), onclick: () => pick(k) }, l)));
@@ -88,19 +101,21 @@ function chartCard({ symbol, name, yahoo, index, avgCost, firstBuy, trades, quot
     if (mode !== 'pct' && canEdit()) draws.push(h('button', { type: 'button', class: 'tm-tg tm-draw' + (tool === 'line' ? ' on' : ''), 'aria-pressed': String(tool === 'line'), onclick: () => { tool = tool === 'line' ? 'none' : 'line'; draw(); } }, h('i', { style: { background: LINE_COLORS.trend } }), tool === 'line' ? 'Tap two points…' : 'Trendline'));
     if (sel && canEdit()) draws.push(h('button', { type: 'button', class: 'tm-tg', onclick: () => { mutate((d) => { d.trendlines[symKey] = (d.trendlines[symKey] || []).filter((l) => l.id !== sel); if (!d.trendlines[symKey].length) delete d.trendlines[symKey]; }); mm.sel = null; } }, 'Delete line'));
     else if (myLines().length && canEdit()) draws.push(h('button', { type: 'button', class: 'tm-tg', onclick: () => { if (confirm('Remove all ' + myLines().length + ' trendlines on ' + name + '?')) mutate((d) => { delete d.trendlines[symKey]; if (!Object.keys(d.trendlines).length) delete d.trendlines; }); } }, `Clear lines (${myLines().length})`));
+    const swatches = canEdit() && mode !== 'pct' && (tool === 'line' || sel) ? h('div', { class: 'tm-row tm-colors', role: 'group', 'aria-label': 'Trendline colour' }, h('span', { class: 'tm-lab' }, sel ? 'Line colour' : 'New lines'),
+      TL_COLORS.map((c) => { const cur = sel ? ((myLines().find((l) => l.id === sel) || {}).color || TL_COLORS[0]) : (st.tc || TL_COLORS[0]); return h('button', { type: 'button', class: 'tm-sw' + (cur === c ? ' on' : ''), style: { background: c }, 'aria-label': 'Colour ' + c, title: 'Use this colour', onclick: () => { st.tc = c; save(st); if (sel) mutate((d) => { const x = ((d.trendlines || {})[symKey] || []).find((l) => l.id === sel); if (x) x.color = c; }); else draw(); } }); })) : null;
     body.append(h('div', { class: 'tm-bar' },
       ranges,
-      h('div', { class: 'tm-row' }, type, h('span', { class: 'tm-lab' }, 'Bars'), size),
-      h('div', { class: 'tm-row' }, h('span', { class: 'tm-lab' }, 'Lines'), tg('dma50', '50d', LINE_COLORS.dma50), tg('dma200', '200d', LINE_COLORS.dma200), index ? null : tg('pe', 'P/E', LINE_COLORS.pe, eps.state === 'loading' ? ' …' : '')),
-      h('div', { class: 'tm-row' }, zoom, ...draws)));
+      h('div', { class: 'tm-row tm-type' }, type, h('span', { class: 'tm-lab' }, 'Bars'), size),
+      h('div', { class: 'tm-row tm-lines' }, h('span', { class: 'tm-lab' }, 'Lines'), tg('dma50', '50d', LINE_COLORS.dma50), tg('dma200', '200d', LINE_COLORS.dma200), canPe ? tg('pe', index ? 'Index P/E' : 'P/E', LINE_COLORS.pe, eps.state === 'loading' ? ' …' : '') : null),
+      h('div', { class: 'tm-row tm-tools' }, zoom, ...draws), swatches));
     if (data.closesOnly) body.append(h('p', { class: 'note' }, 'Candles and volume need the newer Code.gs in your Apps Script (Settings explains how to paste and redeploy it). Showing closing prices until then.'));
-    if (!index && st.pe && eps.state === 'err') body.append(h('p', { class: 'note' }, 'P/E history: ' + eps.msg));
-    chart = marketChart({ rows, mode, dma50: st.dma50 ? align(data.ma50) : null, dma200: st.dma200 ? align(data.ma200) : null, pe: wantPe ? align(peM) : null,
+    if (canPe && st.pe && eps.state === 'err') body.append(h('p', { class: 'note' }, 'P/E history: ' + eps.msg));
+    chart = marketChart({ rows, mode, dma50: st.dma50 ? align(data.ma50) : null, dma200: st.dma200 ? align(data.ma200) : null, pe: wantPe ? align(peM) : null, peMedian: wantPe ? median(peFull.slice(Math.max(0, all.findIndex((r) => r.d >= cut[0].d))).filter((x) => x != null)) : null, peLabel: index ? 'Index P/E' : 'P/E', newColor: st.tc || null,
       avg: avgCost || null, trades: trades || [], height: window.innerWidth < 640 ? 230 : 280, fmt: pxf, vfmt, dateFmt: short, tickFmt: tick,
       lines: myLines(), tool: canEdit() ? tool : 'none', selected: sel, view: mm.view, onView: (v) => { mm.view = v; },
       onLine: { select: (id) => { mm.sel = id; draw(); },
         update: !canEdit() ? undefined : (id, L) => { mm.sel = id; try { mutate((d) => { const x = ((d.trendlines || {})[symKey] || []).find((l) => l.id === id); if (x) Object.assign(x, L, { p1: Math.round(L.p1 * 100) / 100, p2: Math.round(L.p2 * 100) / 100 }); }); } catch (e) { toast(e.message); draw(); } },
-        add: (L) => { const id = 'tl' + Date.now().toString(36); mm.sel = id; tool = 'none'; try { mutate((d) => { d.trendlines = d.trendlines || {}; (d.trendlines[symKey] = d.trendlines[symKey] || []).push({ id, ...L, p1: Math.round(L.p1 * 100) / 100, p2: Math.round(L.p2 * 100) / 100 }); }); toast('Trendline saved'); } catch (e) { toast(e.message); draw(); } } } });
+        add: (L) => { const id = 'tl' + Date.now().toString(36); mm.sel = id; tool = 'none'; try { mutate((d) => { d.trendlines = d.trendlines || {}; (d.trendlines[symKey] = d.trendlines[symKey] || []).push({ id, ...(st.tc ? { color: st.tc } : {}), ...L, p1: Math.round(L.p1 * 100) / 100, p2: Math.round(L.p2 * 100) / 100 }); }); toast('Trendline saved'); } catch (e) { toast(e.message); draw(); } } } });
     body.append(chart);
     const perf = performance(all);
     if (perf.length) body.append(h('div', { class: 'tm-perf', 'aria-label': 'Returns over different periods' }, perf.map((p) => h('span', { class: 'tm-pf ' + posNeg(p.pct) }, h('small', null, p.label), `${p.pct >= 0 ? '▲' : '▼'} ${p.pct >= 0 ? '+' : '−'}${Math.abs(p.pct * 100).toFixed(1)}%`))));
@@ -168,6 +183,6 @@ function figuresCard({ symbol, yahoo, index, price }) {
  * The terminal for one symbol. Returns the elements to add to a page: [chart card, key figures card].
  * held: your holding (or null); trades: [{ d, side, price, qty }]; quote: { price, prev, at } if known; index: true for an index.
  */
-export function terminal({ symbol, name, yahoo = '', index = false, avgCost = null, firstBuy = null, trades = [], quote = null }) {
-  return [chartCard({ symbol, name, yahoo, index, avgCost, firstBuy, trades, quote }), figuresCard({ symbol, yahoo, index, price: quote ? quote.price : null })];
+export function terminal({ symbol, name, yahoo = '', index = false, indexPe = '', avgCost = null, firstBuy = null, trades = [], quote = null }) {
+  return [chartCard({ symbol, name, yahoo, index, indexPe, avgCost, firstBuy, trades, quote }), figuresCard({ symbol, yahoo, index, price: quote ? quote.price : null })];
 }
