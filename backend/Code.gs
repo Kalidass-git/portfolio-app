@@ -425,11 +425,19 @@ function indexPe_(name, years) {
  * Returns { ok, rows: [[date, pe], ...], ms, cached } or { error, ms, step }.
  */
 function indexPeYear_(name, yearsAgo) {
+  var r = indexPeYearRun_(name, yearsAgo);
+  try { var k = Math.max(0, Math.min(25, Number(yearsAgo) || 0)); if (!r.pending) CacheService.getScriptCache().remove('ipy:' + name + ':' + new Date().getFullYear() + ':' + k + ':run'); } catch (e) { /* the lock expires by itself */ }
+  return r;
+}
+function indexPeYearRun_(name, yearsAgo) {
   var t0 = Date.now();
   if (!name) return { error: 'No index name given.' };
   var k = Math.max(0, Math.min(25, Number(yearsAgo) || 0)), now = new Date();
   var store = CacheService.getScriptCache(), ck = 'ipy:' + name + ':' + now.getFullYear() + ':' + k;
   try { var hit = store.get(ck); if (hit) return { ok: true, rows: JSON.parse(hit), cached: true, ms: Date.now() - t0 }; } catch (e) { /* fetch */ }
+  // NSE's site can take minutes. The app stops waiting after 40 s but this run goes on and keeps its answer, so the app asks again and gets it from the copy. A second run is not started while the first is still going.
+  var runKey = ck + ':run';
+  try { if (store.get(runKey)) return { pending: true, ms: Date.now() - t0 }; store.put(runKey, '1', 300); } catch (e) { /* no lock: carry on */ }
   var MON = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
   var NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   function fmt(d) { return ('0' + d.getDate()).slice(-2) + '-' + NAMES[d.getMonth()] + '-' + d.getFullYear(); }

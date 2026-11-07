@@ -67,7 +67,7 @@ export async function stockEps(symbol, yahoo) {
 const ipeBusy = new Map(), ipeFailed = new Map();
 /** Forget a remembered failure so the next call asks the backend again (Try again, Reload chart). */
 export function retryIndexPe(name) { ipeFailed.delete(name); }
-const IPE_YEAR_WAIT = 40000;   // one year of readings: if NSE's site has not answered in 40 s, give that year up instead of holding everything
+const IPE_YEAR_WAIT = 40000;   // how long one try waits; see ask() below for the retries
 /**
  * Historical P/E of an NSE index, asked from the backend one calendar year at a time ("indexpeyear"): this year first, alone, so a blocked or very slow site
  * shows its reason within 40 seconds; then the other years a few at a time. A year that fails is skipped (the line starts where the readings start).
@@ -81,18 +81,26 @@ export function stockIndexPe(name, years = 10) {
   const p = (async () => {
     if (!S.cfg || !S.cfg.backendUrl) throw new Error('Index P/E comes through your backend, which is not connected on this device.');
     const old = 'Your backend needs the newer Code.gs (it adds the “indexpeyear” action) to draw the index P/E. Paste backend/Code.gs into Apps Script and deploy a new version.';
-    const ask = async (k) => {
-      try {
-        const res = await call(S.cfg.backendUrl, S.cfg.key, 'indexpeyear', { name, yearsAgo: k }, IPE_YEAR_WAIT);
-        if (res && res.ok) return { rows: res.rows || [] };
-        return { err: (res && res.error) || 'no answer', step: res && res.step, ms: res && res.ms };
-      } catch (e) {
-        if (/Unknown action/i.test(e.message)) throw new Error(old);
-        return { err: /took too long/i.test(e.message) ? 'no answer in ' + IPE_YEAR_WAIT / 1000 + ' seconds' : e.message, timeout: /took too long/i.test(e.message) };
+    const ask = async (k, patience = 120000) => {
+      // NSE's site can take minutes. Each try waits 40 s; the backend keeps working after we stop waiting and keeps its answer, so asking again a little later gets it.
+      const t0 = Date.now(); let last = null;
+      for (let n = 0; ; n++) {
+        try {
+          const res = await call(S.cfg.backendUrl, S.cfg.key, 'indexpeyear', { name, yearsAgo: k }, IPE_YEAR_WAIT);
+          if (res && res.ok) return { rows: res.rows || [] };
+          if (!(res && res.pending)) return { err: (res && res.error) || 'no answer', step: res && res.step, ms: res && res.ms };
+          last = 'NSE is still answering the first request';
+        } catch (e) {
+          if (/Unknown action/i.test(e.message)) throw new Error(old);
+          if (!/took too long/i.test(e.message)) return { err: e.message };
+          last = 'no answer in ' + IPE_YEAR_WAIT / 1000 + ' seconds';
+        }
+        if (Date.now() - t0 > patience) return { err: last + ', and still nothing after ' + Math.round((Date.now() - t0) / 60000 * 10) / 10 + ' minutes of waiting', timeout: true };
+        await new Promise((r) => setTimeout(r, 8000));
       }
     };
     const why = (r) => 'The NSE index site (niftyindices.com) gave no P/E readings: ' + r.err + (r.step ? ' (at the ' + r.step + (r.ms ? ', after ' + Math.round(r.ms / 1000) + ' s' : '') + ')' : '') + '. Press Try again later.';
-    const first = await ask(0);
+    const first = await ask(0, 240000);
     if (first.err) throw new Error(why(first));
     const all = [...first.rows], failed = [];
     const todo = Array.from({ length: Math.max(0, years - 1) }, (_, i) => i + 1);

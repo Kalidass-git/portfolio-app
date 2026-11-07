@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.64.0 – Index P/E waits patiently for NSE
+
+- Even one year of index P/E did not come back within 40 seconds. NSE's index site is known to take minutes at times, and an Apps Script run keeps going after the app stops waiting. So `indexpeyear` now keeps its answer in a copy and does not start a second run while the first is going (it replies "pending"); the app tries every 8 seconds for up to 4 minutes for the first year (2 minutes for each other year) and takes the answer from the copy as soon as the first run finishes.
+- The message at the end names what happened and how long we waited. **Redeploy `Code.gs`** (new version). No stored-data changes.
+- If it still fails, open Apps Script › Executions and look at the `indexpeyear` runs: a run that ends in an error names the cause, and one that runs for minutes means NSE is not answering Google's servers.
+
 ## Release 8.63.0 – Index P/E asked year by year, with a reason when NSE does not answer
 
 - The one big "indexpe" call (ten years in one Apps Script run) was being cancelled at the app's wait limit with no reason shown. The backend has a new **`indexpeyear`** action: one calendar year per call, cookie kept for 15 minutes, each year kept 6 hours (this year 1 hour), and every reply carries how long NSE took and at which step it failed.
