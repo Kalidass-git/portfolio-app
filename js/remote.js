@@ -1,10 +1,10 @@
 // Client for the Google Apps Script backend (backend/Code.gs). The backend keeps one JSON file in the owner's Google Drive.
 // POST with a text/plain body avoids a CORS preflight, which Apps Script web apps cannot answer.
 
-export async function call(url, key, action, payload = {}) {
+export async function call(url, key, action, payload = {}, timeoutMs = 45000) {
   let res, text;
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), 45000);   // never wait forever: a stuck request would leave the app on "Saving…"
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);   // never wait forever: a stuck request would leave the app on "Saving…"
   try {
     res = await fetch(url, {
       method: 'POST',
