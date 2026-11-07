@@ -22,7 +22,7 @@ const median = (a) => { if (!a.length) return null; const b = a.slice().sort((x,
 export function fundChart({ title = 'NAV history', loadNavs, avg = null, firstBuy = null }) {
   const st = load(), body = h('div', null, h('p', { class: 'note' }, 'Loading the NAV history…'));
   let all = null, chart = null, view = null, card = null, showCol = false;
-  const fv = fullView(() => card, () => { if (all) draw(); });
+  const fv = fullView(() => card, () => { if (all) draw(); }, 'F:' + title);
   const seg = (label, opts, cur, pick) => h('div', { class: 'tm-seg', role: 'group', 'aria-label': label }, opts.map(([k, l, tip]) => h('button', { type: 'button', class: k === cur ? 'on' : '', title: tip || null, 'aria-pressed': String(k === cur), onclick: () => pick(k) }, l)));
   const draw = () => {
     body.replaceChildren();
