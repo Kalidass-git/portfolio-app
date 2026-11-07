@@ -150,6 +150,11 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.61.0 – Index P/E loads faster
+
+- **Why index P/E failed while stock P/E worked**: the index P/E comes from NSE's index site (niftyindices.com), asked one year at a time for 10 years, one after another. That site is slow, so the total went past the app's 45-second wait ("took too long"). A stock's P/E is a single small request.
+- `backend/Code.gs` `indexPe_` now sends all years at once and keeps the result for 6 hours (the readings change once a day), so repeat loads are instant. The app waits up to 120 seconds for this one call and words a timeout as an NSE-site slowness message. **Redeploy `Code.gs`** (new version) for the speed-up. No stored-data changes.
+
 ## Release 8.60.0 – Sold-price status and ratio fallback
 
 - **Sold shares**: each row shows the day its price was fetched, or why none was found ("no price: …"); the note and button wording now match "Refresh sold prices".

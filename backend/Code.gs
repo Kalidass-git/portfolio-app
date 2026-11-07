@@ -366,6 +366,9 @@ function eps_(symbol, yahoo) {
 function indexPe_(name, years) {
   if (!name) return { error: 'No index name given.' };
   var y = Math.max(1, Math.min(20, Number(years) || 10)), now = new Date(), rows = [], seen = {};
+  // Readings are published once a day, so a copy kept for 6 hours is as good as a fresh one and makes the next load instant.
+  var cacheKey = 'ipe:' + name + ':' + y, store = CacheService.getScriptCache();
+  try { var hit = store.get(cacheKey); if (hit) return { ok: true, rows: JSON.parse(Utilities.ungzip(Utilities.newBlob(Utilities.base64Decode(hit), 'application/x-gzip')).getDataAsString()), cached: true }; } catch (e) { /* no copy: fetch */ }
   var MON = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
   var NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   function fmt(d) { return ('0' + d.getDate()).slice(-2) + '-' + NAMES[d.getMonth()] + '-' + d.getFullYear(); }
@@ -383,15 +386,21 @@ function indexPe_(name, years) {
     } catch (e) { lastErr = e.message; }
   }
   var firstBody = '';
-  for (var k = 0; k < y; k++) {       // one request per year: the site limits how much it returns at once
+  // one request per year (the site limits how much it returns at once), all sent together: sent one after the other, ten years took longer than the app waits
+  var reqs = [];
+  for (var k = 0; k < y; k++) {
     var end = new Date(now.getFullYear() - k, k === 0 ? now.getMonth() : 11, k === 0 ? now.getDate() : 31);
     var start = new Date(now.getFullYear() - k, 0, 1);
+    var payload = { cinfo: "{'name':'" + name + "','startDate':'" + fmt(start) + "','endDate':'" + fmt(end) + "','indexName':'" + name + "'}" };
+    var hdrs = { 'User-Agent': UA, 'Referer': host + '/reports/historical-data', 'Origin': host, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json, text/javascript, */*; q=0.01' };
+    if (cookie) hdrs['Cookie'] = cookie;
+    reqs.push({ url: host + '/Backpage.aspx/getpepbHistoricalDataDBtoJSON', method: 'post', contentType: 'application/json; charset=UTF-8', payload: JSON.stringify(payload), muteHttpExceptions: true, headers: hdrs });
+  }
+  var resps = [];
+  try { resps = UrlFetchApp.fetchAll(reqs); } catch (e) { lastErr = e.message; }
+  resps.forEach(function (r) {
     try {
-      var payload = { cinfo: "{'name':'" + name + "','startDate':'" + fmt(start) + "','endDate':'" + fmt(end) + "','indexName':'" + name + "'}" };
-      var hdrs = { 'User-Agent': UA, 'Referer': host + '/reports/historical-data', 'Origin': host, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json, text/javascript, */*; q=0.01' };
-      if (cookie) hdrs['Cookie'] = cookie;
-      var r = UrlFetchApp.fetch(host + '/Backpage.aspx/getpepbHistoricalDataDBtoJSON', { method: 'post', contentType: 'application/json; charset=UTF-8', payload: JSON.stringify(payload), muteHttpExceptions: true, headers: hdrs });
-      if (r.getResponseCode() !== 200) { lastErr = 'NSE site answered ' + r.getResponseCode(); continue; }
+      if (r.getResponseCode() !== 200) { lastErr = 'NSE site answered ' + r.getResponseCode(); return; }
       var txt = r.getContentText(); if (!firstBody) firstBody = txt.slice(0, 120);
       var list = JSON.parse(JSON.parse(txt).d || '[]');
       list.forEach(function (x) {
@@ -401,10 +410,11 @@ function indexPe_(name, years) {
         rows.push([iso, pe, parseFloat(x.pb) || null, parseFloat(x.divYield) || null]);
       });
     } catch (e) { lastErr = e.message; }
-  }
+  });
   if (!rows.length && !lastErr && firstBody) lastErr = 'unexpected reply: ' + firstBody;
   if (!rows.length) return { error: 'No P/E history came back for ' + name + (lastErr ? ' (' + lastErr + ')' : '') + '.' };
   rows.sort(function (a, b) { return a[0] < b[0] ? -1 : 1; });
+  try { var gz = Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(JSON.stringify(rows.map(function (r) { return [r[0], r[1]]; })))).getBytes()); if (gz.length < 90000) store.put(cacheKey, gz, 21600); } catch (e) { /* too big or no cache: fine */ }
   return { ok: true, rows: rows };
 }
 

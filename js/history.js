@@ -70,7 +70,7 @@ export async function stockIndexPe(name, years = 10) {
   if (!S.cfg || !S.cfg.backendUrl) throw new Error('Index P/E comes through your backend, which is not connected on this device.');
   let res;
   const old = 'Your backend needs the newer Code.gs (it adds the “indexpe” action) to draw the index P/E.';
-  try { res = await call(S.cfg.backendUrl, S.cfg.key, 'indexpe', { name, years }); } catch (e) { throw new Error(/Unknown action/i.test(e.message) ? old : e.message); }
+  try { res = await call(S.cfg.backendUrl, S.cfg.key, 'indexpe', { name, years }, 120000); } catch (e) { throw new Error(/Unknown action/i.test(e.message) ? old : /took too long/i.test(e.message) ? 'The NSE index site (niftyindices.com) is slow to answer right now. Try Reload chart in a minute; once it loads, it is kept for 6 hours.' : e.message); }
   if (!res || res.error || !res.rows) throw new Error((res && res.error && !/Unknown action/i.test(res.error)) ? res.error : old);
   const out = res.rows.map((x) => ({ d: x[0], pe: x[1] }));
   cache.set(key, out);
