@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.64.0 – Index P/E from NSE's daily closing file
+
+- **Why the index P/E never loaded**: it came from niftyindices.com, which NSE protects with a browser check that Apps Script (Google's servers) cannot pass, so the calls just hung. That code (`indexpe`, `indexpeyear`) is removed.
+- **New source**: NSE's daily "all indices" closing file (`nsearchives.nseindia.com/content/indices/ind_close_all_DDMMYYYY.csv`), which lists P/E, P/B and dividend yield for every index. The backend action `indexpedates` reads the file for up to 40 days per call and returns that index's P/E; the app asks for the last trading day of each month for 10 years plus every Friday of the last four months (about 134 days, three calls at a time), retries holidays on the day before, and joins the readings into the line. The reply includes the HTTP status counts, so a block shows as a message such as "the archive answered: 403 ×134".
+- **Redeploy `Code.gs`** (new version). Not testable from the build machine (NSE is blocked there), so check one index after deploying. No stored-data changes.
+
 ## Release 8.63.0 – Index P/E asked year by year, with a reason when NSE does not answer
 
 - The one big "indexpe" call (ten years in one Apps Script run) was being cancelled at the app's wait limit with no reason shown. The backend has a new **`indexpeyear`** action: one calendar year per call, cookie kept for 15 minutes, each year kept 6 hours (this year 1 hour), and every reply carries how long NSE took and at which step it failed.

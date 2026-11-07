@@ -116,8 +116,7 @@ function doPost(e) {
       case 'fundamentals': return json_(fundamentals_(req.symbols || []));
       case 'details': return json_(details_(req.symbol, req.yahoo));
       case 'eps': return json_(eps_(req.symbol, req.yahoo));
-      case 'indexpe': return json_(indexPe_(req.name, req.years));
-      case 'indexpeyear': return json_(indexPeYear_(req.name, req.yearsAgo));
+      case 'indexpedates': return json_(indexPeDates_(req.name, req.dates));
       default: return json_({ error: 'Unknown action.' });
     }
   } catch (err) {
@@ -361,106 +360,48 @@ function eps_(symbol, yahoo) {
 }
 
 /**
- * Historical P/E of an NSE index (Nifty 50, Nifty Bank ...) from NSE's own index site, which publishes P/E, P/B and dividend yield by day.
- * name: the index name as NSE writes it ("NIFTY 50"). years: how far back (default 10). Returns { ok, rows: [[date 'YYYY-MM-DD', pe, pb, dy], ...] } oldest first.
+ * P/E of an NSE index on given days, from NSE's daily "all indices" closing file (nsearchives.nseindia.com), which lists every index with its P/E, P/B and dividend yield.
+ * (The index site niftyindices.com sits behind a browser check that Google's servers cannot pass, so it is not used.)
+ * name: the index as NSE writes it ("NIFTY 50"). dates: up to 45 days as 'DDMMYYYY'. Days with no file (weekends, holidays) are simply missing from the answer.
+ * Returns { ok, rows: [['YYYY-MM-DD', pe], ...], seen: { statusCode: count } } so a block shows up as a status, not as a silent wait.
  */
-function indexPe_(name, years) {
+function indexPeDates_(name, dates) {
   if (!name) return { error: 'No index name given.' };
-  var y = Math.max(1, Math.min(20, Number(years) || 10)), now = new Date(), rows = [], seen = {};
-  // Readings are published once a day, so a copy kept for 6 hours is as good as a fresh one and makes the next load instant.
-  var cacheKey = 'ipe:' + name + ':' + y, store = CacheService.getScriptCache();
-  try { var hit = store.get(cacheKey); if (hit) return { ok: true, rows: JSON.parse(Utilities.ungzip(Utilities.newBlob(Utilities.base64Decode(hit), 'application/x-gzip')).getDataAsString()), cached: true }; } catch (e) { /* no copy: fetch */ }
-  var MON = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
-  var NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  function fmt(d) { return ('0' + d.getDate()).slice(-2) + '-' + NAMES[d.getMonth()] + '-' + d.getFullYear(); }
-  var lastErr = '', cookie = '', UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
-  // the site hands out a session cookie on its own page and expects it back on the data call, so ask for the page first
-  var HOSTS = ['https://www.niftyindices.com', 'https://niftyindices.com'], host = HOSTS[0];
-  for (var hi = 0; hi < HOSTS.length && !cookie; hi++) {
-    try {
-      var pg = UrlFetchApp.fetch(HOSTS[hi] + '/reports/historical-data', { muteHttpExceptions: true, headers: { 'User-Agent': UA, 'Accept': 'text/html' } });
-      var hd = pg.getAllHeaders(), sc = hd['Set-Cookie'] || hd['set-cookie'] || [];
-      if (typeof sc === 'string') sc = [sc];
-      cookie = sc.map(function (c) { return String(c).split(';')[0]; }).join('; ');
-      host = HOSTS[hi];
-      if (!cookie) lastErr = 'NSE page answered ' + pg.getResponseCode() + ' without a session';
-    } catch (e) { lastErr = e.message; }
-  }
-  var firstBody = '';
-  // one request per year (the site limits how much it returns at once), all sent together: sent one after the other, ten years took longer than the app waits
-  var reqs = [];
-  for (var k = 0; k < y; k++) {
-    var end = new Date(now.getFullYear() - k, k === 0 ? now.getMonth() : 11, k === 0 ? now.getDate() : 31);
-    var start = new Date(now.getFullYear() - k, 0, 1);
-    var payload = { cinfo: "{'name':'" + name + "','startDate':'" + fmt(start) + "','endDate':'" + fmt(end) + "','indexName':'" + name + "'}" };
-    var hdrs = { 'User-Agent': UA, 'Referer': host + '/reports/historical-data', 'Origin': host, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json, text/javascript, */*; q=0.01' };
-    if (cookie) hdrs['Cookie'] = cookie;
-    reqs.push({ url: host + '/Backpage.aspx/getpepbHistoricalDataDBtoJSON', method: 'post', contentType: 'application/json; charset=UTF-8', payload: JSON.stringify(payload), muteHttpExceptions: true, headers: hdrs });
-  }
-  var resps = [];
-  try { resps = UrlFetchApp.fetchAll(reqs); } catch (e) { lastErr = e.message; }
-  resps.forEach(function (r) {
-    try {
-      if (r.getResponseCode() !== 200) { lastErr = 'NSE site answered ' + r.getResponseCode(); return; }
-      var txt = r.getContentText(); if (!firstBody) firstBody = txt.slice(0, 120);
-      var list = JSON.parse(JSON.parse(txt).d || '[]');
-      list.forEach(function (x) {
-        var m = /^(\d{1,2}) (\w{3}) (\d{4})$/.exec(String(x.DATE || '').trim()); if (!m) return;
-        var iso = m[3] + '-' + MON[m[2]] + '-' + ('0' + m[1]).slice(-2), pe = parseFloat(x.pe);
-        if (!(pe > 0) || seen[iso]) return; seen[iso] = 1;
-        rows.push([iso, pe, parseFloat(x.pb) || null, parseFloat(x.divYield) || null]);
-      });
-    } catch (e) { lastErr = e.message; }
-  });
-  if (!rows.length && !lastErr && firstBody) lastErr = 'unexpected reply: ' + firstBody;
-  if (!rows.length) return { error: 'No P/E history came back for ' + name + (lastErr ? ' (' + lastErr + ')' : '') + '.' };
-  rows.sort(function (a, b) { return a[0] < b[0] ? -1 : 1; });
-  try { var gz = Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(JSON.stringify(rows.map(function (r) { return [r[0], r[1]]; })))).getBytes()); if (gz.length < 90000) store.put(cacheKey, gz, 21600); } catch (e) { /* too big or no cache: fine */ }
-  return { ok: true, rows: rows };
-}
-
-/**
- * ONE calendar year of an index's P/E history (yearsAgo 0 = this year). The app asks year by year, a few at a time, so one slow answer from NSE's index site
- * cannot hold up the rest, and every reply says how long NSE took and what it answered (so a block or a slow site shows up as a message, not as a silent wait).
- * Returns { ok, rows: [[date, pe], ...], ms, cached } or { error, ms, step }.
- */
-function indexPeYear_(name, yearsAgo) {
-  var t0 = Date.now();
-  if (!name) return { error: 'No index name given.' };
-  var k = Math.max(0, Math.min(25, Number(yearsAgo) || 0)), now = new Date();
-  var store = CacheService.getScriptCache(), ck = 'ipy:' + name + ':' + now.getFullYear() + ':' + k;
-  try { var hit = store.get(ck); if (hit) return { ok: true, rows: JSON.parse(hit), cached: true, ms: Date.now() - t0 }; } catch (e) { /* fetch */ }
-  var MON = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
-  var NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  function fmt(d) { return ('0' + d.getDate()).slice(-2) + '-' + NAMES[d.getMonth()] + '-' + d.getFullYear(); }
-  var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
-  var host = 'https://www.niftyindices.com', cookie = '', step = 'session page';
-  try { cookie = store.get('ipy-cookie') || ''; } catch (e) { /* none */ }
-  try {
-    if (!cookie) {
-      var pg = UrlFetchApp.fetch(host + '/reports/historical-data', { muteHttpExceptions: true, headers: { 'User-Agent': UA, 'Accept': 'text/html' } });
-      var hd = pg.getAllHeaders(), sc = hd['Set-Cookie'] || hd['set-cookie'] || [];
-      if (typeof sc === 'string') sc = [sc];
-      cookie = sc.map(function (c) { return String(c).split(';')[0]; }).join('; ');
-      if (cookie) { try { store.put('ipy-cookie', cookie, 900); } catch (e) { /* fine */ } }
-    }
-    step = 'data request';
-    var end = new Date(now.getFullYear() - k, k === 0 ? now.getMonth() : 11, k === 0 ? now.getDate() : 31), start = new Date(now.getFullYear() - k, 0, 1);
-    var payload = { cinfo: "{'name':'" + name + "','startDate':'" + fmt(start) + "','endDate':'" + fmt(end) + "','indexName':'" + name + "'}" };
-    var hdrs = { 'User-Agent': UA, 'Referer': host + '/reports/historical-data', 'Origin': host, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json, text/javascript, */*; q=0.01' };
-    if (cookie) hdrs['Cookie'] = cookie;
-    var r = UrlFetchApp.fetch(host + '/Backpage.aspx/getpepbHistoricalDataDBtoJSON', { method: 'post', contentType: 'application/json; charset=UTF-8', payload: JSON.stringify(payload), muteHttpExceptions: true, headers: hdrs });
-    if (r.getResponseCode() !== 200) { try { store.remove('ipy-cookie'); } catch (e) { /* fine */ } return { error: 'NSE index site answered ' + r.getResponseCode(), step: step, ms: Date.now() - t0 }; }
-    var list = JSON.parse(JSON.parse(r.getContentText()).d || '[]'), rows = [], seen = {};
-    list.forEach(function (x) {
-      var m = /^(\d{1,2}) (\w{3}) (\d{4})$/.exec(String(x.DATE || '').trim()); if (!m) return;
-      var iso = m[3] + '-' + MON[m[2]] + '-' + ('0' + m[1]).slice(-2), pe = parseFloat(x.pe);
-      if (!(pe > 0) || seen[iso]) return; seen[iso] = 1; rows.push([iso, pe]);
+  var list = (dates || []).filter(function (d) { return /^\d{8}$/.test(String(d)); }).slice(0, 45);
+  if (!list.length) return { error: 'No dates given.' };
+  var want = String(name).trim().toUpperCase(), UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+  var seen = {}, rows = [], cookie = '';
+  function reqs(c) { return list.map(function (d) { var h = { 'User-Agent': UA, 'Accept': 'text/csv,*/*', 'Referer': 'https://www.nseindia.com/' }; if (c) h['Cookie'] = c; return { url: 'https://nsearchives.nseindia.com/content/indices/ind_close_all_' + d + '.csv', muteHttpExceptions: true, headers: h }; }); }
+  function splitCsv(line) { var out = [], cur = '', q = false; for (var i = 0; i < line.length; i++) { var ch = line.charAt(i); if (ch === '"') q = !q; else if (ch === ',' && !q) { out.push(cur); cur = ''; } else cur += ch; } out.push(cur); return out.map(function (x) { return x.trim(); }); }
+  function run(c) {
+    seen = {}; rows = [];
+    var res = UrlFetchApp.fetchAll(reqs(c));
+    res.forEach(function (r) {
+      var code = r.getResponseCode(); seen[code] = (seen[code] || 0) + 1;
+      if (code !== 200) return;
+      var lines = r.getContentText().split(/\r?\n/); if (lines.length < 2) return;
+      var head = splitCsv(lines[0]).map(function (x) { return x.toLowerCase(); }), iName = head.indexOf('index name'), iDate = head.indexOf('index date'), iPe = head.indexOf('p/e');
+      if (iName < 0 || iDate < 0 || iPe < 0) return;
+      for (var k = 1; k < lines.length; k++) {
+        var f = splitCsv(lines[k]); if (String(f[iName] || '').toUpperCase() !== want) continue;
+        var m = /^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/.exec(String(f[iDate] || '')), pe = parseFloat(f[iPe]);
+        if (m && pe > 0) rows.push([m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2), pe]);
+        break;
+      }
     });
-    rows.sort(function (a, b) { return a[0] < b[0] ? -1 : 1; });
-    if (rows.length) { try { store.put(ck, JSON.stringify(rows), k === 0 ? 3600 : 21600); } catch (e) { /* fine */ } }
-    return { ok: true, rows: rows, ms: Date.now() - t0 };
-  } catch (e) { return { error: e.message, step: step, ms: Date.now() - t0 }; }
+  }
+  try {
+    run('');
+    // the archive may want the session cookie NSE's main site hands out: when every answer was a refusal, fetch it and try once more
+    if (!rows.length && (seen[401] || seen[403])) {
+      var pg = UrlFetchApp.fetch('https://www.nseindia.com/', { muteHttpExceptions: true, headers: { 'User-Agent': UA, 'Accept': 'text/html' } });
+      var hd = pg.getAllHeaders(), sc = hd['Set-Cookie'] || hd['set-cookie'] || []; if (typeof sc === 'string') sc = [sc];
+      cookie = sc.map(function (c) { return String(c).split(';')[0]; }).join('; ');
+      if (cookie) run(cookie);
+    }
+  } catch (e) { return { error: 'Backend error: ' + e.message }; }
+  rows.sort(function (a, b) { return a[0] < b[0] ? -1 : 1; });
+  return { ok: true, rows: rows, seen: seen };
 }
 
 /** Dividends per share paid by each company, from Yahoo Finance (NSE first, then BSE). symbols: [{symbol:'INFY', yahoo:''}] */

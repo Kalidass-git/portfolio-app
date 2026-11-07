@@ -63,14 +63,25 @@ export async function stockEps(symbol, yahoo) {
   cache.set(key, out);
   return out;
 }
-/** Historical P/E of an NSE index from the backend ("indexpe" action): [{ d, pe }] oldest first. name is the NSE index name, for example "NIFTY 50". */
 const ipeBusy = new Map(), ipeFailed = new Map();
 /** Forget a remembered failure so the next call asks the backend again (Try again, Reload chart). */
 export function retryIndexPe(name) { ipeFailed.delete(name); }
-const IPE_YEAR_WAIT = 40000;   // one year of readings: if NSE's site has not answered in 40 s, give that year up instead of holding everything
+const pad2 = (n) => String(n).padStart(2, '0');
+const ddmmyyyy = (d) => pad2(d.getUTCDate()) + pad2(d.getUTCMonth() + 1) + d.getUTCFullYear();
+const weekday = (d) => { while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d = new Date(d.getTime() - 86400000); return d; };
+/** The days to read: the last trading day of every month for `years` years, plus every Friday of the last four months (so the recent end of the line is fine-grained). */
+function sampleDays(years, today = new Date()) {
+  const t = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())), out = new Map();
+  for (let m = 0; m < years * 12; m++) {
+    const d = weekday(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() - m + 1, 0)));
+    if (d <= t) out.set(d.getTime(), d);
+  }
+  for (let k = 0; k < 17; k++) { const d = weekday(new Date(t.getTime() - k * 7 * 86400000)); out.set(d.getTime(), d); }
+  return [...out.values()].sort((a, b) => a - b);
+}
 /**
- * Historical P/E of an NSE index, asked from the backend one calendar year at a time ("indexpeyear"): this year first, alone, so a blocked or very slow site
- * shows its reason within 40 seconds; then the other years a few at a time. A year that fails is skipped (the line starts where the readings start).
+ * Historical P/E of an NSE index, from NSE's daily "all indices" closing file read by the backend ("indexpedates"): [{ d, pe }] oldest first.
+ * name is the NSE index name, for example "NIFTY 50". A day with no file (holiday) is tried again on the day before.
  * One call per index at a time; a failure is remembered until Try again / Reload chart.
  */
 export function stockIndexPe(name, years = 10) {
@@ -80,27 +91,38 @@ export function stockIndexPe(name, years = 10) {
   if (ipeFailed.has(name)) return Promise.reject(new Error(ipeFailed.get(name)));
   const p = (async () => {
     if (!S.cfg || !S.cfg.backendUrl) throw new Error('Index P/E comes through your backend, which is not connected on this device.');
-    const old = 'Your backend needs the newer Code.gs (it adds the “indexpeyear” action) to draw the index P/E. Paste backend/Code.gs into Apps Script and deploy a new version.';
-    const ask = async (k) => {
-      try {
-        const res = await call(S.cfg.backendUrl, S.cfg.key, 'indexpeyear', { name, yearsAgo: k }, IPE_YEAR_WAIT);
-        if (res && res.ok) return { rows: res.rows || [] };
-        return { err: (res && res.error) || 'no answer', step: res && res.step, ms: res && res.ms };
-      } catch (e) {
-        if (/Unknown action/i.test(e.message)) throw new Error(old);
-        return { err: /took too long/i.test(e.message) ? 'no answer in ' + IPE_YEAR_WAIT / 1000 + ' seconds' : e.message, timeout: /took too long/i.test(e.message) };
-      }
+    const old = 'Your backend needs the newer Code.gs (it adds the “indexpedates” action) to draw the index P/E. Paste backend/Code.gs into Apps Script and deploy a new version.';
+    const got = new Map(), codes = {};
+    const ask = async (days) => {
+      const chunks = []; for (let i = 0; i < days.length; i += 40) chunks.push(days.slice(i, i + 40));
+      let lastErr = '';
+      const worker = async () => {
+        for (let c = chunks.shift(); c; c = chunks.shift()) {
+          try {
+            const res = await call(S.cfg.backendUrl, S.cfg.key, 'indexpedates', { name, dates: c.map(ddmmyyyy) }, 60000);
+            if (res.error) { lastErr = res.error; continue; }
+            for (const [d, pe] of res.rows || []) got.set(d, pe);
+            for (const [k, n] of Object.entries(res.seen || {})) codes[k] = (codes[k] || 0) + n;
+          } catch (e) { if (/Unknown action/i.test(e.message)) throw new Error(old); lastErr = e.message; }
+        }
+      };
+      await Promise.all([worker(), worker(), worker()]);
+      return lastErr;
     };
-    const why = (r) => 'The NSE index site (niftyindices.com) gave no P/E readings: ' + r.err + (r.step ? ' (at the ' + r.step + (r.ms ? ', after ' + Math.round(r.ms / 1000) + ' s' : '') + ')' : '') + '. Press Try again later.';
-    const first = await ask(0);
-    if (first.err) throw new Error(why(first));
-    const all = [...first.rows], failed = [];
-    const todo = Array.from({ length: Math.max(0, years - 1) }, (_, i) => i + 1);
-    const worker = async () => { for (let k = todo.shift(); k != null; k = todo.shift()) { const r = await ask(k); if (r.err) failed.push(k); else all.push(...r.rows); } };
-    await Promise.all([worker(), worker(), worker()]);
-    if (!all.length) throw new Error('The NSE index site returned no P/E readings for ' + name + '.');
-    const seen = new Set(), out = all.filter((x) => !seen.has(x[0]) && seen.add(x[0])).sort((x, y) => (x[0] < y[0] ? -1 : 1)).map((x) => ({ d: x[0], pe: x[1] }));
-    if (!failed.length) cache.set(key, out);   // a partial answer is shown but not kept, so the next load asks for the missing years again
+    let days = sampleDays(years), lastErr = await ask(days);
+    // holidays have no file: look at the day before, up to three times
+    for (let pass = 0; pass < 3; pass++) {
+      const missing = days.filter((d) => !got.has(d.toISOString().slice(0, 10)));
+      if (!missing.length || missing.length === days.length) break;
+      days = missing.map((d) => weekday(new Date(d.getTime() - 86400000)));
+      await ask(days);
+    }
+    if (!got.size) {
+      const sc = Object.entries(codes).map(([k, n]) => `${k} ×${n}`).join(', ');
+      throw new Error('NSE gave no P/E readings for ' + name + (sc ? ' (the archive answered: ' + sc + ')' : lastErr ? ' (' + lastErr + ')' : '') + '. Check the index name, or press Try again later.');
+    }
+    const out = [...got.entries()].sort((x, y) => (x[0] < y[0] ? -1 : 1)).map(([d, pe]) => ({ d, pe }));
+    cache.set(key, out);
     return out;
   })();
   ipeBusy.set(name, p);
