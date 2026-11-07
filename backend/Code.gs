@@ -116,7 +116,6 @@ function doPost(e) {
       case 'fundamentals': return json_(fundamentals_(req.symbols || []));
       case 'details': return json_(details_(req.symbol, req.yahoo));
       case 'eps': return json_(eps_(req.symbol, req.yahoo));
-      case 'indexpedates': return json_(indexPeDates_(req.name, req.dates));
       default: return json_({ error: 'Unknown action.' });
     }
   } catch (err) {
@@ -357,51 +356,6 @@ function eps_(symbol, yahoo) {
     } catch (e) { if (i === tickers.length - 1) return { error: 'Backend error: ' + e.message }; }
   }
   return { error: 'No earnings history found for ' + (symbol || yahoo) + '.' };
-}
-
-/**
- * P/E of an NSE index on given days, from NSE's daily "all indices" closing file (nsearchives.nseindia.com), which lists every index with its P/E, P/B and dividend yield.
- * (The index site niftyindices.com sits behind a browser check that Google's servers cannot pass, so it is not used.)
- * name: the index as NSE writes it ("NIFTY 50"). dates: up to 45 days as 'DDMMYYYY'. Days with no file (weekends, holidays) are simply missing from the answer.
- * Returns { ok, rows: [['YYYY-MM-DD', pe], ...], seen: { statusCode: count } } so a block shows up as a status, not as a silent wait.
- */
-function indexPeDates_(name, dates) {
-  if (!name) return { error: 'No index name given.' };
-  var list = (dates || []).filter(function (d) { return /^\d{8}$/.test(String(d)); }).slice(0, 45);
-  if (!list.length) return { error: 'No dates given.' };
-  var want = String(name).trim().toUpperCase(), UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
-  var seen = {}, rows = [], cookie = '';
-  function reqs(c) { return list.map(function (d) { var h = { 'User-Agent': UA, 'Accept': 'text/csv,*/*', 'Referer': 'https://www.nseindia.com/' }; if (c) h['Cookie'] = c; return { url: 'https://nsearchives.nseindia.com/content/indices/ind_close_all_' + d + '.csv', muteHttpExceptions: true, headers: h }; }); }
-  function splitCsv(line) { var out = [], cur = '', q = false; for (var i = 0; i < line.length; i++) { var ch = line.charAt(i); if (ch === '"') q = !q; else if (ch === ',' && !q) { out.push(cur); cur = ''; } else cur += ch; } out.push(cur); return out.map(function (x) { return x.trim(); }); }
-  function run(c) {
-    seen = {}; rows = [];
-    var res = UrlFetchApp.fetchAll(reqs(c));
-    res.forEach(function (r) {
-      var code = r.getResponseCode(); seen[code] = (seen[code] || 0) + 1;
-      if (code !== 200) return;
-      var lines = r.getContentText().split(/\r?\n/); if (lines.length < 2) return;
-      var head = splitCsv(lines[0]).map(function (x) { return x.toLowerCase(); }), iName = head.indexOf('index name'), iDate = head.indexOf('index date'), iPe = head.indexOf('p/e');
-      if (iName < 0 || iDate < 0 || iPe < 0) return;
-      for (var k = 1; k < lines.length; k++) {
-        var f = splitCsv(lines[k]); if (String(f[iName] || '').toUpperCase() !== want) continue;
-        var m = /^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/.exec(String(f[iDate] || '')), pe = parseFloat(f[iPe]);
-        if (m && pe > 0) rows.push([m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2), pe]);
-        break;
-      }
-    });
-  }
-  try {
-    run('');
-    // the archive may want the session cookie NSE's main site hands out: when every answer was a refusal, fetch it and try once more
-    if (!rows.length && (seen[401] || seen[403])) {
-      var pg = UrlFetchApp.fetch('https://www.nseindia.com/', { muteHttpExceptions: true, headers: { 'User-Agent': UA, 'Accept': 'text/html' } });
-      var hd = pg.getAllHeaders(), sc = hd['Set-Cookie'] || hd['set-cookie'] || []; if (typeof sc === 'string') sc = [sc];
-      cookie = sc.map(function (c) { return String(c).split(';')[0]; }).join('; ');
-      if (cookie) run(cookie);
-    }
-  } catch (e) { return { error: 'Backend error: ' + e.message }; }
-  rows.sort(function (a, b) { return a[0] < b[0] ? -1 : 1; });
-  return { ok: true, rows: rows, seen: seen };
 }
 
 /** Dividends per share paid by each company, from Yahoo Finance (NSE first, then BSE). symbols: [{symbol:'INFY', yahoo:''}] */

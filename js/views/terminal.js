@@ -8,7 +8,7 @@ import * as W from '../watch.js';
 import { marketChart, LINE_COLORS } from '../mchart.js';
 import { fullView } from '../fullview.js';
 import { colourPanel } from '../chartcolors.js';
-import { stockOhlc, stockEps, stockIndexPe, retryIndexPe, stockInfo, aggregateOhlc, candleMode, sliceRange, dropCache, RANGES } from '../history.js';
+import { stockOhlc, stockEps, stockIndexPe, retryIndexPe, nativeApp, stockInfo, aggregateOhlc, candleMode, sliceRange, dropCache, RANGES } from '../history.js';
 import { sma, epsTimeline, peSeries, performance } from '../ta.js';
 
 const KEY = 'fw.term';
@@ -40,7 +40,8 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
   let tool = 'none', chart = null, card = null, showCol = false;
   const fv = fullView(() => card, () => { if (data) { draw(); header(); } });
   const myLines = () => ((S.data && S.data.trendlines) || {})[symKey] || [];
-  let data = null, eps = { state: index && !indexPe ? 'none' : 'idle', msg: '', tl: null }, peFull = null;
+  const noIdxPe = index && !(indexPe && nativeApp());   // index P/E: Android app only for now
+  let data = null, eps = { state: noIdxPe ? 'none' : 'idle', msg: '', tl: null }, peFull = null;
 
   const header = () => {
     const rows = data ? data.rows : [], last = rows[rows.length - 1], prev = rows[rows.length - 2];
@@ -52,10 +53,10 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
         cp != null ? h('span', { class: 'tm-badge ' + posNeg(ch) }, `${ch >= 0 ? '▲' : '▼'} ${ch >= 0 ? '+' : '−'}${Math.abs(cp * 100).toFixed(2)}%`) : null,
         ch != null ? h('span', { class: 'muted tm-sub' }, `${ch >= 0 ? '+' : '−'}${dec(Math.abs(ch), 2)} today`) : null,
         quote && quote.at ? h('span', { class: 'muted tm-sub' }, 'price ' + ago(Date.parse(quote.at))) : last ? h('span', { class: 'muted tm-sub' }, 'last close ' + dateStr(last.d)) : null),
-      h('div', { class: 'tm-actions' }, fv.button, watchButton({ symbol, name, yahoo, index }), btn('Reload chart', () => { dropCache(symbol); data = null; peFull = null; eps = { state: index && !indexPe ? 'none' : 'idle', msg: '', tl: null }; body.replaceChildren(h('p', { class: 'note' }, 'Loading the price history…')); start(); toast('Reloading'); }, 'small')));
+      h('div', { class: 'tm-actions' }, fv.button, watchButton({ symbol, name, yahoo, index }), btn('Reload chart', () => { dropCache(symbol); data = null; peFull = null; eps = { state: noIdxPe ? 'none' : 'idle', msg: '', tl: null }; body.replaceChildren(h('p', { class: 'note' }, 'Loading the price history…')); start(); toast('Reloading'); }, 'small')));
   };
 
-  const canPe = !index || !!indexPe;
+  const canPe = !noIdxPe;
   const ensureEps = () => {
     if (!canPe || !st.pe || eps.state !== 'idle') return;
     eps.state = 'loading'; draw();
