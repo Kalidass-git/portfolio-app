@@ -150,6 +150,13 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.69.0 – Chart: time-axis zoom around the pointer; full view and landscape survive a page rebuild
+
+- **Dragging the time axis** (the dates under the chart) now zooms around the point you pressed on, like dragging the price axis zooms the price: the bars under the pointer stay where they are and the rest stretches around them. Before, it always zoomed toward the newest bar, so older parts could not be studied that way. Double-click the axis to undo.
+- **Full view stays open when the page is rebuilt** (every save, refresh or price update rebuilds the page, which used to close the full view, and in the Android app turned the screen back to portrait a moment after the landscape button). The new card of the same chart takes the full view and the landscape turn over; leaving the page gives the screen back to the phone.
+- **Landscape button, Android app**: if the installed app is older than 8.67.0 (no native `setOrientation`), the button now says so ("Build and install the latest APK") instead of doing nothing.
+- No stored-data changes.
+
 ## Release 8.68.0 – Home and Net worth charts: y axis that fits the lines
 
 - The ₹ amount charts on **Home** (Net worth over time, all asset lines) and on **Net worth over time** started at an odd value and ran up to the next power of ten (a week of gold moving from 54.7 to 57 lakh was drawn along the bottom of a 54.7L to 1Cr axis). New `js/axis.js` picks round tick values with equal gaps (1, 2, 2.5 or 5 times a power of ten, 4 to 6 gaps) that hug the data with a little room, never below zero for data above zero. The same gold week now reads 54L, 55L, 56L, 57L, 58L. `lineChart` takes a `ticks` option for this. The Growth % view is unchanged. Test: `tests/axis.test.mjs`.

@@ -290,7 +290,7 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
   const inPlot = (e) => { if (!ctx) return null; const s = ctx.toSvg(e), [x0, y0, x1, y1] = ctx.plot; return s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1 ? s : null; };
   const ptrs = new Map(); let drag = null, pinch = null;
   box.addEventListener('pointerdown', (e) => {
-    if (ctx) { const zs = ctx.toSvg(e), zone = ctx.zone(zs.x, zs.y); if (zone) { try { box.setPointerCapture(e.pointerId); } catch { /* not supported */ } drag = { zone, x: e.clientX, y: e.clientY, a, z, lo: ctx.lo, hi: ctx.hi, moved: true }; ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); return; } }
+    if (ctx) { const zs = ctx.toSvg(e), zone = ctx.zone(zs.x, zs.y); if (zone) { try { box.setPointerCapture(e.pointerId); } catch { /* not supported */ } drag = { zone, x: e.clientX, y: e.clientY, a, z, lo: ctx.lo, hi: ctx.hi, moved: true, frac: Math.max(0, Math.min(1, (zs.x - ctx.padL) / (ctx.W - ctx.padL - ctx.padR))) }; ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); return; } }
     const s = inPlot(e); if (!s) return;
     try { box.setPointerCapture(e.pointerId); } catch { /* not supported */ }
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -310,7 +310,7 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
       a = anchor - nl * frac; z = a + nl - 1; redraw(); return;
     }
     if (drag && drag.zone) {
-      if (drag.zone === 'x') { const len0 = drag.z - drag.a + 1, nl = Math.max(MINBARS, Math.min(N, len0 * Math.exp(-(e.clientX - drag.x) / 150))); z = drag.z; a = z - nl + 1; if (a < 0) { a = 0; z = nl - 1; } redraw(); }
+      if (drag.zone === 'x') { const len0 = drag.z - drag.a + 1, nl = Math.max(MINBARS, Math.min(N, len0 * Math.exp(-(e.clientX - drag.x) / 150))), anchor = drag.a + len0 * drag.frac; a = anchor - nl * drag.frac; z = a + nl - 1; redraw(); }   // the bars under the pointer stay put while the rest stretches around them
       else { const r0 = drag.hi - drag.lo, mid = (drag.hi + drag.lo) / 2, r = r0 * Math.exp((e.clientY - drag.y) / 150); yz = { lo: mid - r / 2, hi: mid + r / 2 }; redraw(); }
       return;
     }

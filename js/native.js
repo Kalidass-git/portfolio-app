@@ -103,10 +103,12 @@ function files() {
 
 /** Android app only: true when the screen can be turned from the page. */
 export const canTurnScreen = () => !!P('NativeTools');
-/** Android app only: 'landscape' turns the screen sideways (even when the phone's auto-rotate is off), 'auto' gives control back to the phone. Resolves false in a browser or an older app. */
+/** Android app only: 'landscape' turns the screen sideways (even when the phone's auto-rotate is off), 'auto' gives control back to the phone.
+ *  Resolves null when it worked, otherwise a short reason (an app built before 8.67.0 does not have the native part). */
 export async function setOrientation(mode) {
-  const NT = P('NativeTools'); if (!NT || !NT.setOrientation) return false;
-  try { await NT.setOrientation({ mode }); return true; } catch { return false; }
+  const NT = P('NativeTools'); if (!NT || !NT.setOrientation) return 'This is not the Android app.';
+  try { await NT.setOrientation({ mode }); return null; }
+  catch (e) { return /not implemented|unimplemented/i.test((e && e.message) || '') || (e && e.code === 'UNIMPLEMENTED') ? 'This build of the app cannot turn the screen yet. Build and install the latest APK.' : ((e && e.message) || 'The screen could not be turned.'); }
 }
 
 /** Android app only: make the page into an A4 PDF and open the share sheet (Save to Drive, WhatsApp, Gmail, Print). Resolves false in a browser. */

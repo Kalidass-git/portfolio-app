@@ -38,7 +38,7 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
   const symKey = String(symbol).toUpperCase().trim();
   const mm = mem.get(symKey) || {}; mem.set(symKey, mm);
   let tool = 'none', chart = null, card = null, showCol = false;
-  const fv = fullView(() => card, () => { if (data) { draw(); header(); } });
+  const fv = fullView(() => card, () => { if (data) { draw(); header(); } }, 'T:' + String(symbol).toUpperCase().trim());
   const myLines = () => ((S.data && S.data.trendlines) || {})[symKey] || [];
   const noIdxPe = index && !(indexPe && nativeApp());   // index P/E: Android app only for now
   let data = null, eps = { state: noIdxPe ? 'none' : 'idle', msg: '', tl: null }, peFull = null;
