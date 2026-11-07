@@ -49,7 +49,7 @@ export async function stockOhlc(symbol, yahoo) {
   return out;
 }
 /** Forget what was loaded for a share, so the next view asks the backend again. */
-export function dropCache(symbol) { for (const k of ['eq:', 'ohlc:', 'eps:', 'info:']) cache.delete(k + symbol); for (const k of [...cache.keys()]) if (k.startsWith('ipe:')) cache.delete(k); }
+export function dropCache(symbol) { for (const k of ['eq:', 'ohlc:', 'eps:', 'info:']) cache.delete(k + symbol); for (const k of [...cache.keys()]) if (k.startsWith('ipe:')) cache.delete(k); ipeFailed.clear(); }
 /** Reported earnings per share for the P/E line: { quarterly: [{date, eps}], annual: [{date, eps}] }. Needs the newer Code.gs ("eps" action). */
 export async function stockEps(symbol, yahoo) {
   const key = 'eps:' + symbol;
@@ -64,17 +64,28 @@ export async function stockEps(symbol, yahoo) {
   return out;
 }
 /** Historical P/E of an NSE index from the backend ("indexpe" action): [{ d, pe }] oldest first. name is the NSE index name, for example "NIFTY 50". */
-export async function stockIndexPe(name, years = 10) {
+const ipeBusy = new Map(), ipeFailed = new Map();
+/** Forget a remembered failure so the next call asks the backend again (Try again, Reload chart). */
+export function retryIndexPe(name) { ipeFailed.delete(name); }
+export function stockIndexPe(name, years = 10) {
   const key = 'ipe:' + name, hit = cache.get(key);
-  if (hit) return hit;
-  if (!S.cfg || !S.cfg.backendUrl) throw new Error('Index P/E comes through your backend, which is not connected on this device.');
-  let res;
-  const old = 'Your backend needs the newer Code.gs (it adds the “indexpe” action) to draw the index P/E.';
-  try { res = await call(S.cfg.backendUrl, S.cfg.key, 'indexpe', { name, years }, 120000); } catch (e) { throw new Error(/Unknown action/i.test(e.message) ? old : /took too long/i.test(e.message) ? 'The NSE index site (niftyindices.com) is slow to answer right now. Try Reload chart in a minute; once it loads, it is kept for 6 hours.' : e.message); }
-  if (!res || res.error || !res.rows) throw new Error((res && res.error && !/Unknown action/i.test(res.error)) ? res.error : old);
-  const out = res.rows.map((x) => ({ d: x[0], pe: x[1] }));
-  cache.set(key, out);
-  return out;
+  if (hit) return Promise.resolve(hit);
+  // One call per index at a time: every chart on the page, the full view and each redraw join the call already on its way, and a failure is remembered until the person asks again (these calls take a long time and each one runs a full Apps Script run).
+  if (ipeBusy.has(name)) return ipeBusy.get(name);
+  if (ipeFailed.has(name)) return Promise.reject(new Error(ipeFailed.get(name)));
+  const p = (async () => {
+    if (!S.cfg || !S.cfg.backendUrl) throw new Error('Index P/E comes through your backend, which is not connected on this device.');
+    let res;
+    const old = 'Your backend needs the newer Code.gs (it adds the “indexpe” action) to draw the index P/E.';
+    try { res = await call(S.cfg.backendUrl, S.cfg.key, 'indexpe', { name, years }, 120000); } catch (e) { throw new Error(/Unknown action/i.test(e.message) ? old : /took too long/i.test(e.message) ? 'The NSE index site (niftyindices.com) did not answer in 2 minutes. Press Try again later; once it loads, it is kept for 6 hours.' : e.message); }
+    if (!res || res.error || !res.rows) throw new Error((res && res.error && !/Unknown action/i.test(res.error)) ? res.error : old);
+    const out = res.rows.map((x) => ({ d: x[0], pe: x[1] }));
+    cache.set(key, out);
+    return out;
+  })();
+  ipeBusy.set(name, p);
+  p.then(() => ipeBusy.delete(name), (e) => { ipeBusy.delete(name); ipeFailed.set(name, e.message); });
+  return p;
 }
 /** Quote figures (P/E, 52-week range, volume ...) and deeper numbers (margins, growth, debt, target) for one share: { q, d } (either may be null). */
 export async function stockInfo(symbol, yahoo) {

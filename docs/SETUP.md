@@ -150,6 +150,11 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.62.0 – One index P/E call at a time
+
+- **Duplicate index P/E calls**: every chart on the page, the full view, each redraw and each Reload/Try again started its own backend call, and each runs a full Apps Script run against NSE's slow site. `stockIndexPe` now keeps one call per index in flight (everything else joins it), remembers a failure until you press Try again or Reload chart, and keeps a finished result until you reload.
+- The failure message now says NSE's site did not answer in 2 minutes. No stored-data changes; the app only.
+
 ## Release 8.61.0 – Index P/E loads faster
 
 - **Why index P/E failed while stock P/E worked**: the index P/E comes from NSE's index site (niftyindices.com), asked one year at a time for 10 years, one after another. That site is slow, so the total went past the app's 45-second wait ("took too long"). A stock's P/E is a single small request.
