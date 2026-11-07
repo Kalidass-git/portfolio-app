@@ -83,14 +83,26 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
     const mine = (S.data.alerts || []).filter((a) => a.rule === 'trendline' && a.lineId === id);
     const hitIds = new Set(W.evalAlerts(S.data).hit.map((x) => x.alert.id));
     const cur = L.color || TL_COLORS[0], ed = canEdit();
-    const pop = h('div', { class: 'tm-pop', role: 'dialog', 'aria-label': 'Trendline options' },
+    const grip = h('div', { class: 'tm-grip', title: 'Drag to move this toolbar out of the way', 'aria-label': 'Drag to move this toolbar' }, '⠿ Move');
+    const pop = h('div', { class: 'tm-pop', role: 'dialog', 'aria-label': 'Trendline options' }, grip,
       ed ? h('div', { class: 'tm-pop-row' }, TL_COLORS.map((c) => h('button', { type: 'button', class: 'tm-sw' + (cur === c ? ' on' : ''), style: { background: c }, 'aria-label': 'Colour ' + c, onclick: () => mutate((d) => { const x = ((d.trendlines || {})[symKey] || []).find((l) => l.id === id); if (x) x.color = c; }) }))) : null,
       mine.length ? h('div', { class: 'tm-pop-alerts' }, mine.map((a) => h('button', { type: 'button', class: 'tm-al' + (hitIds.has(a.id) ? ' hit' : '') + (a.on === false ? ' off' : ''), onclick: () => (ed ? lineAlertForm({ alert: a, name }) : null) }, `🔔 ${a.tf === 'W' ? 'Week' : a.tf === 'M' ? 'Month' : 'Day'} ${a.dir === 'below' ? '↓' : '↑'}`))) : null,
       ed ? h('div', { class: 'tm-pop-row' },
         h('button', { type: 'button', class: 'chip-btn small', onclick: () => lineAlertForm({ symbol: symKey, name, yahoo, lineId: id }) }, mine.length ? '＋ Another alert' : '🔔 Set alert'),
         h('button', { type: 'button', class: 'chip-btn small', onclick: () => { mutate((d) => { d.trendlines[symKey] = (d.trendlines[symKey] || []).filter((l) => l.id !== id); if (!d.trendlines[symKey].length) delete d.trendlines[symKey]; if (!Object.keys(d.trendlines).length) delete d.trendlines; d.alerts = (d.alerts || []).filter((a) => !(a.rule === 'trendline' && a.lineId === id)); }); mm.sel = null; } }, 'Delete')) : null,
       h('button', { type: 'button', class: 'tm-x', 'aria-label': 'Close', onclick: () => { mm.sel = null; draw(); } }, '✕'));
+    // the grip drags the toolbar anywhere over the chart; where you put it is remembered for the next line you select
+    grip.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const w = pop.parentElement; if (!w) return;
+      try { grip.setPointerCapture(e.pointerId); } catch { /* not supported */ }
+      const r = pop.getBoundingClientRect(), wr = w.getBoundingClientRect(), ox = e.clientX - r.left, oy = e.clientY - r.top;
+      const move = (ev) => { const x = Math.max(0, Math.min(Math.max(0, wr.width - r.width), ev.clientX - wr.left - ox)), y = Math.max(0, Math.min(Math.max(0, wr.height - r.height), ev.clientY - wr.top - oy)); pop.style.left = x + 'px'; pop.style.top = y + 'px'; mm.popAt = { x, y }; };
+      const end = () => { grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', end); grip.removeEventListener('pointercancel', end); };
+      grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', end); grip.addEventListener('pointercancel', end);
+    });
     const p = mm.pos || { x: 120, y: 40 };
+    if (mm.popAt) { pop.style.top = mm.popAt.y + 'px'; pop.style.left = mm.popAt.x + 'px'; return pop; }
     pop.style.top = Math.max(4, p.y + 16) + 'px'; pop.style.left = Math.max(4, p.x - 100) + 'px';
     requestAnimationFrame(() => { const w = pop.parentElement; if (!w) return; const r = pop.getBoundingClientRect(), pr = w.getBoundingClientRect(); if (r.right > pr.right - 4) pop.style.left = Math.max(4, pr.width - r.width - 4) + 'px'; if (r.bottom > pr.bottom - 4) pop.style.top = Math.max(4, p.y - r.height - 12) + 'px'; });
     return pop;
@@ -126,11 +138,16 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
     if (!sel && myLines().length && canEdit()) draws.push(h('button', { type: 'button', class: 'tm-tg', onclick: () => { if (confirm('Remove all ' + myLines().length + ' trendlines on ' + name + '?')) mutate((d) => { delete d.trendlines[symKey]; if (!Object.keys(d.trendlines).length) delete d.trendlines; }); } }, `Clear lines (${myLines().length})`));
     const swatches = canEdit() && mode !== 'pct' && tool === 'line' ? h('div', { class: 'tm-row tm-colors', role: 'group', 'aria-label': 'Trendline colour' }, h('span', { class: 'tm-lab' }, 'New lines'),
       TL_COLORS.map((c) => { const cur = sel ? ((myLines().find((l) => l.id === sel) || {}).color || TL_COLORS[0]) : (st.tc || TL_COLORS[0]); return h('button', { type: 'button', class: 'tm-sw' + (cur === c ? ' on' : ''), style: { background: c }, 'aria-label': 'Colour ' + c, title: 'Use this colour', onclick: () => { st.tc = c; save(st); if (sel) mutate((d) => { const x = ((d.trendlines || {})[symKey] || []).find((l) => l.id === sel); if (x) x.color = c; }); else draw(); } }); })) : null;
-    body.append(h('div', { class: 'tm-bar' },
+    const phone = window.innerWidth < 640, barOpen = !phone || !!st.barOpen;   // on a phone the controls start folded away so they do not cover the chart
+    const bar = h('div', { class: 'tm-bar' },
       ranges,
       h('div', { class: 'tm-row tm-type' }, type, h('span', { class: 'tm-lab' }, 'Bars'), size),
       h('div', { class: 'tm-row tm-lines' }, h('span', { class: 'tm-lab' }, 'Lines'), tg('dma50', '50d', LINE_COLORS.dma50), tg('dma200', '200d', LINE_COLORS.dma200), canPe ? tg('pe', index ? 'Index P/E' : 'P/E', LINE_COLORS.pe, eps.state === 'loading' ? ' …' : '') : null),
-      h('div', { class: 'tm-row tm-tools' }, zoom, ...draws), swatches));
+      h('div', { class: 'tm-row tm-tools' }, zoom, ...draws), swatches);
+    body.append(h('div', { class: 'tm-barwrap' },
+      phone ? h('button', { type: 'button', class: 'tm-barbtn', 'aria-expanded': String(barOpen), onclick: () => { st.barOpen = !barOpen; save(st); draw(); } },
+        h('span', null, barOpen ? 'Hide chart controls' : 'Chart controls'), h('small', null, barOpen ? '' : `${st.range} · ${st.mode === 'candle' ? 'Candles' : st.mode === 'pct' ? '%' : 'Line'}`), h('b', { 'aria-hidden': 'true' }, barOpen ? '▴' : '▾')) : null,
+      barOpen ? bar : null));
     if (showCol) body.append(colourPanel([['dma50', '50-day average'], ['dma200', '200-day average'], ...(canPe ? [['pe', index ? 'Index P/E' : 'P/E'], ['median', 'Median P/E']] : []), ['avg', 'Your average cost']], draw));
     if (data.closesOnly) body.append(h('p', { class: 'note' }, 'Candles and volume need the newer Code.gs in your Apps Script (Settings explains how to paste and redeploy it). Showing closing prices until then.'));
     if (canPe && st.pe && eps.state === 'err') body.append(h('p', { class: 'note' }, 'P/E history: ' + eps.msg + ' ', h('button', { type: 'button', class: 'chip-btn small', onclick: () => { if (index && indexPe) retryIndexPe(indexPe); eps = { state: 'idle', msg: '', tl: null }; ensureEps(); } }, 'Try again')));

@@ -1655,3 +1655,11 @@ body.tm-lock { overflow: hidden; }
 .mchart .tagtxt { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .mchart .hl-lab { font-size: 10.5px; }
 .mchart .cross { stroke: var(--muted); stroke-dasharray: 3 3; opacity: .8; }
+
+/* movable trendline toolbar, and folded chart controls on phones */
+.tm-grip { cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; font-size: .78rem; color: var(--muted); padding: 2px 4px 4px; margin: -4px 0 0; border-bottom: 1px dashed var(--line); letter-spacing: .03em; }
+.tm-grip:active { cursor: grabbing; }
+.tm-barbtn { display: flex; align-items: center; gap: 8px; width: 100%; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: .92rem; padding: 8px 12px; min-height: 40px; border-radius: 10px; cursor: pointer; text-align: left; margin: 4px 0 8px; }
+.tm-barbtn small { color: var(--muted); flex: 1; } .tm-barbtn span { font-weight: 650; } .tm-barbtn[aria-expanded="false"] span { flex: 0 0 auto; } .tm-barbtn b { margin-left: auto; color: var(--muted); }
+.tm-full .tm-barwrap { position: sticky; top: 0; z-index: 5; background: var(--surface); }
+.tm-full .tm-barwrap .tm-bar { position: static; }

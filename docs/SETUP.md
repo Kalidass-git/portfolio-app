@@ -150,6 +150,14 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.66.0 – Chart: movable trendline toolbar, up-and-down drag, P/E tag, folded controls on phones
+
+- **Trendline toolbar** (colours, alert, delete) has a "⠿ Move" grip: drag it anywhere over the chart. The place is remembered for the next line you select.
+- **Dragging the chart** now also moves it up and down (the price range follows the pointer, limited to one data-height beyond the data). A sideways-only drag keeps the price scale fitting itself. Reset, or double-clicking the price axis, brings it back. On a phone the chart must be zoomed (+ or pinch) first, so that swiping an un-zoomed chart still scrolls the page.
+- **P/E tag**: touching or hovering shows the P/E as a tag right on the P/E line, inside the P/E panel; it is no longer in the line of figures below the chart (open, high, low, close, volume and the averages stay there).
+- **Phones**: the chart controls start folded into one "Chart controls · 1Y · Line" button (also in full view); tap it to open them. The choice is remembered on the phone. Desktop is unchanged.
+- App only; no stored-data changes.
+
 ## Release 8.65.0 – Index P/E: Android app only, nothing on the Google backend
 
 - Reading the index P/E through the Google backend never worked (NSE does not answer Google's servers), so **all of it is removed from `backend/Code.gs`** (`indexpe`, `indexpeyear`, `indexpedates`). Nothing runs there for this any more.

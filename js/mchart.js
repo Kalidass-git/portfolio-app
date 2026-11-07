@@ -75,7 +75,7 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
     if (avg != null && avg > lo - (hi - lo) * 0.5 && avg < hi + (hi - lo) * 0.5) { lo = Math.min(lo, avg); hi = Math.max(hi, avg); }
     const span = hi - lo || hi * 0.02 || 1; lo -= span * 0.06; hi += span * 0.06;
     const fitLo = lo, fitHi = hi;
-    if (yz && mode !== 'pct') { lo = yz.lo; hi = yz.hi; }
+    if (yz) { lo = yz.lo; hi = yz.hi; }
     const y = (v) => priceT + (1 - (val(v) - val(lo)) / (val(hi) - val(lo))) * (priceB - priceT);
     const priceAt = (py) => lo + (1 - (py - priceT) / (priceB - priceT)) * (hi - lo);
 
@@ -240,18 +240,23 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
       if (m50 && m50[i] != null) dot(y(m50[i]), LINE_COLORS.dma50);
       if (m200 && m200[i] != null) dot(y(m200[i]), LINE_COLORS.dma200);
       if (showPe && peS[i] != null) dot(peY(peS[i]), LINE_COLORS.pe);
+      if (showPe && peS[i] != null) {   // the P/E reading as a tag beside the P/E line itself, so it is read where it is drawn (the other figures stay in the line below the chart)
+        const v = peS[i], txt = peLabel + ' ' + peFmt(v, 1), tw = Math.max(48, txt.length * 6.4 + 12), py = peY(v);
+        const tx = Math.max(padL + 2, Math.min(W - padR - tw - 2, cx(i) - tw / 2)), ty = Math.min(peB - 18, py - 26 >= peT + 1 ? py - 26 : py + 8);
+        tagBox.append(svg('g', { class: 'mc-tag' }, svg('rect', { x: tx, y: ty, width: tw, height: 17, rx: 3, fill: 'var(--surface, #fff)', stroke: LINE_COLORS.pe }), svg('text', { x: tx + tw / 2, y: ty + 12.5, 'text-anchor': 'middle', class: 'tagtxt', fill: LINE_COLORS.pe }, txt)));
+      }
       const chip = (label, v, col) => (v == null ? null : h('span', { class: 'mc-chip' }, h('i', { style: { background: col } }), `${label} ${v}`));
       read.replaceChildren(h('b', null, dateFmt(r.d)), mode === 'candle' ? ` O ${fmt(r.o)} · H ${fmt(r.h)} · L ${fmt(r.l)} · C ${fmt(r.c)}` : ` ${fmt(r.c)}`,
         h('span', { class: ch >= 0 ? 'pos' : 'neg' }, ` ${ch >= 0 ? '+' : '−'}${(Math.abs(ch / prev) * 100).toFixed(2)}%`),
         mode === 'pct' ? h('span', { class: r.c >= base ? 'pos' : 'neg' }, ` · since start ${r.c >= base ? '+' : '−'}${(Math.abs(r.c / base - 1) * 100).toFixed(1)}%`) : '', r.v > 0 ? ` · Vol ${vfmt(r.v)}` : '',
-        h('div', { class: 'mc-chips' }, chip('50d', m50 && m50[i] != null ? fmt(m50[i]) : null, LINE_COLORS.dma50), chip('200d', m200 && m200[i] != null ? fmt(m200[i]) : null, LINE_COLORS.dma200), chip(peLabel, showPe && peS[i] != null ? peFmt(peS[i], 1) : null, LINE_COLORS.pe)));
+        h('div', { class: 'mc-chips' }, chip('50d', m50 && m50[i] != null ? fmt(m50[i]) : null, LINE_COLORS.dma50), chip('200d', m200 && m200[i] != null ? fmt(m200[i]) : null, LINE_COLORS.dma200)));
     };
     const rect = () => root.getBoundingClientRect();
     const toSvg = (e) => { const bb = rect(); return { x: ((e.clientX - bb.left) / bb.width) * W, y: ((e.clientY - bb.top) / bb.height) * H }; };
     const barAt = (X) => Math.max(0, Math.min(n - 1, Math.floor((X - padL) / gw) - off));
     const drawing = tool === 'line' && mode !== 'pct';
     const hit = svg('rect', { x: padL, y: priceT, width: W - padL - padR, height: bottom - priceT, fill: 'transparent', style: `cursor: ${drawing ? 'crosshair' : 'grab'}` });
-    root.style.touchAction = drawing || sel ? 'none' : 'pan-y';
+    root.style.touchAction = drawing || sel || box.isZoomed() ? 'none' : 'pan-y';   // once zoomed or moved, a drag moves the chart in any direction instead of scrolling the page
     // what a tap at (X, Y) means when drawing: the date of the bar and the price, snapped to the nearest high, low, open or close when it is close by
     const point = (X, Y) => {
       const p = (X - padL) / gw - off - 0.5, i = barAt(X);
@@ -268,7 +273,7 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
     };
     // the line with the whole of it moved by the distance from (X0, Y0) to (X, Y)
     const shift = (L, X0, Y0, X, Y) => { const dp = (X - X0) / gw, dq = priceAt(Y) - priceAt(Y0); return { d1: dateOf(posOf(L.d1) + dp), p1: L.p1 + dq, d2: dateOf(posOf(L.d2) + dp), p2: L.p2 + dq }; };
-    ctx = { H, lo, hi, plotH: priceB - priceT, zone: (X, Y) => (Y >= bottom && Y <= H && X >= padL && X <= W - padR ? 'x' : X > W - padR && Y >= priceT && Y <= priceB && mode !== 'pct' ? 'y' : null), hitLine, shift, show, point, near, barAt, toSvg, drawing, gw, padL, padR, W, rect, plot: [padL, priceT, W - padR, bottom] };
+    ctx = { H, lo, hi, fitLo, fitHi, plotH: priceB - priceT, zone: (X, Y) => (Y >= bottom && Y <= H && X >= padL && X <= W - padR ? 'x' : X > W - padR && Y >= priceT && Y <= priceB && mode !== 'pct' ? 'y' : null), hitLine, shift, show, point, near, barAt, toSvg, drawing, gw, padL, padR, W, rect, plot: [padL, priceT, W - padR, bottom] };
     // dragging the month labels stretches time, dragging the price labels stretches the price scale (double-click either to undo)
     const axX = svg('rect', { x: padL, y: bottom, width: W - padL - padR, height: axisH + 4, fill: 'transparent', style: 'cursor: ew-resize' });
     const axY = svg('rect', { x: W - padR, y: priceT, width: padR, height: priceB - priceT, fill: 'transparent', style: 'cursor: ns-resize' });
@@ -285,7 +290,7 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
     try { box.setPointerCapture(e.pointerId); } catch { /* not supported */ }
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (ptrs.size === 2) { const [p, q] = [...ptrs.values()]; pinch = { d: Math.hypot(p.x - q.x, p.y - q.y), a, z }; drag = null; return; }
-    drag = { x: e.clientX, y: e.clientY, a, z, moved: false, touch: e.pointerType === 'touch', yz: yz ? { ...yz } : null };
+    drag = { x: e.clientX, y: e.clientY, a, z, moved: false, touch: e.pointerType === 'touch', yz: yz ? { ...yz } : null, vr: { lo: ctx.lo, hi: ctx.hi } };
     if (!ctx.drawing) {
       const hl = ctx.hitLine(s.x, s.y), L = hl && (lines || []).find((q) => q.id === hl.id);
       if (hl && L && onLine && onLine.update) { drag.edit = { ...hl, X0: s.x, Y0: s.y, orig: L }; sel = hl.id; }
@@ -317,12 +322,22 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
       return;
     }
     if (drag && ptrs.size === 1 && (e.buttons || drag.touch)) {
-      const dx = e.clientX - drag.x;
-      if (Math.abs(dx) > 4 || (yz && Math.abs(e.clientY - drag.y) > 4)) drag.moved = true;
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) drag.moved = true;
+      if (Math.abs(dy) > 6) drag.vert = true;          // from here this drag also moves the chart up and down (a sideways-only drag keeps the price scale fitting itself)
       if (drag.moved && (box.isZoomed() || !drag.touch)) {
-        if (yz && drag.yz) { const k = (drag.yz.hi - drag.yz.lo) / ctx.plotH, sh = ((e.clientY - drag.y) / (ctx.rect().height / ctx.H)) * k; yz = { lo: drag.yz.lo + sh, hi: drag.yz.hi + sh }; }
+        let ch = false;
+        if (drag.vert) {
+          // the price range follows the pointer; it may leave the data by up to one data-height either way, so the chart cannot be lost
+          const k = (drag.vr.hi - drag.vr.lo) / ctx.plotH, sh = (dy / (ctx.rect().height / ctx.H)) * k, dh = ctx.fitHi - ctx.fitLo;
+          let lo2 = drag.vr.lo + sh, hi2 = drag.vr.hi + sh;
+          const mid = (lo2 + hi2) / 2, mn = ctx.fitLo - dh, mx = ctx.fitHi + dh, adj = mid < mn ? mn - mid : mid > mx ? mx - mid : 0;
+          lo2 += adj; hi2 += adj;
+          if (!yz || Math.abs(yz.lo - lo2) > 1e-9) { yz = { lo: lo2, hi: hi2 }; ch = true; }
+        }
         const bars = Math.round(((dx / ctx.rect().width) * ctx.W) / ctx.gw), len = drag.z - drag.a + 1, na = Math.max(room(len)[0], Math.min(room(len)[1], drag.a - bars));
-        if (Math.round(na) !== Math.round(a)) { a = na; z = a + len - 1; redraw(); }
+        if (Math.round(na) !== Math.round(a)) { a = na; z = a + len - 1; ch = true; }
+        if (ch) redraw();
         return;
       }
     }
