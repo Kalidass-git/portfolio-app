@@ -117,6 +117,7 @@ function doPost(e) {
       case 'details': return json_(details_(req.symbol, req.yahoo));
       case 'eps': return json_(eps_(req.symbol, req.yahoo));
       case 'indexpe': return json_(indexPe_(req.name, req.years));
+      case 'indexpeyear': return json_(indexPeYear_(req.name, req.yearsAgo));
       default: return json_({ error: 'Unknown action.' });
     }
   } catch (err) {
@@ -416,6 +417,50 @@ function indexPe_(name, years) {
   rows.sort(function (a, b) { return a[0] < b[0] ? -1 : 1; });
   try { var gz = Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(JSON.stringify(rows.map(function (r) { return [r[0], r[1]]; })))).getBytes()); if (gz.length < 90000) store.put(cacheKey, gz, 21600); } catch (e) { /* too big or no cache: fine */ }
   return { ok: true, rows: rows };
+}
+
+/**
+ * ONE calendar year of an index's P/E history (yearsAgo 0 = this year). The app asks year by year, a few at a time, so one slow answer from NSE's index site
+ * cannot hold up the rest, and every reply says how long NSE took and what it answered (so a block or a slow site shows up as a message, not as a silent wait).
+ * Returns { ok, rows: [[date, pe], ...], ms, cached } or { error, ms, step }.
+ */
+function indexPeYear_(name, yearsAgo) {
+  var t0 = Date.now();
+  if (!name) return { error: 'No index name given.' };
+  var k = Math.max(0, Math.min(25, Number(yearsAgo) || 0)), now = new Date();
+  var store = CacheService.getScriptCache(), ck = 'ipy:' + name + ':' + now.getFullYear() + ':' + k;
+  try { var hit = store.get(ck); if (hit) return { ok: true, rows: JSON.parse(hit), cached: true, ms: Date.now() - t0 }; } catch (e) { /* fetch */ }
+  var MON = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
+  var NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function fmt(d) { return ('0' + d.getDate()).slice(-2) + '-' + NAMES[d.getMonth()] + '-' + d.getFullYear(); }
+  var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+  var host = 'https://www.niftyindices.com', cookie = '', step = 'session page';
+  try { cookie = store.get('ipy-cookie') || ''; } catch (e) { /* none */ }
+  try {
+    if (!cookie) {
+      var pg = UrlFetchApp.fetch(host + '/reports/historical-data', { muteHttpExceptions: true, headers: { 'User-Agent': UA, 'Accept': 'text/html' } });
+      var hd = pg.getAllHeaders(), sc = hd['Set-Cookie'] || hd['set-cookie'] || [];
+      if (typeof sc === 'string') sc = [sc];
+      cookie = sc.map(function (c) { return String(c).split(';')[0]; }).join('; ');
+      if (cookie) { try { store.put('ipy-cookie', cookie, 900); } catch (e) { /* fine */ } }
+    }
+    step = 'data request';
+    var end = new Date(now.getFullYear() - k, k === 0 ? now.getMonth() : 11, k === 0 ? now.getDate() : 31), start = new Date(now.getFullYear() - k, 0, 1);
+    var payload = { cinfo: "{'name':'" + name + "','startDate':'" + fmt(start) + "','endDate':'" + fmt(end) + "','indexName':'" + name + "'}" };
+    var hdrs = { 'User-Agent': UA, 'Referer': host + '/reports/historical-data', 'Origin': host, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json, text/javascript, */*; q=0.01' };
+    if (cookie) hdrs['Cookie'] = cookie;
+    var r = UrlFetchApp.fetch(host + '/Backpage.aspx/getpepbHistoricalDataDBtoJSON', { method: 'post', contentType: 'application/json; charset=UTF-8', payload: JSON.stringify(payload), muteHttpExceptions: true, headers: hdrs });
+    if (r.getResponseCode() !== 200) { try { store.remove('ipy-cookie'); } catch (e) { /* fine */ } return { error: 'NSE index site answered ' + r.getResponseCode(), step: step, ms: Date.now() - t0 }; }
+    var list = JSON.parse(JSON.parse(r.getContentText()).d || '[]'), rows = [], seen = {};
+    list.forEach(function (x) {
+      var m = /^(\d{1,2}) (\w{3}) (\d{4})$/.exec(String(x.DATE || '').trim()); if (!m) return;
+      var iso = m[3] + '-' + MON[m[2]] + '-' + ('0' + m[1]).slice(-2), pe = parseFloat(x.pe);
+      if (!(pe > 0) || seen[iso]) return; seen[iso] = 1; rows.push([iso, pe]);
+    });
+    rows.sort(function (a, b) { return a[0] < b[0] ? -1 : 1; });
+    if (rows.length) { try { store.put(ck, JSON.stringify(rows), k === 0 ? 3600 : 21600); } catch (e) { /* fine */ } }
+    return { ok: true, rows: rows, ms: Date.now() - t0 };
+  } catch (e) { return { error: e.message, step: step, ms: Date.now() - t0 }; }
 }
 
 /** Dividends per share paid by each company, from Yahoo Finance (NSE first, then BSE). symbols: [{symbol:'INFY', yahoo:''}] */

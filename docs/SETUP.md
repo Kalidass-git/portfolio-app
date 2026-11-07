@@ -150,6 +150,13 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.63.0 – Index P/E asked year by year, with a reason when NSE does not answer
+
+- The one big "indexpe" call (ten years in one Apps Script run) was being cancelled at the app's wait limit with no reason shown. The backend has a new **`indexpeyear`** action: one calendar year per call, cookie kept for 15 minutes, each year kept 6 hours (this year 1 hour), and every reply carries how long NSE took and at which step it failed.
+- The app asks this year first, alone (gives up after 40 s and shows the reason), then the other years three at a time. A year that fails is skipped; a partial chart is shown but not kept, so the next load asks again for the missing years. Still one call per index at a time (8.62.0).
+- **Redeploy `Code.gs`** (new version) — the app needs the new action. The old `indexpe` action stays for older apps. No stored-data changes.
+- If it still fails, the message under the chart now names the step and status (for example "NSE index site answered 403"), which tells whether NSE is blocking Google's servers.
+
 ## Release 8.62.0 – One index P/E call at a time
 
 - **Duplicate index P/E calls**: every chart on the page, the full view, each redraw and each Reload/Try again started its own backend call, and each runs a full Apps Script run against NSE's slow site. `stockIndexPe` now keeps one call per index in flight (everything else joins it), remembers a failure until you press Try again or Reload chart, and keeps a finished result until you reload.
