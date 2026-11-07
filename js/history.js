@@ -67,20 +67,40 @@ export async function stockEps(symbol, yahoo) {
 const ipeBusy = new Map(), ipeFailed = new Map();
 /** Forget a remembered failure so the next call asks the backend again (Try again, Reload chart). */
 export function retryIndexPe(name) { ipeFailed.delete(name); }
+const IPE_YEAR_WAIT = 40000;   // one year of readings: if NSE's site has not answered in 40 s, give that year up instead of holding everything
+/**
+ * Historical P/E of an NSE index, asked from the backend one calendar year at a time ("indexpeyear"): this year first, alone, so a blocked or very slow site
+ * shows its reason within 40 seconds; then the other years a few at a time. A year that fails is skipped (the line starts where the readings start).
+ * One call per index at a time; a failure is remembered until Try again / Reload chart.
+ */
 export function stockIndexPe(name, years = 10) {
   const key = 'ipe:' + name, hit = cache.get(key);
   if (hit) return Promise.resolve(hit);
-  // One call per index at a time: every chart on the page, the full view and each redraw join the call already on its way, and a failure is remembered until the person asks again (these calls take a long time and each one runs a full Apps Script run).
   if (ipeBusy.has(name)) return ipeBusy.get(name);
   if (ipeFailed.has(name)) return Promise.reject(new Error(ipeFailed.get(name)));
   const p = (async () => {
     if (!S.cfg || !S.cfg.backendUrl) throw new Error('Index P/E comes through your backend, which is not connected on this device.');
-    let res;
-    const old = 'Your backend needs the newer Code.gs (it adds the “indexpe” action) to draw the index P/E.';
-    try { res = await call(S.cfg.backendUrl, S.cfg.key, 'indexpe', { name, years }, 120000); } catch (e) { throw new Error(/Unknown action/i.test(e.message) ? old : /took too long/i.test(e.message) ? 'The NSE index site (niftyindices.com) did not answer in 2 minutes. Press Try again later; once it loads, it is kept for 6 hours.' : e.message); }
-    if (!res || res.error || !res.rows) throw new Error((res && res.error && !/Unknown action/i.test(res.error)) ? res.error : old);
-    const out = res.rows.map((x) => ({ d: x[0], pe: x[1] }));
-    cache.set(key, out);
+    const old = 'Your backend needs the newer Code.gs (it adds the “indexpeyear” action) to draw the index P/E. Paste backend/Code.gs into Apps Script and deploy a new version.';
+    const ask = async (k) => {
+      try {
+        const res = await call(S.cfg.backendUrl, S.cfg.key, 'indexpeyear', { name, yearsAgo: k }, IPE_YEAR_WAIT);
+        if (res && res.ok) return { rows: res.rows || [] };
+        return { err: (res && res.error) || 'no answer', step: res && res.step, ms: res && res.ms };
+      } catch (e) {
+        if (/Unknown action/i.test(e.message)) throw new Error(old);
+        return { err: /took too long/i.test(e.message) ? 'no answer in ' + IPE_YEAR_WAIT / 1000 + ' seconds' : e.message, timeout: /took too long/i.test(e.message) };
+      }
+    };
+    const why = (r) => 'The NSE index site (niftyindices.com) gave no P/E readings: ' + r.err + (r.step ? ' (at the ' + r.step + (r.ms ? ', after ' + Math.round(r.ms / 1000) + ' s' : '') + ')' : '') + '. Press Try again later.';
+    const first = await ask(0);
+    if (first.err) throw new Error(why(first));
+    const all = [...first.rows], failed = [];
+    const todo = Array.from({ length: Math.max(0, years - 1) }, (_, i) => i + 1);
+    const worker = async () => { for (let k = todo.shift(); k != null; k = todo.shift()) { const r = await ask(k); if (r.err) failed.push(k); else all.push(...r.rows); } };
+    await Promise.all([worker(), worker(), worker()]);
+    if (!all.length) throw new Error('The NSE index site returned no P/E readings for ' + name + '.');
+    const seen = new Set(), out = all.filter((x) => !seen.has(x[0]) && seen.add(x[0])).sort((x, y) => (x[0] < y[0] ? -1 : 1)).map((x) => ({ d: x[0], pe: x[1] }));
+    if (!failed.length) cache.set(key, out);   // a partial answer is shown but not kept, so the next load asks for the missing years again
     return out;
   })();
   ipeBusy.set(name, p);
