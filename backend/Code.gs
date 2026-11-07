@@ -305,6 +305,14 @@ function fundamentals_(list) {
     var miss = []; items.forEach(function (s, i) { if (!out[s.symbol] && !s.yahoo) miss.push(i); });
     if (miss.length) run(function (s) { return s.symbol + '.BO'; }, miss);
   } catch (e) { return { error: 'Backend error: ' + e.message }; }
+  // Yahoo's ratio feed does not know every share (small and recently listed ones), though the price feed does. Fall back to the price feed so such a share gets its price and 52-week range instead of "not found".
+  try {
+    var left = items.filter(function (s) { return !out[s.symbol]; });
+    if (left.length) {
+      var qq = quotes_(left).quotes;
+      left.forEach(function (s) { var q = qq[s.symbol]; if (q) out[s.symbol] = { name: null, price: q.price, prevClose: q.prevClose, dayPct: q.prevClose > 0 ? (q.price - q.prevClose) / q.prevClose : null, pe: null, fpe: null, pb: null, eps: null, mcap: null, dy: null, hi52: q.high52, lo52: q.low52, dma50: null, dma200: null, volume: null }; });
+    }
+  } catch (e) { /* the share stays listed as not found below */ }
   items.forEach(function (s) { if (!out[s.symbol]) errors[s.symbol] = 'not found'; });
   return { ok: true, data: out, errors: errors };
 }

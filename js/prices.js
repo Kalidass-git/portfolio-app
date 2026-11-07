@@ -83,6 +83,8 @@ export function soldSymbols() {
   }
   return out;
 }
+/** Why a sold share got no price in the last sold-price refresh: { SYMBOL: 'message' } (kept in memory only). */
+export const soldIssues = {};
 /** Latest prices of the sold shares only. Owner only, because the prices are saved with the data for everyone. */
 export async function refreshSold(onProgress = () => {}) {
   if (S.role !== 'owner') throw new Error('Only the owner can refresh these prices.');
@@ -93,7 +95,9 @@ export async function refreshSold(onProgress = () => {}) {
   const res = await call(S.cfg.backendUrl, S.cfg.key, 'quotes', { symbols });
   const now = new Date().toISOString(), got = {};
   for (const [sym, q] of Object.entries(res.quotes || {})) if (q && q.price > 0) got[sym.toUpperCase()] = q.price;
-  for (const [sym, msg] of Object.entries(res.errors || {})) out.errors.push(`${sym}: ${msg}`);
+  for (const k of Object.keys(soldIssues)) delete soldIssues[k];
+  for (const [sym, msg] of Object.entries(res.errors || {})) { out.errors.push(`${sym}: ${msg}`); soldIssues[sym.toUpperCase()] = msg; }
+  for (const q of symbols) if (!got[q.symbol] && !soldIssues[q.symbol]) soldIssues[q.symbol] = 'no price returned';
   out.count = Object.keys(got).length;
   if (out.count) mutate((d) => { d.priceBook = d.priceBook || {}; for (const [sym, price] of Object.entries(got)) d.priceBook[sym] = { price, at: now }; });
   return out;

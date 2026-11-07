@@ -97,9 +97,12 @@ export function sold(root) {
   }
   const list = eq.sold.map((s) => {
     const o = (data.soldSettings || {})[s.symbol] || {};
-    const px = o.suppress ? (o.manualPrice > 0 ? o.manualPrice : null) : priceOfSymbol((o.nowSymbol || s.nowSymbol).toUpperCase());
+    const sym = (o.nowSymbol || s.nowSymbol).toUpperCase();
+    const px = o.suppress ? (o.manualPrice > 0 ? o.manualPrice : null) : priceOfSymbol(sym);
+    const pb = (data.priceBook || {})[sym], held = all.stocks.items.some((i) => i.symbol && i.symbol.toUpperCase() === sym && i.livePrice > 0);
+    const pxAt = !o.suppress && px && !held && pb && pb.at ? pb.at : null, issue = !o.suppress && !px ? prices.soldIssues[sym] || null : null;
     const nowValue = px ? s.nowQty * px : null;
-    return { ...s, o, px, nowValue, diff: nowValue == null ? null : nowValue - s.proceeds, ret: s.cost ? s.realized / s.cost : null, split: Math.abs(s.nowQty - s.qty) > 1e-6 };
+    return { ...s, o, px, pxAt, issue, nowValue, diff: nowValue == null ? null : nowValue - s.proceeds, ret: s.cost ? s.realized / s.cost : null, split: Math.abs(s.nowQty - s.qty) > 1e-6 };
   }).sort((a, b) => (a.date < b.date ? 1 : -1));
   const priced = list.filter((x) => x.nowValue != null);
   const proceeds = list.reduce((a, x) => a + x.proceeds, 0), cost = list.reduce((a, x) => a + x.cost, 0), realized = proceeds - cost;
@@ -126,10 +129,10 @@ export function sold(root) {
     { label: 'Sold for', cls: 'r', get: (x) => money(x.proceeds), total: () => money(proceeds) },
     { label: 'Bought for', mob: 'under', mlabel: 'bought ', cls: 'r', get: (x) => money(x.cost), total: () => money(cost) },
     { label: 'Profit / loss', cls: 'r', render: (x) => h('span', { class: posNeg(x.realized) }, money(x.realized), x.ret != null ? h('small', { class: 'sub' }, ' ' + pct(x.ret, 0)) : null), total: () => h('span', { class: posNeg(realized) }, money(realized)) },
-    { label: 'Value today if kept', mob: 'under', mlabel: 'now ', cls: 'r', get: (x) => (x.nowValue == null ? h('span', { class: 'muted' }, x.o.suppress ? 'price off' : 'no price') : money(x.nowValue) + (x.o.suppress && x.o.manualPrice ? ' (set by you)' : '')), total: () => (priced.length ? money(kept) : '') },
+    { label: 'Value today if kept', mob: 'under', mlabel: 'now ', cls: 'r', get: (x) => (x.nowValue == null ? h('span', { class: 'muted' }, x.o.suppress ? 'price off' : x.issue ? 'no price: ' + x.issue : 'no price yet') : h('span', null, money(x.nowValue) + (x.o.suppress && x.o.manualPrice ? ' (set by you)' : ''), x.pxAt ? h('small', { class: 'sub' }, ' · price ' + dateStr(x.pxAt.slice(0, 10))) : null)), total: () => (priced.length ? money(kept) : '') },
     { label: 'Kept vs sold', mob: 'under', mlabel: 'vs keeping: ', cls: 'r', render: (x) => (x.diff == null ? '–' : h('span', { class: x.diff > 0 ? 'warn' : 'pos' }, (x.diff > 0 ? '+' : '−') + money(Math.abs(x.diff)), h('small', { class: 'sub' }, x.diff > 0 ? ' missed' : ' saved'))) },
   ], list, { footer: { label: 'Total' }, m: { key: 'eq-sold', head: 'Share', sub: (x) => `${dateStr(x.date)} · ${num(x.qty)} ${x.qty === 1 ? 'share' : 'shares'}`,
     views: [['Profit / loss', 'Sold for'], ['Bought for', 'Value today if kept'], ['Kept vs sold']],
     sort: [{ value: 'none', label: 'As listed', kind: 'none' }, { value: 'date', label: 'Sold on', kind: 'date', get: (x) => x.date }, { value: 'profit', label: 'Profit / loss', kind: 'num', get: (x) => x.realized }, { value: 'sold', label: 'Sold for', kind: 'num', get: (x) => x.proceeds }, { value: 'name', label: 'Share', kind: 'text', get: (x) => String(x.name || '').toLowerCase() }] }, onRow: canEdit() ? (x) => soldSymbolForm(x) : null }),
-    h('p', { class: 'note' }, 'Profit uses first-in-first-out cost, which is how the tax department matches sales to purchases. “Kept vs sold” is the value today of the shares you sold (after any later split or bonus) minus what you received. Fully sold shares get a price when you press Refresh prices. Shares that no longer trade (merged or unlisted) have no price. Brokerage and taxes are included only if they were in the file or the sale entry.'))));
+    h('p', { class: 'note' }, 'Profit uses first-in-first-out cost, which is how the tax department matches sales to purchases. “Kept vs sold” is the value today of the shares you sold (after any later split or bonus) minus what you received. Fully sold shares get a price when you press Refresh sold prices (each row shows the day its price was fetched, or why none was found). Shares that no longer trade (merged or unlisted) have no price; tap a row to give it another symbol or set a price yourself. Brokerage and taxes are included only if they were in the file or the sale entry.'))));
 }
