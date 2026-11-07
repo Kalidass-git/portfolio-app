@@ -150,6 +150,14 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.59.0 – Asset performance on Home, sold-price refresh, savings summaries
+
+- **Home › Net worth over time** now compares net worth with four asset lines: Shares & funds, Debt & fixed income, Gold, Others & cash. Filter chips show each alone (with highest, lowest and share of assets); "Moved the most" names the biggest mover. Growth % (default) indexes every line to 0% at the start of the period; Amount ₹ shows real values.
+- Recording: each daily reading now also saves an optional `cls` (the four values). Older months fill from month-end check-ins that saved classes; lines build up from today. New money counts in the lines (contributions are not stripped out). Old records work unchanged.
+- **Shares & funds › History › Sold shares**: separate "Refresh sold prices" button (owner, needs the backend). The holdings refresh no longer fetches sold symbols.
+- **Savings**: Chits, PF and RDs tabs show a summary card of interest earned so far on open holdings (estimate at the assumed rate; for PF, credited interest plus accrual since the last credit). Closed tab shows actual results, with an "Actual results by kind" table.
+- New files `js/classes.js`, `js/savingsummary.js` (in `sw.js` FILES); test `tests/savingsummary.test.mjs`.
+
 ## Release 8.58.0 – White full-view charts
 
 - Chart full view now has a **white background** (dark surface in dark mode) instead of grey, and the toolbar sits flat on it with a thin line underneath. No other changes; no data changes.
