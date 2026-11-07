@@ -9,6 +9,7 @@ import { confirmDialog, pct, posNeg, stat, datalistId, icon, rowList } from '../
 import { chitCards, isWallet } from '../monthinvest.js';
 import { sortFilterBar } from '../mobilebar.js';
 import { monthGroups } from '../ui.js';
+import { openSummary, closedSummary } from '../savingsummary.js';
 
 /** Calendar and financial year (April to March) choices for the date filter. */
 const PERIODS = (asOf) => {
@@ -468,6 +469,7 @@ export function savingsTab(only) {
     if (only && only !== title) continue;
     const list = all.savings.filter((s) => [].concat(types).includes(s.type));
     if (title === 'Other savings' && !list.length) continue;
+    if (list.length) wrap.append(holdingSummary(title, list, all.asOf));
     if (title === 'Chits') { const cards = chitDueCards(S.data); if (cards) wrap.append(cards); }
     const withX = title === 'Chits' || title === 'Insurance' || title === 'Recurring deposits' || title === 'Other savings';
     wrap.append(section(title,
@@ -492,6 +494,17 @@ export function savingsTab(only) {
   }
   return wrap;
 }
+/** Summary card above each kind of open holding: paid in, interest earned so far, worth today, what to expect. */
+function holdingSummary(title, list, asOf) {
+  const pf = title === 'Provident fund', sm = openSummary(list, asOf, (s) => C.savingMaturity(s).amount);
+  const gainPct = sm.paid > 0 ? sm.interest / sm.paid : null;
+  return h('div', { class: 'stats', style: { marginBottom: '12px' } },
+    stat('Paid in', money(sm.paid), `${sm.count} ${sm.count === 1 ? 'account' : 'accounts'}`),
+    stat('Interest earned so far', h('span', { class: posNeg(sm.interest) }, money(sm.interest)), pf ? `${money(sm.credited)} credited · ${money(sm.accruing)} accruing` : (gainPct != null ? pct(gainPct, 1) + ' on what you paid · at the assumed rate' : 'at the assumed rate')),
+    stat('Worth today', money(sm.worth), pf ? 'balance plus interest accruing since the last credit' : 'paid in plus interest so far'),
+    pf ? stat('Interest in a year', money(sm.yearly), 'at today’s balance and rate')
+      : stat('Expected at the end', sm.maturity != null ? money(sm.maturity) : '–', sm.maturity != null ? `${money(sm.maturity - sm.paid)} more than paid in` : 'needs an end date or expected payout'));
+}
 const xirrCell = (s) => (s.xirr == null ? h('span', { class: 'muted' }, '–') : h('span', { class: posNeg(s.xirr), title: s.xirrKind !== 'estimate' ? 'Actual, from the closing amount' : s.xirrBasis === 'rate' ? 'Estimate: the assumed yearly rate (no expected payout entered)' : 'Estimate from your expected payout' }, (s.xirrKind === 'estimate' ? '≈ ' : '') + pct(s.xirr, 1)));
 function closeSaving(sv) {
   const paid = C.savingPrincipal(sv);
@@ -509,7 +522,26 @@ export function closedTab() {
   const acct = new Map(data.accounts.map((a) => [a.id, `${a.name} · ${a.holder}`]));
   const paid = list.reduce((a, s) => a + s.principal, 0), got = list.reduce((a, s) => a + s.closed.amount, 0);
   const wrap = h('div');
-  wrap.append(h('div', { class: 'stats' }, stat('Closed accounts', String(list.length), 'chits, deposits and other savings'), stat('Paid in', money(paid), ''), stat('Received', money(got), h('span', { class: posNeg(got - paid) }, (got - paid >= 0 ? 'gain ' : 'loss ') + money(Math.abs(got - paid))))));
+  const cs = closedSummary(list);
+  if (list.length) {
+    const a = cs.all;
+    wrap.append(h('div', { class: 'stats' },
+      stat('Closed accounts', String(a.count), 'chits, deposits and other savings'),
+      stat('Paid in', money(a.paid), 'all payments you made'),
+      stat('Received', money(a.got), 'what actually came back'),
+      stat('Actual gain', h('span', { class: posNeg(a.gain) }, (a.gain < 0 ? '−' : '') + money(Math.abs(a.gain))), [a.ret != null ? pct(a.ret, 1) + ' on paid in' : null, a.xirr != null ? 'XIRR ' + pct(a.xirr, 1) : null].filter(Boolean).join(' · '))));
+    if (cs.byKind.length > 1) wrap.append(section('Actual results by kind', table([
+      { label: 'Kind', host: true, get: (k) => k.kind },
+      { label: 'Closed', mob: 'under', mlabel: 'closed ', cls: 'r', get: (k) => String(k.count) },
+      { label: 'Paid in', cls: 'r', get: (k) => money(k.paid), total: () => money(a.paid) },
+      { label: 'Received', cls: 'r', get: (k) => money(k.got), total: () => money(a.got) },
+      { label: 'Gain', cls: 'r', render: (k) => h('span', { class: posNeg(k.gain) }, (k.gain < 0 ? '−' : '') + money(Math.abs(k.gain)), k.ret != null ? h('small', { class: 'sub' }, ' ' + pct(k.ret, 1)) : null), total: () => money(a.gain) },
+      { label: 'XIRR', mob: 'under', mlabel: 'XIRR ', cls: 'r', get: (k) => (k.xirr == null ? '–' : pct(k.xirr, 1)), total: () => (a.xirr == null ? '–' : pct(a.xirr, 1)) },
+    ], cs.byKind, { footer: { label: 'All closed' }, mobile: { key: 'sav-closed-kind', head: 'Kind', first: (k) => ({ title: k.kind, sub: `${k.count} closed` }), views: [
+      { label: 'Paid in · Received', main: (k) => money(k.paid), sub: (k) => money(k.got), total: () => ({ main: money(a.paid), sub: money(a.got) }) },
+      { label: 'Gain · XIRR', main: (k) => h('span', { class: posNeg(k.gain) }, money(k.gain)), sub: (k) => (k.xirr == null ? '–' : pct(k.xirr, 1)), total: () => ({ main: money(a.gain) }) },
+    ] } })));
+  }
   wrap.append(section('Closed accounts', table([
     { label: 'Name', host: true, get: (s) => s.name }, { label: 'Type', mob: 'under', get: (s) => s.type }, { label: 'Holder', mob: 'under', get: (s) => s.holder },
     { label: 'Started', mob: 'hide', get: (s) => dateStr(s.depositDate || (s.entries[0] && s.entries[0].date)) }, { label: 'Closed', mob: 'under', mlabel: 'closed ', get: (s) => dateStr(s.closed.date) },

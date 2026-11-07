@@ -12,6 +12,7 @@ import { monthPlan, pendingToReceive } from '../monthinvest.js';
 import { openInfo } from '../mobilebar.js';
 import { refresh as refreshPrices, agoText } from './equity.js';
 import * as P from '../projector.js';
+import { LINES, classPoints } from '../classes.js';
 
 let selMonth = null;
 const rerender = () => window.dispatchEvent(new Event('rerender'));
@@ -24,7 +25,7 @@ const RISK_ORDER = ['Safe', 'Medium', 'Medium High', 'High'];
 
 // ---------- net worth over time ----------
 const NW_RANGES = [['1w', '1 week', 7], ['1m', '1 month', 1], ['3m', '3 months', 3], ['6m', '6 months', 6], ['1y', '1 year', 12]];
-let nwRange = '3m';
+let nwRange = '3m', nwLine = 'all', nwMode = 'pct';
 const dayMs = 86400000, isoMs = (d) => Date.parse(d + 'T00:00:00Z'), msIso = (t) => new Date(t).toISOString().slice(0, 10);
 /** Net worth for every day of the chosen range: readings where they exist, straight lines in between. */
 function nwDaily(pts, from, to) {
@@ -52,22 +53,74 @@ function netWorthHistory(data, all) {
   if (inRange.length < 2) return section('Net worth over time', h('div', null, chips, h('p', { class: 'empty' }, 'Not enough saved readings in this period yet.'), h('p', { class: 'note' }, `The app saves one reading each day you open it on the owner’s device, and keeps the month-end figures too. The oldest reading is ${dateStr(first)}.`)));
   const days = nwDaily(pts, start, to);
   const nets = days.map((d) => d.net), hasAssets = days.every((d) => d.assets != null);
-  const lo = Math.min(...nets), hi = Math.max(...nets);
-  const step = (hi - lo) || 1, yMin = Math.max(0, Math.floor((lo - step * 0.15) / 1e4) * 1e4);
   const long = days.length > 100;
   const labels = days.map((d) => { const dt = new Date(isoMs(d.date)); const mon = dt.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' }); return long ? `${mon} '${d.date.slice(2, 4)}` : `${dt.getUTCDate()} ${mon}`; });
-  const series = [{ name: 'Net worth', values: nets, color: 0 }];
-  if (hasAssets) series.push({ name: 'Total assets', values: days.map((d) => d.assets), color: 2, dashed: true });
-  const yLo = hasAssets ? Math.max(0, Math.floor((Math.min(lo, ...days.map((d) => d.assets)) - step * 0.15) / 1e4) * 1e4) : yMin;
-  const change = nets[nets.length - 1] - nets[0], hiDay = days.find((d) => d.net === hi), loDay = days.find((d) => d.net === lo);
-  return section('Net worth over time', h('div', null, chips,
-    h('div', { class: 'stats' },
-      stat('Change in ' + r[1], h('span', { class: tone(change) }, sgn(change)), nets[0] ? sgp(change / nets[0]) + ' since ' + shortDate(days[0].date) : ''),
-      stat('Highest', money(hi), shortDate(hiDay.date)),
-      stat('Lowest', money(lo), shortDate(loDay.date)),
-      stat('Readings used', `${daily + monthly}`, `${daily} daily · ${monthly} month-end`)),
-    lineChart({ labels, tipLabels: days.map((d) => dateStr(d.date) + (d.exact ? '' : ' (between readings)')), fmt: money, yMin: yLo, height: 250, series }),
-    h('p', { class: 'note' }, `Drawn from the readings the app has saved: one for each day you open it on the owner’s device (net worth, assets and loans on that day), plus the month-end figures from your Plan sheet and check-ins. Where a day has no reading, the line runs straight between the nearest two. The oldest reading is ${dateStr(first)}, so a longer period shows a flatter, month-end-only line until daily readings build up.${hasAssets ? '' : ' Total assets appear once the period has daily readings throughout.'} Hover or touch the chart for the figure on any day.`)));
+  const tipLabels = days.map((d) => dateStr(d.date) + (d.exact ? '' : ' (between readings)'));
+  // the four asset lines: a value for every day of the range, straight between readings, nothing before the first one
+  const cpts = classPoints(data, all), clsDays = {};
+  for (const l of LINES) clsDays[l.id] = lineDaily(cpts, l.id, days.map((d) => d.date));
+  const have = (id) => clsDays[id].filter((v) => v > 0).length >= 2;   // a line needs two readings above zero to be drawn
+  const lines = [{ id: 'net', label: 'Net worth', color: 6, values: nets }, ...LINES.map((l) => ({ ...l, values: clsDays[l.id] }))];
+  const info = (ln) => { const vs = ln.values.filter((v) => v != null); if (vs.length < 2) return null; const a0 = vs[0], a1 = vs[vs.length - 1]; return { now: a1, base: a0, change: a1 - a0, ret: a0 ? (a1 - a0) / Math.abs(a0) : null, hi: Math.max(...vs), lo: Math.min(...vs), firstAt: days[ln.values.findIndex((v) => v != null)].date }; };
+  const sel = nwLine === 'all' || nwLine === 'net' || lines.some((l) => l.id === nwLine) ? nwLine : 'all';
+  const filters = [['all', 'Compare all'], ['net', 'Net worth'], ...LINES.filter((l) => l.id !== 'other').map((l) => [l.id, l.label]), ['other', 'Others & cash']];
+  const filterBar = h('div', { class: 'chips', role: 'group', 'aria-label': 'Show' }, filters.map(([k, l]) => h('button', { type: 'button', class: 'chip-btn' + (sel === k ? ' on' : ''), 'aria-pressed': String(sel === k), onclick: () => { nwLine = k; rerender(); } }, l)));
+  const modeBar = h('div', { class: 'chips', role: 'group', 'aria-label': 'Measure' }, [['pct', 'Growth %'], ['amt', 'Amount ₹']].map(([k, l]) => h('button', { type: 'button', class: 'chip-btn' + (nwMode === k ? ' on' : ''), 'aria-pressed': String(nwMode === k), onclick: () => { nwMode = k; rerender(); } }, l)));
+  const shown = sel === 'all' ? lines.filter((l) => l.id === 'net' || (l.id !== 'other' && have(l.id))) : lines.filter((l) => l.id === sel);
+  const shownHave = shown.filter((l) => l.id === 'net' || have(l.id));
+  const title = sel === 'all' || sel === 'net' ? 'Net worth over time' : (lines.find((l) => l.id === sel) || {}).label + ' over time';
+  const mover = LINES.filter((l) => l.id !== 'other' && have(l.id)).map((l) => ({ l, i: info({ values: clsDays[l.id] }) })).sort((p, q) => Math.abs(q.i.change) - Math.abs(p.i.change))[0];
+  const tile = (ln) => { const i = info(ln); return i ? stat(ln.label, money(i.now), h('span', { class: tone(i.change) }, `${sgn(i.change)}${i.ret != null ? ' · ' + sgp(i.ret) : ''}`)) : stat(ln.label, '–', 'no readings yet'); };
+  let stats, chart;
+  if (sel === 'all') {
+    stats = h('div', { class: 'stats' }, tile(lines[0]), ...LINES.filter((l) => l.id !== 'other').map((l) => tile(lines.find((x) => x.id === l.id))),
+      mover ? stat('Moved the most', mover.l.label, h('span', { class: tone(mover.i.change) }, `${sgn(mover.i.change)} in ${r[1]}`)) : null);
+  } else {
+    const ln = lines.find((l) => l.id === sel), i = info(ln);
+    const share = sel !== 'net' && i && all.totalAssets ? i.now / all.totalAssets : null;
+    stats = i ? h('div', { class: 'stats' },
+      stat(sel === 'net' ? 'Change in ' + r[1] : ln.label + ' now', sel === 'net' ? h('span', { class: tone(i.change) }, sgn(i.change)) : money(i.now), sel === 'net' ? (i.base ? sgp(i.change / i.base) + ' since ' + shortDate(days[0].date) : '') : h('span', { class: tone(i.change) }, `${sgn(i.change)}${i.ret != null ? ' · ' + sgp(i.ret) : ''} in ${r[1]}`)),
+      stat('Highest', money(i.hi), shortDate(days[ln.values.indexOf(i.hi)].date)),
+      stat('Lowest', money(i.lo), shortDate(days[ln.values.indexOf(i.lo)].date)),
+      share != null ? stat('Share of your assets', pct(share, 1), 'today') : stat('Readings used', `${daily + monthly}`, `${daily} daily · ${monthly} month-end`)) : null;
+  }
+  if (!shownHave.length || (sel !== 'all' && sel !== 'net' && !have(sel))) {
+    chart = h('p', { class: 'empty' }, sel !== 'all' && sel !== 'net' ? `No readings of ${(lines.find((l) => l.id === sel) || {}).label} in this period yet. The app now saves it every day you open it on the owner’s device, so the line builds up from today.` : 'Not enough readings in this period yet.');
+  } else if (nwMode === 'pct') {
+    // each line as growth since its own first reading in this period: 100 = start. Lines of very different sizes can be compared.
+    const idx = shownHave.map((ln) => { const at = ln.values.findIndex((v) => v > 0), base = at < 0 ? 0 : ln.values[at]; return { name: ln.label, color: ln.color, values: ln.values.map((v, i) => (v == null || !base || i < at ? null : (v / base) * 100)) }; });
+    const flat = idx.flatMap((x) => x.values).filter((v) => v != null), lo = Math.min(...flat, 100), hi = Math.max(...flat, 100), padv = Math.max(1, (hi - lo) * 0.1);
+    // four equal steps of a round size, with the 0% line on one of them
+    const STEPS = [1, 2, 5, 10, 20, 25, 50, 100, 200, 500];
+    let stepv = STEPS.find((x) => x * 4 >= hi - lo + 2 * padv) || 1000, yLo = Math.floor((lo - padv) / stepv) * stepv;
+    while (yLo + stepv * 4 < hi + padv) { stepv = STEPS[STEPS.indexOf(stepv) + 1] || stepv * 2; yLo = Math.floor((lo - padv) / stepv) * stepv; }
+    const yHi = yLo + stepv * 4;
+    const sg = (v) => { const x = v - 100; return (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x).toFixed(1) + '%'; };
+    chart = lineChart({ labels, tipLabels, fmt: sg, axisFmt: (v) => { const x = Math.round(v - 100); return (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x) + '%'; }, yMin: yLo, yMax: yHi, height: 260, series: idx });
+  } else {
+    const ser = shownHave.map((ln) => ({ name: ln.label, color: ln.color, values: ln.values }));
+    if (sel === 'net' && hasAssets) ser.push({ name: 'Total assets', values: days.map((d) => d.assets), color: 2, dashed: true });
+    const flat = ser.flatMap((x) => x.values).filter((v) => v != null), lo = Math.min(...flat), hi = Math.max(...flat), stepv = (hi - lo) || 1;
+    chart = lineChart({ labels, tipLabels, fmt: money, yMin: Math.max(0, Math.floor((lo - stepv * 0.15) / 1e4) * 1e4), height: 260, series: ser });
+  }
+  const missing = LINES.filter((l) => l.id !== 'other' && !have(l.id));
+  return section(title, h('div', null, chips, filterBar, modeBar, stats, chart,
+    h('p', { class: 'note' }, (nwMode === 'pct' ? 'Growth % starts every line at 0 on the first day of the period, so a small line and a big one can be compared. ' : '') + `A line also rises when you put new money in, not only when prices rise. The app saves net worth and the four asset lines (shares & funds, debt & fixed income, gold, others & cash) each day you open it on the owner’s device, and fills earlier months from your month-end check-ins; where a day has no reading the line runs straight between the nearest two. ${missing.length ? 'Not enough readings yet for ' + missing.map((l) => l.label).join(', ') + ' in this period: ' : ''}${missing.length ? 'they build up from today. ' : ''}The oldest net worth reading is ${dateStr(first)}. Hover or touch the chart for any day.`)));
+}
+
+/** A value for every given day from dated readings (`pts`, oldest first, each with `key`): straight lines between readings, nothing before the first. */
+function lineDaily(pts, key, dates) {
+  const ok = pts.filter((p) => Number.isFinite(p[key]));
+  if (!ok.length) return dates.map(() => null);
+  let k = 0;
+  return dates.map((d) => {
+    if (d < ok[0].date) return null;
+    while (k < ok.length - 1 && ok[k + 1].date <= d) k++;
+    const a = ok[k], b = ok[k + 1];
+    if (!b || d >= b.date) return a[key];
+    const f = (isoMs(d) - isoMs(a.date)) / (isoMs(b.date) - isoMs(a.date));
+    return a[key] + (b[key] - a[key]) * f;
+  });
 }
 
 /** Small round icon for the Net worth card (class says which colour). */

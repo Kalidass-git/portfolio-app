@@ -79,16 +79,16 @@ const short = (v) => {
 /**
  * Line chart. series: [{name, values:[n|null], dashed}] ; labels: x labels (same length).
  */
-export function lineChart({ labels, series, fmt = (v) => v, height = 220, yMin, area = false, width, tipLabels }) {
+export function lineChart({ labels, series, fmt = (v) => v, height = 220, yMin, yMax, axisFmt, area = false, width, tipLabels }) {
   const W = width || defaultWidth(), H = height, pad = { l: 44, r: 12, t: 12, b: 24 };
   const all = series.flatMap((s) => s.values).filter((v) => v != null);
-  const lo = yMin ?? Math.min(0, ...all), hi = niceMax(Math.max(...all, 1));
+  const lo = yMin ?? Math.min(0, ...all), hi = yMax ?? niceMax(Math.max(...all, 1));
   const x = (i) => pad.l + (labels.length < 2 ? 0 : (i / (labels.length - 1)) * (W - pad.l - pad.r));
   const y = (v) => pad.t + (1 - (v - lo) / (hi - lo || 1)) * (H - pad.t - pad.b);
   const root = svg('svg', { viewBox: `0 0 ${W} ${H}`, class: 'chart', role: 'img', 'aria-label': series.map((s) => s.name).join(' and ') });
   for (let i = 0; i <= 4; i++) {
     const v = lo + ((hi - lo) * i) / 4;
-    root.append(svg('line', { x1: pad.l, x2: W - pad.r, y1: y(v), y2: y(v), class: 'grid' }), svg('text', { x: pad.l - 6, y: y(v) + 3.5, class: 'axis', 'text-anchor': 'end' }, short(v)));
+    root.append(svg('line', { x1: pad.l, x2: W - pad.r, y1: y(v), y2: y(v), class: 'grid' }), svg('text', { x: pad.l - 6, y: y(v) + 3.5, class: 'axis', 'text-anchor': 'end' }, axisFmt ? axisFmt(v) : short(v)));
   }
   const step = Math.max(1, Math.ceil(labels.length / 8));
   labels.forEach((l, i) => { if ((i % step === 0 && (labels.length - 1 - i >= step * 0.7 || i === 0 || i === labels.length - 1)) || i === labels.length - 1) root.append(svg('text', { x: x(i), y: H - 6, class: 'axis', 'text-anchor': i === 0 ? 'start' : i === labels.length - 1 ? 'end' : 'middle' }, l)); });

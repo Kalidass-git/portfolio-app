@@ -4,6 +4,7 @@ import { materialize, materializeFunds } from './trades.js';
 import { computeAll, todayISO } from './calc.js';
 import * as remote from './remote.js';
 import { merge } from './merge.js';
+import { liveGroups, sameGroups } from './classes.js';
 
 const K = { data: 'pt.data', cfg: 'pt.cfg', quotes: 'pt.quotes', meta: 'pt.meta', base: 'pt.base' };
 const read = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
@@ -107,8 +108,9 @@ function snapshot() {
   if (S.role !== 'owner' || !S.data || !S.all) return false;
   const hist = (S.data.history = S.data.history || []);
   const rec = { date: S.all.asOf, net: Math.round(S.all.netAsset), assets: Math.round(S.all.totalAssets), liab: Math.round(S.all.liabTotal) };
+  try { rec.cls = liveGroups(S.data, S.all); } catch (e) { /* the reading is still worth keeping without the four lines */ }   // optional field: older readings simply have none
   const last = hist[hist.length - 1];
-  if (last && last.date === rec.date) { if (last.net === rec.net && last.assets === rec.assets) return false; Object.assign(last, rec); return true; }
+  if (last && last.date === rec.date) { if (last.net === rec.net && last.assets === rec.assets && (!rec.cls || sameGroups(last.cls, rec.cls))) return false; Object.assign(last, rec); return true; }
   if (last && last.date > rec.date) return false;
   hist.push(rec);
   return true;

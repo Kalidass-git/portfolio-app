@@ -6,6 +6,8 @@ import { hbars, donut, legend, strip } from '../charts.js';
 import { classify, fundCategory } from '../classify.js';
 import { symKey } from '../trades.js';
 import { classifyForm, priceOfSymbol, sellForm } from './eqshared.js';
+import * as prices from '../prices.js';
+import { toast } from '../ui.js';
 
 let scope = 'all';
 const rerender = () => window.dispatchEvent(new Event('rerender'));
@@ -102,10 +104,20 @@ export function sold(root) {
   const priced = list.filter((x) => x.nowValue != null);
   const proceeds = list.reduce((a, x) => a + x.proceeds, 0), cost = list.reduce((a, x) => a + x.cost, 0), realized = proceeds - cost;
   const pProceeds = priced.reduce((a, x) => a + x.proceeds, 0), kept = priced.reduce((a, x) => a + x.nowValue, 0), diff = kept - pProceeds;
-  root.append(h('div', { class: 'stats' },
+  // These prices are fetched here, not by the holdings Refresh: only the sold shares, only when asked.
+  const stamps = prices.soldSymbols().map((q) => ((data.priceBook || {})[q.symbol] || {}).at).filter(Boolean).sort();
+  const age = stamps.length ? Date.now() - new Date(stamps[0]).getTime() : null;
+  root.append(h('div', { class: 'row-actions', style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px', marginBottom: '10px' } },
+    canEdit() ? h('button', { type: 'button', class: 'refresh-btn small', title: 'Fetch current prices for the shares you sold, to show what they would be worth if kept', onclick: async (e) => {
+      const b = e.currentTarget, lb = b.querySelector('.lb'), t0 = lb.textContent; b.disabled = true;
+      try { const r = await prices.refreshSold((m) => (lb.textContent = m)); toast(r.total ? `Updated ${r.count} of ${r.total} sold share prices` + (r.errors.length ? `. ${r.errors.length} issue${r.errors.length > 1 ? 's' : ''}: ${r.errors[0]}` : '') : 'No sold shares to price', r.errors.length ? 'bad' : ''); }
+      catch (err) { toast(err.message, 'bad'); } finally { lb.textContent = t0; b.disabled = false; rerender(); }
+    } }, h('span', { class: 'lb' }, 'Refresh sold prices')) : null,
+    h('span', { class: 'stamp' }, age == null ? 'Sold-share prices not fetched yet' : 'Prices ' + (age < 6e4 ? 'just now' : age < 36e5 ? Math.floor(age / 6e4) + ' min ago' : age < 864e5 ? Math.floor(age / 36e5) + ' hours ago' : Math.floor(age / 864e5) + ' days ago'))),
+    h('div', { class: 'stats' },
     stat('Sold for', money(proceeds), `${list.length} sale${list.length === 1 ? '' : 's'} · cost ${money(cost)}`),
     stat('Profit or loss made', h('span', { class: posNeg(realized) }, money(realized)), cost ? pct(realized / cost, 1) + ' on cost' : ''),
-    stat('If you had kept them', priced.length ? money(kept) : '–', priced.length < list.length ? (priced.length ? `${priced.length} of ${list.length} have a price` : 'press Refresh prices') : 'value today'),
+    stat('If you had kept them', priced.length ? money(kept) : '–', priced.length < list.length ? (priced.length ? `${priced.length} of ${list.length} have a price` : 'press Refresh sold prices') : 'value today'),
     stat(diff >= 0 ? 'Holding on would have given' : 'Selling saved you', priced.length ? h('span', { class: diff >= 0 ? 'warn' : 'pos' }, money(Math.abs(diff))) : '–', diff >= 0 ? 'more than you sold for' : 'compared with holding on')));
   root.append(section('Every sale', h('div', null, table([
     { label: 'Sold on', mob: 'under', mlabel: 'sold ', get: (x) => dateStr(x.date) },

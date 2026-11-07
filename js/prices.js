@@ -72,6 +72,33 @@ export async function refreshGold() {
   return out.gold;
 }
 
+/** Fully sold shares, with the symbol to price them by (History › Sold shares shows what they would be worth today). */
+export function soldSymbols() {
+  const eq = S.all && S.all.stocks.eq, out = [];
+  if (eq) for (const x of eq.sold) {
+    const o = (S.data.soldSettings || {})[x.symbol] || {};
+    if (o.suppress) continue;
+    const sy = (o.nowSymbol || x.nowSymbol).toUpperCase();
+    if (!/\$/.test(sy) && !out.some((q) => q.symbol === sy)) out.push({ symbol: sy, yahoo: o.yahoo || '' });
+  }
+  return out;
+}
+/** Latest prices of the sold shares only. Owner only, because the prices are saved with the data for everyone. */
+export async function refreshSold(onProgress = () => {}) {
+  if (S.role !== 'owner') throw new Error('Only the owner can refresh these prices.');
+  if (!S.remote) throw new Error('Share prices need the Google Drive backend (Settings).');
+  const symbols = soldSymbols(), out = { count: 0, total: symbols.length, errors: [] };
+  if (!symbols.length) return out;
+  onProgress(`Fetching ${symbols.length} price${symbols.length === 1 ? '' : 's'}…`);
+  const res = await call(S.cfg.backendUrl, S.cfg.key, 'quotes', { symbols });
+  const now = new Date().toISOString(), got = {};
+  for (const [sym, q] of Object.entries(res.quotes || {})) if (q && q.price > 0) got[sym.toUpperCase()] = q.price;
+  for (const [sym, msg] of Object.entries(res.errors || {})) out.errors.push(`${sym}: ${msg}`);
+  out.count = Object.keys(got).length;
+  if (out.count) mutate((d) => { d.priceBook = d.priceBook || {}; for (const [sym, price] of Object.entries(got)) d.priceBook[sym] = { price, at: now }; });
+  return out;
+}
+
 export async function refreshAll(onProgress = () => {}) {
   const out = { stocks: 0, funds: 0, errors: [] };
   const quotes = {};
@@ -83,9 +110,7 @@ export async function refreshAll(onProgress = () => {}) {
       onProgress('Fetching share prices…');
       const symbols = S.data.stocks.map((s) => ({ symbol: s.symbol, yahoo: s.yahoo || '' }));
       symbols.push({ symbol: '__GOLD_USD', yahoo: 'GC=F' }, { symbol: '__USD_INR', yahoo: 'INR=X' });
-      // fully sold shares too, so the Sold tab can show what they are worth today
-      const eq = S.all && S.all.stocks.eq;
-      if (eq) for (const x of eq.sold) { const o = (S.data.soldSettings || {})[x.symbol] || {}; if (o.suppress) continue; const sy = (o.nowSymbol || x.nowSymbol).toUpperCase(); if (!/\$/.test(sy) && !symbols.some((q) => q.symbol.toUpperCase() === sy)) symbols.push({ symbol: sy, yahoo: o.yahoo || '' }); }
+      // fully sold shares are NOT fetched here any more: History › Sold shares has its own refresh button
       const res = await call(S.cfg.backendUrl, S.cfg.key, 'quotes', { symbols });
       const g = res.quotes && res.quotes.__GOLD_USD, fx = res.quotes && res.quotes.__USD_INR;
       if (g && fx) goldLive = { usdOz: g.price, prevUsdOz: g.prevClose || g.price, inr: fx.price, prevInr: fx.prevClose || fx.price, at: now };
