@@ -150,6 +150,13 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.67.0 – Volume tag, and landscape chart in the Android app
+
+- **Volume tag**: touching or hovering shows the volume as a tag above its bar, inside the volume panel, like the P/E tag. It is no longer in the line of figures below the chart.
+- **Landscape in the Android app**: in the chart's full view there is a new screen-turn button next to the close button (Android app only). It turns the screen to landscape even when the phone's auto-rotate is off, and back to the phone's normal behaviour when you press it again or close the full view. In landscape the panels are lower and the title strip is one thin line, so the whole chart fits without scrolling. **This needs the new APK** (a small native addition, `setOrientation` in `NativeToolsPlugin.java`); the web version is unchanged. In the Android app the full view no longer asks the browser for its own fullscreen (it would end when the screen turns).
+- Chart controls fold on a phone held either way (the test is the shorter side of the screen).
+- No stored-data changes.
+
 ## Release 8.66.0 – Chart: movable trendline toolbar, up-and-down drag, P/E tag, folded controls on phones
 
 - **Trendline toolbar** (colours, alert, delete) has a "⠿ Move" grip: drag it anywhere over the chart. The place is remembered for the next line you select.

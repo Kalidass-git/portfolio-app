@@ -101,6 +101,14 @@ function files() {
   };
 }
 
+/** Android app only: true when the screen can be turned from the page. */
+export const canTurnScreen = () => !!P('NativeTools');
+/** Android app only: 'landscape' turns the screen sideways (even when the phone's auto-rotate is off), 'auto' gives control back to the phone. Resolves false in a browser or an older app. */
+export async function setOrientation(mode) {
+  const NT = P('NativeTools'); if (!NT || !NT.setOrientation) return false;
+  try { await NT.setOrientation({ mode }); return true; } catch { return false; }
+}
+
 /** Android app only: make the page into an A4 PDF and open the share sheet (Save to Drive, WhatsApp, Gmail, Print). Resolves false in a browser. */
 export async function sharePdf(name) {
   const NT = P('NativeTools'); if (!NT) return false;
