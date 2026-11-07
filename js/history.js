@@ -64,13 +64,16 @@ export async function stockEps(symbol, yahoo) {
   return out;
 }
 const ipeBusy = new Map(), ipeFailed = new Map();
-/** Forget a remembered failure so the next call asks the backend again (Try again, Reload chart). */
+const capObj = () => (typeof window !== 'undefined' ? window.Capacitor : null);
+/** The index P/E is read straight from NSE by the phone, so it exists only inside the Android app (a web page cannot read NSE, and Google's servers are not allowed to). */
+export const nativeApp = () => { const c = capObj(); return !!(c && c.isNativePlatform && c.isNativePlatform()); };
+/** Forget a remembered failure so the next call asks again (Try again, Reload chart). */
 export function retryIndexPe(name) { ipeFailed.delete(name); }
 const pad2 = (n) => String(n).padStart(2, '0');
 const ddmmyyyy = (d) => pad2(d.getUTCDate()) + pad2(d.getUTCMonth() + 1) + d.getUTCFullYear();
 const weekday = (d) => { while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d = new Date(d.getTime() - 86400000); return d; };
 /** The days to read: the last trading day of every month for `years` years, plus every Friday of the last four months (so the recent end of the line is fine-grained). */
-function sampleDays(years, today = new Date()) {
+export function sampleDays(years, today = new Date()) {
   const t = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())), out = new Map();
   for (let m = 0; m < years * 12; m++) {
     const d = weekday(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() - m + 1, 0)));
@@ -79,10 +82,26 @@ function sampleDays(years, today = new Date()) {
   for (let k = 0; k < 17; k++) { const d = weekday(new Date(t.getTime() - k * 7 * 86400000)); out.set(d.getTime(), d); }
   return [...out.values()].sort((a, b) => a - b);
 }
+const csvSplit = (line) => { const out = []; let cur = '', q = false; for (const ch of line) { if (ch === '"') q = !q; else if (ch === ',' && !q) { out.push(cur); cur = ''; } else cur += ch; } out.push(cur); return out.map((x) => x.trim()); };
+/** One day's P/E for an index out of NSE's "all indices" closing file text: { d: 'YYYY-MM-DD', pe } or null. */
+export function peFromCsv(text, name) {
+  const lines = String(text || '').split(/\r?\n/); if (lines.length < 2) return null;
+  const head = csvSplit(lines[0]).map((x) => x.toLowerCase()), iN = head.indexOf('index name'), iD = head.indexOf('index date'), iP = head.indexOf('p/e');
+  if (iN < 0 || iD < 0 || iP < 0) return null;
+  const want = String(name).trim().toUpperCase();
+  for (let k = 1; k < lines.length; k++) {
+    const f = csvSplit(lines[k]); if (String(f[iN] || '').toUpperCase() !== want) continue;
+    const m = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/.exec(f[iD] || ''), pe = parseFloat(f[iP]);
+    return m && pe > 0 ? { d: `${m[3]}-${pad2(m[2])}-${pad2(m[1])}`, pe } : null;
+  }
+  return null;
+}
+const IPE_KEY = 'pt.ipe';
+const ipeStore = () => { try { return JSON.parse(localStorage.getItem(IPE_KEY) || '{}'); } catch { return {}; } };
 /**
- * Historical P/E of an NSE index, from NSE's daily "all indices" closing file read by the backend ("indexpedates"): [{ d, pe }] oldest first.
- * name is the NSE index name, for example "NIFTY 50". A day with no file (holiday) is tried again on the day before.
- * One call per index at a time; a failure is remembered until Try again / Reload chart.
+ * Historical P/E of an NSE index, read by the Android app straight from NSE's daily "all indices" closing file through the phone's own connection:
+ * [{ d, pe }] oldest first. Readings are kept on the phone (not in your data), so after the first load only new days are fetched.
+ * Outside the Android app it says so and fetches nothing. One call per index at a time; a failure is remembered until Try again / Reload chart.
  */
 export function stockIndexPe(name, years = 10) {
   const key = 'ipe:' + name, hit = cache.get(key);
@@ -90,38 +109,51 @@ export function stockIndexPe(name, years = 10) {
   if (ipeBusy.has(name)) return ipeBusy.get(name);
   if (ipeFailed.has(name)) return Promise.reject(new Error(ipeFailed.get(name)));
   const p = (async () => {
-    if (!S.cfg || !S.cfg.backendUrl) throw new Error('Index P/E comes through your backend, which is not connected on this device.');
-    const old = 'Your backend needs the newer Code.gs (it adds the “indexpedates” action) to draw the index P/E. Paste backend/Code.gs into Apps Script and deploy a new version.';
-    const got = new Map(), codes = {};
-    const ask = async (days) => {
-      const chunks = []; for (let i = 0; i < days.length; i += 40) chunks.push(days.slice(i, i + 40));
-      let lastErr = '';
-      const worker = async () => {
-        for (let c = chunks.shift(); c; c = chunks.shift()) {
-          try {
-            const res = await call(S.cfg.backendUrl, S.cfg.key, 'indexpedates', { name, dates: c.map(ddmmyyyy) }, 60000);
-            if (res.error) { lastErr = res.error; continue; }
-            for (const [d, pe] of res.rows || []) got.set(d, pe);
-            for (const [k, n] of Object.entries(res.seen || {})) codes[k] = (codes[k] || 0) + n;
-          } catch (e) { if (/Unknown action/i.test(e.message)) throw new Error(old); lastErr = e.message; }
-        }
-      };
-      await Promise.all([worker(), worker(), worker()]);
-      return lastErr;
+    if (!nativeApp()) throw new Error('The index P/E is available in the Android app only.');
+    const cap = capObj(), http = (cap.Plugins && cap.Plugins.CapacitorHttp) || (cap.registerPlugin && cap.registerPlugin('CapacitorHttp'));
+    if (!http || !http.request) throw new Error('This version of the Android app cannot read NSE directly. Update the app.');
+    const store = ipeStore(), mine = store[name.toUpperCase()] || {}, codes = {};
+    const tried = new Set(), UA = 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36';
+    let cookie = '';
+    const one = async (day) => {
+      const k = day.toISOString().slice(0, 10); if (mine[k] != null) return true;
+      tried.add(k);
+      try {
+        const headers = { 'User-Agent': UA, Accept: 'text/csv,*/*', Referer: 'https://www.nseindia.com/' }; if (cookie) headers.Cookie = cookie;
+        const r = await http.request({ url: 'https://nsearchives.nseindia.com/content/indices/ind_close_all_' + ddmmyyyy(day) + '.csv', method: 'GET', headers, responseType: 'text', connectTimeout: 15000, readTimeout: 20000 });
+        codes[r.status] = (codes[r.status] || 0) + 1;
+        if (r.status !== 200) return false;
+        const v = peFromCsv(typeof r.data === 'string' ? r.data : '', name);
+        if (v) { mine[v.d] = v.pe; return v.d === k; }
+      } catch (e) { codes[e && e.message ? e.message.slice(0, 40) : 'error'] = (codes[e && e.message ? e.message.slice(0, 40) : 'error'] || 0) + 1; }
+      return false;
     };
-    let days = sampleDays(years), lastErr = await ask(days);
+    const run = async (days) => {
+      const q = days.slice();
+      const worker = async () => { for (let d = q.shift(); d; d = q.shift()) await one(d); };
+      await Promise.all([worker(), worker(), worker(), worker(), worker(), worker()]);
+    };
+    let days = sampleDays(years);
+    // today's readings first, so a block is seen at once: if the first few all come back refused, ask NSE's main page for its session cookie and go on with it
+    await run(days.slice(-3));
+    if (!Object.keys(mine).length && (codes[401] || codes[403])) {
+      try { const r = await http.request({ url: 'https://www.nseindia.com/', method: 'GET', headers: { 'User-Agent': UA, Accept: 'text/html' }, responseType: 'text', connectTimeout: 15000, readTimeout: 20000 }); const sc = r.headers && (r.headers['Set-Cookie'] || r.headers['set-cookie']); if (sc) cookie = String(sc).split(/,(?=\s*\w+=)/).map((c) => c.split(';')[0].trim()).join('; '); } catch { /* the main page may refuse too */ }
+    }
+    await run(days.slice(0, -3));
     // holidays have no file: look at the day before, up to three times
     for (let pass = 0; pass < 3; pass++) {
-      const missing = days.filter((d) => !got.has(d.toISOString().slice(0, 10)));
+      const missing = days.filter((d) => mine[d.toISOString().slice(0, 10)] == null);
       if (!missing.length || missing.length === days.length) break;
-      days = missing.map((d) => weekday(new Date(d.getTime() - 86400000)));
-      await ask(days);
+      days = missing.map((d) => weekday(new Date(d.getTime() - 86400000))).filter((d) => !tried.has(d.toISOString().slice(0, 10)));
+      await run(days);
     }
-    if (!got.size) {
+    const keys = Object.keys(mine);
+    if (!keys.length) {
       const sc = Object.entries(codes).map(([k, n]) => `${k} ×${n}`).join(', ');
-      throw new Error('NSE gave no P/E readings for ' + name + (sc ? ' (the archive answered: ' + sc + ')' : lastErr ? ' (' + lastErr + ')' : '') + '. Check the index name, or press Try again later.');
+      throw new Error('NSE gave no P/E readings for ' + name + (sc ? ' (it answered: ' + sc + ')' : '') + '. Check the index name, or press Try again later.');
     }
-    const out = [...got.entries()].sort((x, y) => (x[0] < y[0] ? -1 : 1)).map(([d, pe]) => ({ d, pe }));
+    try { store[name.toUpperCase()] = mine; localStorage.setItem(IPE_KEY, JSON.stringify(store)); } catch { /* the phone's storage is full or blocked: the readings are just fetched again next time */ }
+    const out = keys.sort().map((d) => ({ d, pe: mine[d] }));
     cache.set(key, out);
     return out;
   })();

@@ -150,6 +150,13 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.65.0 – Index P/E: Android app only, nothing on the Google backend
+
+- Reading the index P/E through the Google backend never worked (NSE does not answer Google's servers), so **all of it is removed from `backend/Code.gs`** (`indexpe`, `indexpeyear`, `indexpedates`). Nothing runs there for this any more.
+- **Browser / web app**: no P/E line for indexes (the toggle is hidden). Share P/E is unchanged.
+- **Android app**: the phone reads NSE's daily "all indices" closing file itself (Capacitor's native HTTP, so no browser restrictions and no Google servers): the last trading day of each month for 10 years plus every Friday of the last four months, holidays retried on the day before. The readings are kept on the phone (`localStorage` key `pt.ipe`, not in your data file), so after the first load only new days are fetched. If NSE refuses, the message names the answers received. Not testable from the build machine: check one index in the Android app. The browser version can get an index P/E later by another route.
+- No stored-data changes.
+
 ## Release 8.64.0 – Index P/E from NSE's daily closing file
 
 - **Why the index P/E never loaded**: it came from niftyindices.com, which NSE protects with a browser check that Apps Script (Google's servers) cannot pass, so the calls just hung. That code (`indexpe`, `indexpeyear`) is removed.
