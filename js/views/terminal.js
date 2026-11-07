@@ -53,7 +53,7 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
         cp != null ? h('span', { class: 'tm-badge ' + posNeg(ch) }, `${ch >= 0 ? '▲' : '▼'} ${ch >= 0 ? '+' : '−'}${Math.abs(cp * 100).toFixed(2)}%`) : null,
         ch != null ? h('span', { class: 'muted tm-sub' }, `${ch >= 0 ? '+' : '−'}${dec(Math.abs(ch), 2)} today`) : null,
         quote && quote.at ? h('span', { class: 'muted tm-sub' }, 'price ' + ago(Date.parse(quote.at))) : last ? h('span', { class: 'muted tm-sub' }, 'last close ' + dateStr(last.d)) : null),
-      h('div', { class: 'tm-actions' }, fv.button, watchButton({ symbol, name, yahoo, index }), btn('Reload chart', () => { dropCache(symbol); data = null; peFull = null; eps = { state: noIdxPe ? 'none' : 'idle', msg: '', tl: null }; body.replaceChildren(h('p', { class: 'note' }, 'Loading the price history…')); start(); toast('Reloading'); }, 'small')));
+      h('div', { class: 'tm-actions' }, fv.rotate, fv.button, watchButton({ symbol, name, yahoo, index }), btn('Reload chart', () => { dropCache(symbol); data = null; peFull = null; eps = { state: noIdxPe ? 'none' : 'idle', msg: '', tl: null }; body.replaceChildren(h('p', { class: 'note' }, 'Loading the price history…')); start(); toast('Reloading'); }, 'small')));
   };
 
   const canPe = !noIdxPe;
@@ -138,7 +138,7 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
     if (!sel && myLines().length && canEdit()) draws.push(h('button', { type: 'button', class: 'tm-tg', onclick: () => { if (confirm('Remove all ' + myLines().length + ' trendlines on ' + name + '?')) mutate((d) => { delete d.trendlines[symKey]; if (!Object.keys(d.trendlines).length) delete d.trendlines; }); } }, `Clear lines (${myLines().length})`));
     const swatches = canEdit() && mode !== 'pct' && tool === 'line' ? h('div', { class: 'tm-row tm-colors', role: 'group', 'aria-label': 'Trendline colour' }, h('span', { class: 'tm-lab' }, 'New lines'),
       TL_COLORS.map((c) => { const cur = sel ? ((myLines().find((l) => l.id === sel) || {}).color || TL_COLORS[0]) : (st.tc || TL_COLORS[0]); return h('button', { type: 'button', class: 'tm-sw' + (cur === c ? ' on' : ''), style: { background: c }, 'aria-label': 'Colour ' + c, title: 'Use this colour', onclick: () => { st.tc = c; save(st); if (sel) mutate((d) => { const x = ((d.trendlines || {})[symKey] || []).find((l) => l.id === sel); if (x) x.color = c; }); else draw(); } }); })) : null;
-    const phone = window.innerWidth < 640, barOpen = !phone || !!st.barOpen;   // on a phone the controls start folded away so they do not cover the chart
+    const phone = Math.min(window.innerWidth, window.innerHeight) < 600, barOpen = !phone || !!st.barOpen;   // on a phone the controls start folded away so they do not cover the chart
     const bar = h('div', { class: 'tm-bar' },
       ranges,
       h('div', { class: 'tm-row tm-type' }, type, h('span', { class: 'tm-lab' }, 'Bars'), size),

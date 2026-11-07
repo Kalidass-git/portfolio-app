@@ -321,7 +321,7 @@ const ICONS = {
   plus: 'M12 5v14M5 12h14', minus: 'M5 12h14', refresh: 'M23 4v6h-6M20.5 15a9 9 0 1 1-2.1-9.4L23 10', edit: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
   swap: 'M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3', download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
   upload: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12', copy: 'M9 9h11v11H9zM5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1',
-  expand: 'M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7', shrink: 'M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7', close: 'M6 6l12 12M18 6L6 18',
+  expand: 'M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7', rotate: 'M3 8a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM18 12h.01', shrink: 'M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7', close: 'M6 6l12 12M18 6L6 18',
   search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-4.3-4.3', check: 'M5 12l5 5L20 7',
 };
 export function icon(name) {

@@ -2,6 +2,7 @@ package com.familywealth.app;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
@@ -52,6 +53,23 @@ public class NativeToolsPlugin extends Plugin {
                 call.resolve();
             } catch (Exception e) {
                 call.reject("Could not set the system bars: " + e.getMessage());
+            }
+        });
+    }
+
+    /**
+     * Turns the screen to landscape (both landscape sides, whatever the phone's own auto-rotate lock says) for the chart's full view,
+     * and back to the phone's normal behaviour with mode "auto".
+     */
+    @PluginMethod
+    public void setOrientation(final PluginCall call) {
+        final boolean land = "landscape".equals(call.getString("mode", "auto"));
+        getActivity().runOnUiThread(() -> {
+            try {
+                getActivity().setRequestedOrientation(land ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE : ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+                call.resolve();
+            } catch (Exception e) {
+                call.reject("Could not turn the screen: " + e.getMessage());
             }
         });
     }

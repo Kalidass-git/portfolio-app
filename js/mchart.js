@@ -37,7 +37,7 @@ const niceStep = (raw) => { const p = Math.pow(10, Math.floor(Math.log10(raw))),
  *   place a new one (onLine.add({ d1, p1, d2, p2 })); tapping a line calls onLine.select(id); selected highlights one.
  */
 export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, pe = null, avg = null, trades = [], height = 250, fmt = nice, vfmt = (v) => String(Math.round(v)), dateFmt = (d) => d, tickFmt = (d) => d,
-  lines = [], tool = 'none', selected = null, onLine = null, view = null, onView = () => {}, peMedian = null, peLabel = 'P/E', peFmt = (v, d = 0) => v.toFixed(d), peSigned = false, newColor = null, width = 0 } = {}) {
+  lines = [], tool = 'none', selected = null, onLine = null, view = null, onView = () => {}, peMedian = null, peLabel = 'P/E', peFmt = (v, d = 0) => v.toFixed(d), peSigned = false, newColor = null, width = 0, dense = false } = {}) {
   const N = rows.length;
   if (N < 2) return h('p', { class: 'empty' }, 'Not enough history for this range.');
   const MINBARS = Math.min(12, N);
@@ -60,7 +60,7 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
     const R = rows.slice(ia, iz + 1), n = R.length, sub = (arr) => (arr ? arr.slice(ia, iz + 1) : null);
     const m50 = sub(dma50), m200 = sub(dma200), peS = sub(pe);
     const showPe = !!peS && peS.some((x) => x != null), hasVol = R.some((r) => r.v > 0);
-    const padL = 6, padR = W < 520 ? 56 : 64, padT = 8, axisH = 22, gap = 8, peH = showPe ? 66 : 0, volH = hasVol ? 44 : 0;
+    const padL = 6, padR = W < 520 ? 56 : 64, padT = 8, axisH = 22, gap = 8, peH = showPe ? (dense ? 44 : 66) : 0, volH = hasVol ? (dense ? 30 : 44) : 0;   // dense: a phone turned sideways has little height
     const priceT = padT, priceB = padT + height, peT = priceB + gap, peB = peT + peH, volT = (showPe ? peB : priceB) + gap, volB = volT + volH;
     const H = (hasVol ? volB : showPe ? peB : priceB) + axisH, bottom = hasVol ? volB : showPe ? peB : priceB;
     const gw = (W - padL - padR) / slots, cx = (i) => padL + gw * (off + i) + gw / 2;
@@ -245,10 +245,15 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
         const tx = Math.max(padL + 2, Math.min(W - padR - tw - 2, cx(i) - tw / 2)), ty = Math.min(peB - 18, py - 26 >= peT + 1 ? py - 26 : py + 8);
         tagBox.append(svg('g', { class: 'mc-tag' }, svg('rect', { x: tx, y: ty, width: tw, height: 17, rx: 3, fill: 'var(--surface, #fff)', stroke: LINE_COLORS.pe }), svg('text', { x: tx + tw / 2, y: ty + 12.5, 'text-anchor': 'middle', class: 'tagtxt', fill: LINE_COLORS.pe }, txt)));
       }
+      if (hasVol && r.v > 0) {   // the volume as a tag above its bar, inside the volume panel (the other figures stay below the chart)
+        const vmax = Math.max(1, ...R.map((q) => q.v || 0)), hh = (r.v / vmax) * volH, txt = 'Vol ' + vfmt(r.v), tw = Math.max(52, txt.length * 6.4 + 12);
+        const tx = Math.max(padL + 2, Math.min(W - padR - tw - 2, cx(i) - tw / 2)), ty = Math.max(volT, volB - hh - 19);
+        tagBox.append(svg('g', { class: 'mc-tag' }, svg('rect', { x: tx, y: ty, width: tw, height: 17, rx: 3, fill: 'var(--surface, #fff)', stroke: r.c >= (i ? R[i - 1].c : r.o) ? CUP : CDN }), svg('text', { x: tx + tw / 2, y: ty + 12.5, 'text-anchor': 'middle', class: 'tagtxt', fill: r.c >= (i ? R[i - 1].c : r.o) ? CUP : CDN }, txt)));
+      }
       const chip = (label, v, col) => (v == null ? null : h('span', { class: 'mc-chip' }, h('i', { style: { background: col } }), `${label} ${v}`));
       read.replaceChildren(h('b', null, dateFmt(r.d)), mode === 'candle' ? ` O ${fmt(r.o)} · H ${fmt(r.h)} · L ${fmt(r.l)} · C ${fmt(r.c)}` : ` ${fmt(r.c)}`,
         h('span', { class: ch >= 0 ? 'pos' : 'neg' }, ` ${ch >= 0 ? '+' : '−'}${(Math.abs(ch / prev) * 100).toFixed(2)}%`),
-        mode === 'pct' ? h('span', { class: r.c >= base ? 'pos' : 'neg' }, ` · since start ${r.c >= base ? '+' : '−'}${(Math.abs(r.c / base - 1) * 100).toFixed(1)}%`) : '', r.v > 0 ? ` · Vol ${vfmt(r.v)}` : '',
+        mode === 'pct' ? h('span', { class: r.c >= base ? 'pos' : 'neg' }, ` · since start ${r.c >= base ? '+' : '−'}${(Math.abs(r.c / base - 1) * 100).toFixed(1)}%`) : '', 
         h('div', { class: 'mc-chips' }, chip('50d', m50 && m50[i] != null ? fmt(m50[i]) : null, LINE_COLORS.dma50), chip('200d', m200 && m200[i] != null ? fmt(m200[i]) : null, LINE_COLORS.dma200)));
     };
     const rect = () => root.getBoundingClientRect();
