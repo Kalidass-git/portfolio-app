@@ -13,6 +13,7 @@ import { openInfo } from '../mobilebar.js';
 import { refresh as refreshPrices, agoText } from './equity.js';
 import * as P from '../projector.js';
 import { LINES, classPoints } from '../classes.js';
+import { fitAxis } from '../axis.js';
 
 let selMonth = null;
 const rerender = () => window.dispatchEvent(new Event('rerender'));
@@ -100,8 +101,8 @@ function netWorthHistory(data, all) {
   } else {
     const ser = shownHave.map((ln) => ({ name: ln.label, color: ln.color, values: ln.values }));
     if (sel === 'net' && hasAssets) ser.push({ name: 'Total assets', values: days.map((d) => d.assets), color: 2, dashed: true });
-    const flat = ser.flatMap((x) => x.values).filter((v) => v != null), lo = Math.min(...flat), hi = Math.max(...flat), stepv = (hi - lo) || 1;
-    chart = lineChart({ labels, tipLabels, fmt: money, yMin: Math.max(0, Math.floor((lo - stepv * 0.15) / 1e4) * 1e4), height: 260, series: ser });
+    const ax = fitAxis(ser.flatMap((x) => x.values));   // round, equal steps that fit the lines, so a small move is not squeezed along the bottom
+    chart = lineChart({ labels, tipLabels, fmt: money, yMin: ax.yMin, yMax: ax.yMax, ticks: ax.ticks, height: 260, series: ser });
   }
   const missing = LINES.filter((l) => l.id !== 'other' && !have(l.id));
   return section(title, h('div', null, chips, filterBar, modeBar, stats, chart,
