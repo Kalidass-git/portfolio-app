@@ -3,6 +3,7 @@
 import { S } from '../store.js';
 import * as C from '../calc.js';
 import * as P from '../projector.js';
+import { fitAxis } from '../axis.js';
 import { h, money, pct, dateStr, monthLabel, section, stat, table, setOptions } from '../ui.js';
 import { lineChart, stackedArea } from '../charts.js';
 import * as I from '../insights.js';
@@ -90,7 +91,7 @@ export function render() {
   if (havePlan) series.push({ name: 'Planned at the start', values: planVals, color: 2, dash: '2 4' });
   if (prj.length) series.push({ name: 'Projected from today', values: pVals, dashed: true, color: 3 });
   root.append(section('Net worth, month by month', h('div', null,
-    lineChart({ labels, fmt: money, yMin: Math.floor((lo * 0.97) / 1e5) * 1e5, height: 260, series }),
+    lineChart({ labels, fmt: money, ...(() => { const ax = fitAxis(series.flatMap((x) => x.values)); return { yMin: ax.yMin, yMax: ax.yMax, ticks: ax.ticks }; })(), height: 260, series }),
     h('p', { class: 'note' }, `The solid line is each month-end snapshot, ending at today. ${havePlan ? 'The dotted line is the plan as it was made at the start (your Wealth outlook plan for the year), so the gap between the two is how far you have moved from it. ' : ''}${prj.length ? `The dashed line carries today’s position to December using ${hasPlan ? 'your ' + year + ' plan' : 'the standard assumptions (no ' + year + ' plan yet)'} and the market outlook set under Wealth outlook.` : ''}`))));
 
   root.append(mixChart(data, all, months, lbl));

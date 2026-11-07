@@ -150,6 +150,11 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.68.0 – Home and Net worth charts: y axis that fits the lines
+
+- The ₹ amount charts on **Home** (Net worth over time, all asset lines) and on **Net worth over time** started at an odd value and ran up to the next power of ten (a week of gold moving from 54.7 to 57 lakh was drawn along the bottom of a 54.7L to 1Cr axis). New `js/axis.js` picks round tick values with equal gaps (1, 2, 2.5 or 5 times a power of ten, 4 to 6 gaps) that hug the data with a little room, never below zero for data above zero. The same gold week now reads 54L, 55L, 56L, 57L, 58L. `lineChart` takes a `ticks` option for this. The Growth % view is unchanged. Test: `tests/axis.test.mjs`.
+- No stored-data changes.
+
 ## Release 8.67.0 – Volume tag, and landscape chart in the Android app
 
 - **Volume tag**: touching or hovering shows the volume as a tag above its bar, inside the volume panel, like the P/E tag. It is no longer in the line of figures below the chart.
