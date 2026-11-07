@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.60.0 – Sold-price status and ratio fallback
+
+- **Sold shares**: each row shows the day its price was fetched, or why none was found ("no price: …"); the note and button wording now match "Refresh sold prices".
+- **"Not found" next to a price that updated** (e.g. Lalithaa): the P/E and 52-week feed does not know every share although the price feed does. `backend/Code.gs` `fundamentals_` now falls back to the price feed (price, 52-week range), and the app words the leftover case as "price updated, but P/E and other ratios are not available". **Redeploy `Code.gs`** (new version) for the fallback.
+- Removed a duplicated "needs the backend" message in the holdings refresh. No stored-data changes.
+
 ## Release 8.59.0 – Asset performance on Home, sold-price refresh, savings summaries
 
 - **Home › Net worth over time** now compares net worth with four asset lines: Shares & funds, Debt & fixed income, Gold, Others & cash. Filter chips show each alone (with highest, lowest and share of assets); "Moved the most" names the biggest mover. Growth % (default) indexes every line to 0% at the start of the period; Amount ₹ shows real values.

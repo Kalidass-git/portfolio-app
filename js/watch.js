@@ -183,7 +183,11 @@ export function refreshMetrics(targets, onProgress = () => {}) {
           onProgress('Fetching share ratios…');
           const res = await call(S.cfg.backendUrl, S.cfg.key, 'fundamentals', { symbols: stocks.map((t) => ({ symbol: t.ref, yahoo: t.yahoo || '' })) });
           for (const t of stocks) { const q = res.data && res.data[t.ref]; if (q) { M[t.key] = { ...q, at }; out.shares++; } }
-          for (const [sym, msg] of Object.entries(res.errors || {})) out.errors.push(`${sym}: ${msg}`);
+          for (const [sym, msg] of Object.entries(res.errors || {})) {
+            // the price feed can know a share the ratio feed does not: say so, instead of a bare "not found" next to a price that did update
+            const priced = S.all && S.all.stocks.items.some((i) => i.symbol && i.symbol.toUpperCase() === sym.toUpperCase() && i.livePrice > 0);
+            out.errors.push(priced && /not found/i.test(msg) ? `${sym}: price updated, but P/E and other ratios are not available for it` : `${sym}: ${msg}`);
+          }
         } catch (e) { out.errors.push(/Unknown action/i.test(e.message) ? 'Your backend needs the newer Code.gs (adds “fundamentals”). Paste backend/Code.gs into Apps Script and deploy a new version.' : 'Shares: ' + e.message); }
       }
     }
