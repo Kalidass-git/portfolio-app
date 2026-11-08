@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.71.3 – Android app: find the app's plugins when the page has no registerPlugin
+
+- The landscape button said "no registerPlugin": in the installed app the page has `Capacitor.isNativePlatform()` but no `Capacitor.registerPlugin` (the page has no bundler, so Capacitor's own script is not loaded). The native side still lists every plugin, with its methods, on `Capacitor.Plugins`.
+- The lookup in `js/native.js` now uses `registerPlugin` when it exists (as before) and otherwise `Capacitor.Plugins.<name>`. This is what the landscape button needed; it also means the other native features (status bar colour, reminders, back button, PDF share) find their plugins in such a build. Listener calls are guarded in case a plugin object has no `addListener`.
+- Landscape still needs an APK that includes the 8.67.0+ `NativeToolsPlugin.java` (fixed landscape); if the APK is older the button says so.
+
 ## Release 8.71.2 – Landscape button: say exactly what the app build is missing
 
 - The landscape button reported "works only in the Android app" in an app that is the Android app. The lookup of the app's own plugin (`NativeTools`) came back empty and the page could not say why.

@@ -12,10 +12,15 @@ export const isNative = () => !!(cap() && cap().isNativePlatform && cap().isNati
 const made = {};
 let whyNot = '';   // why the last plugin lookup came back empty (shown in the landscape message, to find out what an app build is missing)
 const P = (name) => {
-  if (!isNative() || !cap().registerPlugin) { whyNot = !cap() ? 'no Capacitor in this page' : !isNative() ? 'Capacitor says platform ' + (cap().getPlatform ? cap().getPlatform() : '?') : 'no registerPlugin'; return null; }
+  if (!isNative()) { whyNot = !cap() ? 'no Capacitor in this page' : 'Capacitor says platform ' + (cap().getPlatform ? cap().getPlatform() : '?'); return null; }
   if (made[name]) return made[name];
-  try { return (made[name] = cap().registerPlugin(name)); }
-  catch (e) { const known = cap().Plugins && cap().Plugins[name]; if (known) return (made[name] = known); whyNot = 'registerPlugin failed: ' + ((e && e.message) || e); return null; }
+  // registerPlugin first, exactly as before. Some app builds give the page no registerPlugin (there is no bundler, so Capacitor's own script
+  // is not loaded); the native side then still puts every plugin on Capacitor.Plugins, with its methods, so use that.
+  if (cap().registerPlugin) { try { return (made[name] = cap().registerPlugin(name)); } catch (e) { whyNot = 'registerPlugin failed: ' + ((e && e.message) || e); } }
+  const known = cap().Plugins && cap().Plugins[name];
+  if (known) return (made[name] = known);
+  if (!whyNot || cap().registerPlugin === undefined) whyNot = 'no registerPlugin and no Plugins.' + name;
+  return null;
 };
 
 export const reminderOpts = () => ({ ...DEFAULTS, ...(S.cfg.reminders || {}) });
@@ -80,7 +85,7 @@ function pullToRefresh() {
 // ---------- the Android back button ----------
 function backButton() {
   const App = P('App'); if (!App) return;
-  App.addListener('backButton', () => {
+  App.addListener && App.addListener('backButton', () => {
     const open = [...document.querySelectorAll('dialog[open]')].pop();
     if (open) { open.close(); open.remove(); return; }
     const h0 = location.hash.replace(/^#\/?/, '');
@@ -173,7 +178,7 @@ const planSoon = () => { clearTimeout(timer); timer = setTimeout(() => planRemin
 
 function tapToOpen() {
   const LN = P('LocalNotifications'); if (!LN) return;
-  LN.addListener('localNotificationActionPerformed', (ev) => {
+  LN.addListener && LN.addListener('localNotificationActionPerformed', (ev) => {
     const href = ev && ev.notification && ev.notification.extra && ev.notification.extra.href;
     if (href && /^#\//.test(href)) location.hash = href;
   });
