@@ -1674,3 +1674,8 @@ body.tm-lock { overflow: hidden; }
   .tm-full .mc-read { font-size: .8rem; margin-top: 2px; }
 }
 .tm-rotate.on { background: var(--brand, #0f5a45); color: #fff; border-color: var(--brand, #0f5a45); }
+
+/* trendline options as a row in the chart toolbar (no floating box) */
+.tm-pop.inline { position: static; width: auto; max-width: none; min-width: 0; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 34px 6px 10px; margin: 6px 0; box-shadow: none; background: var(--surface-2, var(--surface)); border-radius: 10px; position: relative; }
+.tm-pop.inline .tm-x { position: absolute; top: 4px; right: 6px; }
+.tm-full .tm-pop.inline { margin: 6px 0 0; }

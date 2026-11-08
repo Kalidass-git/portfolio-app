@@ -69,12 +69,12 @@ export function fullView(getCard, redraw, key = '') {
     rotate: rot,
     get on() { return on; },
     /** size for marketChart in the current mode */
-    size(normalHeight) {
+    size(normalHeight, reserve = 0) {   // reserve: pixels the rest of the card needs besides the chart (the caller knows whether its controls are folded away)
       if (!on) return { height: normalHeight };
       const phone = window.innerWidth < 640, sideways = Math.min(window.innerWidth, window.innerHeight) < 600 && window.innerWidth > window.innerHeight;   // a phone turned sideways: little height, so the panels are made lower
       const width = Math.max(320, Math.min(Math.round(window.innerWidth - (phone ? 24 : 40)), 2400));
       if (sideways) return { height: Math.max(120, window.innerHeight - 215), width, dense: true };
-      return { height: Math.max(180, window.innerHeight - (phone ? 520 : 360)), width };
+      return { height: Math.max(180, window.innerHeight - (reserve || (phone ? 520 : 360))), width };
     },
   };
 }
