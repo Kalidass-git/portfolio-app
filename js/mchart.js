@@ -185,13 +185,19 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
     }
 
     // trendlines (not in % mode: the price axis there is relative)
+    const upx = () => { try { const w = box.getBoundingClientRect().width; return w > 0 ? W / w : 1; } catch { return 1; } };   // drawing units per screen pixel
+    const coarse = () => { try { return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); } catch { return false; } };
     const lineLayer = svg('g', { 'clip-path': `url(#${clip})` }), segs = [];
     if (mode !== 'pct') {
       const locked = (L) => lockAll || !!L.locked;
       const draw = (L, sel, ghost) => {
         const col = L.color || LINE_COLORS.trend, x1 = px(posOf(L.d1)), x2 = px(posOf(L.d2)), y1 = y(L.p1), y2 = y(L.p2);
         lineLayer.append(svg('line', { x1, y1, x2, y2, stroke: col, 'stroke-width': sel ? 2.8 : 1.8, 'stroke-linecap': 'round', 'stroke-dasharray': ghost ? '5 4' : null, opacity: ghost ? '.8' : null }));
-        if (sel && !locked(L)) for (const [xx, yy] of [[x1, y1], [x2, y2]]) lineLayer.append(svg('circle', { cx: xx, cy: yy, r: 5, fill: 'var(--surface, #fff)', stroke: col, 'stroke-width': 2 }));
+        if (sel && !locked(L)) for (const [xx, yy] of [[x1, y1], [x2, y2]]) {   // end handles: bigger on a touch screen, with a soft ring that shows how wide the grab area is
+          const u = upx(), big = coarse();
+          if (big) lineLayer.append(svg('circle', { cx: xx, cy: yy, r: 20 * u, fill: col, 'fill-opacity': '.14', 'pointer-events': 'none' }));
+          lineLayer.append(svg('circle', { cx: xx, cy: yy, r: (big ? 9 : 5.5) * (big ? u : 1), fill: 'var(--surface, #fff)', stroke: col, 'stroke-width': 2.2, 'pointer-events': 'none' }));
+        }
         if (!ghost && locked(L)) lineLayer.append(svg('text', { x: x2 + (x2 >= x1 ? -4 : 4), y: y2 - 6, 'text-anchor': x2 >= x1 ? 'end' : 'start', class: 'axis', fill: col, style: 'font-size:11px' }, '🔒'));
         return { x1, y1, x2, y2 };
       };
@@ -275,8 +281,8 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
     const near = (X, Y) => { let best = null, bd = 12; for (const s of segs) { const dx = s.x2 - s.x1, dy = s.y2 - s.y1, L2 = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((X - s.x1) * dx + (Y - s.y1) * dy) / L2)), d = Math.hypot(X - (s.x1 + t * dx), Y - (s.y1 + t * dy)); if (d < bd) { bd = d; best = s.id; } } return best; };
     // a tap or press on a line: its end handles first (when it is selected), then its body
     const hitLine = (X, Y) => {
-      const sg = segs.find((q) => q.id === sel);
-      if (sg) { if (Math.hypot(X - sg.x1, Y - sg.y1) < 16) return { id: sg.id, kind: 'p1' }; if (Math.hypot(X - sg.x2, Y - sg.y2) < 16) return { id: sg.id, kind: 'p2' }; }
+      const sg = segs.find((q) => q.id === sel), R = coarse() ? 24 * upx() : 16;   // a fingertip needs a wider grab area than a mouse
+      if (sg) { const d1 = Math.hypot(X - sg.x1, Y - sg.y1), d2 = Math.hypot(X - sg.x2, Y - sg.y2); if (Math.min(d1, d2) < R) return { id: sg.id, kind: d1 <= d2 ? 'p1' : 'p2' }; }
       const id = near(X, Y); return id ? { id, kind: 'move' } : null;
     };
     // the line with the whole of it moved by the distance from (X0, Y0) to (X, Y)
