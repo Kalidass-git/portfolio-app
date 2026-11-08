@@ -12,27 +12,39 @@ export const LEVELS = [
   { id: 'over', max: 1.2, label: 'Over', hint: 'up to 20% above the limit' },
   { id: 'beyond', max: Infinity, label: 'Well beyond', hint: 'more than 20% above the limit' },
 ];
-// Heat map colours. `used` is spending as a share of the limit. Under the limit: the less spent, the deeper the green, and it fades
-// to a pale neutral at 100%. Over the limit: it grows from that same pale neutral into deep red by HEAT_MAX (160%) and stays there.
-// Both sides meet at the same pale colour, so the change around the limit is smooth. The text colour is picked for contrast.
+// Heat map: six colour bands by the share of the limit used (the colours themselves live in css/app.css as .hz-<id>, for light and dark).
+//   under 60% green, 60-80% light green, 80-100% amber, 100-120% light orange, 120-160% red, above 160% deep red.
+// This is only how a month is coloured; the status levels above and every figure are unchanged.
 export const HEAT_MAX = 1.6;
-const hsl = (hh, ss, ll) => { const a = (ss / 100) * Math.min(ll / 100, 1 - ll / 100), f = (n) => { const k = (n + hh / 30) % 12; return Math.round(255 * (ll / 100 - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))); }; return [f(0), f(8), f(4)]; };
-const lum = (rgb) => { const c = rgb.map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
-const rgbCss = (c) => `rgb(${c[0]},${c[1]},${c[2]})`;
-/** { bg, fg, bd } for a month that used `used` of its limit (1 = exactly the limit). */
-export function heat(used) {
-  const u = Math.max(0, Math.min(HEAT_MAX, used));
-  const over = u > 1, d = over ? Math.min(1, (u - 1) / (HEAT_MAX - 1)) : 1 - u;     // depth 0 (pale) to 1 (deep)
-  const e = Math.pow(d, 0.85);
-  const bg = hsl(over ? 358 : 142, 12 + 58 * e, 93 - 56 * e);
-  // dark ink on light fills, white on deep ones; whichever has the better contrast
-  const L = lum(bg), dark = (L + 0.05) / (lum([17, 24, 39]) + 0.05), light = 1.05 / (L + 0.05);
-  const fg = dark >= light ? '#111827' : '#ffffff';
-  return { bg: rgbCss(bg), fg, bd: rgbCss(hsl(over ? 358 : 142, 20 + 55 * e, 93 - 56 * e - 12)) };
-}
-/** Stops for the legend: a smooth bar from 0% to HEAT_MAX of the limit. */
-export function heatGradient(steps = 16) {
-  return `linear-gradient(90deg, ${Array.from({ length: steps + 1 }, (_, i) => { const u = (HEAT_MAX * i) / steps; return `${heat(u).bg} ${((i / steps) * 100).toFixed(1)}%`; }).join(', ')})`;
+export const BANDS = [
+  { id: 'g', max: 0.6, label: 'Low', range: 'under 60%' },
+  { id: 'lg', max: 0.8, label: 'Comfortable', range: '60 to 80%' },
+  { id: 'y', max: 1, label: 'Near the limit', range: '80 to 100%' },
+  { id: 'o', max: 1.2, label: 'Slightly over', range: '100 to 120%' },
+  { id: 'r', max: 1.6, label: 'Over', range: '120 to 160%' },
+  { id: 'd', max: Infinity, label: 'Far over', range: 'above 160%' },
+];
+/** The band of a month that used `used` of its limit (1 = exactly the limit). A month exactly on a boundary belongs to the lower band. */
+export const bandOf = (used) => BANDS.find((b) => used <= b.max + 1e-9) || BANDS[BANDS.length - 1];
+
+/**
+ * One short, changing sentence about the month being looked at.
+ * @param rows  [{ month, spent, limit, status }] for the months of the year shown (months with a limit have status.used)
+ * @param month 'YYYY-MM' the month in focus
+ * @param cur   'YYYY-MM' the current month (it is not finished, so it reads "so far")
+ * @returns { tone: 'good'|'ok'|'warn'|'bad', title, text } or null when there is nothing to judge
+ */
+export function monthInsight(rows, month, cur, money = (v) => String(Math.round(v)), label = (m) => m) {
+  const r = rows.find((x) => x.month === month);
+  if (!r || !r.status || r.status.used == null) return null;
+  const used = r.status.used, band = bandOf(used), pc = Math.round(used * 100) + '%', now = month === cur;
+  const others = rows.filter((x) => x.month !== month && x.status && x.status.used != null && (!now || x.month < cur));
+  const avg = others.length ? others.reduce((a, x) => a + x.status.used, 0) / others.length : null;
+  const vs = avg == null ? '' : used < avg * 0.85 ? `, lower than your usual ${Math.round(avg * 100)}%` : used > avg * 1.15 ? `, higher than your usual ${Math.round(avg * 100)}%` : `, close to your usual ${Math.round(avg * 100)}%`;
+  const left = r.limit - r.spent, m = label(month), so = now ? ' so far' : '';
+  const title = { g: now ? 'Great control this month' : 'Well controlled', lg: 'Comfortably within the limit', y: 'Close to the limit', o: 'Slightly over the limit', r: 'Over the limit', d: 'Far over the limit' }[band.id];
+  const tail = left >= 0 ? `${money(left)} still within the limit` : `${money(-left)} over the limit`;
+  return { tone: { g: 'good', lg: 'good', y: 'ok', o: 'warn', r: 'bad', d: 'bad' }[band.id], band: band.id, title, text: `${m}: ${pc} of the limit used${so}${vs}. ${tail}.` };
 }
 
 /** { used, level } for what was spent against the limit; null when there is nothing to judge. */

@@ -3,7 +3,7 @@ import { S } from '../store.js';
 import * as C from '../calc.js';
 import { h, money, compact, pct, monthLabel, section, stat, table, dialog, setOptions, monthGroups, rowList, canEdit } from '../ui.js';
 import { hbars, barChart, donut, legend } from '../charts.js';
-import { LEVELS, HEAT_MAX, heat, heatGradient, periodMonths, monthRow, periodTotal, mixOf } from '../monthdetail.js';
+import { BANDS, HEAT_MAX, bandOf, monthInsight, periodMonths, monthRow, periodTotal, mixOf } from '../monthdetail.js';
 
 let period = 'this', ledgerOpen = false;
 const rerender = () => window.dispatchEvent(new Event('rerender'));
@@ -19,14 +19,21 @@ const short = (m) => monthLabel(m).slice(0, 3);
 const pill = (st) => (st ? h('span', { class: 'lvl lvl-' + st.level.id, title: st.level.hint }, st.level.label) : h('span', { class: 'muted' }, '–'));
 const usedText = (st) => (st && st.used != null ? pct(st.used, 0) + ' used' : '');
 
-/** The colour key: one smooth bar from 0% of the limit (deep green) through the limit (pale) to well beyond it (deep red). */
+/** The colour key: six bands from green (well under the limit) through amber (at it) to deep red (far over it). */
 function legendRow() {
-  const pos = (u) => ((u / HEAT_MAX) * 100).toFixed(1) + '%';
-  const ticks = [[0, '0%', 'nothing spent'], [0.75, '75%', 'well within'], [1, '100%', 'the limit'], [1.2, '120%', 'over'], [HEAT_MAX, '160%+', 'well beyond']];
-  return h('div', { class: 'heat-legend', role: 'img', 'aria-label': 'Colour key: deep green when spending is far under the limit, pale at the limit, deep red when far over it' },
-    h('div', { class: 'heat-bar', style: { background: heatGradient() } }, h('i', { class: 'heat-limit', style: { left: pos(1) }, title: 'The limit (100%)' })),
-    h('div', { class: 'heat-ticks' }, ticks.map(([u, a, b], i) => h('span', { class: 'heat-tick' + (i === 0 ? ' first' : i === ticks.length - 1 ? ' last' : '') + (i === 1 || i === 3 ? ' opt' : ''), style: { left: pos(u) } }, h('b', null, a), h('small', null, b)))),
-    h('p', { class: 'note heat-note' }, 'The deeper the green, the less of the limit was used. The deeper the red, the further over it went.'));
+  return h('div', { class: 'hz-legend', role: 'img', 'aria-label': 'Colour key: ' + BANDS.map((b) => `${b.label}, ${b.range} of the limit`).join('; ') },
+    h('div', { class: 'hz-bar' }, BANDS.map((b) => h('i', { class: 'hz-' + b.id, title: `${b.label}: ${b.range}` }))),
+    h('div', { class: 'hz-ticks' }, ['0%', '60%', '80%', '100%', '120%', '160%+'].map((t, i) => h('span', { class: 'hz-tick' + (i === 0 ? ' first' : ''), style: { left: (i * 100 / 6).toFixed(2) + '%' } }, t))),
+    h('div', { class: 'hz-names' }, BANDS.map((b) => h('span', null, b.label))),
+    h('p', { class: 'note heat-note' }, 'Colour shows how much of the month\u2019s limit was spent. Green is well under it, amber is close to it, and red is over it.'));
+}
+
+/** The short sentence under the map: what the month in focus looks like. Tap it to open that month. */
+function insightRow(yearRows, focus, cur, single) {
+  const ins = monthInsight([...yearRows.values()], focus, cur, money, short);
+  if (!ins) return null;
+  return h(single ? 'div' : 'button', { type: single ? null : 'button', class: 'hz-insight hz-' + ins.band, onclick: single ? null : () => { period = focus; rerender(); }, 'aria-label': ins.title + '. ' + ins.text + (single ? '' : ' Tap to open this month.') },
+    h('span', { class: 'hz-dot hz-' + ins.band, 'aria-hidden': 'true' }), h('span', { class: 'hz-txt' }, h('b', null, ins.title), h('small', null, ins.text)), single ? null : h('span', { class: 'hz-go', 'aria-hidden': 'true' }, '\u203a'));
 }
 
 /** Choose which lines count as spending. One-time payments (tax, EMI, rent, other) can be left out. */
@@ -47,15 +54,18 @@ function countDialog(rows, ov) {
   ]);
 }
 
-/** One box per month of the year, coloured by status. Tap a month to open it. */
+/** One tile per month of the year, coloured by how much of its limit was used. Tap a month to open it. */
 function monthMap(year, rowsByMonth, sel) {
   const cur = C.monthKey(S.all.asOf);
   return h('div', { class: 'mmap', role: 'group', 'aria-label': 'Months of ' + year }, Array.from({ length: 12 }, (_, i) => {
     const m = `${year}-${String(i + 1).padStart(2, '0')}`, r = rowsByMonth.get(m), st = r && r.status;
-    const on = sel.includes(m), one = sel.length === 1;
-    const hc = st && st.used != null ? heat(st.used) : null;
-    return h('button', { type: 'button', class: 'mm lvl-' + (st ? st.level.id : 'none') + (hc ? ' heat' : '') + (on ? (one ? ' on' : ' on-some') : ''), style: hc ? { '--hb': hc.bg, '--hf': hc.fg, '--hd': hc.bd } : null, disabled: !r, 'aria-pressed': on ? 'true' : 'false', title: r ? `${monthLabel(m, true)}: ${st ? st.level.label : 'nothing to judge'}${st && st.used != null ? ', ' + pct(st.used, 0) + ' of the limit' : ''}` : 'No data', onclick: () => { period = m; rerender(); } },
-      h('b', null, short(m)), h('small', null, r ? (st && st.used != null ? pct(st.used, 0) : '–') : ''), m === cur ? h('i', { class: 'mm-now' }, 'now') : null);
+    const on = sel.includes(m), one = sel.length === 1, used = st && st.used != null ? st.used : null, band = used != null ? bandOf(used) : null;
+    const title = r ? `${monthLabel(m, true)}: ${used != null ? pct(used, 0) + ' of the limit, ' + band.label.toLowerCase() : st ? st.level.label : 'nothing to judge'}${m === cur ? ' (this month, so far)' : ''}` : monthLabel(m, true) + ': no bank entries';
+    return h('button', { type: 'button', class: 'mm' + (band ? ' hz hz-' + band.id : '') + (m === cur ? ' cur' : '') + (on ? (one ? ' on' : ' on-some') : ''), disabled: !r, 'aria-pressed': on ? 'true' : 'false', 'aria-current': m === cur ? 'date' : null, title, 'aria-label': title,
+      onclick: () => { period = m; rerender(); } },
+      h('b', null, short(m)), h('small', null, r ? (used != null ? pct(used, 0) : '\u2013') : ''),
+      used != null ? h('i', { class: 'mm-meter', 'aria-hidden': 'true' }, h('s', { style: { width: Math.min(100, (used / HEAT_MAX) * 100).toFixed(1) + '%' } }), h('u', { style: { left: ((1 / HEAT_MAX) * 100).toFixed(1) + '%' } })) : null,
+      m === cur ? h('i', { class: 'mm-now' }, 'now') : null);
   }));
 }
 
@@ -80,7 +90,7 @@ export function render() {
   // the year map, so any month is one tap away
   const year = (single ? r0.month : months[0]).slice(0, 4);
   const yearRows = new Map(Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`).filter((m) => m <= cur && (ledger.includes(m) || m === cur)).map((m) => [m, rows.find((r) => r.month === m) || monthRow(data, all, m, ov)]));
-  root.append(section(`${year}, month by month`, h('div', null, monthMap(year, yearRows, months), legendRow(), h('p', { class: 'note' }, (tot.manual ? 'Each month is judged by the spending that counts against its budget: the interest income expected, or the amount you set in Categories & budgets. Tap a month to open it.' : 'Each month is judged by the spending that counts against the interest income expected in it. Tap a month to open it.')))));
+  root.append(section(`${year}, month by month`, h('div', null, monthMap(year, yearRows, months), legendRow(), insightRow(yearRows, single ? r0.month : [...yearRows.keys()].pop(), cur, single), h('p', { class: 'note' }, (tot.manual ? 'Each month is judged by the spending that counts against its budget: the interest income expected, or the amount you set in Categories & budgets. Tap a month to open it.' : 'Each month is judged by the spending that counts against the interest income expected in it. Tap a month to open it.')))));
 
   // headline
   const worst = rows.filter((r) => r.status && ['over', 'beyond'].includes(r.status.level.id)).length;
