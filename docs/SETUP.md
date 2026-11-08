@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.71.1 – Landscape button: the real reason it fails on an older APK, said plainly
+
+- The message "This is not the Android app" was wrong. An APK built before 8.67.0 does have the app's own plugin, but not the screen-turn method, so Capacitor gives the page no such function and the old check mistook that for "not Android".
+- Now the button says that the installed app was built before the screen-turn feature and needs a new APK (build from the latest code, Android Studio: Build > Build APK, or the usual build steps in this guide). It also tries the browser's own screen lock first, in case that works in the build.
+- The screen turn itself (fixed landscape) needs the APK to include `NativeToolsPlugin.java` from 8.67.0 or newer; nothing in the web app can replace that.
+
 ## Release 8.71.0 – Line options back as a corner popup; chart stays put on refresh; Home usual spending pace
 
 - **Line options are a small popup in the top-left corner of the chart:** drawing or tapping a line only selects it. The popup (colour, alert, lock, delete) opens when you press the new **Line options** button next to Trendline, or right-click (long-press on a phone) a line. It overlays the chart, so opening it never pushes the chart down; ✕ closes it and keeps the line selected.

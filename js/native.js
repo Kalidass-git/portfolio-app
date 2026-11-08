@@ -106,17 +106,22 @@ export const canTurnScreen = () => !!P('NativeTools');
 /** Android app only: 'landscape' turns the screen sideways (even when the phone's auto-rotate is off), 'auto' gives control back to the phone.
  *  Resolves null when it worked, otherwise a short reason (an app built before 8.67.0 does not have the native part). */
 export async function setOrientation(mode) {
-  const NT = P('NativeTools'); if (!NT || !NT.setOrientation) return 'This is not the Android app.';
+  const NT = P('NativeTools'); if (!NT) return 'This works only in the Android app.';
   const land = mode === 'landscape', turned = () => window.innerWidth > window.innerHeight;
+  const OLD = 'The installed app was built before the screen-turn feature (8.67.0), so it cannot turn the screen. Build and install a new APK from the latest code. The rest of the app works as before.';
   let why = null;
-  try { await NT.setOrientation({ mode }); }
-  catch (e) { why = /not implemented|unimplemented/i.test((e && e.message) || '') || (e && e.code === 'UNIMPLEMENTED') ? 'This build of the app cannot turn the screen yet. Build and install the latest APK.' : ((e && e.message) || 'The screen could not be turned.'); }
-  // the page's own way (works in some app builds that have no native part): ask the browser to lock or unlock the screen
+  // An app built before 8.67.0 has the plugin but not this method: Capacitor then gives no function at all (or "not implemented").
+  if (typeof NT.setOrientation !== 'function') why = OLD;
+  else {
+    try { await NT.setOrientation({ mode }); }
+    catch (e) { why = /not implemented|unimplemented/i.test((e && e.message) || '') || (e && e.code === 'UNIMPLEMENTED') ? OLD : ((e && e.message) || 'The screen could not be turned.'); }
+  }
+  // the page's own way, tried when the native part is missing or did not turn the screen: ask the browser to lock or unlock the screen
   const so = window.screen && window.screen.orientation;
-  if (so && (why || (land && !turned()))) { try { if (land) await so.lock('landscape'); else so.unlock(); why = null; } catch { /* not allowed here */ } }
+  if (so && (why || (land && !turned()))) { try { if (land) await so.lock('landscape'); else so.unlock(); why = null; } catch { /* not allowed in this app build */ } }
   if (land && !why) {
     await new Promise((r) => setTimeout(r, 700));
-    if (!turned()) why = 'The screen did not turn. Build and install the latest APK (8.70.0 or newer), then try again.';
+    if (!turned()) why = 'The screen did not turn. If your phone is held upright with rotation locked, try again; if it keeps failing, build and install a new APK from the latest code.';
   }
   return why;
 }
