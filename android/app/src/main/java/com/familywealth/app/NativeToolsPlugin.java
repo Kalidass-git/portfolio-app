@@ -58,7 +58,7 @@ public class NativeToolsPlugin extends Plugin {
     }
 
     /**
-     * Turns the screen to landscape (both landscape sides, whatever the phone's own auto-rotate lock says) for the chart's full view,
+     * Turns the screen to landscape (fixed landscape, whatever the phone's own auto-rotate lock says) for the chart's full view,
      * and back to the phone's normal behaviour with mode "auto".
      */
     @PluginMethod
@@ -66,7 +66,7 @@ public class NativeToolsPlugin extends Plugin {
         final boolean land = "landscape".equals(call.getString("mode", "auto"));
         getActivity().runOnUiThread(() -> {
             try {
-                getActivity().setRequestedOrientation(land ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE : ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+                getActivity().setRequestedOrientation(land ? ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE : ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
                 call.resolve();
             } catch (Exception e) {
                 call.reject("Could not turn the screen: " + e.getMessage());

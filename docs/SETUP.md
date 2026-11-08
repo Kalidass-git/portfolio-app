@@ -157,6 +157,7 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Phone full view uses the blank space:** the chart height is worked out from what the card really needs (controls folded or open), so it fills the screen instead of leaving about 190 px empty.
 - **No accidental moves:** only the selected line can be dragged, so pressing an unselected line just pans the chart and a tap selects it. Dragging needs a bigger movement first (10 px touch / 6 px mouse for the line, 6 / 4 for its ends). **🔒 Lock** in the box locks one line (optional `locked` field on the line, nothing else changes); **Lock lines** in the toolbar locks all lines on this device. A locked line shows a small lock.
 - **Undo:** after moving a line, "Line moved" and after saving a new one, "Trendline saved", the message has an **Undo** button for six seconds.
+- **Landscape button (Android app):** the app now forces fixed landscape (not the sensor-dependent kind), tries the browser's own screen lock when the native call is missing, and tells you plainly if the screen did not turn (an APK built before 8.67.0 has no native part: rebuild and install it; the Java file changed again in this release).
 - No stored data changes: `locked` is an optional field that older lines work without.
 
 ## Release 8.69.0 – Chart: time-axis zoom around the pointer; full view and landscape survive a page rebuild
