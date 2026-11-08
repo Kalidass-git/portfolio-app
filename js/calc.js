@@ -1036,7 +1036,9 @@ export function returns(data, all) {
   const gf = data.gold.purchases.filter((p) => p.amount && p.date).map((p) => ({ t: toMs(p.date), amount: -p.amount }));
   const sch = data.gold.schemes.find((s) => s.active);
   const sf = sch ? sch.entries.map((e) => ({ t: toMs(e.date), amount: -e.amount })) : [];
-  add('Gold', gf.concat(sf), all.gold.value, all.gold.invested);
+  // running gold chits are counted at cost in the gold value, so the money paid into them goes out on its own dates too (without this the value had no payment behind it and the gold return came out too high)
+  const cf = (all.gold.chits.active || []).flatMap((c) => (c.entries || []).filter((e) => e.amount > 0 && e.date).map((e) => ({ t: toMs(e.date), amount: -e.amount })));
+  add('Gold', gf.concat(sf, cf), all.gold.value, all.gold.invested);
   // Bonds: principal out, coupons in monthly (quarterly for quarterly bonds)
   const coupons = (it, gross) => {
     const fl = [{ t: toMs(it.depositDate), amount: -it.principal }];

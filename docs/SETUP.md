@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.75.2 – Gold XIRR no longer inflated by running gold chits
+
+- The gold value counts money paid into running gold chits at cost, but the gold return's cash flows left those payments out, so that money looked like free value and pushed Gold's XIRR (and the overall XIRR) up. The chit payments are now included as money paid in on their own dates.
+- Calculation fix only; no stored data changed. Test: `tests/goldchitxirr.test.mjs <data.json>`.
+- Checked and unchanged: bond and private-lending monthly interest is counted as money received each month; the overall figure is one money-weighted XIRR over all dated flows (so long-held EPF weighs more than its share of today's value).
+
 ## Release 8.75.1 – Easier to change a trendline's angle
 
 - The round end handles of a selected trendline are bigger on a touch screen (with a soft ring showing the grab area), and the area that grabs an end is wider, so a finger can drag one end to change the angle instead of moving the whole line.
