@@ -150,6 +150,14 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.74.0 – Home expense bars show your usual spending
+
+On Home, under This month in detail, the Expenses bars now carry a tick at what that line usually is and are coloured by how the month compares. Nothing stored changes and no figure is changed.
+
+- **The tick** is the usual amount for the line: the middle value of your last 6 months measured to the same day (this month) or the whole month (a finished month), from the same history as the pace chip (`usualPace` in `js/spendpace.js`).
+- **Colour** (`lineTone`): under 85% of the usual = green, 85–115% (close, or just over) = amber, above 115% = red. A line you spend on that is not usual in most months (travel, medical) is red and has no tick. With fewer than two earlier months of bank entries the bars stay as they were. A small ▼ ≈ ▲ after the amount says the same for anyone who cannot tell the colours apart, and tapping or hovering a row gives the usual amount.
+- A one-line key sits under the bars. `hbars` in `js/charts.js` takes optional `mark`, `tone` and `note` per row; other charts are unchanged.
+
 ## Release 8.73.0 – Home: "This month in detail" card redesigned (same content, less text)
 
 Presentation only: every figure, tap and dialog works as before; nothing stored changes.

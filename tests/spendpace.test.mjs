@@ -1,5 +1,5 @@
 // The usual spending pace: rent early, groceries all month, one-offs not expected.
-import { usualPace, paceSentence } from '../js/spendpace.js';
+import { usualPace, paceSentence, lineTone } from '../js/spendpace.js';
 let bad = 0; const ok = (c, m) => { if (!c) { bad++; console.log('FAIL', m); } else console.log('ok  ', m); };
 const led = []; const add = (m, d, cat, amt) => led.push({ date: `${m}-${String(d).padStart(2, '0')}`, category: cat, debit: amt, credit: 0, desc: cat });
 for (const m of ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09']) { add(m, 2, 'Rent', 15000); for (let d = 1; d <= 28; d += 3) add(m, d, 'Family Budget', 1000); if (m === '2026-07') add(m, 15, 'Medical', 9000); }
@@ -19,4 +19,6 @@ let p = null; try {
   ok(/ahead of your usual pace/.test(paceSentence(p, (v) => '₹' + Math.round(v), 8)) && /medical/.test(paceSentence(p, (v) => '₹' + Math.round(v), 8)), 'sentence names the reason');
   ok(usualPace({ ledger: led.filter((e) => e.date.startsWith('2026-09')), settings: {}, categories: [] }, mc, '2026-10', 8) === null, 'one earlier month is not enough: null');
 } catch (e) { bad++; console.log('FAIL threw', e.message); }
+ok(lineTone(500, 1000) === 'good' && lineTone(849, 1000) === 'good' && lineTone(850, 1000) === 'warn' && lineTone(1150, 1000) === 'warn' && lineTone(1151, 1000) === 'bad', 'tone: under 85% green, 85-115% amber, above 115% red');
+ok(lineTone(5000, 0, 'oneoff') === 'bad' && lineTone(5000, 0, 'steady') === null && lineTone(0, 1000) === null, 'tone: a one-off is red, nothing spent has no colour');
 console.log(bad ? bad + ' FAILED' : 'ALL OK'); process.exit(bad ? 1 : 0);

@@ -1734,3 +1734,14 @@ body.tm-lock { overflow: hidden; }
 .md-tab[aria-selected="true"]:first-child small { color: var(--pos); } .md-tab[aria-selected="true"]:last-child small { color: var(--neg); }
 .md-hint { margin: 8px 0 0; font-size: .85rem; color: var(--muted); }
 @media (min-width: 900px) { .md { display: grid; grid-template-columns: minmax(260px, 380px) 1fr; column-gap: 24px; align-items: start; } .md-hero { grid-column: 1; grid-row: 1 / span 2; } .md-other { grid-column: 1; grid-row: 3; } .md-tabs { grid-column: 2; grid-row: 1; margin-top: 0; align-self: start; } .md-panel { grid-column: 2; grid-row: 2 / span 2; } }
+
+/* usual-spending marks on the expense bars: a tick at the usual amount, bar coloured by how the line compares */
+.hb-track.mk { position: relative; overflow: visible; } .hb-fill.good, .hb-fill.warn, .hb-fill.bad { border-radius: 5px; }
+.hb-fill.good { background: var(--pos); } .hb-fill.warn { background: #d99a1c; } .hb-fill.bad { background: var(--neg); }
+:root[data-theme="dark"] .hb-fill.warn { background: #e3b25a; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .hb-fill.warn { background: #e3b25a; } }
+.hb-mark { position: absolute; top: -4px; bottom: -4px; width: 0; border-left: 2px solid var(--ink); transform: translateX(-1px); pointer-events: none; }
+.hb-g { display: inline-block; width: 1em; text-align: center; font-size: .72rem; font-weight: 800; } .hb-g.good { color: var(--pos); } .hb-g.warn { color: var(--warn); } .hb-g.bad { color: var(--neg); }
+.md-key { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 10px 0 0; font-size: .78rem; color: var(--muted); }
+.md-key span { display: inline-flex; align-items: center; gap: 5px; } .md-key i { width: 9px; height: 9px; border-radius: 50%; } .md-key .t { width: 0; height: 12px; border-radius: 0; border-left: 2px solid var(--ink); }
+.md-key .g { background: var(--pos); } .md-key .w { background: #d99a1c; } .md-key .r { background: var(--neg); }
