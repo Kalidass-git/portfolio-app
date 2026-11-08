@@ -1711,3 +1711,26 @@ body.tm-lock { overflow: hidden; }
 /* trendline options: a small box in the top-left corner of the chart, opened by the Line options button; it overlays, so the chart never moves */
 .tm-pop.float { position: absolute; top: 8px; left: 8px; right: auto; bottom: auto; width: max-content; min-width: 0; max-width: calc(100% - 70px); flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 30px 8px 10px; z-index: 6; }
 .tm-pop.float .tm-lab { display: none; }
+
+/* Home: This month in detail (summary on top, Income / Expenses tabs below) */
+.md-hero { background: color-mix(in srgb, var(--brand) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--brand) 22%, var(--line)); border-radius: 16px; padding: 14px 16px 12px; display: grid; gap: 6px; }
+.md-lab { font-size: .72rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.md-big { font-size: clamp(1.7rem, 8vw, 2.2rem); font-weight: 800; letter-spacing: -.02em; line-height: 1.1; overflow-wrap: anywhere; }
+.md-big.neg { color: var(--neg); } .md-big.pos { color: var(--brand); }
+.md-track { position: relative; margin-top: 4px; } .md-track .pbar { height: 12px; margin: 0; border-radius: 7px; background: color-mix(in srgb, var(--brand) 14%, var(--line-2)); }
+.md-track .pbar span { background: var(--neg); border-radius: 7px; } .md-track .pbar.warn span { background: var(--warn); } .md-track .pbar.bad span { background: var(--neg); }
+.md-tick { position: absolute; top: -4px; bottom: -4px; width: 0; border-left: 2px solid var(--ink); transform: translateX(-1px); }
+.md-sub { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: .82rem; color: var(--muted); } .md-sub small { font-size: inherit; }
+.md-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 0; margin-top: 8px; border-top: 1px solid color-mix(in srgb, var(--brand) 18%, var(--line)); padding-top: 10px; }
+.md-stats > div { display: grid; gap: 2px; min-width: 0; padding: 0 10px; } .md-stats > div:first-child { padding-left: 0; } .md-stats > div + div { border-left: 1px solid color-mix(in srgb, var(--brand) 18%, var(--line)); }
+.md-stats small { font-size: .7rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); } .md-stats b { font-size: clamp(.95rem, 4.2vw, 1.15rem); overflow-wrap: anywhere; }
+.md-pace { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.md-chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 99px; padding: 5px 11px; font-size: .8rem; font-weight: 700; }
+.md-chip.warn { background: color-mix(in srgb, var(--warn) 16%, var(--surface)); color: var(--warn); } .md-chip.good { background: color-mix(in srgb, var(--pos) 15%, var(--surface)); color: var(--pos); }
+.md-other { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 10px 2px 0; font-size: .85rem; color: var(--muted); }
+.md-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 3px; margin: 14px 0 8px; }
+.md-tab { display: flex; justify-content: center; align-items: baseline; gap: 8px; border: 0; background: none; font: inherit; font-weight: 700; color: var(--muted); padding: 9px 8px; border-radius: 9px; cursor: pointer; }
+.md-tab small { font-weight: 600; font-size: .8rem; } .md-tab.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.14); } .md-tab:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.md-tab[aria-selected="true"]:first-child small { color: var(--pos); } .md-tab[aria-selected="true"]:last-child small { color: var(--neg); }
+.md-hint { margin: 8px 0 0; font-size: .85rem; color: var(--muted); }
+@media (min-width: 900px) { .md { display: grid; grid-template-columns: minmax(260px, 380px) 1fr; column-gap: 24px; align-items: start; } .md-hero { grid-column: 1; grid-row: 1 / span 2; } .md-other { grid-column: 1; grid-row: 3; } .md-tabs { grid-column: 2; grid-row: 1; margin-top: 0; align-self: start; } .md-panel { grid-column: 2; grid-row: 2 / span 2; } }

@@ -150,6 +150,15 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.73.0 – Home: "This month in detail" card redesigned (same content, less text)
+
+Presentation only: every figure, tap and dialog works as before; nothing stored changes.
+
+- **Summary on top:** "Left to spend" (or "Over budget by") as the big number, one bar for spent against the budget with a tick where you usually are by this day, then Received, To receive and Month end in one row. The old long pace paragraph is now a single chip ("₹X ahead of usual pace" or "On your usual pace") with **By line ›**; the full sentence moved into that dialog.
+- **Income and Expenses as two tabs** under the summary (on a phone one list at a time; on a wide screen the summary sits beside the lists). Income keeps the per-source rows (tap for each bond, payment or to mark received), the due-to-you list and the "not in the bank yet" rows. Expenses keeps the category bars (tap to see what a category is made of) and **See where it went**.
+- **Other payments** is one line ("₹X other payments not counted · Review ›"). The month picker is unchanged. The tab you pick is kept while you stay on the app.
+- Built on 8.72.0 (heat map); cache v165.
+
 ## Release 8.72.0 – Month in detail: monthly spending heat map redesigned
 
 Only how the months look changed. The limit, the spending that counts, the status levels and pills, every table and chart and all stored data are exactly as before.
