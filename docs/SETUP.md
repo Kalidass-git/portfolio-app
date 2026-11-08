@@ -150,6 +150,16 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.70.0 – Chart: trendline tool and full view survive background refreshes; line options on demand; lines can be locked, and moves undone
+
+- **Why full view and drawing were cancelled:** every sync (a save finishing, a refresh) rebuilds the whole page, which forgot the Trendline tool and the first point of a half-drawn line. The tool and the first point are now kept per chart (`mm.tool`, `mm.pend`) and handed to the rebuilt chart, and full view stays open (8.69.0 handoff).
+- **Line options are a row in the chart toolbar, not a floating box:** drawing or tapping a line only selects it. The row (colour, alert, lock, delete) appears under the toolbar when you press the new **Line options** button next to Trendline, or right-click (long-press on a phone) a line; ✕ closes it and keeps the line selected.
+- **Phone full view uses the blank space:** the chart height is worked out from what the card really needs (controls folded or open), so it fills the screen instead of leaving about 190 px empty.
+- **No accidental moves:** only the selected line can be dragged, so pressing an unselected line just pans the chart and a tap selects it. Dragging needs a bigger movement first (10 px touch / 6 px mouse for the line, 6 / 4 for its ends). **🔒 Lock** in the box locks one line (optional `locked` field on the line, nothing else changes); **Lock lines** in the toolbar locks all lines on this device. A locked line shows a small lock.
+- **Undo:** after moving a line, "Line moved" and after saving a new one, "Trendline saved", the message has an **Undo** button for six seconds.
+- **Landscape button (Android app):** the app now forces fixed landscape (not the sensor-dependent kind), tries the browser's own screen lock when the native call is missing, and tells you plainly if the screen did not turn (an APK built before 8.67.0 has no native part: rebuild and install it; the Java file changed again in this release).
+- No stored data changes: `locked` is an optional field that older lines work without.
+
 ## Release 8.69.0 – Chart: time-axis zoom around the pointer; full view and landscape survive a page rebuild
 
 - **Dragging the time axis** (the dates under the chart) now zooms around the point you pressed on, like dragging the price axis zooms the price: the bars under the pointer stay where they are and the rest stretches around them. Before, it always zoomed toward the newest bar, so older parts could not be studied that way. Double-click the axis to undo.

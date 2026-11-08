@@ -37,7 +37,9 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
   const headBox = h('div', { class: 'tm-head' });
   const symKey = String(symbol).toUpperCase().trim();
   const mm = mem.get(symKey) || {}; mem.set(symKey, mm);
-  let tool = 'none', chart = null, card = null, showCol = false;
+  let tool = mm.tool || 'none', chart = null, card = null, showCol = false;   // the tool and a half-drawn line are kept in mm, so a page rebuild (a sync finishing, say) does not cancel them
+  const setTool = (t) => { tool = t; mm.tool = t; if (t !== 'line') mm.pend = null; };
+  const lineBy = (d, id) => (((d.trendlines || {})[symKey]) || []).find((l) => l.id === id);
   const fv = fullView(() => card, () => { if (data) { draw(); header(); } }, 'T:' + String(symbol).toUpperCase().trim());
   const myLines = () => ((S.data && S.data.trendlines) || {})[symKey] || [];
   const noIdxPe = index && !(indexPe && nativeApp());   // index P/E: Android app only for now
@@ -77,34 +79,20 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
     }).catch((e) => { eps.state = 'err'; eps.msg = e.message || 'Could not load the earnings history.'; draw(); });
   };
 
-  // the small toolbar that opens where you tap a trendline: colour, alert, delete
+  // the trendline options (colour, alert, lock, delete): a row in the chart toolbar, shown when asked for
   const linePopup = (id) => {
     const L = myLines().find((l) => l.id === id); if (!L) return h('span');
     const mine = (S.data.alerts || []).filter((a) => a.rule === 'trendline' && a.lineId === id);
     const hitIds = new Set(W.evalAlerts(S.data).hit.map((x) => x.alert.id));
     const cur = L.color || TL_COLORS[0], ed = canEdit();
-    const grip = h('div', { class: 'tm-grip', title: 'Drag to move this toolbar out of the way', 'aria-label': 'Drag to move this toolbar' }, '⠿ Move');
-    const pop = h('div', { class: 'tm-pop', role: 'dialog', 'aria-label': 'Trendline options' }, grip,
+    const pop = h('div', { class: 'tm-pop inline', role: 'toolbar', 'aria-label': 'Trendline options' }, h('span', { class: 'tm-lab' }, 'Selected line'),
       ed ? h('div', { class: 'tm-pop-row' }, TL_COLORS.map((c) => h('button', { type: 'button', class: 'tm-sw' + (cur === c ? ' on' : ''), style: { background: c }, 'aria-label': 'Colour ' + c, onclick: () => mutate((d) => { const x = ((d.trendlines || {})[symKey] || []).find((l) => l.id === id); if (x) x.color = c; }) }))) : null,
       mine.length ? h('div', { class: 'tm-pop-alerts' }, mine.map((a) => h('button', { type: 'button', class: 'tm-al' + (hitIds.has(a.id) ? ' hit' : '') + (a.on === false ? ' off' : ''), onclick: () => (ed ? lineAlertForm({ alert: a, name }) : null) }, `🔔 ${a.tf === 'W' ? 'Week' : a.tf === 'M' ? 'Month' : 'Day'} ${a.dir === 'below' ? '↓' : '↑'}`))) : null,
       ed ? h('div', { class: 'tm-pop-row' },
         h('button', { type: 'button', class: 'chip-btn small', onclick: () => lineAlertForm({ symbol: symKey, name, yahoo, lineId: id }) }, mine.length ? '＋ Another alert' : '🔔 Set alert'),
-        h('button', { type: 'button', class: 'chip-btn small', onclick: () => { mutate((d) => { d.trendlines[symKey] = (d.trendlines[symKey] || []).filter((l) => l.id !== id); if (!d.trendlines[symKey].length) delete d.trendlines[symKey]; if (!Object.keys(d.trendlines).length) delete d.trendlines; d.alerts = (d.alerts || []).filter((a) => !(a.rule === 'trendline' && a.lineId === id)); }); mm.sel = null; } }, 'Delete')) : null,
-      h('button', { type: 'button', class: 'tm-x', 'aria-label': 'Close', onclick: () => { mm.sel = null; draw(); } }, '✕'));
-    // the grip drags the toolbar anywhere over the chart; where you put it is remembered for the next line you select
-    grip.addEventListener('pointerdown', (e) => {
-      e.preventDefault(); e.stopPropagation();
-      const w = pop.parentElement; if (!w) return;
-      try { grip.setPointerCapture(e.pointerId); } catch { /* not supported */ }
-      const r = pop.getBoundingClientRect(), wr = w.getBoundingClientRect(), ox = e.clientX - r.left, oy = e.clientY - r.top;
-      const move = (ev) => { const x = Math.max(0, Math.min(Math.max(0, wr.width - r.width), ev.clientX - wr.left - ox)), y = Math.max(0, Math.min(Math.max(0, wr.height - r.height), ev.clientY - wr.top - oy)); pop.style.left = x + 'px'; pop.style.top = y + 'px'; mm.popAt = { x, y }; };
-      const end = () => { grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', end); grip.removeEventListener('pointercancel', end); };
-      grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', end); grip.addEventListener('pointercancel', end);
-    });
-    const p = mm.pos || { x: 120, y: 40 };
-    if (mm.popAt) { pop.style.top = mm.popAt.y + 'px'; pop.style.left = mm.popAt.x + 'px'; return pop; }
-    pop.style.top = Math.max(4, p.y + 16) + 'px'; pop.style.left = Math.max(4, p.x - 100) + 'px';
-    requestAnimationFrame(() => { const w = pop.parentElement; if (!w) return; const r = pop.getBoundingClientRect(), pr = w.getBoundingClientRect(); if (r.right > pr.right - 4) pop.style.left = Math.max(4, pr.width - r.width - 4) + 'px'; if (r.bottom > pr.bottom - 4) pop.style.top = Math.max(4, p.y - r.height - 12) + 'px'; });
+        h('button', { type: 'button', class: 'chip-btn small', title: L.locked ? 'Let this line be moved again' : 'Stop this line from being moved by accident', onclick: () => mutate((d) => { const x = lineBy(d, id); if (x) { if (x.locked) delete x.locked; else x.locked = true; } }) }, L.locked ? '🔓 Unlock' : '🔒 Lock'),
+        h('button', { type: 'button', class: 'chip-btn small', onclick: () => { mutate((d) => { d.trendlines[symKey] = (d.trendlines[symKey] || []).filter((l) => l.id !== id); if (!d.trendlines[symKey].length) delete d.trendlines[symKey]; if (!Object.keys(d.trendlines).length) delete d.trendlines; d.alerts = (d.alerts || []).filter((a) => !(a.rule === 'trendline' && a.lineId === id)); }); mm.sel = null; mm.pop = false; } }, 'Delete')) : null,
+      h('button', { type: 'button', class: 'tm-x', 'aria-label': 'Close', onclick: () => { mm.pop = false; draw(); } }, '✕'));
     return pop;
   };
   const draw = () => {
@@ -134,7 +122,12 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
     const ib = (label, text, fn, extra = '') => h('button', { type: 'button', class: 'tm-ib' + extra, 'aria-label': label, title: label, onclick: fn }, text);
     const zoom = h('div', { class: 'tm-seg', role: 'group', 'aria-label': 'Zoom' }, ib('Zoom out', '−', () => chart && chart.zoom(1.4)), ib('Zoom in', '+', () => chart && chart.zoom(0.7)), ib('Show everything', 'Reset', () => chart && chart.reset()));
     const draws = [h('button', { type: 'button', class: 'tm-tg' + (showCol ? ' on' : ''), 'aria-pressed': String(showCol), title: 'Change line colours', onclick: () => { showCol = !showCol; draw(); } }, h('i', { class: 'cc-dot' }), 'Colours')];
-    if (mode !== 'pct' && canEdit()) draws.push(h('button', { type: 'button', class: 'tm-tg tm-draw' + (tool === 'line' ? ' on' : ''), 'aria-pressed': String(tool === 'line'), onclick: () => { tool = tool === 'line' ? 'none' : 'line'; draw(); } }, h('i', { style: { background: LINE_COLORS.trend } }), tool === 'line' ? 'Tap two points…' : 'Trendline'));
+    if (mode !== 'pct' && canEdit()) draws.push(h('button', { type: 'button', class: 'tm-tg tm-draw' + (tool === 'line' ? ' on' : ''), 'aria-pressed': String(tool === 'line'), onclick: () => { setTool(tool === 'line' ? 'none' : 'line'); draw(); } }, h('i', { style: { background: LINE_COLORS.trend } }), tool === 'line' ? 'Tap two points…' : 'Trendline'));
+    // the options box for a line opens only when asked: from this button, or by right-click / long press on a line
+    if (mode !== 'pct' && myLines().length) {
+      draws.push(h('button', { type: 'button', class: 'tm-tg' + (sel && mm.pop ? ' on' : ''), 'aria-pressed': String(!!(sel && mm.pop)), title: 'Colour, alert, lock or delete the selected line', onclick: () => { if (!sel) { toast('Tap a line on the chart first'); return; } mm.pop = !mm.pop; draw(); } }, 'Line options'));
+      if (canEdit()) draws.push(h('button', { type: 'button', class: 'tm-tg' + (st.lockAll ? ' on' : ''), 'aria-pressed': String(!!st.lockAll), title: 'Stop every line on this device from being moved or its end points dragged', onclick: () => { st.lockAll = !st.lockAll; save(st); draw(); } }, st.lockAll ? '🔒 Lines locked' : '🔓 Lock lines'));
+    }
     if (!sel && myLines().length && canEdit()) draws.push(h('button', { type: 'button', class: 'tm-tg', onclick: () => { if (confirm('Remove all ' + myLines().length + ' trendlines on ' + name + '?')) mutate((d) => { delete d.trendlines[symKey]; if (!Object.keys(d.trendlines).length) delete d.trendlines; }); } }, `Clear lines (${myLines().length})`));
     const swatches = canEdit() && mode !== 'pct' && tool === 'line' ? h('div', { class: 'tm-row tm-colors', role: 'group', 'aria-label': 'Trendline colour' }, h('span', { class: 'tm-lab' }, 'New lines'),
       TL_COLORS.map((c) => { const cur = sel ? ((myLines().find((l) => l.id === sel) || {}).color || TL_COLORS[0]) : (st.tc || TL_COLORS[0]); return h('button', { type: 'button', class: 'tm-sw' + (cur === c ? ' on' : ''), style: { background: c }, 'aria-label': 'Colour ' + c, title: 'Use this colour', onclick: () => { st.tc = c; save(st); if (sel) mutate((d) => { const x = ((d.trendlines || {})[symKey] || []).find((l) => l.id === sel); if (x) x.color = c; }); else draw(); } }); })) : null;
@@ -152,13 +145,18 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
     if (data.closesOnly) body.append(h('p', { class: 'note' }, 'Candles and volume need the newer Code.gs in your Apps Script (Settings explains how to paste and redeploy it). Showing closing prices until then.'));
     if (canPe && st.pe && eps.state === 'err') body.append(h('p', { class: 'note' }, 'P/E history: ' + eps.msg + ' ', h('button', { type: 'button', class: 'chip-btn small', onclick: () => { if (index && indexPe) retryIndexPe(indexPe); eps = { state: 'idle', msg: '', tl: null }; ensureEps(); } }, 'Try again')));
     chart = marketChart({ rows, mode, dma50: st.dma50 ? align(data.ma50) : null, dma200: st.dma200 ? align(data.ma200) : null, pe: wantPe ? align(peM) : null, peMedian: wantPe ? median(peFull.slice(Math.max(0, all.findIndex((r) => r.d >= cut[0].d))).filter((x) => x != null)) : null, peLabel: index ? 'Index P/E' : 'P/E', newColor: st.tc || null,
-      avg: avgCost || null, trades: trades || [], ...fv.size(window.innerWidth < 640 ? 230 : 280), fmt: pxf, vfmt, dateFmt: short, tickFmt: tick,
-      lines: myLines(), tool: canEdit() ? tool : 'none', selected: sel, view: mm.view, onView: (v) => { mm.view = v; },
-      onLine: { select: (id, pos) => { mm.sel = id; if (pos) mm.pos = pos; draw(); },
-        update: !canEdit() ? undefined : (id, L) => { mm.sel = id; try { mutate((d) => { const x = ((d.trendlines || {})[symKey] || []).find((l) => l.id === id); if (x) Object.assign(x, L, { p1: Math.round(L.p1 * 100) / 100, p2: Math.round(L.p2 * 100) / 100 }); }); } catch (e) { toast(e.message); draw(); } },
-        add: (L, pos) => { if (pos) mm.pos = pos; const id = 'tl' + Date.now().toString(36); mm.sel = id; tool = 'none'; try { mutate((d) => { d.trendlines = d.trendlines || {}; (d.trendlines[symKey] = d.trendlines[symKey] || []).push({ id, ...(st.tc ? { color: st.tc } : {}), ...L, p1: Math.round(L.p1 * 100) / 100, p2: Math.round(L.p2 * 100) / 100 }); }); toast('Trendline saved'); } catch (e) { toast(e.message); draw(); } } } });
+      avg: avgCost || null, trades: trades || [], ...fv.size(window.innerWidth < 640 ? 230 : 280, window.innerWidth < 640 ? (barOpen ? 520 : 355) + (sel && mm.pop ? 70 : 0) : 0), fmt: pxf, vfmt, dateFmt: short, tickFmt: tick,
+      lines: myLines(), tool: canEdit() ? tool : 'none', selected: sel, view: mm.view, onView: (v) => { mm.view = v; }, pending: tool === 'line' ? mm.pend || null : null, onPending: (pt) => { mm.pend = pt; }, lockAll: !!st.lockAll,
+      onLine: { select: (id, pos) => { if (id !== mm.sel) mm.pop = false; mm.sel = id; if (pos) mm.pos = pos; draw(); },
+        menu: (id, pos) => { mm.sel = id; mm.pop = true; if (pos) mm.pos = pos; draw(); },
+        update: !canEdit() ? undefined : (id, L) => {
+          mm.sel = id; const was = (() => { const o = myLines().find((l) => l.id === id); return o ? { d1: o.d1, p1: o.p1, d2: o.d2, p2: o.p2 } : null; })();
+          try { mutate((d) => { const x = lineBy(d, id); if (x) Object.assign(x, L, { p1: Math.round(L.p1 * 100) / 100, p2: Math.round(L.p2 * 100) / 100 }); }); } catch (e) { toast(e.message); draw(); return; }
+          if (was) toast('Line moved', '', { label: 'Undo', onClick: () => { try { mutate((d) => { const x = lineBy(d, id); if (x) Object.assign(x, was); }); } catch (e) { toast(e.message); } } });
+        },
+        add: (L, pos) => { if (pos) mm.pos = pos; const id = 'tl' + Date.now().toString(36); mm.sel = id; mm.pop = false; setTool('none'); try { mutate((d) => { d.trendlines = d.trendlines || {}; (d.trendlines[symKey] = d.trendlines[symKey] || []).push({ id, ...(st.tc ? { color: st.tc } : {}), ...L, p1: Math.round(L.p1 * 100) / 100, p2: Math.round(L.p2 * 100) / 100 }); }); toast('Trendline saved', '', { label: 'Undo', onClick: () => { try { mutate((d) => { if (!d.trendlines) return; d.trendlines[symKey] = (d.trendlines[symKey] || []).filter((l) => l.id !== id); if (!d.trendlines[symKey].length) delete d.trendlines[symKey]; if (!Object.keys(d.trendlines).length) delete d.trendlines; }); mm.sel = null; mm.pop = false; } catch (e) { toast(e.message); } } }); } catch (e) { toast(e.message); draw(); } } } });
     const wrap = h('div', { class: 'tm-chartwrap' }, chart);
-    if (sel && canEdit() !== undefined && mode !== 'pct') wrap.append(linePopup(sel));
+    if (sel && mm.pop && mode !== 'pct') body.append(linePopup(sel));
     body.append(wrap);
     const perf = performance(all);
     if (perf.length) body.append(h('div', { class: 'tm-perf', 'aria-label': 'Returns over different periods' }, perf.map((p) => h('span', { class: 'tm-pf ' + posNeg(p.pct) }, h('small', null, p.label), `${p.pct >= 0 ? '▲' : '▼'} ${p.pct >= 0 ? '+' : '−'}${Math.abs(p.pct * 100).toFixed(1)}%`))));

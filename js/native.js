@@ -107,8 +107,18 @@ export const canTurnScreen = () => !!P('NativeTools');
  *  Resolves null when it worked, otherwise a short reason (an app built before 8.67.0 does not have the native part). */
 export async function setOrientation(mode) {
   const NT = P('NativeTools'); if (!NT || !NT.setOrientation) return 'This is not the Android app.';
-  try { await NT.setOrientation({ mode }); return null; }
-  catch (e) { return /not implemented|unimplemented/i.test((e && e.message) || '') || (e && e.code === 'UNIMPLEMENTED') ? 'This build of the app cannot turn the screen yet. Build and install the latest APK.' : ((e && e.message) || 'The screen could not be turned.'); }
+  const land = mode === 'landscape', turned = () => window.innerWidth > window.innerHeight;
+  let why = null;
+  try { await NT.setOrientation({ mode }); }
+  catch (e) { why = /not implemented|unimplemented/i.test((e && e.message) || '') || (e && e.code === 'UNIMPLEMENTED') ? 'This build of the app cannot turn the screen yet. Build and install the latest APK.' : ((e && e.message) || 'The screen could not be turned.'); }
+  // the page's own way (works in some app builds that have no native part): ask the browser to lock or unlock the screen
+  const so = window.screen && window.screen.orientation;
+  if (so && (why || (land && !turned()))) { try { if (land) await so.lock('landscape'); else so.unlock(); why = null; } catch { /* not allowed here */ } }
+  if (land && !why) {
+    await new Promise((r) => setTimeout(r, 700));
+    if (!turned()) why = 'The screen did not turn. Build and install the latest APK (8.70.0 or newer), then try again.';
+  }
+  return why;
 }
 
 /** Android app only: make the page into an A4 PDF and open the share sheet (Save to Drive, WhatsApp, Gmail, Print). Resolves false in a browser. */

@@ -37,7 +37,7 @@ const niceStep = (raw) => { const p = Math.pow(10, Math.floor(Math.log10(raw))),
  *   place a new one (onLine.add({ d1, p1, d2, p2 })); tapping a line calls onLine.select(id); selected highlights one.
  */
 export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, pe = null, avg = null, trades = [], height = 250, fmt = nice, vfmt = (v) => String(Math.round(v)), dateFmt = (d) => d, tickFmt = (d) => d,
-  lines = [], tool = 'none', selected = null, onLine = null, view = null, onView = () => {}, peMedian = null, peLabel = 'P/E', peFmt = (v, d = 0) => v.toFixed(d), peSigned = false, newColor = null, width = 0, dense = false } = {}) {
+  lines = [], tool = 'none', selected = null, onLine = null, view = null, onView = () => {}, peMedian = null, peLabel = 'P/E', peFmt = (v, d = 0) => v.toFixed(d), peSigned = false, newColor = null, width = 0, dense = false, pending: pending0 = null, onPending = () => {}, lockAll = false } = {}) {
   const N = rows.length;
   if (N < 2) return h('p', { class: 'empty' }, 'Not enough history for this range.');
   const MINBARS = Math.min(12, N);
@@ -47,7 +47,7 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
   const box = h('div', { class: 'chart-box' });
   const read = h('div', { class: 'cd-read mc-read', 'aria-live': 'polite' });
   let yz = null;                          // price range chosen by dragging the price axis: { lo, hi } (null = fit what is on screen)
-  let ctx = null, pending = null, preview = null, sel = selected, live = null;   // sel: the selected line; live: a line being dragged { id, line }      // first point of a trendline being drawn, and where the pointer is now
+  let ctx = null, pending = pending0, preview = null, sel = selected, live = null;   // sel: the selected line; live: a line being dragged { id, line }      // first point of a trendline being drawn, and where the pointer is now
   // you may drag past either end, up to half a screen of empty space, so the first or last candle can be brought to the middle
   const room = (len) => { const half = Math.floor(len / 2); return [-half, N - len + half]; };
   const fix = () => { const len = Math.max(MINBARS, Math.min(N, Math.round(z - a + 1))), [mn, mx] = room(len); a = Math.max(mn, Math.min(mx, Math.round(a))); z = a + len - 1; };
@@ -186,10 +186,12 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
     // trendlines (not in % mode: the price axis there is relative)
     const lineLayer = svg('g', { 'clip-path': `url(#${clip})` }), segs = [];
     if (mode !== 'pct') {
+      const locked = (L) => lockAll || !!L.locked;
       const draw = (L, sel, ghost) => {
         const col = L.color || LINE_COLORS.trend, x1 = px(posOf(L.d1)), x2 = px(posOf(L.d2)), y1 = y(L.p1), y2 = y(L.p2);
         lineLayer.append(svg('line', { x1, y1, x2, y2, stroke: col, 'stroke-width': sel ? 2.8 : 1.8, 'stroke-linecap': 'round', 'stroke-dasharray': ghost ? '5 4' : null, opacity: ghost ? '.8' : null }));
-        if (sel) for (const [xx, yy] of [[x1, y1], [x2, y2]]) lineLayer.append(svg('circle', { cx: xx, cy: yy, r: 5, fill: 'var(--surface, #fff)', stroke: col, 'stroke-width': 2 }));
+        if (sel && !locked(L)) for (const [xx, yy] of [[x1, y1], [x2, y2]]) lineLayer.append(svg('circle', { cx: xx, cy: yy, r: 5, fill: 'var(--surface, #fff)', stroke: col, 'stroke-width': 2 }));
+        if (!ghost && locked(L)) lineLayer.append(svg('text', { x: x2 + (x2 >= x1 ? -4 : 4), y: y2 - 6, 'text-anchor': x2 >= x1 ? 'end' : 'start', class: 'axis', fill: col, style: 'font-size:11px' }, '🔒'));
         return { x1, y1, x2, y2 };
       };
       for (const L0 of lines || []) { const L = live && live.id === L0.id ? { ...L0, ...live.line } : L0; segs.push({ id: L.id, ...draw(L, L.id === sel, false) }); }
@@ -298,7 +300,8 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
     drag = { x: e.clientX, y: e.clientY, a, z, moved: false, touch: e.pointerType === 'touch', yz: yz ? { ...yz } : null, vr: { lo: ctx.lo, hi: ctx.hi } };
     if (!ctx.drawing) {
       const hl = ctx.hitLine(s.x, s.y), L = hl && (lines || []).find((q) => q.id === hl.id);
-      if (hl && L && onLine && onLine.update) { drag.edit = { ...hl, X0: s.x, Y0: s.y, orig: L }; sel = hl.id; }
+      // only the line that is selected (and not locked) can be dragged; pressing any other line just moves the chart, and a tap selects it
+      if (hl && L && sel === hl.id && !lockAll && !L.locked && onLine && onLine.update) drag.edit = { ...hl, X0: s.x, Y0: s.y, orig: L };
       else ctx.show(ctx.barAt(s.x), s.y);
     }
   });
@@ -318,7 +321,7 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
     const sv = s || ctx.toSvg(e);
     if (ctx.drawing) { if (pending) { preview = ctx.point(sv.x, sv.y); redraw(); } else ctx.show(ctx.barAt(sv.x), sv.y); return; }
     if (drag && drag.edit && ptrs.size === 1 && (e.buttons || drag.touch)) {
-      if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 3) drag.moved = true;
+      if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > (drag.edit.kind === 'move' ? (drag.touch ? 10 : 6) : (drag.touch ? 6 : 4))) drag.moved = true;   // a small slip of the finger or mouse does not move a line
       if (drag.moved) {
         const ed = drag.edit, L = ed.orig;
         const line = ed.kind === 'move' ? ctx.shift(L, ed.X0, ed.Y0, sv.x, sv.y) : (() => { const q = ctx.point(sv.x, sv.y); return ed.kind === 'p1' ? { d1: q.d, p1: q.p, d2: L.d2, p2: L.p2 } : { d1: L.d1, p1: L.p1, d2: q.d, p2: q.p }; })();
@@ -359,8 +362,8 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
     const s = inPlot(e); if (!s) return;
     if (ctx.drawing) {
       const pt = ctx.point(s.x, s.y);
-      if (!pending) { pending = pt; preview = null; redraw(); }
-      else if (onLine && onLine.add) { const L = { d1: pending.d, p1: pending.p, d2: pt.d, p2: pt.p }; pending = null; preview = null; onLine.add(L, here(e)); }
+      if (!pending) { pending = pt; preview = null; onPending(pt); redraw(); }
+      else if (onLine && onLine.add) { const L = { d1: pending.d, p1: pending.p, d2: pt.d, p2: pt.p }; pending = null; preview = null; onPending(null); onLine.add(L, here(e)); }
       return;
     }
     const id = ctx.near(s.x, s.y);
@@ -368,6 +371,13 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
     else if (selected && onLine && onLine.select) onLine.select(null);
   };
   box.addEventListener('pointerup', finish);
+  // right-click (or a long press on a phone) on a line selects it and opens its options
+  box.addEventListener('contextmenu', (e) => {
+    if (!ctx || ctx.drawing || !onLine || !onLine.menu) return;
+    const s = inPlot(e); if (!s) return;
+    const id = ctx.near(s.x, s.y); if (!id) return;
+    e.preventDefault(); drag = null; live = null; ptrs.clear(); pinch = null; sel = id; onLine.menu(id, here(e));
+  });
   box.addEventListener('dblclick', (e) => { if (!ctx) return; const zs = ctx.toSvg(e), zone = ctx.zone(zs.x, zs.y); if (zone === 'y') { yz = null; redraw(); } else if (zone === 'x') { a = 0; z = N - 1; redraw(); } });
   box.addEventListener('pointercancel', (e) => { ptrs.delete(e.pointerId); pinch = null; drag = null; if (live) { live = null; redraw(); } });
   box.addEventListener('wheel', (e) => {
