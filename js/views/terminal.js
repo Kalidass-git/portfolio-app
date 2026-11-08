@@ -85,7 +85,7 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
     const mine = (S.data.alerts || []).filter((a) => a.rule === 'trendline' && a.lineId === id);
     const hitIds = new Set(W.evalAlerts(S.data).hit.map((x) => x.alert.id));
     const cur = L.color || TL_COLORS[0], ed = canEdit();
-    const pop = h('div', { class: 'tm-pop inline', role: 'toolbar', 'aria-label': 'Trendline options' }, h('span', { class: 'tm-lab' }, 'Selected line'),
+    const pop = h('div', { class: 'tm-pop float', role: 'dialog', 'aria-label': 'Trendline options' }, h('span', { class: 'tm-lab' }, 'Selected line'),
       ed ? h('div', { class: 'tm-pop-row' }, TL_COLORS.map((c) => h('button', { type: 'button', class: 'tm-sw' + (cur === c ? ' on' : ''), style: { background: c }, 'aria-label': 'Colour ' + c, onclick: () => mutate((d) => { const x = ((d.trendlines || {})[symKey] || []).find((l) => l.id === id); if (x) x.color = c; }) }))) : null,
       mine.length ? h('div', { class: 'tm-pop-alerts' }, mine.map((a) => h('button', { type: 'button', class: 'tm-al' + (hitIds.has(a.id) ? ' hit' : '') + (a.on === false ? ' off' : ''), onclick: () => (ed ? lineAlertForm({ alert: a, name }) : null) }, `🔔 ${a.tf === 'W' ? 'Week' : a.tf === 'M' ? 'Month' : 'Day'} ${a.dir === 'below' ? '↓' : '↑'}`))) : null,
       ed ? h('div', { class: 'tm-pop-row' },
@@ -145,7 +145,7 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
     if (data.closesOnly) body.append(h('p', { class: 'note' }, 'Candles and volume need the newer Code.gs in your Apps Script (Settings explains how to paste and redeploy it). Showing closing prices until then.'));
     if (canPe && st.pe && eps.state === 'err') body.append(h('p', { class: 'note' }, 'P/E history: ' + eps.msg + ' ', h('button', { type: 'button', class: 'chip-btn small', onclick: () => { if (index && indexPe) retryIndexPe(indexPe); eps = { state: 'idle', msg: '', tl: null }; ensureEps(); } }, 'Try again')));
     chart = marketChart({ rows, mode, dma50: st.dma50 ? align(data.ma50) : null, dma200: st.dma200 ? align(data.ma200) : null, pe: wantPe ? align(peM) : null, peMedian: wantPe ? median(peFull.slice(Math.max(0, all.findIndex((r) => r.d >= cut[0].d))).filter((x) => x != null)) : null, peLabel: index ? 'Index P/E' : 'P/E', newColor: st.tc || null,
-      avg: avgCost || null, trades: trades || [], ...fv.size(window.innerWidth < 640 ? 230 : 280, window.innerWidth < 640 ? (barOpen ? 520 : 355) + (sel && mm.pop ? 70 : 0) : 0), fmt: pxf, vfmt, dateFmt: short, tickFmt: tick,
+      avg: avgCost || null, trades: trades || [], ...fv.size(window.innerWidth < 640 ? 230 : 280, window.innerWidth < 640 ? (barOpen ? 520 : 355) : 0), fmt: pxf, vfmt, dateFmt: short, tickFmt: tick,
       lines: myLines(), tool: canEdit() ? tool : 'none', selected: sel, view: mm.view, onView: (v) => { mm.view = v; }, pending: tool === 'line' ? mm.pend || null : null, onPending: (pt) => { mm.pend = pt; }, lockAll: !!st.lockAll,
       onLine: { select: (id, pos) => { if (id !== mm.sel) mm.pop = false; mm.sel = id; if (pos) mm.pos = pos; draw(); },
         menu: (id, pos) => { mm.sel = id; mm.pop = true; if (pos) mm.pos = pos; draw(); },
@@ -156,7 +156,7 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
         },
         add: (L, pos) => { if (pos) mm.pos = pos; const id = 'tl' + Date.now().toString(36); mm.sel = id; mm.pop = false; setTool('none'); try { mutate((d) => { d.trendlines = d.trendlines || {}; (d.trendlines[symKey] = d.trendlines[symKey] || []).push({ id, ...(st.tc ? { color: st.tc } : {}), ...L, p1: Math.round(L.p1 * 100) / 100, p2: Math.round(L.p2 * 100) / 100 }); }); toast('Trendline saved', '', { label: 'Undo', onClick: () => { try { mutate((d) => { if (!d.trendlines) return; d.trendlines[symKey] = (d.trendlines[symKey] || []).filter((l) => l.id !== id); if (!d.trendlines[symKey].length) delete d.trendlines[symKey]; if (!Object.keys(d.trendlines).length) delete d.trendlines; }); mm.sel = null; mm.pop = false; } catch (e) { toast(e.message); } } }); } catch (e) { toast(e.message); draw(); } } } });
     const wrap = h('div', { class: 'tm-chartwrap' }, chart);
-    if (sel && mm.pop && mode !== 'pct') body.append(linePopup(sel));
+    if (sel && mm.pop && mode !== 'pct') wrap.append(linePopup(sel));   // floats over the chart corner, so opening it never pushes the chart down
     body.append(wrap);
     const perf = performance(all);
     if (perf.length) body.append(h('div', { class: 'tm-perf', 'aria-label': 'Returns over different periods' }, perf.map((p) => h('span', { class: 'tm-pf ' + posNeg(p.pct) }, h('small', null, p.label), `${p.pct >= 0 ? '▲' : '▼'} ${p.pct >= 0 ? '+' : '−'}${Math.abs(p.pct * 100).toFixed(1)}%`))));

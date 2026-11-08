@@ -47,11 +47,12 @@ export function marketChart({ rows, mode = 'line', dma50 = null, dma200 = null, 
   const box = h('div', { class: 'chart-box' });
   const read = h('div', { class: 'cd-read mc-read', 'aria-live': 'polite' });
   let yz = null;                          // price range chosen by dragging the price axis: { lo, hi } (null = fit what is on screen)
+  if (view && view.yz) yz = { ...view.yz };   // the price range you dragged to also survives a rebuild
   let ctx = null, pending = pending0, preview = null, sel = selected, live = null;   // sel: the selected line; live: a line being dragged { id, line }      // first point of a trendline being drawn, and where the pointer is now
   // you may drag past either end, up to half a screen of empty space, so the first or last candle can be brought to the middle
   const room = (len) => { const half = Math.floor(len / 2); return [-half, N - len + half]; };
   const fix = () => { const len = Math.max(MINBARS, Math.min(N, Math.round(z - a + 1))), [mn, mx] = room(len); a = Math.max(mn, Math.min(mx, Math.round(a))); z = a + len - 1; };
-  const redraw = () => { fix(); box.replaceChildren(paint(), read); onView(a === 0 && z === N - 1 ? null : { d0: rows[Math.max(0, a)].d, d1: rows[Math.min(N - 1, z)].d, l: Math.max(0, -a), r: Math.max(0, z - (N - 1)) }); };
+  const redraw = () => { fix(); box.replaceChildren(paint(), read); onView(a === 0 && z === N - 1 && !yz ? null : { yz: yz ? { ...yz } : null, d0: rows[Math.max(0, a)].d, d1: rows[Math.min(N - 1, z)].d, l: Math.max(0, -a), r: Math.max(0, z - (N - 1)) }); };
   const zoomAt = (f, frac = 0.5) => { const len = z - a + 1, nl = Math.max(MINBARS, Math.min(N, len * f)); if (Math.round(nl) === len) return; const anchor = a + len * frac; a = anchor - nl * frac; z = a + nl - 1; redraw(); };
   box.zoom = (f) => zoomAt(f, 0.5); box.reset = () => { a = 0; z = N - 1; yz = null; redraw(); }; box.isZoomed = () => !(a === 0 && z === N - 1) || !!yz;
 
