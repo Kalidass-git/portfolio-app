@@ -150,6 +150,11 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.71.2 – Landscape button: say exactly what the app build is missing
+
+- The landscape button reported "works only in the Android app" in an app that is the Android app. The lookup of the app's own plugin (`NativeTools`) came back empty and the page could not say why.
+- The lookup now also accepts a plugin Capacitor already registered, and when it still fails the message carries the reason in brackets (no Capacitor in the page, Capacitor's platform name, or the registerPlugin error), so the build can be fixed without guessing.
+
 ## Release 8.71.1 – Landscape button: the real reason it fails on an older APK, said plainly
 
 - The message "This is not the Android app" was wrong. An APK built before 8.67.0 does have the app's own plugin, but not the screen-turn method, so Capacitor gives the page no such function and the old check mistook that for "not Android".
