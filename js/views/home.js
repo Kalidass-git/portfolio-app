@@ -747,6 +747,7 @@ function toReceiveExtras(data, all, mc) {
       ? h('div', { class: 'bank-gap' }, rowList([{ title: 'Income Bond · not in the bank yet', sub: `due so far ${money(bankGap.due)}, bank shows ${money(bankGap.credited)} · tap for details`, onClick: () => bankGapDialog(bankGap), value: h('span', { class: 'warn' }, money(bankGap.gap)), valueSub: h('span', { class: 'warn' }, 'to check') }]))
       : h('p', { class: 'note bank-ok' }, '✓ Bank check: ', money(bankGap.due), ' of bond interest due so far, ', money(bankGap.credited), ' credited. ', h('a', { href: 'javascript:void 0', onclick: (e) => { e.preventDefault(); bankGapDialog(bankGap); } }, 'Details'))) : null);
 }
+let monthTab = 'income';   // which list shows under the month summary on Home (kept for this visit)
 function thisMonth(data, all, months) {
   const mc = C.monthCashflow(data, all, selMonth);
   const isCur = selMonth === C.monthKey(all.asOf);
@@ -758,28 +759,36 @@ function thisMonth(data, all, months) {
   const bar = (v, of, cls) => h('div', { class: 'pbar ' + (cls || '') }, h('span', { style: { width: (of > 0 ? Math.min(100, Math.max(0, (v / of) * 100)) : 0).toFixed(1) + '%' } }));
   const asOf = new Date(all.asOf), day = asOf.getUTCDate(), dim = new Date(Date.UTC(asOf.getUTCFullYear(), asOf.getUTCMonth() + 1, 0)).getUTCDate();
   const pace = bud ? bud * (day / dim) : 0;
-  const budget = h('div', { class: 'budget-box' },
-    h('div', { class: 'trio' },
-      h('div', null, h('span', { class: 'mini-title' }, manual ? 'Budget (set by you)' : 'Budget (expected)'), h('b', null, money(bud))),
-      h('div', null, h('span', { class: 'mini-title' }, 'Received'), h('b', { class: 'pos' }, money(rec))),
-      h('div', null, h('span', { class: 'mini-title' }, 'Spent'), h('b', { class: spent > rec ? 'neg' : '' }, money(spent)))),
-    h('p', { class: 'mini-title' }, `Spent ${money(spent)} of ${money(bud)} budget` + (bud ? ` (${pct(spent / bud, 0)})` : '')), bar(spent, bud, spent > bud ? 'bad' : spent > rec ? 'warn' : ''),
-    h('p', { class: 'summary-line' }, 'Left to spend from budget ', h('b', { class: tone(left) }, sgn(left)), pend > 0 ? h('span', { class: 'muted' }, ` · ${money(pend)} still to receive`) : null),
+  // the usual pace for this month (see spendpace.js); null when the month is over or there is not enough history
+  const up = isCur && day < dim - 3 ? usualPace(data, mc, selMonth, day) : null;
+  const pos = (v) => (bud > 0 ? Math.min(100, Math.max(0, (v / bud) * 100)).toFixed(1) + '%' : '0%');
+  const fillCls = spent > bud ? 'bad' : spent > rec ? 'warn' : '';
+  const budget = h('div', { class: 'md-hero' },
+    h('span', { class: 'md-lab' }, left >= 0 ? 'Left to spend' : 'Over budget by'),
+    h('b', { class: 'md-big ' + tone(left) }, money(Math.abs(left))),
+    h('div', { class: 'md-track', role: 'img', 'aria-label': `Spent ${money(spent)} of ${money(bud)} budget` + (up ? `; usually ${money(up.expectedNow)} by now` : '') },
+      bar(spent, bud, fillCls),
+      up && bud > 0 ? h('i', { class: 'md-tick', style: { left: pos(up.expectedNow) }, title: `Usual by day ${day}: ${money(up.expectedNow)}` }) : null),
+    h('div', { class: 'md-sub' }, h('span', null, `Spent ${money(spent)}`, bud ? ` · ${pct(spent / bud, 0)}` : ''), h('span', { title: manual ? 'Budget set by you in Categories & budgets' : 'Budget: the interest income expected this month' }, `Budget ${money(bud)}`, manual ? h('small', null, ' (set)') : null)),
+    h('div', { class: 'md-stats' },
+      h('div', null, h('small', null, 'Received'), h('b', { class: 'pos' }, money(rec))),
+      pend > 0 ? h('div', null, h('small', null, 'To receive'), h('b', { class: 'warn' }, money(pend))) : null,
+      up ? h('div', null, h('small', null, 'Month end'), h('b', null, money(up.projected))) : null),
     paceNote());
   function paceNote() {
     if (!isCur || day >= dim - 3) return null;
-    // learned from your own earlier months: rent early, groceries all month, one-offs not expected
-    const up = usualPace(data, mc, selMonth, day);
     if (up) {
       const ahead = up.spent > up.expectedNow * 1.15 && up.spent - up.expectedNow > 500;
-      return h('p', { class: 'note' + (ahead ? ' warn' : '') }, paceSentence(up, money, day), ' ',
-        h('a', { href: 'javascript:void 0', onclick: (e) => { e.preventDefault(); paceDialog(up); } }, 'See by line'));
+      return h('div', { class: 'md-pace' },
+        h('span', { class: 'md-chip ' + (ahead ? 'warn' : 'good') }, ahead ? `▲ ${money(up.spent - up.expectedNow)} ahead of usual pace` : '✓ On your usual pace'),
+        h('a', { href: 'javascript:void 0', onclick: (e) => { e.preventDefault(); paceDialog(up); } }, 'By line ›'));
     }
-    return bud && spent > pace * 1.15 ? h('p', { class: 'note warn' }, `Spending is ahead of the month: ${money(spent)} spent by day ${day}; spread evenly, the budget would allow about ${money(pace)} by now. (With two or more earlier months of bank entries this becomes a usual pace that knows rent comes early.)`) : null;
+    return bud && spent > pace * 1.15 ? h('div', { class: 'md-pace' }, h('span', { class: 'md-chip warn', title: `Spread evenly, the budget would allow about ${money(pace)} by day ${day}` }, `▲ Ahead of an even pace (${money(pace)} by now)`)) : null;
   }
   function paceDialog(up) {
     const kindText = { early: 'usually paid early in the month', steady: 'spread through the month', oneoff: 'not in most months: a one-off' };
     dialog('Spending by line vs your usual pace', h('div', null,
+      h('p', { class: 'summary-line' }, paceSentence(up, money, day)),
       h('p', { class: 'note' }, `Usual = the middle value of your last ${up.months} months, measured to day ${day}. A line that shows up in fewer than half of your months is treated as a one-off, so it is not expected.`),
       rowList(up.lines.map((l) => ({ title: l.name, sub: `${kindText[l.kind]} · usual by now ${money(l.usualNow)} · usual for the month ${money(l.usualMonth)}`, value: money(l.spent), valueSub: h('span', { class: l.diff > 0.5 ? 'neg' : l.diff < -0.5 ? 'pos' : 'muted' }, l.diff > 0.5 ? '+' + money(l.diff) : l.diff < -0.5 ? '−' + money(-l.diff) : 'on pace') }))),
       h('p', { class: 'summary-line' }, `By now ${money(up.spent)} against a usual ${money(up.expectedNow)}. Month end at this rate: about ${money(up.projected)} (usual month ${money(up.expectedMonth)}).`)), [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
@@ -792,27 +801,26 @@ function thisMonth(data, all, months) {
       rowList(mc.others.map((o) => ({ title: o.name, sub: `${o.count} ${o.count === 1 ? 'entry' : 'entries'}`, value: money(o.amount), valueSub: canEdit() ? box(o) : (o.counted ? 'counted' : 'not counted') }))),
       canEdit() ? null : h('p', { class: 'note' }, 'Only the owner can change this.')), [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
   };
-  const others = mc.others.length ? h('p', { class: 'note' }, mc.notCounted > 0 ? `${money(mc.notCounted)} of other payments is not counted in Spent. ` : 'All other payments are counted in Spent. ', h('a', { href: 'javascript:void 0', onclick: (e) => { e.preventDefault(); review(); } }, 'Review')) : null;
-  return section(isCur ? 'This month in detail' : monthLabel(selMonth) + ' in detail', h('div', null,
+  const others = mc.others.length ? h('div', { class: 'md-other' }, h('span', null, mc.notCounted > 0 ? `${money(mc.notCounted)} other payments not counted` : 'All other payments counted'), h('a', { href: 'javascript:void 0', onclick: (e) => { e.preventDefault(); review(); } }, 'Review ›')) : null;
+  const incomePanel = h('div', { class: 'md-panel' },
+    h('p', { class: 'big-line' }, h('b', null, money(rec)), h('span', { class: 'muted' }, ` of ${money(exp)} expected`)),
+    bar(rec, exp, 'good'),
+    rowList(mc.income.map((r) => ({
+      title: r.name, sub: 'expected ' + money(r.expected) + (r.bonds || (r.payments && isCur) ? ' · tap for details' : r.since ? ' · lent ' + dateStr(r.since) : ''), value: money(r.received),
+      onClick: r.bonds ? () => pendingBonds(r.bonds, selMonth) : r.payments && isCur ? () => lendingPayments(r.name, selMonth)
+        : isCur && canEdit() && (r.expected - r.received > 1 || ((data.manualMonthlyIncome || []).find((x) => x.name === r.name) || {}).paidMonths?.includes(selMonth)) ? () => fixIncome(r.name, selMonth) : null,
+      valueSub: r.expected - r.received > 0 ? h('span', { class: 'warn' }, money(r.expected - r.received) + ' pending') : '✓ received',
+    }))),
+    isCur ? toReceiveExtras(data, all, mc) : null);
+  const expensePanel = h('div', { class: 'md-panel' },
+    h('p', { class: 'big-line' }, h('b', null, money(spent)), h('span', { class: 'muted' }, ' spent')),
+    spend.length ? hbars(spend.map((s) => ({ label: s.name, value: s.amount, cats: s.cats })), { fmt: money, colorIndex: 1, onClick: (x) => expenseDrill(selMonth, x.label, x.cats) }) : h('p', { class: 'empty' }, 'No expenses recorded in this month.'),
+    spend.length ? h('p', { class: 'md-hint' }, 'Tap a bar for details · ', h('a', { href: '#/flow' }, 'See where it went ›')) : null);
+  const tabBtn = (id, text, val) => h('button', { type: 'button', role: 'tab', class: 'md-tab' + (monthTab === id ? ' on' : ''), 'aria-selected': monthTab === id ? 'true' : 'false', onclick: () => { monthTab = id; rerender(); } }, text, h('small', null, val));
+  return section(isCur ? 'This month in detail' : monthLabel(selMonth) + ' in detail', h('div', { class: 'md' },
     budget, others,
-    h('div', { class: 'month' },
-      h('div', null,
-        h('p', { class: 'mini-title' }, 'Income'),
-        h('p', { class: 'big-line' }, h('b', null, money(rec)), h('span', { class: 'muted' }, ` of ${money(exp)} expected`)),
-        bar(rec, exp, 'good'),
-        rowList(mc.income.map((r) => ({
-          title: r.name, sub: 'expected ' + money(r.expected) + (r.bonds ? ' · tap to see each bond' : r.payments && isCur ? ' · tap for each payment' : r.since ? ' · lent ' + dateStr(r.since) : ''), value: money(r.received),
-          onClick: r.bonds ? () => pendingBonds(r.bonds, selMonth) : r.payments && isCur ? () => lendingPayments(r.name, selMonth)
-            : isCur && canEdit() && (r.expected - r.received > 1 || ((data.manualMonthlyIncome || []).find((x) => x.name === r.name) || {}).paidMonths?.includes(selMonth)) ? () => fixIncome(r.name, selMonth) : null,
-          valueSub: r.expected - r.received > 0 ? h('span', { class: 'warn' }, money(r.expected - r.received) + ' pending') : '✓ received',
-        }))),
-        isCur ? toReceiveExtras(data, all, mc) : null),
-      h('div', null,
-        h('p', { class: 'mini-title' }, 'Expenses'),
-        h('p', { class: 'big-line' }, h('b', null, money(spent)), h('span', { class: 'muted' }, ' spent')),
-        spend.length ? hbars(spend.map((s) => ({ label: s.name, value: s.amount, cats: s.cats })), { fmt: money, colorIndex: 1, onClick: (x) => expenseDrill(selMonth, x.label, x.cats) }) : h('p', { class: 'empty' }, 'No expenses recorded in this month.'),
-        spend.length ? h('p', { class: 'note' }, 'Tap a category or its amount to see what it is made of.') : null,
-        h('p', null, h('a', { href: '#/flow' }, 'See where it went'))))),
+    h('div', { class: 'md-tabs', role: 'tablist' }, tabBtn('income', 'Income', compact(rec)), tabBtn('expenses', 'Expenses', compact(spent))),
+    monthTab === 'expenses' ? expensePanel : incomePanel),
     [monthPicker(months, selMonth, (m) => { selMonth = m; rerender(); })]);
 }
 
