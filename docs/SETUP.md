@@ -150,6 +150,11 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.75.1 – Easier to change a trendline's angle
+
+- The round end handles of a selected trendline are bigger on a touch screen (with a soft ring showing the grab area), and the area that grabs an end is wider, so a finger can drag one end to change the angle instead of moving the whole line.
+- Desktop is unchanged apart from slightly larger handles. Presentation and touch handling only; no stored data changed.
+
 ## Release 8.75.0 – Usual-spending marks on Income & expenses and Month in detail
 
 - Income & expenses, "Where the money went" (category view, spans of a month or less): each bar has a tick at your usual amount for the same span (median of earlier months) and is green, amber or red against it.
