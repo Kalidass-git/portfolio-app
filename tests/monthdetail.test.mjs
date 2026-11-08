@@ -33,4 +33,22 @@ const a = PL.workOptional(rows, 5e5, 0.04), b = PL.workOptional(rows, 5e5, 0.04,
 ok(a.needToday === 12600 && a.skippedToday === 0 && a.corpusToday === 315000, 'no exclusions: 12 x 1000 + 600 a year, ÷ 4%');
 ok(b.grossToday === 12600 && b.skippedToday === 3400 && b.needToday === 9200 && b.corpusToday === 230000, 'leaving out 25% of everyday spending and the Tax item: 12600 − 3000 − 400');
 ok(PL.workOptional(rows, 5e5, 0.04, { frac: 0, items: [] }).needToday === a.needToday, 'empty exclusions change nothing');
+// Heat map bands and the monthly insight
+ok(M.bandOf(0).id === 'g' && M.bandOf(0.6).id === 'g' && M.bandOf(0.61).id === 'lg' && M.bandOf(0.8).id === 'lg' && M.bandOf(0.81).id === 'y', 'bands: 0-60 green, 60-80 light green, 80-100 amber');
+ok(M.bandOf(1).id === 'y' && M.bandOf(1.01).id === 'o' && M.bandOf(1.2).id === 'o' && M.bandOf(1.21).id === 'r' && M.bandOf(1.6).id === 'r' && M.bandOf(1.61).id === 'd' && M.bandOf(9).id === 'd', 'bands: 100-120 light orange, 120-160 red, above 160 deep red');
+const R = (month, spent, limit) => ({ month, spent, limit, status: M.statusOf(spent, limit) });
+const yr = [R('2026-08', 190, 100), R('2026-09', 170, 100), R('2026-10', 120, 100), R('2026-11', 53, 100)];
+const ins = M.monthInsight(yr, '2026-11', '2026-11');
+ok(ins && ins.band === 'g' && ins.tone === 'good' && /53% of the limit used so far, lower than your usual 160%/.test(ins.text) && /47 still within/.test(ins.text), 'insight for the current month reads "so far" and compares with earlier months only');
+const ins2 = M.monthInsight(yr, '2026-08', '2026-11');
+ok(ins2.band === 'd' && ins2.tone === 'bad' && /90 over the limit/.test(ins2.text) && !/so far/.test(ins2.text), 'insight for a finished month: far over, and how much over');
+ok(M.monthInsight(yr, '2026-12', '2026-11') === null && M.monthInsight([R('2026-05', 10, 0)], '2026-05', '2026-11') === null, 'nothing to judge: no insight');
+// contrast of the tile text on every band colour, light and dark (WCAG AA, 4.5:1)
+const css = fs.readFileSync(new URL('../css/app.css', import.meta.url), 'utf8');
+const lumHex = (x) => { const v = [1, 3, 5].map((i) => parseInt(x.slice(i, i + 2), 16) / 255).map((u) => (u <= 0.03928 ? u / 12.92 : Math.pow((u + 0.055) / 1.055, 2.4))); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+const ratio = (a, b) => { const [x, y] = [lumHex(a), lumHex(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+for (const [theme, re] of [['light', /^\.hz-(\w+)\s+\{ --hb: (#\w+); --hf: (#\w+);/gm], ['dark', /^:root\[data-theme="dark"\] \.hz-(\w+)\s+\{ --hb: (#\w+); --hf: (#\w+);/gm]]) {
+  const found = [...css.matchAll(re)]; ok(found.length === 6, theme + ': six band colours defined');
+  for (const [, id, bg, fg] of found) ok(ratio(bg, fg) >= 4.5, `${theme} ${id}: text contrast ${ratio(bg, fg).toFixed(1)}:1 is at least 4.5`);
+}
 console.log(bad ? bad + ' failed' : 'all passed'); process.exit(bad ? 1 : 0);

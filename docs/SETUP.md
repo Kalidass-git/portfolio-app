@@ -150,6 +150,15 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.72.0 – Month in detail: monthly spending heat map redesigned
+
+Only how the months look changed. The limit, the spending that counts, the status levels and pills, every table and chart and all stored data are exactly as before.
+
+- **Six colour bands** by the share of the limit used: under 60% green, 60–80% light green, 80–100% amber, 100–120% light orange, 120–160% red, above 160% deep red. A month exactly on a boundary takes the lower band. Colours are in `css/app.css` (`.hz-g … .hz-d`), separately for light and dark; `tests/monthdetail.test.mjs` checks the text on each colour against 4.5:1 contrast.
+- **Month tiles:** month, share used, and a thin meter (full width = 160%, with a tick at the 100% limit). The current month has a ring and a "now" tag; the selected month is scaled up with a heavy outline; months with no bank entries are dashed and greyed. Tiles have a full spoken label for screen readers.
+- **Colour key:** one six-part bar with the thresholds under it and a name for each band.
+- **Monthly insight:** one short line that changes with the month in focus (the chosen month, or the latest month when looking at a whole period), e.g. "Nov: 53% of the limit used so far, lower than your usual 160%. ₹X still within the limit." The current month says "so far"; "usual" is the average of the earlier months of the year that have a limit. When a whole period is shown, tap the line to open that month (`monthInsight` and `bandOf` in `js/monthdetail.js`, no stored data).
+
 ## Release 8.71.3 – Android app: find the app's plugins when the page has no registerPlugin
 
 - The landscape button said "no registerPlugin": in the installed app the page has `Capacitor.isNativePlatform()` but no `Capacitor.registerPlugin` (the page has no bundler, so Capacitor's own script is not loaded). The native side still lists every plugin, with its methods, on `Capacitor.Plugins`.
