@@ -64,3 +64,29 @@ export function lineTone(spent, usual, kind) {
   const r = spent / usual;
   return r < 0.85 ? 'good' : r <= 1.15 ? 'warn' : 'bad';
 }
+
+/** The date `k` months later (negative = earlier), same day of the month, cut back to the last day when that month is shorter. 'YYYY-MM-DD' in and out. */
+export function shiftMonths(iso, k) {
+  const y = Number(iso.slice(0, 4)), m = Number(iso.slice(5, 7)) - 1 + k, d = Number(iso.slice(8, 10));
+  const ty = y + Math.floor(m / 12), tm = ((m % 12) + 12) % 12, dim = new Date(Date.UTC(ty, tm + 1, 0)).getUTCDate();
+  return `${ty}-${String(tm + 1).padStart(2, '0')}-${String(Math.min(d, dim)).padStart(2, '0')}`;
+}
+
+/**
+ * The usual amount per key (a category, say) for the span from..to, from the same span in the earlier months: the middle value of up to `want` of them.
+ * @param sumFn   (from, to) => Map(key -> amount) for that span
+ * @param hasData (month 'YYYY-MM') => whether that month has bank entries (empty months are skipped, not counted as zero)
+ * @returns Map(key -> { usual, kind: 'steady' | 'oneoff' }), or null when fewer than 2 earlier months have entries. A key in under half of them is a one-off (usual 0).
+ */
+export function usualByKey(from, to, sumFn, hasData, want = 6) {
+  const wins = [];
+  for (let k = 1; wins.length < want && k <= 24; k++) { const f = shiftMonths(from, -k); if (hasData(f.slice(0, 7))) wins.push(sumFn(f, shiftMonths(to, -k))); }
+  if (wins.length < 2) return null;
+  const keys = new Set(); wins.forEach((w) => w.forEach((_, key) => keys.add(key)));
+  const out = new Map(), n = wins.length;
+  for (const key of keys) {
+    const vals = wins.map((w) => w.get(key) || 0), present = vals.filter((v) => v > 0.5).length, oneoff = present < Math.ceil(n / 2);
+    out.set(key, { usual: oneoff ? 0 : median(vals), kind: oneoff ? 'oneoff' : 'steady' });
+  }
+  return out;
+}

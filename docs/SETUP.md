@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.75.0 – Usual-spending marks on Income & expenses and Month in detail
+
+- Income & expenses, "Where the money went" (category view, spans of a month or less): each bar has a tick at your usual amount for the same span (median of earlier months) and is green, amber or red against it.
+- Month in detail, "Where it went" (single month): same ticks and colours, compared with usual by the same day for the current month.
+- Presentation only. No stored data or calculations changed. Multi-month spans get no marks.
+
 ## Release 8.74.0 – Home expense bars show your usual spending
 
 On Home, under This month in detail, the Expenses bars now carry a tick at what that line usually is and are coloured by how the month compares. Nothing stored changes and no figure is changed.

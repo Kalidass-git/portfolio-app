@@ -3,7 +3,8 @@ import { bulkForm } from './bulk.js';
 import { S } from '../store.js';
 import * as C from '../calc.js';
 import { h, money, pct, dateStr, monthLabel, section, stat, table, dialog, segTabs, btn, canEdit, dec, route, setOptions, monthGroups } from '../ui.js';
-import { hbars, barChart, stackedBars, meter } from '../charts.js';
+import { hbars, barChart, stackedBars, meter, usualKey } from '../charts.js';
+import { usualByKey, lineTone } from '../spendpace.js';
 import * as CAT from '../categories.js';
 import * as categoriesView from './categories.js';
 import { openLedger, txnForm } from './cash.js';
@@ -74,7 +75,7 @@ export function render() {
 const bdView = { debit: 'category', credit: 'category' };
 const descLink = (dir, desc) => `${detailLink('*', dir)}&view=all&desc=${encodeURIComponent(desc)}`;
 /** Top items as bars, switchable between category and description. "Show all" opens the entry-by-entry page. */
-function breakdown(title, dir, catRows, entryRows, ci, emptyMsg) {
+function breakdown(title, dir, catRows, entryRows, ci, emptyMsg, usual = null) {
   if (!catRows.length) return section(title, h('p', { class: 'empty' }, emptyMsg));
   const view = bdView[dir];
   const pick = (k) => (e) => { e.preventDefault(); bdView[dir] = k; rerender(); };
@@ -82,7 +83,7 @@ function breakdown(title, dir, catRows, entryRows, ci, emptyMsg) {
     [['category', 'Category'], ['description', 'Description']].map(([k, l]) => h('a', { href: 'javascript:void 0', class: k === view ? 'on' : '', 'aria-selected': String(k === view), onclick: pick(k) }, l)),
     h('a', { href: detailLink('*', dir) + '&view=all' }, 'Show all ›'));
   let body;
-  if (view === 'category') body = h('div', null, hbars(catRows.map((x) => ({ label: x.category, value: x.amount })), { fmt: money, colorIndex: ci, onClick: (x) => { location.hash = detailLink(x.label, dir); } }), h('p', { class: 'note' }, 'Tap a category to see it by description or entry by entry.'));
+  if (view === 'category') body = h('div', null, hbars(catRows.map((x) => { const u = usual && usual.get(x.category); return { label: x.category, value: x.amount, mark: u && u.usual > 0 ? u.usual : 0, tone: u ? lineTone(x.amount, u.usual, u.kind) : null, note: u ? (u.usual > 0 ? `${x.category}: ${money(x.amount)} against a usual ${money(u.usual)}` : `${x.category}: ${money(x.amount)}, not usual in most months`) : (usual ? `${x.category}: ${money(x.amount)}, not seen in earlier months` : null) }; }), { fmt: money, colorIndex: ci, onClick: (x) => { location.hash = detailLink(x.label, dir); } }), usual ? usualKey('usual for this span') : null, h('p', { class: 'note' }, 'Tap a category to see it by description or entry by entry.'));
   else {
     const list = C.byDescription(entryRows, dir);
     body = h('div', null, hbars(list.slice(0, 12).map((r) => ({ label: r.desc, value: r.amount })), { fmt: money, colorIndex: ci, onClick: (x) => { location.hash = descLink(dir, x.label); } }),
@@ -100,6 +101,9 @@ function overview() {
   const s = C.rangeSummary(data, range.from, range.to, filter);
   const filtered = !!filterText();
   const name = periodName(period, range);
+  // what each category usually is over the same days of the earlier months; only for a span of a month or less (a year would overlap itself)
+  const ledgerSet = new Set(months), spanDays = (new Date(range.to) - new Date(range.from)) / 864e5;
+  const usualCats = spanDays <= 31 ? usualByKey(range.from, range.to, (f, t) => new Map(C.rangeSummary(data, f, t, filter).expense.map((x) => [x.category, x.amount])), (m) => ledgerSet.has(m)) : null;
   const root = h('div', { class: 'page' });
   root.append(h('div', { class: 'pagebar' }, segTabs(TABS, 'month', 'Expense views'),
     canEdit() ? h('span', { class: 'btn-row' }, btn('Add many', () => bulkForm(), '', { keep: true }), btn('Add income', () => txnForm(null, { kind: 'credit', title: 'Add income' }), '', { keep: true }), btn('Add expense', () => txnForm(null, { kind: 'debit', title: 'Add expense' }), 'primary', { keep: true })) : null));
@@ -161,7 +165,7 @@ function overview() {
   }
 
   root.append(h('div', { class: 'grid2' },
-    breakdown('Where the money went · ' + name, 'debit', s.expense, s.expenseRows, 1, 'No expenses for this period' + (filtered ? ' and filter.' : '.')),
+    breakdown('Where the money went · ' + name, 'debit', s.expense, s.expenseRows, 1, 'No expenses for this period' + (filtered ? ' and filter.' : '.'), usualCats),
     breakdown('Income by source', 'credit', s.income, s.incomeRows, 2, 'No income in this period.')));
   if (s.invest.length) root.append(section('Money put into investments', hbars(s.invest.map((x) => ({ label: x.category, value: x.amount })), { fmt: money, colorIndex: 0, onClick: (x) => { location.hash = detailLink(x.label, 'debit'); } })));
 

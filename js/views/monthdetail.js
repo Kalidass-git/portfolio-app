@@ -2,7 +2,8 @@
 import { S } from '../store.js';
 import * as C from '../calc.js';
 import { h, money, compact, pct, monthLabel, section, stat, table, dialog, setOptions, monthGroups, rowList, canEdit } from '../ui.js';
-import { hbars, barChart, donut, legend } from '../charts.js';
+import { hbars, barChart, donut, legend, usualKey } from '../charts.js';
+import { usualPace, lineTone } from '../spendpace.js';
 import { BANDS, HEAT_MAX, bandOf, monthInsight, periodMonths, monthRow, periodTotal, mixOf } from '../monthdetail.js';
 
 let period = 'this', ledgerOpen = false;
@@ -115,8 +116,12 @@ export function render() {
 
   // what the spending is made of
   const mix = mixOf(rows), counted = mix.filter((x) => x.counted), left = mix.filter((x) => !x.counted);
+  // for a single month: what each line usually is (by this day for the current month, over the whole month for a finished one), from the earlier months
+  const dimOf = (m) => new Date(Date.UTC(Number(m.slice(0, 4)), Number(m.slice(5, 7)), 0)).getUTCDate();
+  const ref = single ? usualPace(data, r0.mc, r0.month, r0.month === cur ? new Date(all.asOf).getUTCDate() : dimOf(r0.month)) : null, usualBy = new Map(ref ? ref.lines.map((l) => [l.name, l]) : []);
   root.append(h('div', { class: 'grid2' },
-    section('Where it went', counted.length ? h('div', null, hbars(counted.map((x) => ({ label: x.name, value: x.amount })), { fmt: money, colorIndex: 1 }),
+    section('Where it went', counted.length ? h('div', null, hbars(counted.map((x) => { const u = usualBy.get(x.name), tone = u ? lineTone(x.amount, u.usualNow, u.kind) : null; return { label: x.name, value: x.amount, mark: u && u.usualNow > 0 ? u.usualNow : 0, tone, note: u ? (u.usualNow > 0 ? `${x.name}: ${money(x.amount)} against a usual ${money(u.usualNow)}` : `${x.name}: ${money(x.amount)}, not usual in most months`) : null }; }), { fmt: money, colorIndex: 1 }),
+      usualBy.size ? usualKey(cur === r0.month ? 'usual by now' : 'usual') : null,
       left.length ? h('p', { class: 'note' }, `Left out: ${left.map((x) => `${x.name} ${money(x.amount)}`).join(', ')}. Change this under “What counts as spending”.`) : null) : h('p', { class: 'empty' }, 'Nothing counted as spending.')),
     section('Share of spending', counted.length ? h('div', null, donut(counted.map((x) => ({ label: x.name, value: x.amount })), { fmt: money, center: compact(tot.spent), sub: 'spent', size: 190 }), legend(counted.map((x) => ({ label: x.name, value: x.amount })), { fmt: money })) : h('p', { class: 'empty' }, 'Nothing to show.'))));
 

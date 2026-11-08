@@ -330,3 +330,8 @@ export function stackedArea({ labels, series, fmt = (v) => v, height = 240, widt
   root.append(hit);   // on top of the areas, so taps and hover reach it (it was never added, so tapping a colour did nothing)
   return h('div', { class: 'chart-box' }, root, series.length > 1 ? h('ul', { class: 'legend inline' }, series.map((s, i) => h('li', onSelect ? { style: { cursor: 'pointer' }, onclick: () => onSelect(s) } : null, h('i', { style: { background: col(s, i) } }), h('span', { class: 'lg-name' }, s.name)))) : null);
 }
+
+/** The one-line key under bars that carry a usual-amount tick and a green / amber / red colour. */
+export function usualKey(tickText = 'usual') {
+  return h('div', { class: 'md-key', 'aria-hidden': 'true' }, h('span', null, h('i', { class: 't' }), tickText), h('span', null, h('i', { class: 'g' }), 'under'), h('span', null, h('i', { class: 'w' }), 'near'), h('span', null, h('i', { class: 'r' }), 'above'));
+}
