@@ -5,7 +5,7 @@ import * as C from '../calc.js';
 import { h, money, compact, pct, dateStr, monthLabel, section, stat, monthPicker, rowList, kpi, dateChip, btn, canEdit, dec, toast, dialog, icon as uiIcon } from '../ui.js';
 import { strip, legend, hbars, lineChart, donut, spark, color, riskColor } from '../charts.js';
 import * as R from '../risk.js';
-import { usualPace, paceSentence } from '../spendpace.js';
+import { usualPace, paceSentence, lineTone } from '../spendpace.js';
 import { rateHistory, ageText } from './gold.js';
 import { GROUPS } from './groupmix.js';
 import { allocationBody } from './allocview.js';
@@ -812,9 +812,12 @@ function thisMonth(data, all, months) {
       valueSub: r.expected - r.received > 0 ? h('span', { class: 'warn' }, money(r.expected - r.received) + ' pending') : '✓ received',
     }))),
     isCur ? toReceiveExtras(data, all, mc) : null);
+  // what each line usually is by this day (this month) or over the whole month (a finished month), from the earlier months
+  const ref = usualPace(data, mc, selMonth, isCur ? day : dim), usualBy = new Map(ref ? ref.lines.map((l) => [l.name, l]) : []);
   const expensePanel = h('div', { class: 'md-panel' },
     h('p', { class: 'big-line' }, h('b', null, money(spent)), h('span', { class: 'muted' }, ' spent')),
-    spend.length ? hbars(spend.map((s) => ({ label: s.name, value: s.amount, cats: s.cats })), { fmt: money, colorIndex: 1, onClick: (x) => expenseDrill(selMonth, x.label, x.cats) }) : h('p', { class: 'empty' }, 'No expenses recorded in this month.'),
+    spend.length ? hbars(spend.map((s) => { const u = usualBy.get(s.name), tone = u ? lineTone(s.amount, u.usualNow, u.kind) : null; return { label: s.name, value: s.amount, cats: s.cats, mark: u && u.usualNow > 0 ? u.usualNow : 0, tone, note: u ? (u.usualNow > 0 ? `${s.name}: ${money(s.amount)} against a usual ${money(u.usualNow)}${isCur ? ' by day ' + day : ''}` : `${s.name}: ${money(s.amount)}, not usual in most months`) : null }; }), { fmt: money, colorIndex: 1, onClick: (x) => expenseDrill(selMonth, x.label, x.cats) }) : h('p', { class: 'empty' }, 'No expenses recorded in this month.'),
+    spend.length && usualBy.size ? h('div', { class: 'md-key', 'aria-hidden': 'true' }, h('span', null, h('i', { class: 't' }), isCur ? 'usual by now' : 'usual'), h('span', null, h('i', { class: 'g' }), 'under'), h('span', null, h('i', { class: 'w' }), 'near'), h('span', null, h('i', { class: 'r' }), 'above')) : null,
     spend.length ? h('p', { class: 'md-hint' }, 'Tap a bar for details · ', h('a', { href: '#/flow' }, 'See where it went ›')) : null);
   const tabBtn = (id, text, val) => h('button', { type: 'button', role: 'tab', class: 'md-tab' + (monthTab === id ? ' on' : ''), 'aria-selected': monthTab === id ? 'true' : 'false', onclick: () => { monthTab = id; rerender(); } }, text, h('small', null, val));
   return section(isCur ? 'This month in detail' : monthLabel(selMonth) + ' in detail', h('div', { class: 'md' },

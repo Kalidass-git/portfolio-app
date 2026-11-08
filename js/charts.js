@@ -53,11 +53,14 @@ export function legend(items, { fmt, onSelect = null } = {}) {
 
 /** Horizontal bars for category breakdowns. rows: [{label, value, sub}] */
 export function hbars(rows, { fmt = (v) => v, max, colorIndex = 0, onClick } = {}) {
-  const m = max ?? Math.max(1, ...rows.map((r) => r.value));
-  return h('ul', { class: 'hbars' }, rows.map((r) => h('li', { class: onClick ? 'click' : '', onclick: onClick ? () => onClick(r) : null },
+  // a row may also carry { mark, tone, note }: a tick at `mark` (e.g. the usual amount), a status colour ('good' | 'warn' | 'bad') and a spoken title
+  const m = max ?? Math.max(1, ...rows.map((r) => Math.max(r.value, r.mark || 0)));
+  const glyph = { good: '▼', warn: '≈', bad: '▲' };
+  return h('ul', { class: 'hbars' }, rows.map((r) => h('li', { class: onClick ? 'click' : '', title: r.note || null, onclick: onClick ? () => onClick(r) : null },
     h('span', { class: 'hb-label' }, r.label),
-    h('span', { class: 'hb-track' }, h('span', { class: 'hb-fill', style: { width: Math.max(1.5, (r.value / m) * 100) + '%', background: color(r.ci ?? colorIndex) } })),
-    h('span', { class: 'hb-val' }, fmt(r.value)))));
+    h('span', { class: 'hb-track' + (r.mark > 0 ? ' mk' : '') }, h('span', { class: 'hb-fill' + (r.tone ? ' ' + r.tone : ''), style: { width: Math.max(1.5, (r.value / m) * 100) + '%', background: r.tone ? null : color(r.ci ?? colorIndex) } }),
+      r.mark > 0 ? h('i', { class: 'hb-mark', style: { left: Math.min(100, (r.mark / m) * 100) + '%' }, 'aria-hidden': 'true' }) : null),
+    h('span', { class: 'hb-val' }, fmt(r.value), r.tone ? h('small', { class: 'hb-g ' + r.tone, 'aria-label': { good: 'under the usual', warn: 'near the usual', bad: 'above the usual' }[r.tone] }, ' ' + glyph[r.tone]) : null))));
 }
 
 /** Draw to about the size it will be shown at, so axis text stays readable on a phone. */

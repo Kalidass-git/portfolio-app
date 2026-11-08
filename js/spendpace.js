@@ -53,3 +53,14 @@ export function paceSentence(p, money, day) {
   const why = ahead.length ? ' Mostly ' + ahead.map((l) => `${l.name.toLowerCase()} (${money(l.diff)} ${l.kind === 'oneoff' ? 'not usual' : 'above usual'})`).join(' and ') + '.' : '';
   return `${money(p.spent)} spent by day ${day}. In your last ${p.months} months about ${money(p.expectedNow)} had gone by this day (bills like rent come early), so ${p.spent > p.expectedNow ? 'you are ' + money(p.spent - p.expectedNow) + ' ahead of your usual pace' : 'you are on or under your usual pace'}.${why} At this rate the month ends near ${money(p.projected)}.`;
 }
+
+/**
+ * How a line's spending compares with its usual (the same day in earlier months): 'good' well within it (under 85%), 'warn' close to it or just over (85 to 115%),
+ * 'bad' well above it (over 115%), and 'bad' for money spent on a line that is usually not paid at all (a one-off). null when there is no usual to compare with.
+ */
+export function lineTone(spent, usual, kind) {
+  if (!(spent > 0)) return null;
+  if (!(usual > 0)) return kind === 'oneoff' ? 'bad' : null;
+  const r = spent / usual;
+  return r < 0.85 ? 'good' : r <= 1.15 ? 'warn' : 'bad';
+}
