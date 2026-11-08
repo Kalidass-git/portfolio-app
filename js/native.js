@@ -10,7 +10,13 @@ export const isNative = () => !!(cap() && cap().isNativePlatform && cap().isNati
 // This app has no bundler, so the plugins' own JavaScript is never loaded. Capacitor lets the page register a plugin by name instead:
 // the call goes straight to the native side (App, LocalNotifications, SplashScreen and our own NativeTools).
 const made = {};
-const P = (name) => { if (!isNative() || !cap().registerPlugin) return null; try { return made[name] || (made[name] = cap().registerPlugin(name)); } catch { return null; } };
+let whyNot = '';   // why the last plugin lookup came back empty (shown in the landscape message, to find out what an app build is missing)
+const P = (name) => {
+  if (!isNative() || !cap().registerPlugin) { whyNot = !cap() ? 'no Capacitor in this page' : !isNative() ? 'Capacitor says platform ' + (cap().getPlatform ? cap().getPlatform() : '?') : 'no registerPlugin'; return null; }
+  if (made[name]) return made[name];
+  try { return (made[name] = cap().registerPlugin(name)); }
+  catch (e) { const known = cap().Plugins && cap().Plugins[name]; if (known) return (made[name] = known); whyNot = 'registerPlugin failed: ' + ((e && e.message) || e); return null; }
+};
 
 export const reminderOpts = () => ({ ...DEFAULTS, ...(S.cfg.reminders || {}) });
 export const setReminderOpts = (patch) => { setCfg({ reminders: { ...reminderOpts(), ...patch } }); };
@@ -106,7 +112,7 @@ export const canTurnScreen = () => !!P('NativeTools');
 /** Android app only: 'landscape' turns the screen sideways (even when the phone's auto-rotate is off), 'auto' gives control back to the phone.
  *  Resolves null when it worked, otherwise a short reason (an app built before 8.67.0 does not have the native part). */
 export async function setOrientation(mode) {
-  const NT = P('NativeTools'); if (!NT) return 'This works only in the Android app.';
+  const NT = P('NativeTools'); if (!NT) return 'The screen cannot be turned here (' + whyNot + '). It needs the Android app built from the latest code.';
   const land = mode === 'landscape', turned = () => window.innerWidth > window.innerHeight;
   const OLD = 'The installed app was built before the screen-turn feature (8.67.0), so it cannot turn the screen. Build and install a new APK from the latest code. The rest of the app works as before.';
   let why = null;
