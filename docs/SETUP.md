@@ -150,6 +150,11 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.75.3 – Gold XIRR uses the real payment dates of closed chits
+
+- Gold from a closed chit or scheme is stored as one purchase dated the day it closed, so the gold return treated all that money as paid in on that one day. That made the money look held for a short time and the annual return very high. The return now uses the chit's own monthly payment dates (and any extra paid at closing). Stored data is not changed.
+- Test: `tests/goldchitxirr.test.mjs <data.json>`.
+
 ## Release 8.75.2 – Gold XIRR no longer inflated by running gold chits
 
 - The gold value counts money paid into running gold chits at cost, but the gold return's cash flows left those payments out, so that money looked like free value and pushed Gold's XIRR (and the overall XIRR) up. The chit payments are now included as money paid in on their own dates.

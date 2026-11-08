@@ -1033,7 +1033,13 @@ export function returns(data, all) {
     out.push({ name, invested, value, gain: value - invested, ret: invested ? (value - invested) / invested : null, xirr: xirr(f), note, flows: f });
   };
   // Gold
-  const gf = data.gold.purchases.filter((p) => p.amount && p.date).map((p) => ({ t: toMs(p.date), amount: -p.amount }));
+  // gold that came from a closed chit or scheme is one purchase dated the day it closed, but the money went in month by month before that: use the real payment dates
+  const spread = new Map();
+  for (const c of (all.gold.chits.closed || []).concat((data.gold.schemes || []).filter((x) => x.closed))) {
+    const ents = (c.entries || []).filter((e) => e.amount > 0 && e.date);
+    if (c.closed && c.closed.purchaseId && ents.length) spread.set(c.closed.purchaseId, ents.map((e) => ({ t: toMs(e.date), amount: -e.amount })).concat(c.closed.extra > 0 && c.closed.date ? [{ t: toMs(c.closed.date), amount: -c.closed.extra }] : []));
+  }
+  const gf = data.gold.purchases.filter((p) => p.amount && p.date).flatMap((p) => spread.get(p.id) || [{ t: toMs(p.date), amount: -p.amount }]);
   const sch = data.gold.schemes.find((s) => s.active);
   const sf = sch ? sch.entries.map((e) => ({ t: toMs(e.date), amount: -e.amount })) : [];
   // running gold chits are counted at cost in the gold value, so the money paid into them goes out on its own dates too (without this the value had no payment behind it and the gold return came out too high)
