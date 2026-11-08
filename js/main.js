@@ -153,6 +153,15 @@ function markNegatives(root) {
 }
 
 let rendering = false;
+// A rebuilt page can be shorter for a moment (charts fill in a little later), which makes the browser pull the scroll position up and the chart jumps.
+// Put it back for a short while, unless the person scrolls in the meantime.
+let touchedAt = 0;
+['wheel', 'touchmove', 'keydown', 'pointerdown'].forEach((t) => window.addEventListener(t, () => { touchedAt = Date.now(); }, { passive: true, capture: true }));
+function holdScroll(y) {
+  if (!y) return; const t0 = Date.now();
+  for (const ms of [0, 60, 150, 300, 600, 1000]) setTimeout(() => { if (touchedAt > t0 || Math.abs(window.scrollY - y) < 1) return; window.scrollTo(0, y); }, ms);
+}
+
 function renderView() {
   if (rendering) return; rendering = true;
   try {
@@ -165,7 +174,7 @@ function renderView() {
     main.replaceChildren(...[assetsSubnav(cur), page].filter(Boolean));
     markNegatives(main);
     const where = cur + '/' + route().sub;
-    if (window.__lastRoute === where) window.scrollTo(0, y); else { window.scrollTo(0, 0); window.__lastRoute = where; }
+    if (window.__lastRoute === where) { window.scrollTo(0, y); holdScroll(y); } else { window.scrollTo(0, 0); window.__lastRoute = where; }
   } catch (e) {
     console.error(e);
     $('#main').replaceChildren(h('div', { class: 'page' }, h('div', { class: 'card' }, h('h2', null, 'Something went wrong showing this page'), h('p', null, e.message), h('p', { class: 'note' }, 'Your data is safe. Go back to Home or reload the app.'))));

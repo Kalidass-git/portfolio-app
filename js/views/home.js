@@ -5,6 +5,7 @@ import * as C from '../calc.js';
 import { h, money, compact, pct, dateStr, monthLabel, section, stat, monthPicker, rowList, kpi, dateChip, btn, canEdit, dec, toast, dialog, icon as uiIcon } from '../ui.js';
 import { strip, legend, hbars, lineChart, donut, spark, color, riskColor } from '../charts.js';
 import * as R from '../risk.js';
+import { usualPace, paceSentence } from '../spendpace.js';
 import { rateHistory, ageText } from './gold.js';
 import { GROUPS } from './groupmix.js';
 import { allocationBody } from './allocview.js';
@@ -764,7 +765,25 @@ function thisMonth(data, all, months) {
       h('div', null, h('span', { class: 'mini-title' }, 'Spent'), h('b', { class: spent > rec ? 'neg' : '' }, money(spent)))),
     h('p', { class: 'mini-title' }, `Spent ${money(spent)} of ${money(bud)} budget` + (bud ? ` (${pct(spent / bud, 0)})` : '')), bar(spent, bud, spent > bud ? 'bad' : spent > rec ? 'warn' : ''),
     h('p', { class: 'summary-line' }, 'Left to spend from budget ', h('b', { class: tone(left) }, sgn(left)), pend > 0 ? h('span', { class: 'muted' }, ` · ${money(pend)} still to receive`) : null),
-    isCur && bud && spent > pace * 1.15 && day < dim - 3 ? h('p', { class: 'note warn' }, `Spending is ahead of the month: ${money(spent)} spent by day ${day}, an even pace would be about ${money(pace)}.`) : null);
+    paceNote());
+  function paceNote() {
+    if (!isCur || day >= dim - 3) return null;
+    // learned from your own earlier months: rent early, groceries all month, one-offs not expected
+    const up = usualPace(data, mc, selMonth, day);
+    if (up) {
+      const ahead = up.spent > up.expectedNow * 1.15 && up.spent - up.expectedNow > 500;
+      return h('p', { class: 'note' + (ahead ? ' warn' : '') }, paceSentence(up, money, day), ' ',
+        h('a', { href: 'javascript:void 0', onclick: (e) => { e.preventDefault(); paceDialog(up); } }, 'See by line'));
+    }
+    return bud && spent > pace * 1.15 ? h('p', { class: 'note warn' }, `Spending is ahead of the month: ${money(spent)} spent by day ${day}; spread evenly, the budget would allow about ${money(pace)} by now. (With two or more earlier months of bank entries this becomes a usual pace that knows rent comes early.)`) : null;
+  }
+  function paceDialog(up) {
+    const kindText = { early: 'usually paid early in the month', steady: 'spread through the month', oneoff: 'not in most months: a one-off' };
+    dialog('Spending by line vs your usual pace', h('div', null,
+      h('p', { class: 'note' }, `Usual = the middle value of your last ${up.months} months, measured to day ${day}. A line that shows up in fewer than half of your months is treated as a one-off, so it is not expected.`),
+      rowList(up.lines.map((l) => ({ title: l.name, sub: `${kindText[l.kind]} · usual by now ${money(l.usualNow)} · usual for the month ${money(l.usualMonth)}`, value: money(l.spent), valueSub: h('span', { class: l.diff > 0.5 ? 'neg' : l.diff < -0.5 ? 'pos' : 'muted' }, l.diff > 0.5 ? '+' + money(l.diff) : l.diff < -0.5 ? '−' + money(-l.diff) : 'on pace') }))),
+      h('p', { class: 'summary-line' }, `By now ${money(up.spent)} against a usual ${money(up.expectedNow)}. Month end at this rate: about ${money(up.projected)} (usual month ${money(up.expectedMonth)}).`)), [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
+  }
   const toggle = (o, on) => mutate((d) => { const set = new Set((d.settings.homeSpendExtra || []).map((x) => String(x).toLowerCase())); on ? set.add(o.key) : set.delete(o.key); d.settings.homeSpendExtra = [...set]; });
   const review = () => {
     const box = (o) => h('label', { class: 'check-inline', style: { display: 'flex', gap: '8px', alignItems: 'center' } }, h('input', { type: 'checkbox', checked: o.counted, disabled: !canEdit(), onchange: (e) => toggle(o, e.target.checked) }), ' count in Spent');
