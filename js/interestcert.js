@@ -12,7 +12,7 @@
 //   Chits: the gain (what it paid at the end less the instalments paid in), spread over its life in proportion to the money held each month. A closed chit uses the
 //   amount you received when you closed it; an open one is a PROJECTION from its expected payout or yearly rate and the instalments still to come (`projected`).
 import * as C from './calc.js';
-import { monthlyInterest, rateFor } from './epf.js';
+import { monthlyInterest, rateFor, usualMonthly } from './epf.js';
 
 export const KINDS = [['Bonds', 'Bonds'], ['Fixed deposits', 'Fixed deposits'], ['Private lending', 'Private lending'], ['EPF', 'EPF'], ['PPF', 'PPF'], ['Chits', 'Chits']];
 const DAY = 86400000;
@@ -22,11 +22,12 @@ const prevDay = (d) => new Date(C.toMs(d) - DAY).toISOString().slice(0, 10);
 /** The periods offered, with the first and last day of each, as of `asOf`. */
 export function periods(asOf) {
   const y = Number(asOf.slice(0, 4)), m = Number(asOf.slice(5, 7)), cur = asOf.slice(0, 7);
-  const prev = C.addMonths(cur + '-01', -1).slice(0, 7), fy = m >= 4 ? y : y - 1;
+  const prev = C.addMonths(cur + '-01', -1).slice(0, 7), next = C.addMonths(cur + '-01', 1).slice(0, 7), fy = m >= 4 ? y : y - 1;
   const P = (id, label, from, to) => ({ id, label, from, to });
   return [
     P('cm', 'This month', cur + '-01', lastDay(cur)),
     P('pm', 'Last month', prev + '-01', lastDay(prev)),
+    P('nm', 'Next month', next + '-01', lastDay(next)),
     P('ytd', 'Year to date (from 1 Jan)', `${y}-01-01`, asOf),
     P('cy', `This year (${y})`, `${y}-01-01`, `${y}-12-31`),
     P('py', `Last year (${y - 1})`, `${y - 1}-01-01`, `${y - 1}-12-31`),
@@ -137,8 +138,9 @@ export function certificate(data, all, period, kinds = [], opts = {}) {
     if (sv.type === 'EPF' || sv.type === 'PPF') {
       if (!want(sv.type)) continue;
       const r = { kind: sv.type, id: sv.id, name: sv.name, holder: sv.holder || '', party: '', principal: C.savingPrincipal(sv), rate: rateFor(sv, Number(asOf.slice(5, 7)) >= 4 ? Number(asOf.slice(0, 4)) : Number(asOf.slice(0, 4)) - 1), closedOn: sv.closed && sv.closed.date ? sv.closed.date : '', months: {} };
-      const mi = monthlyInterest(sv, asOf);
-      if (projections) { for (const [m, gross] of Object.entries(mi)) if (m >= from.slice(0, 7) && m <= to.slice(0, 7) && gross > 0.005) r.months[m] = { gross, tds: 0, net: gross, due: lastDay(m), proj: false }; }
+      // with projections the months from this one on are worked out from today's balance, the declared rate and (EPF) the usual monthly contribution
+      const mi = projections ? monthlyInterest(sv, asOf, { to: to.slice(0, 7), monthly: usualMonthly(sv, asOf) }) : monthlyInterest(sv, asOf);
+      if (projections) { for (const [m, gross] of Object.entries(mi)) if (m >= from.slice(0, 7) && m <= to.slice(0, 7) && gross > 0.005) r.months[m] = { gross, tds: 0, net: gross, due: lastDay(m), proj: m >= asOf.slice(0, 7) }; }
       else {
         // credited on 31 March for the year just ended
         const fyTotal = {}; for (const [m, v] of Object.entries(mi)) { const fy = Number(m.slice(5, 7)) >= 4 ? Number(m.slice(0, 4)) : Number(m.slice(0, 4)) - 1; fyTotal[fy] = (fyTotal[fy] || 0) + v; }

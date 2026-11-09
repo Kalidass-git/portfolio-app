@@ -14,7 +14,8 @@ export const S = {
   saveFailed: false, guard: null,
   data: null,
   cfg: { backendUrl: '', key: '', useLive: true, theme: 'auto', asOf: '', fontScale: 1 },
-  masked: true,           // hide figures until the eye icon is tapped; resets on every app open
+  masked: false,          // the eye icon in the header hides every figure; figures are shown when the app opens
+  nwHidden: true,         // the Net worth card on Home has its own eye and starts hidden; the header eye sets it to match
   role: 'owner',          // 'owner' can edit, 'viewer' is read-only
   remote: false,          // true when a backend is configured
   meta: { version: 0, dirty: false, lastSync: null },

@@ -19,7 +19,7 @@ const rp = (v, d = 0) => (v >= 0 ? '' : '−') + Math.abs(v * 100).toFixed(d) + 
 const median = (a) => { if (!a.length) return null; const b = a.slice().sort((x, y) => x - y), m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; };
 
 /** loadNavs: async () => [{ d, v }] oldest first. avg: what you paid per unit on average. */
-export function fundChart({ title = 'NAV history', loadNavs, avg = null, firstBuy = null }) {
+export function fundChart({ title = 'NAV history', loadNavs, avg = null, firstBuy = null, trades = [] }) {
   const st = load(), body = h('div', null, h('p', { class: 'note' }, 'Loading the NAV history…'));
   let all = null, chart = null, view = null, card = null, showCol = false;
   const fv = fullView(() => card, () => { if (all) draw(); }, 'F:' + title);
@@ -49,7 +49,7 @@ export function fundChart({ title = 'NAV history', loadNavs, avg = null, firstBu
     if (showCol) body.append(colourPanel([['pe', 'Rolling return'], ['median', 'Median'], ['avg', 'Your average NAV']], draw));
     if (years && !shown.length) body.append(h('p', { class: 'note' }, `This fund does not have ${years} years of history in this range yet, so there are no ${years}-year rolling returns to show.`));
     chart = marketChart({ rows: rows.map((r) => ({ d: r.d, o: r.c, h: r.c, l: r.c, c: r.c, v: 0 })), mode: st.mode, dma50: null, dma200: null, pe: shown.length ? rollRows : null, peMedian: stats ? stats.median : null,
-      peLabel: `${years}Y rolling`, peFmt: (v, d) => rp(v, d || 0), peSigned: true, avg: avg || null, trades: [], ...fv.size(window.innerWidth < 640 ? 230 : 280), fmt: nav, dateFmt: short, tickFmt: tick, view, onView: (v) => { view = v; } });
+      peLabel: `${years}Y rolling`, peFmt: (v, d) => rp(v, d || 0), peSigned: true, avg: avg || null, trades: trades || [], ...fv.size(window.innerWidth < 640 ? 230 : 280), fmt: nav, dateFmt: short, tickFmt: tick, view, onView: (v) => { view = v; } });
     body.append(chart);
     const perf = performance(all.map((r) => ({ d: r.d, c: r.c })));
     if (perf.length) body.append(h('div', { class: 'tm-perf', 'aria-label': 'Returns over different periods' }, perf.map((p) => h('span', { class: 'tm-pf ' + posNeg(p.pct) }, h('small', null, p.label), `${p.pct >= 0 ? '▲' : '▼'} ${p.pct >= 0 ? '+' : '−'}${Math.abs(p.pct * 100).toFixed(1)}%`))));
@@ -61,6 +61,7 @@ export function fundChart({ title = 'NAV history', loadNavs, avg = null, firstBu
         t('Positive', Math.round(stats.positive * 100) + '%', `of ${stats.n.toLocaleString('en-IN')} start days`)),
       h('p', { class: 'note' }, `Each point is the yearly return you would have earned by holding for ${years} year${years > 1 ? 's' : ''} up to that day. The dashed line is the median in this range. A steady, high median with a small gap between best and worst means the fund has been consistent.`));
     }
+    if (trades && trades.length) body.append(h('p', { class: 'note' }, h('b', { class: 'pos' }, '▲'), ' your buys and SIPs, ', h('b', { class: 'neg' }, '▼'), ' your sells, drawn at the NAV you got.'));
     body.append(h('p', { class: 'note' }, `Latest NAV ${dec(all[all.length - 1].c, 4)} on ${dateStr(all[all.length - 1].d)}.${avg ? ` The dashed grey line is what you paid on average (${dec(avg, 2)}).` : ''} Scroll or pinch to zoom, drag to move. Past returns do not predict the future.`));
   };
   Promise.resolve().then(loadNavs).then((r) => { if (!r || r.length < 2) throw new Error('No NAV history found.'); all = r.map((x) => ({ d: x.d, c: x.v })); draw(); })

@@ -39,8 +39,11 @@ export const subTab = (keys) => { const s = route().sub; return keys.includes(s)
 const inr = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
 const inr2 = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const MASK = '₹ ••••';
-/** Figures are hidden until the eye icon is tapped (S.masked is true each time the app opens). */
-export const isMasked = () => S.masked !== false;
+/** Figures are shown unless the eye icon in the header has hidden them (S.masked). A part of a page can hide its own figures on top of that (see withMask). */
+let maskHere = false;
+export const isMasked = () => maskHere || S.masked === true;
+/** Run `fn` with the figures hidden when `hide` is true (the Net worth card on Home); the rest of the page is unaffected. */
+export const withMask = (hide, fn) => { const was = maskHere; maskHere = !!hide; try { return fn(); } finally { maskHere = was; } };
 export const money = (n) => (n == null || isNaN(n) ? '–' : isMasked() ? MASK : (n < 0 ? '-' : '') + '₹' + inr.format(Math.abs(Math.round(n))));
 export const num = (n, d = 0) => (n == null || isNaN(n) ? '–' : d ? inr2.format(n).replace(/\.00$/, d === 2 ? '.00' : '') : inr.format(n));
 export const dec = (n, d = 2) => (n == null || isNaN(n) ? '–' : new Intl.NumberFormat('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d }).format(n));
@@ -323,6 +326,7 @@ const ICONS = {
   upload: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12', copy: 'M9 9h11v11H9zM5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1',
   expand: 'M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7', rotate: 'M3 8a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM18 12h.01', shrink: 'M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7', close: 'M6 6l12 12M18 6L6 18',
   search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-4.3-4.3', check: 'M5 12l5 5L20 7',
+  eye: 'M2.5 12C3.5 10 7 6 12 6s8.5 4 9.5 6c-1 2-4.5 6-9.5 6s-8.5-4-9.5-6zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z', eyeoff: 'M3 3l18 18M10.6 6.2A9.8 9.8 0 0 1 12 6c5 0 8.5 4 9.5 6a14 14 0 0 1-3 3.6M6.5 7.5C4.5 9 3.1 11 2.5 12c1 2 4.5 6 9.5 6 1.5 0 2.8-.4 4-.9M9.9 9.9a3 3 0 0 0 4.2 4.2',
 };
 export function icon(name) {
   const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');

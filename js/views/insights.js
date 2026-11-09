@@ -614,7 +614,7 @@ function certView(root) {
   const res = IC.certificate(data, all, per, cert.kinds, { projections: cert.proj }), t = res.totals;
   const kindLabel = cert.kinds.join(', ');
   root.append(h('div', { class: 'toolbar' },
-    select(periods.map((p) => ({ value: p.id, label: p.label })), per.id, 'Period', (v) => { cert.period = v; rerender(); }),
+    select(periods.map((p) => ({ value: p.id, label: p.label })), per.id, 'Period', (v) => { cert.period = v; if ((periods.find((p) => p.id === v) || {}).from > all.asOf) cert.proj = true; rerender(); }),   // a period wholly in the future has nothing but projections, so they are shown at once (the switch can still be turned off)
     h('label', { class: 'switch', style: { display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer' } }, h('input', { type: 'checkbox', checked: cert.proj, 'aria-label': 'Include projections', onchange: (e) => { cert.proj = e.target.checked; rerender(); } }), 'Include projections and future payments'),
     btn('Download CSV', () => {
       const q = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';

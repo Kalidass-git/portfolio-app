@@ -150,6 +150,17 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.77.0 – Secured/unsecured bonds, full view fix, fund buys on the chart, Home and certificate changes
+
+- **Bonds:** each bond can be marked Secured or Unsecured (optional new field `security`; bonds without it show as "Not set"). It shows under the bond's name, and the second bond chart has a "By company / Secured vs unsecured" switch.
+- **Full view (desktop):** the browser's full screen is now taken by the whole page, not the chart card, so dropping or moving a trendline (which rebuilds the page) no longer ends it. It stays until you close it.
+- **Mutual fund chart:** your buys, SIPs and sells are marked on the NAV chart (▲ buy, ▼ sell).
+- **Home, This month in detail:** opens on Expenses. On wide screens Income and Expenses show together (income under the summary, expenses beside it) so there is no empty space; phones keep the two tabs.
+- **Interest certificate:** new "Next month" period. A period wholly in the future switches projections on by itself. EPF and PPF now project forward month by month from today's balance and the declared rate (EPF: the latest declared rate and the usual monthly contribution; PPF: no new deposits assumed). Tests: `tests/certproject.test.mjs`.
+- **Month in detail, "year, month by month":** the small bar with the limit line is gone; each box keeps its colour and percentage.
+- **Hide figures:** off by default. The Net worth card on Home has its own eye next to its title and starts hidden (amounts only; percentages stay visible). Changing the header eye sets the card to match.
+- Presentation, charts and projections only. No stored data is changed; `security` is an optional field.
+
 ## Release 8.76.2 – Home net-worth chart: asset lines no longer show 0 on days with a saved reading
 
 - The daily readings saved by the app already hold the four lines (shares & funds, debt & fixed income, gold, others & cash). The chart ran them through the class grouping a second time, which sent shares and debt into "Others & cash": those two showed 0 on days with a saved reading and Others & cash showed their sum, while Gold (the only name that matched) looked right. Today's point was built differently, so it looked correct, hence the jumps.

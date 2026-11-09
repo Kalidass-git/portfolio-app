@@ -19,7 +19,7 @@ function watch() {
 export function fullView(getCard, redraw, key = '') {
   let on = false, land = false, fsUsed = false;
   const me = { connected: () => !!getCard() && getCard().isConnected };
-  const card = { get isConnected() { const c = getCard(); return !!c && c.isConnected; }, classList: { toggle: (...a) => getCard().classList.toggle(...a) }, requestFullscreen: () => getCard().requestFullscreen && getCard().requestFullscreen() };
+  const card = { get isConnected() { const c = getCard(); return !!c && c.isConnected; }, classList: { toggle: (...a) => getCard().classList.toggle(...a) }, requestFullscreen: () => document.documentElement.requestFullscreen && document.documentElement.requestFullscreen() };   // the whole page goes full screen, not the card: the card is replaced whenever the page is rebuilt (a trendline dropped or moved), and a full-screen element that is removed ends the browser's full screen
   const b = h('button', { type: 'button', class: 'tm-ib tm-expand', 'aria-label': 'Full view', title: 'Full view', onclick: () => set(!on) }, icon('expand'));
   // Android app only: a button that turns the screen to landscape while the full view is open (and back when it closes)
   const showLand = () => { rot.classList.toggle('on', land); rot.setAttribute('aria-pressed', String(land)); };
@@ -62,7 +62,7 @@ export function fullView(getCard, redraw, key = '') {
   // a card that replaces the one that was in full view: open it the same way, and keep the landscape turn
   if (key) requestAnimationFrame(() => {
     if (!live || live.key !== key || live.owner === me || !card.isConnected) return;
-    live.owner = me; live.miss = 0; land = !!live.land; showLand(); set(true, true);
+    live.owner = me; live.miss = 0; land = !!live.land; showLand(); set(true, true); fsUsed = !!document.fullscreenElement;
   });
   return {
     button: b,

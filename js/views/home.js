@@ -2,7 +2,7 @@
 import { evalAlerts, lineAlertsAuto } from '../watch.js';
 import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
-import { h, money, compact, pct, dateStr, monthLabel, section, stat, monthPicker, rowList, kpi, dateChip, btn, canEdit, dec, toast, dialog, icon as uiIcon } from '../ui.js';
+import { h, money, compact, pct, dateStr, monthLabel, section, stat, monthPicker, rowList, kpi, dateChip, btn, canEdit, dec, toast, dialog, icon as uiIcon, withMask } from '../ui.js';
 import { strip, legend, hbars, lineChart, donut, spark, color, riskColor } from '../charts.js';
 import * as R from '../risk.js';
 import { usualPace, paceSentence, lineTone } from '../spendpace.js';
@@ -130,7 +130,9 @@ function lineDaily(pts, key, dates) {
 const heroNum = (t) => { const m = /^(.*\d)(\s.*)?$/.exec(t) || [t, t, '']; return h('p', { class: 'hero-num' }, h('span', { class: 'hn-amt' }, m[1]), m[2] ? h('span', { class: 'hn-unit' }, m[2]) : null); };
 const hico = (k, cls) => { const e = document.createElement('span'); e.className = 'hico ' + cls; e.setAttribute('aria-hidden', 'true'); e.append(sv('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, ...ICONS[k].map((d) => sv('path', { d })))); return e; };
 let heroOpen = false; // phones: the assets / loans / XIRR rows start folded away; the choice is kept while the app is open
-function hero(all, series, ox) {
+/** The Net worth card: its amounts (net worth, assets, loans, change) can be hidden on their own with the eye next to the title; the percentages stay visible. */
+function hero(all, series, ox) { return withMask(S.nwHidden !== false, () => heroCard(all, series, ox)); }
+function heroCard(all, series, ox) {
   const monthStartIso = C.monthStart(all.asOf);
   const base = series.filter((p) => p.date < monthStartIso).pop();
   const delta = base ? all.netAsset - base.value : null;
@@ -138,7 +140,8 @@ function hero(all, series, ox) {
   return h('section', { class: 'hero card span-12' + (heroOpen ? ' open' : '') },
     h('div', { class: 'hero-top' },
       h('div', null,
-        h('p', { class: 'hero-label' }, hico('wallet', 'nw'), h('span', null, 'Net worth')),
+        h('p', { class: 'hero-label' }, hico('wallet', 'nw'), h('span', null, 'Net worth'),
+          h('button', { type: 'button', class: 'hero-eye', title: S.nwHidden !== false ? 'Show the amounts in this card' : 'Hide the amounts in this card', 'aria-label': S.nwHidden !== false ? 'Show the amounts in this card' : 'Hide the amounts in this card', 'aria-pressed': S.nwHidden !== false ? 'true' : 'false', onclick: () => { S.nwHidden = S.nwHidden === false; window.dispatchEvent(new Event('rerender')); } }, uiIcon(S.nwHidden !== false ? 'eyeoff' : 'eye'))),
         ox && ox.xirr != null ? h('span', { class: 'hero-pill ' + tone(ox.xirr), title: 'Overall XIRR' }, `${ox.xirr >= 0 ? '▲' : '▼'} ${pct(ox.xirr, 1)}`) : null,
         heroNum(compact(all.netAsset)),
         h('p', { class: 'hero-exact' }, hico('cal', 'cal'), h('span', { class: 'hx-txt' }, h('span', { class: 'hx-amt' }, money(all.netAsset)), h('span', { class: 'hx-dot', 'aria-hidden': 'true' }, '·'), h('span', { class: 'hx-date' }, dateStr(all.asOf).replace(/ \d{4}$/, '')))),
@@ -747,7 +750,7 @@ function toReceiveExtras(data, all, mc) {
       ? h('div', { class: 'bank-gap' }, rowList([{ title: 'Income Bond · not in the bank yet', sub: `due so far ${money(bankGap.due)}, bank shows ${money(bankGap.credited)} · tap for details`, onClick: () => bankGapDialog(bankGap), value: h('span', { class: 'warn' }, money(bankGap.gap)), valueSub: h('span', { class: 'warn' }, 'to check') }]))
       : h('p', { class: 'note bank-ok' }, '✓ Bank check: ', money(bankGap.due), ' of bond interest due so far, ', money(bankGap.credited), ' credited. ', h('a', { href: 'javascript:void 0', onclick: (e) => { e.preventDefault(); bankGapDialog(bankGap); } }, 'Details'))) : null);
 }
-let monthTab = 'income';   // which list shows under the month summary on Home (kept for this visit)
+let monthTab = 'expenses';   // which list shows under the month summary on Home (kept for this visit)
 function thisMonth(data, all, months) {
   const mc = C.monthCashflow(data, all, selMonth);
   const isCur = selMonth === C.monthKey(all.asOf);
@@ -802,7 +805,7 @@ function thisMonth(data, all, months) {
       canEdit() ? null : h('p', { class: 'note' }, 'Only the owner can change this.')), [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
   };
   const others = mc.others.length ? h('div', { class: 'md-other' }, h('span', null, mc.notCounted > 0 ? `${money(mc.notCounted)} other payments not counted` : 'All other payments counted'), h('a', { href: 'javascript:void 0', onclick: (e) => { e.preventDefault(); review(); } }, 'Review ›')) : null;
-  const incomePanel = h('div', { class: 'md-panel' },
+  const incomePanel = h('div', { class: 'md-panel md-income' }, h('h3', { class: 'md-ph' }, 'Income'),
     h('p', { class: 'big-line' }, h('b', null, money(rec)), h('span', { class: 'muted' }, ` of ${money(exp)} expected`)),
     bar(rec, exp, 'good'),
     rowList(mc.income.map((r) => ({
@@ -814,16 +817,17 @@ function thisMonth(data, all, months) {
     isCur ? toReceiveExtras(data, all, mc) : null);
   // what each line usually is by this day (this month) or over the whole month (a finished month), from the earlier months
   const ref = usualPace(data, mc, selMonth, isCur ? day : dim), usualBy = new Map(ref ? ref.lines.map((l) => [l.name, l]) : []);
-  const expensePanel = h('div', { class: 'md-panel' },
+  const expensePanel = h('div', { class: 'md-panel md-expense' }, h('h3', { class: 'md-ph' }, 'Expenses'),
     h('p', { class: 'big-line' }, h('b', null, money(spent)), h('span', { class: 'muted' }, ' spent')),
     spend.length ? hbars(spend.map((s) => { const u = usualBy.get(s.name), tone = u ? lineTone(s.amount, u.usualNow, u.kind) : null; return { label: s.name, value: s.amount, cats: s.cats, mark: u && u.usualNow > 0 ? u.usualNow : 0, tone, note: u ? (u.usualNow > 0 ? `${s.name}: ${money(s.amount)} against a usual ${money(u.usualNow)}${isCur ? ' by day ' + day : ''}` : `${s.name}: ${money(s.amount)}, not usual in most months`) : null }; }), { fmt: money, colorIndex: 1, onClick: (x) => expenseDrill(selMonth, x.label, x.cats) }) : h('p', { class: 'empty' }, 'No expenses recorded in this month.'),
     spend.length && usualBy.size ? h('div', { class: 'md-key', 'aria-hidden': 'true' }, h('span', null, h('i', { class: 't' }), isCur ? 'usual by now' : 'usual'), h('span', null, h('i', { class: 'g' }), 'under'), h('span', null, h('i', { class: 'w' }), 'near'), h('span', null, h('i', { class: 'r' }), 'above')) : null,
     spend.length ? h('p', { class: 'md-hint' }, 'Tap a bar for details · ', h('a', { href: '#/flow' }, 'See where it went ›')) : null);
   const tabBtn = (id, text, val) => h('button', { type: 'button', role: 'tab', class: 'md-tab' + (monthTab === id ? ' on' : ''), 'aria-selected': monthTab === id ? 'true' : 'false', onclick: () => { monthTab = id; rerender(); } }, text, h('small', null, val));
-  return section(isCur ? 'This month in detail' : monthLabel(selMonth) + ' in detail', h('div', { class: 'md' },
+  // phones: one list at a time under the tabs; wide screens: both lists at once (income under the summary, expenses beside it) so there is no empty space
+  return section(isCur ? 'This month in detail' : monthLabel(selMonth) + ' in detail', h('div', { class: 'md', 'data-tab': monthTab },
     budget, others,
     h('div', { class: 'md-tabs', role: 'tablist' }, tabBtn('income', 'Income', compact(rec)), tabBtn('expenses', 'Expenses', compact(spent))),
-    monthTab === 'expenses' ? expensePanel : incomePanel),
+    incomePanel, expensePanel),
     [monthPicker(months, selMonth, (m) => { selMonth = m; rerender(); })]);
 }
 

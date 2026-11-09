@@ -8,8 +8,8 @@ const isInterest = (e) => /interest/i.test((e.kind || '') + ' ' + (e.remarks || 
 const fyOf = (mk) => (Number(mk.slice(5, 7)) >= 4 ? Number(mk.slice(0, 4)) : Number(mk.slice(0, 4)) - 1);
 
 /** Yearly rate (0.0825) for a financial year. EPF uses the declared table; years after it, and PPF, use the rate set on the account. */
-export function rateFor(sv, fy) {
-  if (sv.type === 'EPF') { const t = EPF_RATES[fy]; if (t != null) return t / 100; if (fy < 2008) return 0.085; }
+export function rateFor(sv, fy, carry = false) {
+  if (sv.type === 'EPF') { const t = EPF_RATES[fy]; if (t != null) return t / 100; if (fy < 2008) return 0.085; if (carry && !sv.rate) return EPF_RATES[Math.max(...Object.keys(EPF_RATES).map(Number))] / 100; }
   return sv.rate || 0;
 }
 /** Money put in: every entry that is not interest. An interest-labelled row on the first date is the opening balance and counts as money put in. */
@@ -50,18 +50,35 @@ export function modelFlows(sv, asOf, toMs) {
 }
 
 /** Interest the money would have earned in each month up to last month (the same model as modelValue): { 'YYYY-MM': amount }. Not credited until March, but earned month by month. */
-export function monthlyInterest(sv, asOf) {
+/**
+ * Interest earned each completed month. `extend` (optional) carries it on past today for a projection: { to: 'YYYY-MM', monthly }:
+ * every month up to `to` (the current one included) earns the declared rate on the balance, and `monthly` more is put in each month after this one
+ * (EPF: pass the usual monthly contribution; PPF: 0). Nothing is stored; the amounts only feed the certificate's projected figures.
+ */
+export function monthlyInterest(sv, asOf, extend = null) {
   const dep = deposits(sv, asOf), out = {};
   if (!dep.length) return out;
-  const startM = dep[0].date.slice(0, 7), endM = asOf.slice(0, 7);
+  const startM = dep[0].date.slice(0, 7), nowM = asOf.slice(0, 7), endM = extend && extend.to >= nowM ? (() => { let y = Number(extend.to.slice(0, 4)), m = Number(extend.to.slice(5, 7)) + 1; if (m > 12) { m = 1; y++; } return `${y}-${String(m).padStart(2, '0')}`; })() : nowM;
   let credited = 0, accrued = 0, i = 0;
   for (let y = Number(startM.slice(0, 4)), m = Number(startM.slice(5, 7)); ; ) {
     const mk = `${y}-${String(m).padStart(2, '0')}`;
     if (mk > endM) break;
     while (i < dep.length && dep[i].date.slice(0, 7) === mk) credited += dep[i++].amount;
-    if (mk < endM) { const v = (credited * rateFor(sv, fyOf(mk))) / 12; accrued += v; out[mk] = v; }
+    if (extend && extend.monthly > 0 && mk > nowM) credited += extend.monthly;
+    if (mk < endM) { const v = (credited * rateFor(sv, fyOf(mk), mk >= nowM)) / 12; accrued += v; out[mk] = v; }
     if (m === 3) { credited += accrued; accrued = 0; }
     if (++m > 12) { m = 1; y++; }
   }
   return out;
+}
+
+/** The usual monthly contribution to an EPF account: the average of the last three months' deposits when each of them had one, else 0 (PPF and irregular accounts are not assumed to continue). */
+export function usualMonthly(sv, asOf) {
+  if (sv.type !== 'EPF') return 0;
+  const dep = deposits(sv, asOf), by = {};
+  for (const d of dep) by[d.date.slice(0, 7)] = (by[d.date.slice(0, 7)] || 0) + d.amount;
+  const cur = asOf.slice(0, 7); let y = Number(cur.slice(0, 4)), m = Number(cur.slice(5, 7)); const tot = [];
+  for (let k = 0; k < 4; k++) { const key = `${y}-${String(m).padStart(2, '0')}`; if (key !== cur || by[key]) tot.push(by[key] || 0); if (--m < 1) { m = 12; y--; } }
+  const last3 = tot.filter((v) => v > 0).slice(0, 3);
+  return last3.length >= 3 ? last3.reduce((a, b) => a + b, 0) / 3 : 0;
 }
