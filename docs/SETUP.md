@@ -150,6 +150,13 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.78.0 – Chart: crosshair cursor, drag any line, keyboard controls
+
+- The chart cursor is a crosshair (plus) everywhere over the plot, so prices are easy to read; it turns into the grabbing hand only while you drag.
+- With a mouse you can now press a line and drag it straight away; it no longer has to be selected first (before, dragging an unselected line only moved the chart, which looked like the line "moving back"). Phones still select with a tap first, so scrolling is not disturbed.
+- Keyboard (click the chart or Tab to it): with a trendline selected, arrows nudge it (Left/Right = one bar, Up/Down = price; Shift = 5x), Delete or Backspace removes it, Ctrl+C / Ctrl+V copy and paste it, Ctrl+Z (or Ctrl+U) undoes line moves, deletes, pastes and new lines, Esc deselects. With no line selected the arrows move the chart, Shift moves it further, + and - zoom, 0 or Home resets.
+- The keyboard stays on the chart after each save. No stored fields changed.
+
 ## Release 8.77.0 – Secured/unsecured bonds, full view fix, fund buys on the chart, Home and certificate changes
 
 - **Bonds:** each bond can be marked Secured or Unsecured (optional new field `security`; bonds without it show as "Not set"). It shows under the bond's name, and the second bond chart has a "By company / Secured vs unsecured" switch.

@@ -15,6 +15,7 @@ const KEY = 'fw.term';
 const median = (a) => { if (!a.length) return null; const b = a.slice().sort((x, y) => x - y), m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; };
 export const TL_COLORS = ['#00b8d4', '#e91e63', '#ffb300', '#7cb342', '#546e7a', '#ff5722'];
 const defaults = { range: '6M', mode: 'line', iv: 'auto', dma50: true, dma200: true, pe: true };
+let clip = null;   // the trendline copied with Ctrl+C
 const mem = new Map();   // per symbol: the zoom you left the chart at and the line you had selected (the page is rebuilt after every save)
 const load = () => { try { return { ...defaults, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { return { ...defaults }; } };
 const save = (s) => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* private window */ } };
@@ -38,6 +39,7 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
   const symKey = String(symbol).toUpperCase().trim();
   const mm = mem.get(symKey) || {}; mem.set(symKey, mm);
   let tool = mm.tool || 'none', chart = null, card = null, showCol = false;   // the tool and a half-drawn line are kept in mm, so a page rebuild (a sync finishing, say) does not cancel them
+  const pushUndo = (f) => { (mm.hist = mm.hist || []).push(f); if (mm.hist.length > 30) mm.hist.shift(); };
   const setTool = (t) => { tool = t; mm.tool = t; if (t !== 'line') mm.pend = null; };
   const lineBy = (d, id) => (((d.trendlines || {})[symKey]) || []).find((l) => l.id === id);
   const fv = fullView(() => card, () => { if (data) { draw(); header(); } }, 'T:' + String(symbol).toUpperCase().trim());
@@ -146,16 +148,33 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
     if (canPe && st.pe && eps.state === 'err') body.append(h('p', { class: 'note' }, 'P/E history: ' + eps.msg + ' ', h('button', { type: 'button', class: 'chip-btn small', onclick: () => { if (index && indexPe) retryIndexPe(indexPe); eps = { state: 'idle', msg: '', tl: null }; ensureEps(); } }, 'Try again')));
     chart = marketChart({ rows, mode, dma50: st.dma50 ? align(data.ma50) : null, dma200: st.dma200 ? align(data.ma200) : null, pe: wantPe ? align(peM) : null, peMedian: wantPe ? median(peFull.slice(Math.max(0, all.findIndex((r) => r.d >= cut[0].d))).filter((x) => x != null)) : null, peLabel: index ? 'Index P/E' : 'P/E', newColor: st.tc || null,
       avg: avgCost || null, trades: trades || [], ...fv.size(window.innerWidth < 640 ? 230 : 280, window.innerWidth < 640 ? (barOpen ? 520 : 355) : 0), fmt: pxf, vfmt, dateFmt: short, tickFmt: tick,
-      lines: myLines(), tool: canEdit() ? tool : 'none', selected: sel, view: mm.view, onView: (v) => { mm.view = v; }, pending: tool === 'line' ? mm.pend || null : null, onPending: (pt) => { mm.pend = pt; }, lockAll: !!st.lockAll,
+      lines: myLines(), tool: canEdit() ? tool : 'none', selected: sel, view: mm.view, onView: (v) => { mm.view = v; }, pending: tool === 'line' ? mm.pend || null : null, onPending: (pt) => { mm.pend = pt; }, lockAll: !!st.lockAll, onFocus: (v) => { mm.kf = v; },
       onLine: { select: (id, pos) => { if (id !== mm.sel) mm.pop = false; mm.sel = id; if (pos) mm.pos = pos; draw(); },
         menu: (id, pos) => { mm.sel = id; mm.pop = true; if (pos) mm.pos = pos; draw(); },
-        update: !canEdit() ? undefined : (id, L) => {
-          mm.sel = id; const was = (() => { const o = myLines().find((l) => l.id === id); return o ? { d1: o.d1, p1: o.p1, d2: o.d2, p2: o.p2 } : null; })();
+        update: !canEdit() ? undefined : (id, L, o = {}) => {
+          mm.sel = id; const was = (() => { const x = myLines().find((l) => l.id === id); return x ? { d1: x.d1, p1: x.p1, d2: x.d2, p2: x.p2 } : null; })();
+          const back = () => { try { mutate((d) => { const x = lineBy(d, id); if (x && was) Object.assign(x, was); }); } catch (e) { toast(e.message); } };
           try { mutate((d) => { const x = lineBy(d, id); if (x) Object.assign(x, L, { p1: Math.round(L.p1 * 100) / 100, p2: Math.round(L.p2 * 100) / 100 }); }); } catch (e) { toast(e.message); draw(); return; }
-          if (was) toast('Line moved', '', { label: 'Undo', onClick: () => { try { mutate((d) => { const x = lineBy(d, id); if (x) Object.assign(x, was); }); } catch (e) { toast(e.message); } } });
+          if (was) { pushUndo(back); if (!o.quiet) toast('Line moved', '', { label: 'Undo', onClick: back }); }
         },
-        add: (L, pos) => { if (pos) mm.pos = pos; const id = 'tl' + Date.now().toString(36); mm.sel = id; mm.pop = false; setTool('none'); try { mutate((d) => { d.trendlines = d.trendlines || {}; (d.trendlines[symKey] = d.trendlines[symKey] || []).push({ id, ...(st.tc ? { color: st.tc } : {}), ...L, p1: Math.round(L.p1 * 100) / 100, p2: Math.round(L.p2 * 100) / 100 }); }); toast('Trendline saved', '', { label: 'Undo', onClick: () => { try { mutate((d) => { if (!d.trendlines) return; d.trendlines[symKey] = (d.trendlines[symKey] || []).filter((l) => l.id !== id); if (!d.trendlines[symKey].length) delete d.trendlines[symKey]; if (!Object.keys(d.trendlines).length) delete d.trendlines; }); mm.sel = null; mm.pop = false; } catch (e) { toast(e.message); } } }); } catch (e) { toast(e.message); draw(); } } } });
+        remove: !canEdit() ? undefined : (id) => {
+          const o = myLines().find((l) => l.id === id); if (!o) return; const copy = JSON.parse(JSON.stringify(o)); mm.sel = null; mm.pop = false;
+          try { mutate((d) => { d.trendlines[symKey] = (d.trendlines[symKey] || []).filter((l) => l.id !== id); if (!d.trendlines[symKey].length) delete d.trendlines[symKey]; if (!Object.keys(d.trendlines).length) delete d.trendlines; d.alerts = (d.alerts || []).filter((a) => !(a.rule === 'trendline' && a.lineId === id)); }); } catch (e) { toast(e.message); return; }
+          const back = () => { try { mutate((d) => { d.trendlines = d.trendlines || {}; (d.trendlines[symKey] = d.trendlines[symKey] || []).push(copy); }); mm.sel = copy.id; } catch (e) { toast(e.message); } };
+          pushUndo(back); toast('Trendline deleted', '', { label: 'Undo', onClick: back });
+        },
+        copy: (id) => { const o = myLines().find((l) => l.id === id); if (o) { clip = { d1: o.d1, p1: o.p1, d2: o.d2, p2: o.p2, color: o.color }; toast('Trendline copied. Ctrl+V pastes it'); } },
+        paste: !canEdit() ? undefined : () => {
+          if (!clip) { toast('Copy a trendline first (select it, then Ctrl+C)'); return; }
+          const id = 'tl' + Date.now().toString(36), k = 1.01, L = { ...(clip.color ? { color: clip.color } : {}), d1: clip.d1, p1: Math.round(clip.p1 * k * 100) / 100, d2: clip.d2, p2: Math.round(clip.p2 * k * 100) / 100 };
+          try { mutate((d) => { d.trendlines = d.trendlines || {}; (d.trendlines[symKey] = d.trendlines[symKey] || []).push({ id, ...L }); }); } catch (e) { toast(e.message); return; }
+          mm.sel = id; mm.pop = false; clip = { ...clip, p1: L.p1, p2: L.p2 };
+          pushUndo(() => { try { mutate((d) => { if (!d.trendlines) return; d.trendlines[symKey] = (d.trendlines[symKey] || []).filter((l) => l.id !== id); if (!d.trendlines[symKey].length) delete d.trendlines[symKey]; if (!Object.keys(d.trendlines).length) delete d.trendlines; }); mm.sel = null; } catch (e) { toast(e.message); } });
+        },
+        undo: !canEdit() ? undefined : () => { const f = (mm.hist || []).pop(); if (f) f(); else toast('Nothing to undo'); },
+        add: (L, pos) => { if (pos) mm.pos = pos; const id = 'tl' + Date.now().toString(36); mm.sel = id; mm.pop = false; setTool('none'); try { mutate((d) => { d.trendlines = d.trendlines || {}; (d.trendlines[symKey] = d.trendlines[symKey] || []).push({ id, ...(st.tc ? { color: st.tc } : {}), ...L, p1: Math.round(L.p1 * 100) / 100, p2: Math.round(L.p2 * 100) / 100 }); }); pushUndo(() => { try { mutate((d) => { if (!d.trendlines) return; d.trendlines[symKey] = (d.trendlines[symKey] || []).filter((l) => l.id !== id); if (!d.trendlines[symKey].length) delete d.trendlines[symKey]; if (!Object.keys(d.trendlines).length) delete d.trendlines; }); mm.sel = null; } catch (e) { toast(e.message); } }); toast('Trendline saved', '', { label: 'Undo', onClick: () => { try { mutate((d) => { if (!d.trendlines) return; d.trendlines[symKey] = (d.trendlines[symKey] || []).filter((l) => l.id !== id); if (!d.trendlines[symKey].length) delete d.trendlines[symKey]; if (!Object.keys(d.trendlines).length) delete d.trendlines; }); mm.sel = null; mm.pop = false; } catch (e) { toast(e.message); } } }); } catch (e) { toast(e.message); draw(); } } } });
     const wrap = h('div', { class: 'tm-chartwrap' }, chart);
+    if (mm.kf && chart && chart.focus) requestAnimationFrame(() => { if (chart.isConnected) chart.focus({ preventScroll: true }); });   // the page is rebuilt after every save; keep the keyboard on the chart
     if (sel && mm.pop && mode !== 'pct') wrap.append(linePopup(sel));   // floats over the chart corner, so opening it never pushes the chart down
     body.append(wrap);
     const perf = performance(all);
