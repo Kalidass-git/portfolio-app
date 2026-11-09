@@ -150,6 +150,13 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.76.0 – Cash tab on phones: floating add button
+
+- Phones only (desktop is unchanged): a floating round button at the bottom right of Cash → Accounts and Transactions. It is red on Expenses, blue on Investments, green on Income and All, and opens the matching Add form (Add expense, Add investment, Add income, Add transaction). Tapping it also offers Transfer and Import bank file, all the same size. The old top Transfer / Add transaction buttons are hidden on phones.
+- The "Transactions" and "Bank accounts & cash" card titles are hidden on phones (the tabs say where you are); the white card stays. "Add account" is a dashed tile under the account list.
+- Savings summary cards: "Worth today" and "Expected at the end" removed (provident funds keep "Interest in a year").
+- Presentation only; no stored data changed.
+
 ## Release 8.75.3 – Gold XIRR uses the real payment dates of closed chits
 
 - Gold from a closed chit or scheme is stored as one purchase dated the day it closed, so the gold return treated all that money as paid in on that one day. That made the money look held for a short time and the annual return very high. The return now uses the chit's own monthly payment dates (and any extra paid at closing). Stored data is not changed.

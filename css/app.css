@@ -1745,3 +1745,23 @@ body.tm-lock { overflow: hidden; }
 .md-key { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 10px 0 0; font-size: .78rem; color: var(--muted); }
 .md-key span { display: inline-flex; align-items: center; gap: 5px; } .md-key i { width: 9px; height: 9px; border-radius: 50%; } .md-key .t { width: 0; height: 12px; border-radius: 0; border-left: 2px solid var(--ink); }
 .md-key .g { background: var(--pos); } .md-key .w { background: #d99a1c; } .md-key .r { background: var(--neg); }
+
+/* Cash tab on phones: no card or title around the list (the tabs already say where you are), Add account sits under the list, and a floating button replaces the top buttons */
+.acc-add-bottom { display: none; }
+.cash-fab, .cash-fab-scrim { display: none; }
+@media (max-width: 899px) {
+  .cash-btns { display: none !important; }
+  .card.flat-sm { padding: 12px; }   /* the white card stays; only its title goes, because the tabs above already say where you are */
+  .card.flat-sm > .card-head { display: none; }
+  .acc-add-bottom { display: block; width: 100%; margin-top: 12px; padding: 14px; border: 1.5px dashed var(--line); border-radius: 14px; background: transparent; color: var(--brand); font: inherit; font-weight: 650; cursor: pointer; }
+  .cash-fab { display: flex; position: fixed; right: 16px; bottom: calc(68px + env(safe-area-inset-bottom)); z-index: 41; flex-direction: column; align-items: flex-end; gap: 14px; }
+  .cash-fab-scrim.on { display: block; position: fixed; inset: 0; background: rgba(0, 0, 0, .35); z-index: 40; }
+  .cf-menu { display: none; flex-direction: column; align-items: flex-end; gap: 14px; }
+  .cash-fab.open .cf-menu { display: flex; }
+  .cf-row { display: flex; align-items: center; gap: 12px; }
+  .cf-lb { background: var(--surface); color: var(--text, inherit); border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px; font-weight: 650; font-size: .88rem; box-shadow: 0 2px 8px rgba(0, 0, 0, .18); }
+  .cf-btn { width: 56px; height: 56px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--text, inherit); display: grid; place-items: center; box-shadow: 0 4px 12px rgba(0, 0, 0, .3); cursor: pointer; padding: 0; }
+  .cf-btn > span { display: grid; place-items: center; width: 100%; height: 100%; line-height: 0; }
+  .cf-btn svg { display: block; }
+  .cf-btn.main { border: 0; color: #fff; box-shadow: 0 6px 16px rgba(0, 0, 0, .28), 0 0 0 3px #fff; }
+}
