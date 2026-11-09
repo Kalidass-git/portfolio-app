@@ -38,7 +38,9 @@ data.savings = [
 const all2 = computeAll(data, { asOf: '2026-10-25' });
 const e = IC.certificate(data, all2, get('cy'), ['EPF', 'PPF'], ON);
 const epf = e.rows.find((r) => r.kind === 'EPF'), ppf = e.rows.find((r) => r.kind === 'PPF');
-ok(epf && epf.count === 9 && ppf.count === 9 && ppf.gross > 6390 && ppf.gross < 6500, 'PPF earns monthly on 1.2 lakh (plus March compounding) for 9 completed months: ' + ppf.gross);
+const done = (r) => Object.values(r.months).filter((m) => !m.proj);
+ok(epf && done(epf).length === 9 && done(ppf).length === 9 && done(ppf).reduce((a, m) => a + m.gross, 0) > 6390 && done(ppf).reduce((a, m) => a + m.gross, 0) < 6500, 'PPF earns monthly on 1.2 lakh (plus March compounding) for 9 completed months: ' + done(ppf).reduce((a, m) => a + m.gross, 0));
+ok(ppf.count === 12 && Object.values(ppf.months).filter((m) => m.proj).length === 3, 'the rest of the year (this month and later) is marked as projected');
 ok(e.kinds.join() === 'EPF,PPF' && near(e.totals.gross, epf.gross + ppf.gross), 'two types selected');
 const ch = IC.certificate(data, all2, get('cy'), ['Chits'], ON);
 const open = ch.rows.find((r) => r.name === 'Open chit'), closed = ch.rows.find((r) => r.name === 'Closed chit');

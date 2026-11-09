@@ -163,6 +163,8 @@ button:disabled { opacity: .55; cursor: progress; }
 .nowrap { white-space: nowrap; }
 .seg { display: flex; width: 100%; max-width: 100%; overflow-x: auto; scrollbar-width: none; padding: 3px; gap: 2px; background: var(--line-2); border-radius: 10px; }
 .seg a { flex: 1 1 auto; justify-content: center; padding: 7px 10px; border-radius: 8px; color: var(--muted); text-decoration: none; font-size: .88rem; white-space: nowrap; min-height: 34px; display: inline-flex; align-items: center; }
+.seg button { flex: 1 1 auto; justify-content: center; padding: 7px 10px; border: 0; background: none; border-radius: 8px; color: var(--muted); font: inherit; font-size: .88rem; white-space: nowrap; min-height: 34px; display: inline-flex; align-items: center; cursor: pointer; }
+.seg button.on { background: var(--surface); color: var(--ink); font-weight: 650; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
 .seg a.on { background: var(--surface); color: var(--ink); font-weight: 650; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
 @media (min-width: 640px) { .seg { display: inline-flex; width: auto; } .seg a { flex: 0 0 auto; padding: 7px 16px; } }
 .pagebar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
@@ -961,9 +963,6 @@ tr.proj-row td.host i, tr.proj-row td i { font-style: italic; }
 .mm.cur:not(.on) { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--brand); }
 .mm.on-some { box-shadow: 0 0 0 2px color-mix(in srgb, var(--ink) 45%, transparent); }
 .mm.on { transform: scale(1.06); z-index: 1; border-color: var(--ink); outline: 3px solid var(--ink); outline-offset: 2px; box-shadow: 0 8px 18px rgba(0,0,0,.28); }
-.mm-meter { display: block; position: relative; width: 78%; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--hf) 28%, transparent); margin-top: 1px; }
-.mm-meter s { display: block; height: 100%; border-radius: 2px; background: var(--hf); text-decoration: none; }
-.mm-meter u { position: absolute; top: -3px; bottom: -3px; width: 0; border-left: 1.5px solid var(--hf); opacity: .85; text-decoration: none; }
 .mm-now { position: absolute; top: -8px; right: 6px; font-size: .62rem; font-style: normal; font-weight: 700; background: var(--brand); color: var(--brand-ink); border-radius: 99px; padding: 1px 7px; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
 .hz-legend { margin: 14px 0 0; }
 .hz-bar { display: grid; grid-template-columns: repeat(6, 1fr); height: 14px; border-radius: 7px; overflow: hidden; border: 1px solid var(--line); } .hz-bar i { background: var(--hb); }
@@ -1733,7 +1732,16 @@ body.tm-lock { overflow: hidden; }
 .md-tab small { font-weight: 600; font-size: .8rem; } .md-tab.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.14); } .md-tab:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 .md-tab[aria-selected="true"]:first-child small { color: var(--pos); } .md-tab[aria-selected="true"]:last-child small { color: var(--neg); }
 .md-hint { margin: 8px 0 0; font-size: .85rem; color: var(--muted); }
-@media (min-width: 900px) { .md { display: grid; grid-template-columns: minmax(260px, 380px) 1fr; column-gap: 24px; align-items: start; } .md-hero { grid-column: 1; grid-row: 1 / span 2; } .md-other { grid-column: 1; grid-row: 3; } .md-tabs { grid-column: 2; grid-row: 1; margin-top: 0; align-self: start; } .md-panel { grid-column: 2; grid-row: 2 / span 2; } }
+/* phones show the list of the chosen tab; wide screens show income and expenses together */
+.md-ph { display: none; margin: 0 0 6px; font-size: .78rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.md[data-tab="expenses"] .md-income, .md[data-tab="income"] .md-expense { display: none; }
+@media (min-width: 900px) {
+  .md { display: grid; grid-template-columns: minmax(300px, 400px) 1fr; column-gap: 24px; row-gap: 14px; align-items: start; }
+  .md-hero { grid-column: 1; grid-row: 1; } .md-other { grid-column: 1; grid-row: 2; margin-top: 0; }
+  .md-tabs { display: none; } .md-ph { display: block; }
+  .md[data-tab] .md-income, .md[data-tab] .md-expense { display: block; }
+  .md-income { grid-column: 1; grid-row: 3; } .md-expense { grid-column: 2; grid-row: 1 / span 3; }
+}
 
 /* usual-spending marks on the expense bars: a tick at the usual amount, bar coloured by how the line compares */
 .hb-track.mk { position: relative; overflow: visible; } .hb-fill.good, .hb-fill.warn, .hb-fill.bad { border-radius: 5px; }
@@ -1760,3 +1768,8 @@ body.tm-lock { overflow: hidden; }
   .cf-btn svg { display: block; }
   .cf-btn.main { border: 0; color: #fff; box-shadow: 0 6px 16px rgba(0, 0, 0, .28), 0 0 0 3px #fff; }
 }
+
+/* eye on the Net worth card: hides that card's amounts only */
+.hero-eye { margin-left: auto; display: inline-grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; padding: 0; }
+.hero-eye:hover { background: var(--surface-2); color: var(--ink); } .hero-eye svg { width: 20px; height: 20px; }
+.hero-label { min-width: 0; }

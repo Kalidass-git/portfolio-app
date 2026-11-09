@@ -65,7 +65,6 @@ function monthMap(year, rowsByMonth, sel) {
     return h('button', { type: 'button', class: 'mm' + (band ? ' hz hz-' + band.id : '') + (m === cur ? ' cur' : '') + (on ? (one ? ' on' : ' on-some') : ''), disabled: !r, 'aria-pressed': on ? 'true' : 'false', 'aria-current': m === cur ? 'date' : null, title, 'aria-label': title,
       onclick: () => { period = m; rerender(); } },
       h('b', null, short(m)), h('small', null, r ? (used != null ? pct(used, 0) : '\u2013') : ''),
-      used != null ? h('i', { class: 'mm-meter', 'aria-hidden': 'true' }, h('s', { style: { width: Math.min(100, (used / HEAT_MAX) * 100).toFixed(1) + '%' } }), h('u', { style: { left: ((1 / HEAT_MAX) * 100).toFixed(1) + '%' } })) : null,
       m === cur ? h('i', { class: 'mm-now' }, 'now') : null);
   }));
 }

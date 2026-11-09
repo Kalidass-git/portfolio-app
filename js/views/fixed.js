@@ -70,6 +70,8 @@ function partCloseForm(b) {
     },
   });
 }
+const SECURITY = { secured: 'Secured', unsecured: 'Unsecured' };
+let firmView = 'company';   // the second bond chart: by issuer, or secured vs unsecured
 function bondForm(b) {
   const isNew = !b;
   formDialog({
@@ -77,6 +79,7 @@ function bondForm(b) {
     fields: [
       { key: 'name', label: 'Name', required: true, hint: 'For example Navi_Aug26_Aug29' }, { key: 'holder', label: 'Account holder', required: true },
       { key: 'platform', label: 'Bought through', required: true, hint: 'Golden Pi, Groww, AIOnion…' }, { key: 'company', label: 'Issuer', required: true },
+      { key: 'security', label: 'Secured or unsecured (optional)', type: 'select', options: [{ value: '', label: 'Not set' }, { value: 'secured', label: 'Secured' }, { value: 'unsecured', label: 'Unsecured' }], hint: 'Secured: backed by assets of the issuer. Unsecured: backed only by the issuer’s promise to pay.' },
       { key: 'principal', label: 'Amount invested (₹)', type: 'number', required: true }, { key: 'rate', label: 'Interest rate (0.1075 = 10.75%)', type: 'number', required: true },
       { key: 'credit', label: 'Interest paid', type: 'select', options: ['Monthly', 'Quarterly'] },
       { key: 'quarterMonth', label: 'Quarterly interest is paid in', type: 'select', options: C.QUARTER_CHOICES, showIf: (v) => v.credit === 'Quarterly', hint: 'Each payment covers the three months up to the month it is paid in.' },
@@ -87,9 +90,9 @@ function bondForm(b) {
     onSave: (v) => {
       if (v.dueRule === 'day' && !(Number(v.dueDay) >= 1 && Number(v.dueDay) <= 31)) { toast('Enter a day between 1 and 31.', 'bad'); return false; }
       mutate((d) => {
-        const rec = { ...v }; if (rec.credit === 'Quarterly') rec.quarterMonth = Number(rec.quarterMonth) || 0; else delete rec.quarterMonth; if (!rec.dueRule) { delete rec.dueRule; delete rec.dueDay; } else if (rec.dueRule !== 'day') delete rec.dueDay;
+        const rec = { ...v }; if (!rec.security) delete rec.security; if (rec.credit === 'Quarterly') rec.quarterMonth = Number(rec.quarterMonth) || 0; else delete rec.quarterMonth; if (!rec.dueRule) { delete rec.dueRule; delete rec.dueDay; } else if (rec.dueRule !== 'day') delete rec.dueDay;
         if (isNew) d.bonds.push({ id: nextId('b', d.bonds), ...rec });
-        else { const t = d.bonds.find((x) => x.id === b.id); Object.assign(t, rec); if (!('quarterMonth' in rec)) delete t.quarterMonth; if (!rec.dueRule) { delete t.dueRule; delete t.dueDay; } else if (rec.dueRule !== 'day') delete t.dueDay; }
+        else { const t = d.bonds.find((x) => x.id === b.id); Object.assign(t, rec); if (!rec.security) delete t.security; if (!('quarterMonth' in rec)) delete t.quarterMonth; if (!rec.dueRule) { delete t.dueRule; delete t.dueDay; } else if (rec.dueRule !== 'day') delete t.dueDay; }
       });
     },
     onDelete: isNew ? null : () => mutate((d) => { d.bonds = d.bonds.filter((x) => x.id !== b.id); }),
@@ -228,7 +231,7 @@ export function render() {
   const fb = tab === 'bonds' ? quickFilter('bonds', all.bonds, (b) => b.holder, (b) => b.platform, 'Via', bondSorts) : tab === 'fds' ? quickFilter('fds', all.fds, (x) => x.account, (x) => x.issuer, 'Bank') : tab === 'lending' ? quickFilter('lending', all.lending, (x) => x.account, (x) => x.borrower, 'Borrower') : null;
   if (tab === 'bonds') root.append(section('Bonds', h('div', null, fb.bar,
     table([
-      { label: 'Bond', host: true, render: (b) => h('span', null, h('span', null, b.name), h('small', { class: 'muted', style: { display: 'block', fontWeight: 400, opacity: 0.75 } }, [b.holder, b.platform].filter(Boolean).join(' · ') + (b.maturityDate ? ' · matures ' + dateStr(b.maturityDate) : ''))) },
+      { label: 'Bond', host: true, render: (b) => h('span', null, h('span', null, b.name), h('small', { class: 'muted', style: { display: 'block', fontWeight: 400, opacity: 0.75 } }, [b.holder, b.platform, SECURITY[b.security]].filter(Boolean).join(' · ') + (b.maturityDate ? ' · matures ' + dateStr(b.maturityDate) : ''))) },
       { label: 'Invested', cls: 'r', get: (b) => money(b.principal), total: (rs) => money(rs.reduce((a, b) => a + b.principal, 0)) },
       { label: 'Rate (paid)', key: true, cls: 'r', render: (b) => h('span', null, pct(b.rate, 2), h('span', { class: 'plain' }, ' (' + String(b.credit || 'Monthly').toLowerCase() + ')')) },
       { label: 'Schedule', cls: 'r', mob: 'hide', render: (b) => h('span', { onclick: (e) => e.stopPropagation() }, btn('Schedule', () => scheduleDialog(b))) },
@@ -236,7 +239,7 @@ export function render() {
       { label: 'Net per month', key: true, cls: 'r', render: (b) => h('span', null, h('b', null, money(b.monthNet)), h('small', { style: { display: 'block' } }, green('received ' + money(bondReceived(b))))), total: (rs) => h('span', null, h('b', null, money(rs.reduce((a, b) => a + b.monthNet, 0))), h('small', { style: { display: 'block' } }, green('received ' + money(rs.reduce((a, b) => a + bondReceived(b), 0))))) },
     ], fb.rows, { footer: { label: 'Total' }, mobile: {
       key: 'bonds', head: 'Bond',
-      first: (b) => ({ title: b.name, sub: [b.holder, b.platform].filter(Boolean).join(' · ') }),
+      first: (b) => ({ title: b.name, sub: [b.holder, b.platform, SECURITY[b.security]].filter(Boolean).join(' · ') }),
       views: [
         { label: 'Invested · Net / month', main: (b) => money(b.principal), sub: (b) => 'net ' + money(b.monthNet), total: (rs) => ({ main: money(rs.reduce((a, b) => a + b.principal, 0)), sub: 'net ' + money(rs.reduce((a, b) => a + b.monthNet, 0)) }) },
         { label: 'Rate · Next due', main: (b) => pct(b.rate, 2), sub: (b) => { const d = C.bondNextDue(b, S.all.asOf); return String(b.credit || 'Monthly').toLowerCase() + (d ? ' · due ' + shortD(d) : ''); } },
@@ -367,6 +370,7 @@ function holderPie(all, data) {
 }
 function bondInsights(all, data) {
   const group = (key) => { const m = new Map(); for (const b of all.bonds) { const k = String(b[key] || '').trim() || 'Not set'; m.set(k, (m.get(k) || 0) + b.principal); } return [...m.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value); };
+  const secure = (() => { const m = new Map(); for (const b of all.bonds) { const k = SECURITY[b.security] || 'Not set'; m.set(k, (m.get(k) || 0) + b.principal); } return ['Secured', 'Unsecured', 'Not set'].filter((k) => m.has(k)).map((label) => ({ label, value: m.get(label) })); })();
   const owners = group('holder'), firms = group('company'), total = all.bonds.reduce((a, b) => a + b.principal, 0);
   const bn = C.bondNotify(data);
   const save = (patch) => { if (!canEdit()) return toast('This device has read-only access.'); mutate((d) => { d.settings = { ...d.settings, bondNotify: { ...C.bondNotify(d), ...patch } }; }); };
@@ -375,7 +379,12 @@ function bondInsights(all, data) {
   return h('div', null,
     h('div', { class: 'grid2' },
       section('Who holds the bonds', h('div', null, donut(owners, { fmt: money, center: compact(total), sub: 'invested', size: 190 }), legend(owners, { fmt: money }))),
-      section('Which companies', firms.length ? hbars(firms, { fmt: money, colorIndex: 1 }) : h('p', { class: 'empty' }, 'No issuer set on the bonds.'))),
+      section(firmView === 'company' ? 'Which companies' : 'Secured vs unsecured', h('div', null,
+        h('div', { class: 'seg', role: 'tablist', style: { marginBottom: '10px' } }, [['company', 'By company'], ['security', 'Secured vs unsecured']].map(([k, l]) => h('button', { type: 'button', role: 'tab', class: firmView === k ? 'on' : '', 'aria-selected': String(firmView === k), onclick: () => { firmView = k; window.dispatchEvent(new Event('rerender')); } }, l))),
+        firmView === 'company'
+          ? (firms.length ? hbars(firms, { fmt: money, colorIndex: 1 }) : h('p', { class: 'empty' }, 'No issuer set on the bonds.'))
+          : h('div', null, donut(secure, { fmt: money, center: compact(total), sub: 'invested', size: 190 }), legend(secure, { fmt: money }),
+              secure.length === 1 && secure[0].label === 'Not set' ? h('p', { class: 'note' }, 'Mark each bond as secured or unsecured when you add or edit it.') : null)))),
     h('details', { class: 'card simple-settings' }, h('summary', null, 'Bond settings'),
       h('label', { style: { display: 'block', margin: '10px 0' } }, 'Tax deducted on interest (%) ', h('input', { type: 'number', step: 'any', min: '0', max: '100', value: String(Math.round((data.settings.tdsRate ?? 0.1) * 10000) / 100), disabled: !canEdit(), 'aria-label': 'Tax deducted on bond interest', style: { maxWidth: '6em' },
         onchange: (e) => { const n = Number(e.target.value); if (!Number.isFinite(n) || n < 0 || n > 100) return toast('Enter a percentage between 0 and 100.', 'bad'); if (!canEdit()) return toast('This device has read-only access.'); mutate((d) => { d.settings.tdsRate = n / 100; }); } })),

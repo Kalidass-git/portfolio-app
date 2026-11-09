@@ -100,7 +100,7 @@ function chrome() {
     h('div', { class: 'title' }, ROUTES[cur].group ? h('span', { class: 'crumb' }, ROUTES[cur].group) : null, h('h1', null, ROUTES[cur].label)),
     h('div', { class: 'top-right' }, chip, dot,
       S.remote ? h('button', { class: 'icon refresh', 'aria-label': 'Refresh from Drive', title: 'Refresh from Drive', onclick: async () => { try { await pull(); } catch (e) { toast(e.message, 'bad'); } } }, '↻') : null,
-      h('button', { class: 'icon eye', 'aria-label': S.masked ? 'Show figures' : 'Hide figures', title: S.masked ? 'Show figures' : 'Hide figures', 'aria-pressed': S.masked ? 'false' : 'true', onclick: () => { S.masked = !S.masked; renderView(); } }, eye(S.masked)),
+      h('button', { class: 'icon eye', 'aria-label': S.masked ? 'Show figures' : 'Hide figures', title: S.masked ? 'Show figures' : 'Hide figures', 'aria-pressed': S.masked ? 'false' : 'true', onclick: () => { S.masked = !S.masked; S.nwHidden = S.masked; renderView(); } }, eye(S.masked)),   // the Net worth card on Home follows this switch
       h('button', { class: 'icon aa', 'aria-label': 'Text size', title: 'Text size', onclick: () => { const i = FS.findIndex((f) => f >= (S.cfg.fontScale || 1) - 0.001); const n = FS[(i + 1) % FS.length]; setFont(n); toast('Text size ' + Math.round(n * 100) + '%'); } }, h('span', { class: 'aa-t' }, 'Aa')),
       h('a', { class: 'icon', href: '#/settings', 'aria-label': 'Settings' }, icon(SLIDERS))));
   document.documentElement.style.setProperty('--top-h', top.offsetHeight + 'px');

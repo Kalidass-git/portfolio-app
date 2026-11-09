@@ -107,7 +107,8 @@ export function render(root) {
     stat('Gain', gainText(m.pl), pct(m.ret, 1)),
     stat('XIRR', m.xirr == null ? '–' : h('span', { class: posNeg(m.xirr) }, pct(m.xirr, 1)), m.xirr == null ? (raw.opening ? 'part of this fund has no purchase dates' : txns.length ? 'needs a purchase over a month old' : 'record purchases with dates to see it') : 'yearly return including timing'),
     realized ? stat('Already earned', money(realized), 'profit booked on units sold') : null));
-  if (m.schemeCode) root.append(fundChart({ title: 'NAV history and rolling returns', loadNavs: () => fundNavs(m.schemeCode), avg: m.units ? m.invested / m.units : null, firstBuy: txns.length ? txns[txns.length - 1].date : null }));
+  if (m.schemeCode) root.append(fundChart({ title: 'NAV history and rolling returns', loadNavs: () => fundNavs(m.schemeCode), avg: m.units ? m.invested / m.units : null, firstBuy: txns.length ? txns[txns.length - 1].date : null,
+    trades: txns.filter((t) => t.units > 0 && (t.nav > 0 || t.amount > 0)).map((t) => ({ d: t.date, side: BUY_TYPES.test(t.type) ? 'BUY' : 'SELL', price: t.nav > 0 ? t.nav : t.amount / t.units, qty: t.units })) }));
   else root.append(h('div', { class: 'card' }, h('p', { class: 'note' }, 'Link this fund to its live NAV to see its price history.')));
   if (m.schemeCode) root.append(fundFundamentals(m, m.schemeCode));
   if (m.schemeCode) root.append(alertsCard('fund', m.schemeCode, m.name));
