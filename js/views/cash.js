@@ -29,11 +29,33 @@ export function render() {
   const old = route().sub;
   if (old === 'savings' || old === 'closed') location.replace('#/savings' + (old === 'closed' ? '/closed' : ''));
   const tab = subTab(TABS.map((t) => t[0]));
-  root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Cash views'), canEdit() ? h('span', { class: 'btn-row' }, (() => { const b = btn('Import', () => openBankImport(categoryOptions)); b.classList.add('only-lg'); b.title = 'Import bank transactions from a CSV file'; return b; })(), btn('Transfer', () => transferForm()), btn('Add transaction', () => txnForm(), 'primary')) : null));
+  root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Cash views'), canEdit() ? h('span', { class: 'btn-row cash-btns' }, (() => { const b = btn('Import', () => openBankImport(categoryOptions)); b.classList.add('only-lg'); b.title = 'Import bank transactions from a CSV file'; return b; })(), btn('Transfer', () => transferForm()), btn('Add transaction', () => txnForm(), 'primary')) : null));
   root.append(tab === 'ledger' ? ledger() : accounts());
+  if (canEdit()) root.append(cashFab(tab === 'ledger' ? fKind : 'all'));
   return root;
 }
 const rerender = () => window.dispatchEvent(new Event('rerender'));
+
+// ----- phone: a floating add button (bottom right). It changes colour and wording with the tab you are on, and opens Transfer and Import too. -----
+const FAB = { all: ['Add transaction', '--brand', 'debit'], expense: ['Add expense', '--neg', 'debit'], investment: ['Add investment', '--s1', 'debit'], income: ['Add income', '--pos', 'credit'] };
+const FAB_SVG = { plus: 'M12 5v14M5 12h14', close: 'M6 6l12 12M18 6L6 18', swap: 'M7 7h12l-3-3M17 17H5l3 3', imp: 'M12 4v11M7 10l5 5 5-5M5 20h14' };
+const fabIcon = (d) => { const i = document.createElement('span'); i.innerHTML = `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`; return i; };
+function cashFab(kind) {
+  const [label, colour, dir] = FAB[kind] || FAB.all;
+  let open = false;
+  const wrap = h('div', { class: 'cash-fab' }), scrim = h('div', { class: 'cash-fab-scrim', onclick: () => set(false) });
+  const item = (text, d, fn, main) => h('div', { class: 'cf-row' }, h('span', { class: 'cf-lb' }, text),
+    h('button', { type: 'button', class: 'cf-btn' + (main ? ' main' : ''), style: main ? { background: `var(${colour})` } : null, 'aria-label': text, onclick: fn }, fabIcon(d)));
+  const menu = h('div', { class: 'cf-menu' },
+    item('Import bank file', FAB_SVG.imp, () => { set(false); openBankImport(categoryOptions); }),
+    item('Transfer', FAB_SVG.swap, () => { set(false); transferForm(); }),
+    item(label, FAB_SVG.plus, () => { set(false); txnForm(undefined, { kind: dir, title: label }); }, true));
+  const toggle = h('button', { type: 'button', class: 'cf-btn main cf-toggle', style: { background: `var(${colour})` }, 'aria-label': label + ' and more', 'aria-expanded': 'false', onclick: () => set(!open) }, fabIcon(FAB_SVG.plus));
+  function set(v) { open = v; wrap.classList.toggle('open', v); scrim.classList.toggle('on', v); toggle.setAttribute('aria-expanded', String(v)); toggle.replaceChildren(fabIcon(v ? FAB_SVG.close : FAB_SVG.plus)); }
+  wrap.append(menu, toggle);
+  return h('div', null, scrim, wrap);
+}
+
 
 // ----- accounts -----
 const slug = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'acct';
@@ -101,9 +123,11 @@ function accounts() {
         h('span', { class: 'acc-last' }, txi('cal'), b.lastDate ? `Last entry ${dateStr(b.lastDate)} · ${ago(b.lastDate)}` : 'No entries yet'),
         f && (f.i || f.o) ? h('span', { class: 'acc-flow', title: 'This month: money in and money out' }, h('i', { class: 'pos' }, txi('in'), money(f.i)), h('i', { class: 'neg' }, txi('out'), money(f.o))) : null));
   };
-  wrap.append(section('Bank accounts & cash',
-    h('div', null, hero, banks.length ? h('div', { class: 'acc-grid' }, banks.map(card)) : h('p', { class: 'empty' }, 'No account yet. Add one to start.')),
-    canEdit() ? [btn('Add account', () => accountForm())] : null));
+  const accSec = section('Bank accounts & cash',
+    h('div', null, hero, banks.length ? h('div', { class: 'acc-grid' }, banks.map(card)) : h('p', { class: 'empty' }, 'No account yet. Add one to start.'),
+      canEdit() ? h('button', { type: 'button', class: 'acc-add-bottom', onclick: () => accountForm() }, '+  Add account') : null),
+    canEdit() ? [btn('Add account', () => accountForm())] : null);
+  accSec.classList.add('flat-sm'); wrap.append(accSec);
   wrap.append(h('p', { class: 'note' }, 'Tap an account to see its transactions. Balances come from the transactions, so to correct a balance add or edit a transaction. The money in and out under each account is for this month.'));
   return wrap;
 }
@@ -374,11 +398,12 @@ function ledger() {
     tile('', 'list', total === 1 ? 'Entry' : 'Entries', num(total)),
     fKind === 'all' || fKind === 'income' ? tile('pos', 'in', 'Received', money(credit)) : null,
     fKind !== 'income' ? tile(fKind === 'investment' ? 'inv' : 'neg', 'out', outLabel, money(debit)) : null);
-  wrap.append(section('Transactions',
+  const txSec = section('Transactions',
     h('div', { class: 'txn-card' }, h('div', { class: 'filters' }, seg), mbar, bar, summary,
       tbl,
       total > limit ? btn(`Show more (${total - limit} left)`, () => { limit += 100; rerender(); }, 'wide') : null),
-    null));
+    null);
+  txSec.classList.add('flat-sm'); wrap.append(txSec);
   return wrap;
 }
 
@@ -501,9 +526,7 @@ function holdingSummary(title, list, asOf) {
   return h('div', { class: 'stats', style: { marginBottom: '12px' } },
     stat('Paid in', money(sm.paid), `${sm.count} ${sm.count === 1 ? 'account' : 'accounts'}`),
     stat('Interest earned so far', h('span', { class: posNeg(sm.interest) }, money(sm.interest)), pf ? `${money(sm.credited)} credited · ${money(sm.accruing)} accruing` : (gainPct != null ? pct(gainPct, 1) + ' on what you paid · at the assumed rate' : 'at the assumed rate')),
-    stat('Worth today', money(sm.worth), pf ? 'balance plus interest accruing since the last credit' : 'paid in plus interest so far'),
-    pf ? stat('Interest in a year', money(sm.yearly), 'at today’s balance and rate')
-      : stat('Expected at the end', sm.maturity != null ? money(sm.maturity) : '–', sm.maturity != null ? `${money(sm.maturity - sm.paid)} more than paid in` : 'needs an end date or expected payout'));
+    pf ? stat('Interest in a year', money(sm.yearly), 'at today’s balance and rate') : null);
 }
 const xirrCell = (s) => (s.xirr == null ? h('span', { class: 'muted' }, '–') : h('span', { class: posNeg(s.xirr), title: s.xirrKind !== 'estimate' ? 'Actual, from the closing amount' : s.xirrBasis === 'rate' ? 'Estimate: the assumed yearly rate (no expected payout entered)' : 'Estimate from your expected payout' }, (s.xirrKind === 'estimate' ? '≈ ' : '') + pct(s.xirr, 1)));
 function closeSaving(sv) {
