@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.76.1 – Cash tab on phones: one-tap button, search inside Filter
+
+- Phones only (desktop unchanged): the floating button is now one tap with no menu. On Accounts it shows the transfer icon and opens Transfer; on Transactions it opens the Add form directly (red on Expenses, blue on Investments, green on Income and All).
+- The Transactions search box moved into the Filter sheet (Search field, with a chip showing the active search). Links from other screens that open the list with a search still work.
+- Presentation only; no stored data changed.
+
 ## Release 8.76.0 – Cash tab on phones: floating add button
 
 - Phones only (desktop is unchanged): a floating round button at the bottom right of Cash → Accounts and Transactions. It is red on Expenses, blue on Investments, green on Income and All, and opens the matching Add form (Add expense, Add investment, Add income, Add transaction). Tapping it also offers Transfer and Import bank file, all the same size. The old top Transfer / Add transaction buttons are hidden on phones.

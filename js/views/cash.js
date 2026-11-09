@@ -31,32 +31,20 @@ export function render() {
   const tab = subTab(TABS.map((t) => t[0]));
   root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Cash views'), canEdit() ? h('span', { class: 'btn-row cash-btns' }, (() => { const b = btn('Import', () => openBankImport(categoryOptions)); b.classList.add('only-lg'); b.title = 'Import bank transactions from a CSV file'; return b; })(), btn('Transfer', () => transferForm()), btn('Add transaction', () => txnForm(), 'primary')) : null));
   root.append(tab === 'ledger' ? ledger() : accounts());
-  if (canEdit()) root.append(cashFab(tab === 'ledger' ? fKind : 'all'));
+  if (canEdit()) root.append(cashFab(tab === 'ledger' ? fKind : 'accounts'));
   return root;
 }
 const rerender = () => window.dispatchEvent(new Event('rerender'));
 
-// ----- phone: a floating add button (bottom right). It changes colour and wording with the tab you are on, and opens Transfer and Import too. -----
+// ----- phone: one floating button (bottom right), one tap. On Transactions it adds a transaction (colour and wording follow the tab: expense red, investment blue, income green); on Accounts it opens Transfer. -----
 const FAB = { all: ['Add transaction', '--brand', 'debit'], expense: ['Add expense', '--neg', 'debit'], investment: ['Add investment', '--s1', 'debit'], income: ['Add income', '--pos', 'credit'] };
-const FAB_SVG = { plus: 'M12 5v14M5 12h14', close: 'M6 6l12 12M18 6L6 18', swap: 'M7 7h12l-3-3M17 17H5l3 3', imp: 'M12 4v11M7 10l5 5 5-5M5 20h14' };
-const fabIcon = (d) => { const i = document.createElement('span'); i.innerHTML = `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`; return i; };
+const FAB_PATH = { plus: 'M12 5v14M5 12h14', swap: 'M7 7h12l-3-3M17 17H5l3 3' };
 function cashFab(kind) {
-  const [label, colour, dir] = FAB[kind] || FAB.all;
-  let open = false;
-  const wrap = h('div', { class: 'cash-fab' }), scrim = h('div', { class: 'cash-fab-scrim', onclick: () => set(false) });
-  const item = (text, d, fn, main) => h('div', { class: 'cf-row' }, h('span', { class: 'cf-lb' }, text),
-    h('button', { type: 'button', class: 'cf-btn' + (main ? ' main' : ''), style: main ? { background: `var(${colour})` } : null, 'aria-label': text, onclick: fn }, fabIcon(d)));
-  const menu = h('div', { class: 'cf-menu' },
-    item('Import bank file', FAB_SVG.imp, () => { set(false); openBankImport(categoryOptions); }),
-    item('Transfer', FAB_SVG.swap, () => { set(false); transferForm(); }),
-    item(label, FAB_SVG.plus, () => { set(false); txnForm(undefined, { kind: dir, title: label }); }, true));
-  const toggle = h('button', { type: 'button', class: 'cf-btn main cf-toggle', style: { background: `var(${colour})` }, 'aria-label': label + ' and more', 'aria-expanded': 'false', onclick: () => set(!open) }, fabIcon(FAB_SVG.plus));
-  function set(v) { open = v; wrap.classList.toggle('open', v); scrim.classList.toggle('on', v); toggle.setAttribute('aria-expanded', String(v)); toggle.replaceChildren(fabIcon(v ? FAB_SVG.close : FAB_SVG.plus)); }
-  wrap.append(menu, toggle);
-  return h('div', null, scrim, wrap);
+  const accounts = kind === 'accounts', [label, colour, dir] = accounts ? ['Transfer between accounts', '--brand'] : FAB[kind] || FAB.all;
+  const icon = document.createElement('span');
+  icon.innerHTML = `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${accounts ? FAB_PATH.swap : FAB_PATH.plus}"/></svg>`;
+  return h('div', { class: 'cash-fab' }, h('button', { type: 'button', class: 'cf-btn main', style: { background: `var(${colour})` }, title: label, 'aria-label': label, onclick: () => (accounts ? transferForm() : txnForm(undefined, { kind: dir, title: label })) }, icon));
 }
-
-
 // ----- accounts -----
 const slug = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'acct';
 function accountForm(acct) {
@@ -355,9 +343,10 @@ function ledger() {
         filtersOn || sortOn ? h('button', { type: 'button', class: 'tt-clear', onclick: () => { fCat = 'all'; fAmtOp = 'any'; fAmtVal = ''; fSort = 'date'; fDir = 'desc'; reset(); } }, txi('clear'), 'Clear filters and sort') : null)));
   // phone: Sort and Filter sheets over the same fSort / fDir / fAcct / fMonth / fCat / fAmtOp / fAmtVal the desktop selects use
   const thisMonth = C.monthKey(S.all.asOf);
-  const mfilters = { values: { acct: fAcct, month: fMonth, cat: fCat, op: fAmtOp, val: fAmtVal },
-    apply: (v) => { fAcct = v.acct; fMonth = v.month; fCat = v.cat; fAmtOp = v.op; fAmtVal = v.op === 'any' ? '' : String(v.val ?? ''); reset(); },
+  const mfilters = { values: { q: fText, acct: fAcct, month: fMonth, cat: fCat, op: fAmtOp, val: fAmtVal },
+    apply: (v) => { fText = String(v.q || '').trim(); limit = 60; fAcct = v.acct; fMonth = v.month; fCat = v.cat; fAmtOp = v.op; fAmtVal = v.op === 'any' ? '' : String(v.val ?? ''); reset(); },
     fields: [
+      { key: 'q', label: 'Search', type: 'text', default: '', placeholder: 'Description or category' },
       { key: 'acct', label: 'Account', type: 'select', default: 'all', options: [{ value: 'all', label: 'All accounts' }, ...data.accounts.map((a) => ({ value: a.id, label: `${a.name} · ${a.holder}` }))] },
       { key: 'month', label: 'Period', type: 'select', default: thisMonth, chip: (v) => (v.month === 'all' ? 'All months' : 'Period: ' + (v.month.startsWith('p:') ? (PERIODS(S.all.asOf).find((x) => x[0] === v.month) || [0, v.month])[1] : monthLabel(v.month))),
         options: [{ value: 'all', label: 'All months' }, { group: 'Periods', options: PERIODS(S.all.asOf).map(([v, l]) => ({ value: v, label: l })) }, ...monthGroups(months, fMonth).flatMap((g) => (g.label ? [{ group: g.label, options: g.months.map((m) => ({ value: m, label: monthLabel(m) })) }] : g.months.map((m) => ({ value: m, label: monthLabel(m) }))))] },
@@ -365,8 +354,7 @@ function ledger() {
       { key: 'op', label: 'Amount', type: 'select', default: 'any', options: [{ value: 'any', label: 'Any amount' }, { value: 'gt', label: 'Greater than' }, { value: 'lt', label: 'Less than' }], chip: (v) => (v.op === 'any' ? null : 'Amount ' + (v.op === 'gt' ? '>' : '<') + ' ₹' + (v.val || '…')) },
       { key: 'val', label: 'Amount (₹)', type: 'number', default: '', count: false, placeholder: 'e.g. 5000', showIf: (v) => v.op !== 'any' },
     ] };
-  const msearch = h('input', { type: 'text', inputmode: 'search', enterkeyhint: 'search', placeholder: 'Search description or category', value: fText, 'aria-label': 'Search transactions', oninput: (e) => { fText = e.target.value; clearTimeout(window.__ft); window.__ft = setTimeout(() => { limit = 60; rerender(); const i = document.querySelector('.sfbar input'); i && (i.focus(), i.setSelectionRange(fText.length, fText.length)); }, 250); } });
-  const mbar = sortFilterBar({ filters: mfilters, search: h('div', { class: 'txn-search' }, txi('search'), msearch),
+  const mbar = sortFilterBar({ filters: mfilters,
     sort: { value: fSort, dir: fDir, apply: (v, d) => { fSort = v; fDir = d; reset(); }, options: [{ value: 'date', label: 'Date', kind: 'date' }, { value: 'amount', label: 'Amount', kind: 'num' }, { value: 'category', label: 'Category', kind: 'text' }, { value: 'desc', label: 'Description', kind: 'text' }] } });
   { const si = mbar.querySelector('.sf-sort .sf-ic'), fi = mbar.querySelector('.sf-filter .sf-ic'); if (si) si.replaceChildren(txi('sort')); if (fi) fi.replaceChildren(txi('filter')); }
   const total = rows.length, credit = rows.reduce((a, e) => a + (e.credit || 0), 0), debit = rows.reduce((a, e) => a + (e.debit || 0), 0);
