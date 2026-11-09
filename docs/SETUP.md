@@ -150,6 +150,11 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.76.2 – Home net-worth chart: asset lines no longer show 0 on days with a saved reading
+
+- The daily readings saved by the app already hold the four lines (shares & funds, debt & fixed income, gold, others & cash). The chart ran them through the class grouping a second time, which sent shares and debt into "Others & cash": those two showed 0 on days with a saved reading and Others & cash showed their sum, while Gold (the only name that matched) looked right. Today's point was built differently, so it looked correct, hence the jumps.
+- Fixed when reading the readings; stored readings are not changed, so past days correct themselves. Test: `tests/classpoints.test.mjs`.
+
 ## Release 8.76.1 – Cash tab on phones: one-tap button, search inside Filter
 
 - Phones only (desktop unchanged): the floating button is now one tap with no menu. On Accounts it shows the transfer icon and opens Transfer; on Transactions it opens the Add form directly (red on Expenses, blue on Investments, green on Income and All).

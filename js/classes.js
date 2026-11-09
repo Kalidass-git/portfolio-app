@@ -23,6 +23,12 @@ export function liveGroups(data, all) {
   const g = groupValues(P.baseline(data, all).values);
   return { equity: Math.round(g.equity), debt: Math.round(g.debt), gold: Math.round(g.gold), other: Math.round(g.other) };
 }
+/** A saved daily reading already holds the four lines (equity, debt, gold, other); run through groupValues it would pile shares and debt into "other". Raw class values (cash, bonds, shares, …) still go through groupValues. */
+export function readGroups(c) {
+  const four = LINES.map((l) => l.id);
+  if (c && Object.keys(c).every((k) => four.includes(k))) return Object.fromEntries(four.map((k) => [k, Number.isFinite(Number(c[k])) ? Number(c[k]) : 0]));
+  return groupValues(c);
+}
 export const sameGroups = (a, b) => !!a && !!b && LINES.every((l) => a[l.id] === b[l.id]);
 
 /** Dated readings of the four lines, oldest first: month-end check-ins with classes, daily readings with `cls`, and today (which wins on its own date). */
@@ -33,7 +39,7 @@ export function classPoints(data, all) {
     const d = monthEnd(s.month + '-01'); if (d > all.asOf) continue;
     pts.set(d, { date: d, ...groupValues(s.classes), src: 'month end' });
   }
-  for (const r of data.history || []) if (r.cls && r.date <= all.asOf) pts.set(r.date, { date: r.date, ...groupValues(r.cls), src: 'daily' });
+  for (const r of data.history || []) if (r.cls && r.date <= all.asOf) pts.set(r.date, { date: r.date, ...readGroups(r.cls), src: 'daily' });
   pts.set(all.asOf, { date: all.asOf, ...groupValues(P.baseline(data, all).values), src: 'today' });
   return [...pts.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
 }
