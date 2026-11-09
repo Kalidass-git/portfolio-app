@@ -150,6 +150,19 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.79.0 – Passive income planner
+
+A new page, **Spend & plan → Passive income** (`#/passive`), to fund the household's expenses from passive income and keep the salary invested. It reads data the app already has and saves only the owner's plan in one optional field, `settings.passivePlan` (older files work without it; nothing was renamed or removed).
+
+- **Overview**: passive income, monthly expenses, coverage ring (green at 100%, amber from 50%, red below), unmapped expenses; a read-only picture of the allocations; income vs expenses trend; a "needs attention" list; the goal and the extra income still needed; salary protection.
+- **Allocations**: income sources on the left (each bond, each interest income line, and any other income you add), expense categories on the right, a curved connection with its amount between them. Drag an income dot onto an expense, or tap an income and then an expense (works the same on a phone). An amount sheet opens; one income can pay several expenses and several incomes can pay one expense. The amount cannot go above what the income has left (Save is blocked with a message). Tap a connection's amount to change or remove it. Unmapped expenses are red, part-funded amber, funded green. A Connections list repeats every link with an Edit button.
+- **Income frequency**: bonds follow their own payout; an interest income line can be set to monthly, quarterly, half-yearly or yearly and is divided to a monthly planning figure; extra income can be added with an optional bank-description match so its credits are counted as actually received.
+- **Actual vs plan**: per month and category, what was set aside, spent, left, over and the percent used; expenses with no income set aside can be assigned in one tap; income expected vs credited, with late interest marked; unused allocation can carry to the next month (a switch, on by default).
+- **Progress**: coverage by month against the 100% target, the extra income needed, and a month by month table including salary used.
+- Salary is never part of the funding pool. It shows salary, invested, and how much of the month's spending had to be paid from salary because passive income (plus any carried reserve) did not cover it.
+- Nothing raises a budget by itself; allocations change only when the owner changes them.
+- Tests: `tests/passive.test.mjs`.
+
 ## Release 8.78.0 – Chart: crosshair cursor, drag any line, keyboard controls
 
 - The chart cursor is a crosshair (plus) everywhere over the plot, so prices are easy to read; it turns into the grabbing hand only while you drag.
