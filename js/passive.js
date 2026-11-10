@@ -205,30 +205,29 @@ export function allocation(data, all) {
 export function actualVsPlan(data, all, month) {
   const plan = planOf(data, all), al = allocation(data, all), cur = C.monthKey(all.asOf), from = plan.from && plan.from <= month ? plan.from : month;
   const names = new Set(al.cats.map((c) => c.name));
-  const rows = new Map(al.cats.map((c) => [lc(c.name), { name: c.name, planned: c.funded, carryIn: 0, actual: 0 }]));
+  const rows = new Map(al.cats.map((c) => [lc(c.name), { name: c.name, planned: c.funded, carryIn: 0, earlier: 0, actual: 0 }]));
   // walk the months from the start of the plan, so a reserve built earlier is there to use
   const carry = new Map();
   for (const m of monthsBetween(from, month)) {
     const spent = spendByCategory(data, m, plan);
-    for (const nm of spent.keys()) if (!names.has(nm) && !rows.has(lc(nm))) rows.set(lc(nm), { name: nm, planned: 0, carryIn: 0, actual: 0 });
+    for (const nm of spent.keys()) if (!names.has(nm) && !rows.has(lc(nm))) rows.set(lc(nm), { name: nm, planned: 0, carryIn: 0, earlier: 0, actual: 0 });
     for (const [k, r] of rows) {
-      const actual = spent.get(r.name) || 0, cIn = plan.carry ? carry.get(k) || 0 : 0, avail = r.planned + cIn;
-      const out = plan.carry ? Math.max(0, avail - actual) : 0;
-      carry.set(k, out);
-      if (m === month) { r.carryIn = cIn; r.actual = actual; }
+      const actual = spent.get(r.name) || 0, cIn = carry.get(k) || 0;
+      carry.set(k, cIn + Math.max(0, r.planned - actual));   // unused allocation of earlier months: only shown, never added to a month's allowance
+      if (m === month) { r.earlier = cIn; r.actual = actual; }
     }
   }
   const mn = Number(month.slice(5));
   const list = [...rows.values()].map((r) => {
     const cat = al.cats.find((c) => lc(c.name) === lc(r.name)), lump = cat && cat.lump, f = cat && cat.base > 0 ? Math.min(1, r.planned / cat.base) : 1;
     // an expense with a payment every few months: only its regular part is allowed in an ordinary month, the whole payment in the month it falls due; the rest is set aside (see Set aside)
-    const st = lump ? lumpState(lump, mn) : null, avail = lump ? f * (cat.base - cat.lumpMonthly + (st.due ? lump.amount : 0)) : r.planned + r.carryIn, carryIn = lump ? 0 : r.carryIn;
+    const st = lump ? lumpState(lump, mn) : null, avail = lump ? f * (cat.base - cat.lumpMonthly + (st.due ? lump.amount : 0)) : r.planned, carryIn = 0, earlier = lump ? 0 : r.earlier;
     const remaining = Math.max(0, avail - r.actual), over = avail > 0 ? Math.max(0, r.actual - avail) : 0;
     const used = avail > 0 ? r.actual / avail : r.actual > 0 ? Infinity : 0;
     const state = r.actual > 0 && avail === 0 ? 'unmapped' : over > 0.5 ? 'over' : r.actual > 0 && r.planned < r.actual && r.planned > 0 && !carryIn && !lump ? 'partial' : used >= 0.9 ? 'near' : 'ok';
-    return { ...r, carryIn, available: avail, remaining, over, used, state, carryOut: plan.carry && !lump ? remaining : 0, lump: lump || null, lumpDue: !!st && st.due, lumpAmount: lump ? lump.amount : 0, kept: st ? Math.round(st.accrued) : 0 };
-  }).filter((r) => r.planned > 0 || r.actual > 0 || r.carryIn > 0).sort((a, b) => (b.over - a.over) || (b.actual - a.actual));
-  return { month, rows: list, planned: sum(list, (r) => r.planned), actual: sum(list, (r) => r.actual), carryIn: sum(list, (r) => r.carryIn), remaining: sum(list, (r) => r.remaining), over: sum(list, (r) => r.over),
+    return { ...r, carryIn, earlier, available: avail, remaining, over, used, state, carryOut: 0, lump: lump || null, lumpDue: !!st && st.due, lumpAmount: lump ? lump.amount : 0, kept: st ? Math.round(st.accrued) : 0 };
+  }).filter((r) => r.planned > 0 || r.actual > 0 || r.earlier > 0).sort((a, b) => (b.over - a.over) || (b.actual - a.actual));
+  return { month, rows: list, planned: sum(list, (r) => r.planned), actual: sum(list, (r) => r.actual), carryIn: 0, earlier: sum(list, (r) => r.earlier), remaining: sum(list, (r) => r.remaining), over: sum(list, (r) => r.over),
     unmappedAmount: sum(list.filter((r) => r.state === 'unmapped'), (r) => r.actual) };
 }
 
@@ -254,7 +253,7 @@ export function monthFlow(data, all, month) {
 
 /** Passive income actually credited in a month, per source and in total, against what was expected. */
 /** How one month went, income by income. A month still running counts the income that is due (projected); a finished month counts what was credited.
- *  Each income lists the expenses planned on it: what was planned, spent, how much went over, and what was left over (it moves to the next month when carry-forward is on).
+ *  Each income lists the expenses planned on it: what was planned, spent, how much went over, and what was left over (shown only; it is not added to the next month).
  *  The spend of an expense is taken by its incomes in their order; anything above everything planned lands on the last one. */
 export function progressMonth(data, all, month) {
   const al = allocation(data, all), cur = C.monthKey(all.asOf), past = month < cur, inc = incomeActual(data, all, month), av = actualVsPlan(data, all, month);
@@ -268,19 +267,19 @@ export function progressMonth(data, all, month) {
   const unplanned = [];
   for (const r of av.rows) {
     const ls = by.get(lc(r.name)) || [], P = ls.reduce((a, l) => a + l.amount, 0), takes = wf.takes.filter((t) => lc(t.cat) === lc(r.name)), paid = takes.reduce((a, t) => a + t.take, 0);
-    const early = r.lump && r.lumpDue ? r.lumpAmount * (r.lump.every - 1) / r.lump.every : 0, covered = Math.min(r.actual, paid + r.carryIn + early), pk = Math.max(0, r.actual - covered);
+    const early = r.lump && r.lumpDue ? r.lumpAmount * (r.lump.every - 1) / r.lump.every : 0, covered = Math.min(r.actual, paid + early), pk = Math.max(0, r.actual - covered);
     spent += r.actual; pocket += pk; over += r.over; left += r.remaining;
     if (!ls.length || P <= 0) { if (r.actual > 0) unplanned.push({ cat: r.name, spent: r.actual }); continue; }
     let rest = r.actual;
     ls.forEach((l, i) => {
       const cap = r.available * (l.amount / P), take = Math.min(rest, cap), last = i === ls.length - 1, ov = last ? Math.max(0, rest - cap) : 0;
       rest -= take; if (last) rest = 0;
-      const t = takes.find((q) => q.src === l.src), row = { cat: r.name, planned: l.amount, carryIn: i === 0 ? r.carryIn : 0, allowed: cap, spent: take + ov, over: ov, left: Math.max(0, cap - take), paid: t ? t.take : 0, short: Math.max(0, l.amount - (t ? t.take : 0)), lump: !!r.lump, lumpDue: r.lumpDue };
+      const t = takes.find((q) => q.src === l.src), row = { cat: r.name, planned: l.amount, earlier: i === 0 ? r.earlier : 0, allowed: cap, spent: take + ov, over: ov, left: Math.max(0, cap - take), paid: t ? t.take : 0, short: Math.max(0, l.amount - (t ? t.take : 0)), lump: !!r.lump, lumpDue: r.lumpDue };
       const src = sources.find((q) => q.key === l.src); if (src) src.rows.push(row);
     });
   }
   const salary = salaryProtection(data, all, month, 0);
-  return { month, past, sources, unplanned, spent, pocket, over, left, credited: inc.received, expected: inc.expected, income: wf.income, short: wf.short, unused: wf.unused, salary };
+  return { month, past, sources, unplanned, spent, pocket, over, left, earlier: av.earlier, credited: inc.received, expected: inc.expected, income: wf.income, short: wf.short, unused: wf.unused, salary };
 }
 
 /** One or many months, added up. Planned, spent and over are totals; left over is what stood at the end of the last month. */
@@ -292,13 +291,13 @@ export function progressReport(data, all, months) {
     for (const x of m.sources) {
       const t = sources.get(x.key) || { key: x.key, name: x.name, kind: x.kind, monthly: x.monthly, expected: 0, received: 0, allocated: 0, unused: 0, short: 0, rows: new Map() }; sources.set(x.key, t);
       t.expected += x.expected; t.received += x.received; t.allocated += x.allocated; t.unused += x.unused; t.short += x.short;
-      for (const r of x.rows) { const k = lc(r.cat), o = t.rows.get(k) || { cat: r.cat, planned: 0, carryIn: 0, spent: 0, over: 0, left: 0, paid: 0, short: 0, lump: r.lump, lumpDue: false }; t.rows.set(k, o);
-        o.planned += r.planned; o.spent += r.spent; o.over += r.over; o.paid += r.paid; o.short += r.short; o.left = r.left; o.allowed = r.allowed; if (m === per[0]) o.carryIn = r.carryIn; o.lumpDue = r.lumpDue; }
+      for (const r of x.rows) { const k = lc(r.cat), o = t.rows.get(k) || { cat: r.cat, planned: 0, earlier: 0, spent: 0, over: 0, left: 0, paid: 0, short: 0, lump: r.lump, lumpDue: false }; t.rows.set(k, o);
+        o.planned += r.planned; o.spent += r.spent; o.over += r.over; o.paid += r.paid; o.short += r.short; o.left += r.left; o.allowed = r.allowed; if (m === per[0]) o.earlier = r.earlier; o.lumpDue = r.lumpDue; }
     }
     for (const u of m.unplanned) un.set(lc(u.cat), { cat: u.cat, spent: (un.get(lc(u.cat)) || { spent: 0 }).spent + u.spent });
   }
   const sum2 = (f) => per.reduce((a, m) => a + f(m), 0);
-  return { months, per, last, sources: [...sources.values()].map((t) => ({ ...t, rows: [...t.rows.values()] })), unplanned: [...un.values()], spent: sum2((m) => m.spent), pocket: sum2((m) => m.pocket), over: sum2((m) => m.over), left: last.left, credited: sum2((m) => m.credited), expected: sum2((m) => m.expected), income: sum2((m) => m.income), short: sum2((m) => m.short), unused: last.unused, salary: last.salary };
+  return { months, per, last, sources: [...sources.values()].map((t) => ({ ...t, rows: [...t.rows.values()] })), unplanned: [...un.values()], spent: sum2((m) => m.spent), pocket: sum2((m) => m.pocket), over: sum2((m) => m.over), left: sum2((m) => m.left), earlier: per[0].earlier, credited: sum2((m) => m.credited), expected: sum2((m) => m.expected), income: sum2((m) => m.income), short: sum2((m) => m.short), unused: last.unused, salary: last.salary };
 }
 
 export function incomeActual(data, all, month) {
@@ -314,8 +313,8 @@ export function salaryProtection(data, all, month, reserveIn = 0) {
   const invested = sum(rows.filter((e) => kind(e.category) === 'investment'), (e) => e.debit);
   const spent = sum([...spendByCategory(data, month, plan).values()]);
   const passive = incomeActual(data, all, month).received;
-  const funded = Math.min(spent, passive + (plan.carry ? reserveIn : 0)), diverted = Math.max(0, spent - funded);
-  return { month, salary, invested, spent, passive, funded, diverted, reserveOut: plan.carry ? Math.max(0, reserveIn + passive - spent) : 0, protectedShare: salary > 0 ? Math.max(0, (salary - diverted) / salary) : null };
+  const funded = Math.min(spent, passive), diverted = Math.max(0, spent - funded);
+  return { month, salary, invested, spent, passive, funded, diverted, reserveOut: 0, protectedShare: salary > 0 ? Math.max(0, (salary - diverted) / salary) : null };
 }
 
 /** Coverage month by month for the last `n` months: passive income received over expenses, with the income reserve running forward. */

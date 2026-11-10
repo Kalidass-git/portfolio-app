@@ -23,9 +23,8 @@ if (file) {
     const a = P.allocation(d, all); ok(a.sources.find((s) => s.key === key).over > 0 || a.sources.find((s) => s.key === key).monthly >= 12000, 'a source allocated beyond its income is reported as over');
     ok(a.unmapped.every((c) => c.funded === 0) && !a.unmapped.some((c) => c.name === rent.name), 'a funded category is not unmapped');
     const n = P.actualVsPlan(d, all, '2026-11').rows.find((r) => r.name === rent.name), o = P.actualVsPlan(d, all, '2026-10').rows.find((r) => r.name === rent.name);
-    ok(o && n && Math.abs(n.carryIn - o.carryOut) < 1, 'unused allocation of one month is carried into the next');
-    const e = JSON.parse(JSON.stringify(d)); e.settings.passivePlan.carry = false;
-    ok(P.actualVsPlan(e, all, '2026-11').rows.every((r) => r.carryIn === 0), 'with carry forward off nothing is carried');
+    const unusedBefore = ['2026-09', '2026-10'].reduce((t, m) => { const r = P.actualVsPlan(d, all, m).rows.find((x) => x.name === rent.name); return t + (r ? Math.max(0, r.planned - r.actual) : 0); }, 0);
+    ok(o && n && n.carryIn === 0 && n.available === n.planned && Math.abs(n.earlier - unusedBefore) < 1, 'unused allocation of earlier months is shown on its own and never added to the month\'s allowance');
     const before = JSON.stringify(P.planOf(d).alloc); P.breaches(d, all); P.summary(d, all); ok(JSON.stringify(P.planOf(d).alloc) === before, 'monitoring never changes an allocation');
   }
   // bonds are grouped by how often they pay, and older allocations saved against one bond move into its group

@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.88.0 – Passive income: fuller Overview, unused allocation shown separately
+
+- **Overview** (plan only) is fuller again: a card per income listing the expenses planned on it in payment order with amounts (and any quarterly/yearly payment included), what is allocated and still free; an *Expenses* table (budget a month, from passive income, gap, total); *Kept aside every month* for quarterly/yearly payments; the coverage goal.
+- **Unused allocation is no longer carried.** What an expense did not use is never added to the next month's allowance, so a month's over / pocket figures depend only on that month. Progress shows two separate indicators: *Unused this month / in the period* and *Unused from earlier months* (the sum of earlier months' unused plan, from the start of the plan), and per expense a note with the unused part. The carry-forward switch is removed; the stored `carry` field is left alone and ignored. Salary protection no longer counts a carried reserve either.
+- Works on past records: everything is worked out from the bank entries already stored and the allocations as they are now (allocations are not versioned, so a past month is judged against today's plan, from the plan's *from* month). Nothing stored changes.
+
 ## Release 8.87.0 – Passive income: one Progress tab
 
 Actual vs plan and Progress are now one **Progress** tab, the only place that shows actuals. Overview and Allocations are plan only (no trend, no attention list, no averages of past months; an expense with no budget just says so).
