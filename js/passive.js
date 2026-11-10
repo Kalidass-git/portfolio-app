@@ -235,15 +235,15 @@ export function actualVsPlan(data, all, month) {
 /** Uses each source's income, in the order of the expenses, up to what is allocated. A source that has less than it was planned to give pays the first expenses in full and leaves the last ones short.
  *  `avail` maps a source key to the income it has to give. */
 export function waterfall(al, avail) {
-  const rank = new Map(al.cats.map((c) => [lc(c.name), c.rank])), paid = new Map(), bySource = [];
+  const rank = new Map(al.cats.map((c) => [lc(c.name), c.rank])), paid = new Map(), bySource = [], takes = [];
   for (const s of al.sources) {
     let left = Math.max(0, Number(avail.get(s.key)) || 0);
     const links = al.links.filter((l) => l.src === s.key).sort((a, b) => (a.ord != null && b.ord != null ? a.ord - b.ord : (rank.get(lc(a.cat)) || 1e6) - (rank.get(lc(b.cat)) || 1e6)));
-    for (const l of links) { const take = Math.min(left, l.amount); left -= take; paid.set(lc(l.cat), (paid.get(lc(l.cat)) || 0) + take); }
+    for (const l of links) { const take = Math.min(left, l.amount); left -= take; paid.set(lc(l.cat), (paid.get(lc(l.cat)) || 0) + take); takes.push({ src: s.key, cat: l.cat, amount: l.amount, take }); }
     bySource.push({ key: s.key, name: s.name, income: Math.max(0, Number(avail.get(s.key)) || 0), allocated: sum(links, (l) => l.amount), unused: left });
   }
   const rows = al.cats.filter((c) => c.funded > 0).map((c) => { const p = paid.get(lc(c.name)) || 0; return { name: c.name, rank: c.rank, ord: Math.min(...al.links.filter((l) => lc(l.cat) === lc(c.name)).map((l) => (l.ord != null ? l.ord : 1e6))), planned: c.funded, paid: p, short: Math.max(0, c.funded - p), usual: c.base }; }).sort((a, b) => a.ord - b.ord || a.rank - b.rank);
-  return { rows, bySource, income: sum(bySource, (r) => r.income), planned: sum(rows, (r) => r.planned), paid: sum(rows, (r) => r.paid), short: sum(rows, (r) => r.short), unused: sum(bySource, (r) => r.unused), shortCats: rows.filter((r) => r.short > 0.5) };
+  return { rows, bySource, takes, income: sum(bySource, (r) => r.income), planned: sum(rows, (r) => r.planned), paid: sum(rows, (r) => r.paid), short: sum(rows, (r) => r.short), unused: sum(bySource, (r) => r.unused), shortCats: rows.filter((r) => r.short > 0.5) };
 }
 /** The waterfall for a month: income that actually arrived for a finished month, what is due for the current one. */
 export function monthFlow(data, all, month) {
@@ -253,6 +253,54 @@ export function monthFlow(data, all, month) {
 }
 
 /** Passive income actually credited in a month, per source and in total, against what was expected. */
+/** How one month went, income by income. A month still running counts the income that is due (projected); a finished month counts what was credited.
+ *  Each income lists the expenses planned on it: what was planned, spent, how much went over, and what was left over (it moves to the next month when carry-forward is on).
+ *  The spend of an expense is taken by its incomes in their order; anything above everything planned lands on the last one. */
+export function progressMonth(data, all, month) {
+  const al = allocation(data, all), cur = C.monthKey(all.asOf), past = month < cur, inc = incomeActual(data, all, month), av = actualVsPlan(data, all, month);
+  const wf = waterfall(al, new Map(inc.rows.map((r) => [r.key, past ? r.received : Math.max(r.expected, r.received)])));
+  const cat = new Map(av.rows.map((r) => [lc(r.name), r])), links = al.links.slice().sort((a, b) => (a.ord != null && b.ord != null ? a.ord - b.ord : 0));
+  const by = new Map(); for (const l of links) { const k = lc(l.cat); by.set(k, [...(by.get(k) || []), l]); }
+  const sources = al.sources.map((x) => ({ key: x.key, name: x.name, kind: x.kind, monthly: x.monthly, expected: 0, received: 0, allocated: 0, unused: 0, short: 0, rows: [] }));
+  for (const r of inc.rows) { const t = sources.find((q) => q.key === r.key); if (t) { t.expected = r.expected; t.received = r.received; } }
+  for (const b of wf.bySource) { const t = sources.find((q) => q.key === b.key); if (t) { t.allocated = b.allocated; t.unused = b.unused; t.short = Math.max(0, b.allocated - b.income); } }
+  let pocket = 0, over = 0, left = 0, spent = 0;
+  const unplanned = [];
+  for (const r of av.rows) {
+    const ls = by.get(lc(r.name)) || [], P = ls.reduce((a, l) => a + l.amount, 0), takes = wf.takes.filter((t) => lc(t.cat) === lc(r.name)), paid = takes.reduce((a, t) => a + t.take, 0);
+    const early = r.lump && r.lumpDue ? r.lumpAmount * (r.lump.every - 1) / r.lump.every : 0, covered = Math.min(r.actual, paid + r.carryIn + early), pk = Math.max(0, r.actual - covered);
+    spent += r.actual; pocket += pk; over += r.over; left += r.remaining;
+    if (!ls.length || P <= 0) { if (r.actual > 0) unplanned.push({ cat: r.name, spent: r.actual }); continue; }
+    let rest = r.actual;
+    ls.forEach((l, i) => {
+      const cap = r.available * (l.amount / P), take = Math.min(rest, cap), last = i === ls.length - 1, ov = last ? Math.max(0, rest - cap) : 0;
+      rest -= take; if (last) rest = 0;
+      const t = takes.find((q) => q.src === l.src), row = { cat: r.name, planned: l.amount, carryIn: i === 0 ? r.carryIn : 0, allowed: cap, spent: take + ov, over: ov, left: Math.max(0, cap - take), paid: t ? t.take : 0, short: Math.max(0, l.amount - (t ? t.take : 0)), lump: !!r.lump, lumpDue: r.lumpDue };
+      const src = sources.find((q) => q.key === l.src); if (src) src.rows.push(row);
+    });
+  }
+  const salary = salaryProtection(data, all, month, 0);
+  return { month, past, sources, unplanned, spent, pocket, over, left, credited: inc.received, expected: inc.expected, income: wf.income, short: wf.short, unused: wf.unused, salary };
+}
+
+/** One or many months, added up. Planned, spent and over are totals; left over is what stood at the end of the last month. */
+export function progressReport(data, all, months) {
+  const per = months.map((m) => progressMonth(data, all, m));
+  if (!per.length) return { months: [], per, sources: [], unplanned: [], spent: 0, pocket: 0, over: 0, left: 0, credited: 0, expected: 0, income: 0, short: 0, unused: 0 };
+  const last = per[per.length - 1], sources = new Map(), un = new Map();
+  for (const m of per) {
+    for (const x of m.sources) {
+      const t = sources.get(x.key) || { key: x.key, name: x.name, kind: x.kind, monthly: x.monthly, expected: 0, received: 0, allocated: 0, unused: 0, short: 0, rows: new Map() }; sources.set(x.key, t);
+      t.expected += x.expected; t.received += x.received; t.allocated += x.allocated; t.unused += x.unused; t.short += x.short;
+      for (const r of x.rows) { const k = lc(r.cat), o = t.rows.get(k) || { cat: r.cat, planned: 0, carryIn: 0, spent: 0, over: 0, left: 0, paid: 0, short: 0, lump: r.lump, lumpDue: false }; t.rows.set(k, o);
+        o.planned += r.planned; o.spent += r.spent; o.over += r.over; o.paid += r.paid; o.short += r.short; o.left = r.left; o.allowed = r.allowed; if (m === per[0]) o.carryIn = r.carryIn; o.lumpDue = r.lumpDue; }
+    }
+    for (const u of m.unplanned) un.set(lc(u.cat), { cat: u.cat, spent: (un.get(lc(u.cat)) || { spent: 0 }).spent + u.spent });
+  }
+  const sum2 = (f) => per.reduce((a, m) => a + f(m), 0);
+  return { months, per, last, sources: [...sources.values()].map((t) => ({ ...t, rows: [...t.rows.values()] })), unplanned: [...un.values()], spent: sum2((m) => m.spent), pocket: sum2((m) => m.pocket), over: sum2((m) => m.over), left: last.left, credited: sum2((m) => m.credited), expected: sum2((m) => m.expected), income: sum2((m) => m.income), short: sum2((m) => m.short), unused: last.unused, salary: last.salary };
+}
+
 export function incomeActual(data, all, month) {
   const map = incomeInMonth(data, all, month), src = sources(data, all);
   const rows = src.map((s) => ({ ...s, ...sourceMonth(s, map) }));

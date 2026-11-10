@@ -150,6 +150,15 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.87.0 – Passive income: one Progress tab
+
+Actual vs plan and Progress are now one **Progress** tab, the only place that shows actuals. Overview and Allocations are plan only (no trend, no attention list, no averages of past months; an expense with no budget just says so).
+- **Period**: This month, Last month, 3 / 6 months (finished months), Year to date, 12 months.
+- **KPIs**: passive income (this month includes the projected income that is still due), spent, from your pocket, and the more income a month that would have covered the pocket spend.
+- **One card per income**, listing the expenses planned on it: planned, spent, *Over by* when it went above, *Income fell short* when the income paid less than planned, and what was left over (with carry-forward on it moves to the next month; money left from earlier months is shown too). Spend of an expense is taken by its incomes in their order; anything above everything planned lands on the last one. Spend with nothing planned is listed as paid from the pocket.
+- Several months add up (planned, spent, over); left over is what stood at the end. A month-by-month table, *Set aside for later payments* and Salary protection follow.
+- Old links to the Actual vs plan tab open Overview. Presentation and read-only calculations; nothing stored changes.
+
 ## Release 8.86.0 – Passive income: simpler Actual vs plan
 
 Actual vs plan now answers two questions per expense: how much went over the plan, and how much came out of your pocket because passive income was not enough. The "This month's income, used in order" and "Expenses this month / On plan" sections are gone. Top figures: passive income credited, spent, paid by passive income, from your pocket. *By expense* lists each expense with what it cost, what passive income paid (the credited income used in each income's order, plus carried-over balance), the rest from the pocket, and the reason (over the plan / income short / no income set aside). *Set aside*, income expected vs credited and salary protection stay. Presentation only; nothing stored changes.
