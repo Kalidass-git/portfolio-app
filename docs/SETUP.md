@@ -150,6 +150,15 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.80.0 – Passive income: grouped bonds, payment order, allocation cards
+
+- **Bonds are grouped** by how they pay: one "Monthly bonds" source and one "Quarterly bonds" source (tap Income settings to see the bonds inside). Allocations saved earlier against a single bond move into its group automatically when read; the saved file is not rewritten until you next change the plan.
+- **Payment order**: each expense has a priority (shown as 1, 2, 3 on the board and in a new Payment order list with up and down buttons; saved as the optional `settings.passivePlan.order`). An allocation is now a plan, not a promise. Each month the income that really arrives is used from the top of the order: with 10,000 of interest and rent first at 10,000, rent is paid and the rest is left short; with 40,000 everything is paid and the rest is left over.
+- **Actual vs plan** has a new section, "This month's income, used in order", showing what each expense gets and what is left short (income due for the current month, credited for finished months). A red item appears under Needs attention when a month's income will not cover every allocation. Nothing is paid out or raised automatically.
+- **Allocations tab** shows Passive income, Allocated, Unallocated and Unmapped expenses as cards.
+- Dragging an income dot near the top or bottom of the screen scrolls the page, so an expense off screen can be reached.
+- Tests added to `tests/passive.test.mjs`.
+
 ## Release 8.79.0 – Passive income planner
 
 A new page, **Spend & plan → Passive income** (`#/passive`), to fund the household's expenses from passive income and keep the salary invested. It reads data the app already has and saves only the owner's plan in one optional field, `settings.passivePlan` (older files work without it; nothing was renamed or removed).
