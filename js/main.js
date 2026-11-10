@@ -10,6 +10,7 @@ import * as gold from './views/gold.js';
 import * as savings from './views/savings.js';
 import * as flow from './views/flow.js';
 import * as monthdetail from './views/monthdetail.js';
+import * as passive from './views/passive.js';
 import * as projector from './views/projector.js';
 import * as riskPage from './views/risk.js';
 import * as report from './views/report.js';
@@ -28,6 +29,7 @@ const ROUTES = {
   gold: { label: 'Gold & others', short: 'Gold & more', view: gold, tab: 'assets', group: 'Assets', icon: 'M12 3l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V7z' },
   flow: { label: 'Income & expenses', view: flow, tab: 'flow', group: 'Spend & plan', icon: 'M4 6h16M4 12h10M4 18h6' },
   monthdetail: { label: 'Month in detail', short: 'Month in detail', view: monthdetail, tab: 'flow', group: 'Spend & plan', icon: 'M5 4h14v16H5zM8 9h8M8 13h8M8 17h5' },
+  passive: { label: 'Passive income', short: 'Passive income', view: passive, tab: 'flow', group: 'Spend & plan', icon: 'M12 3v18M17 7.5c0-1.9-2.2-3-5-3s-5 1.1-5 3 2.2 2.8 5 3.5 5 1.6 5 3.5-2.2 3-5 3-5-1.1-5-3' },
   projector: { label: 'Wealth outlook', short: 'Wealth outlook', view: projector, tab: 'outlook', group: 'Spend & plan', icon: 'M3 17l6-6 4 4 8-9M15 6h6v6' },
   risk: { label: 'Risk & what-if', short: 'Risk', view: riskPage, tab: 'outlook', group: 'Spend & plan', icon: 'M12 3l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V7zM9 12l2 2 4-4' },
   report: { label: 'Family report', short: 'Family report', view: report, tab: 'report', group: 'Report', icon: 'M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h7' },
