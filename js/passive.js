@@ -8,7 +8,8 @@
 //     expense: { [category in lower case]: { name, mode: 'fixed', amount, freq, lump: { amount, every } } }   an expense that costs the same every time, instead of the average of past months;
 //              lump = a further payment made once every `every` months (maintenance at quarter end), planned as a share of every month
 //     merge: { [category in lower case]: 'Other category' }   a category counted as part of another (Maintenance as part of Rent)
-//     order: [category names, first = paid first]   the priority a month's income is used in }
+//     order: [category names, first = paid first]   the default priority, used for an income that has no order of its own
+//     sorder: { [source key]: [category names] }   the order one income pays its expenses in (set by dragging cards in its column) }
 // An allocation is a plan, not a promise: each month the income that really arrives is used in that order, so a smaller month pays the first expenses in full and leaves the last ones short.
 // Nothing here changes a budget: allocations are only ever changed by the owner.
 import * as C from './calc.js';
@@ -37,13 +38,13 @@ export function planOf(data, all) {
     const seen = new Map(); for (const a of alloc) { const k = a.src + '|' + lc(a.cat), o = seen.get(k); if (o) o.amount = (Number(o.amount) || 0) + (Number(a.amount) || 0); else seen.set(k, a); }
     alloc = [...seen.values()];
   }
-  return { alloc, freq: { ...(p.freq || {}) }, extra: (p.extra || []).map((x) => ({ ...x })), skip: [...(p.skip || [])], carry: p.carry !== false, from: p.from || '', order: [...(p.order || [])], expense: { ...(p.expense || {}) }, merge: { ...(p.merge || {}) } };
+  return { alloc, freq: { ...(p.freq || {}) }, extra: (p.extra || []).map((x) => ({ ...x })), skip: [...(p.skip || [])], carry: p.carry !== false, from: p.from || '', order: [...(p.order || [])], sorder: Object.fromEntries(Object.entries(p.sorder || {}).map(([k, v]) => [k, [...v]])), expense: { ...(p.expense || {}) }, merge: { ...(p.merge || {}) } };
 }
 export const bondGroup = (b) => (b.credit === 'Quarterly' ? 'bondgrp:quarterly' : 'bondgrp:monthly');
 /** Writes the plan into a data object inside mutate(). */
 export function savePlan(d, plan) {
   d.settings = d.settings || {};
-  d.settings.passivePlan = { alloc: plan.alloc.map((a) => ({ id: a.id, src: a.src, cat: a.cat, amount: r0(a.amount) })), freq: plan.freq, extra: plan.extra, skip: plan.skip, carry: plan.carry !== false, from: plan.from || '', order: plan.order || [], expense: plan.expense || {}, merge: plan.merge || {} };
+  d.settings.passivePlan = { alloc: plan.alloc.map((a) => ({ id: a.id, src: a.src, cat: a.cat, amount: r0(a.amount) })), freq: plan.freq, extra: plan.extra, skip: plan.skip, carry: plan.carry !== false, from: plan.from || '', order: plan.order || [], sorder: plan.sorder || {}, expense: plan.expense || {}, merge: plan.merge || {} };
 }
 export const newId = (list, p) => { let n = list.length + 1; const have = new Set(list.map((x) => x.id)); while (have.has(p + n)) n++; return p + n; };
 
@@ -158,7 +159,10 @@ export function allocation(data, all) {
   const sources2 = src.map((s) => { const al = sum(live.filter((a) => a.src === s.key), (a) => a.amount); return { ...s, allocated: al, remaining: s.monthly - al, over: Math.max(0, al - s.monthly) }; });
   const cats2 = cats.map((c) => { const fund = sum(live.filter((a) => lc(a.cat) === lc(c.name)), (a) => a.amount); return { ...c, funded: fund, need: Math.max(0, c.base - fund), extra: Math.max(0, fund - c.base) }; });
   const rk = new Map(cats.map((c, i) => [lc(c.name), i]));
-  for (const sx of sources2) live.filter((a) => a.src === sx.key).sort((a, b) => rk.get(lc(a.cat)) - rk.get(lc(b.cat))).forEach((a, i) => { a.ord = i + 1; });   // the order this source pays in
+  for (const sx of sources2) {   // the order this source pays in: its own order if it has one, then the order of the expenses
+    const own = new Map(((plan.sorder || {})[sx.key] || []).map((n, i) => [lc(n), i]));
+    live.filter((a) => a.src === sx.key).sort((a, b) => (own.has(lc(a.cat)) ? own.get(lc(a.cat)) : 1e6 + rk.get(lc(a.cat))) - (own.has(lc(b.cat)) ? own.get(lc(b.cat)) : 1e6 + rk.get(lc(b.cat)))).forEach((a, i) => { a.ord = i + 1; });
+  }
   const totalIncome = sum(sources2, (s) => s.monthly), allocated = sum(live, (a) => a.amount), expenses = sum(cats2, (c) => c.base);
   return { plan, sources: sources2, cats: cats2, links: live, orphans, totalIncome, allocated, unallocated: totalIncome - allocated, expenses,
     unmapped: cats2.filter((c) => c.base > 0 && c.funded === 0), partial: cats2.filter((c) => c.funded > 0 && c.funded < c.base - 0.5), covered: Math.min(allocated, expenses) };
@@ -199,11 +203,11 @@ export function waterfall(al, avail) {
   const rank = new Map(al.cats.map((c) => [lc(c.name), c.rank])), paid = new Map(), bySource = [];
   for (const s of al.sources) {
     let left = Math.max(0, Number(avail.get(s.key)) || 0);
-    const links = al.links.filter((l) => l.src === s.key).sort((a, b) => (rank.get(lc(a.cat)) || 1e6) - (rank.get(lc(b.cat)) || 1e6));
+    const links = al.links.filter((l) => l.src === s.key).sort((a, b) => (a.ord != null && b.ord != null ? a.ord - b.ord : (rank.get(lc(a.cat)) || 1e6) - (rank.get(lc(b.cat)) || 1e6)));
     for (const l of links) { const take = Math.min(left, l.amount); left -= take; paid.set(lc(l.cat), (paid.get(lc(l.cat)) || 0) + take); }
     bySource.push({ key: s.key, name: s.name, income: Math.max(0, Number(avail.get(s.key)) || 0), allocated: sum(links, (l) => l.amount), unused: left });
   }
-  const rows = al.cats.filter((c) => c.funded > 0).map((c) => { const p = paid.get(lc(c.name)) || 0; return { name: c.name, rank: c.rank, planned: c.funded, paid: p, short: Math.max(0, c.funded - p), usual: c.base }; }).sort((a, b) => a.rank - b.rank);
+  const rows = al.cats.filter((c) => c.funded > 0).map((c) => { const p = paid.get(lc(c.name)) || 0; return { name: c.name, rank: c.rank, ord: Math.min(...al.links.filter((l) => lc(l.cat) === lc(c.name)).map((l) => (l.ord != null ? l.ord : 1e6))), planned: c.funded, paid: p, short: Math.max(0, c.funded - p), usual: c.base }; }).sort((a, b) => a.ord - b.ord || a.rank - b.rank);
   return { rows, bySource, income: sum(bySource, (r) => r.income), planned: sum(rows, (r) => r.planned), paid: sum(rows, (r) => r.paid), short: sum(rows, (r) => r.short), unused: sum(bySource, (r) => r.unused), shortCats: rows.filter((r) => r.short > 0.5) };
 }
 /** The waterfall for a month: income that actually arrived for a finished month, what is due for the current one. */

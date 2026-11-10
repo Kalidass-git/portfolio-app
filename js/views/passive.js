@@ -9,7 +9,7 @@ const TABS = [['overview', 'Overview'], ['allocations', 'Allocations'], ['actual
 const NS = 'http://www.w3.org/2000/svg';
 const svg = (tag, attrs = {}, ...kids) => { const el = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) if (v != null) el.setAttribute(k, v); for (const kid of kids.flat()) if (kid != null) el.append(kid.nodeType ? kid : document.createTextNode(String(kid))); return el; };
 const PAL = ['#0f8a6a', '#3b82c4', '#c08a1e', '#8b5cf6', '#d4572e', '#2a9d8f'];
-let month = '', range = 12, filt = 'all';   // filt: which expenses the Allocations list shows
+let month = '', range = 12, kcol = 'all';   // kcol: which column of the Allocations board is shown ('all' or a column key)
 const tone = (cov) => (cov == null ? 'muted' : cov >= 1 ? 'pos' : cov >= 0.5 ? 'warn' : 'neg');
 const KIND = { bond: 'Bond interest', lending: 'Lending interest', other: 'Other income' };
 const srcColor = (al, key) => PAL[Math.max(0, al.sources.findIndex((s) => s.key === key)) % PAL.length];
@@ -197,54 +197,123 @@ function salaryCard(sm) {
     h('p', { class: 'note' }, `Passive income paid ${money(r.funded)} of ${money(r.spent)} spent so far this month. ${r.diverted > 0 ? money(r.diverted) + ' had to come from salary.' : 'No salary was needed for expenses.'}${S.data.settings.passivePlan && P.planOf(S.data).carry && sm.hist.length > 1 && sm.hist[sm.hist.length - 2].reserve > 0 ? ' A reserve of ' + money(sm.hist[sm.hist.length - 2].reserve) + ' from earlier months was available.' : ''}`)));
 }
 
-/** The expense cards in priority order. The grip drags a card to a new place (or Up and Down on the keyboard); the order is saved and every chip renumbers by itself. */
-function expenseList(al, ed, shown) {
-  const list = h('ol', { class: 'pi-ex' }), drag = filt === 'all' && ed;
-  const saveOrder = (names) => setPlan((p) => { p.order = names; });
-  for (const c of shown) {
-    const links = al.links.filter((l) => l.cat.toLowerCase() === c.name.toLowerCase()).sort((a, b) => b.amount - a.amount), full = c.base > 0 && c.funded >= c.base - 0.5, st = c.funded === 0 ? (c.base > 0 ? 'none' : 'idle') : full ? 'full' : 'part';
-    const grip = drag ? h('span', { class: 'pi-grip', role: 'button', tabindex: '0', 'aria-label': `Move ${c.name}. Drag, or press Up or Down.`, title: 'Drag to change the order',
-      onkeydown: (e) => { const names = al.cats.map((x) => x.name), i = names.indexOf(c.name), j = i + (e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0); if (j === i || j < 0 || j >= names.length) return; e.preventDefault(); [names[i], names[j]] = [names[j], names[i]]; saveOrder(names); } }, '⠿') : null;
-    const li = h('li', { class: 'pi-exc ' + st, 'data-cat': c.name, tabindex: ed ? '0' : null, role: ed ? 'button' : null, onclick: (e) => { if (ed && !e.target.closest('.pi-grip')) expenseSheet(al, c.name); }, onkeydown: (e) => { if (ed && e.target === li && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); expenseSheet(al, c.name); } } },
-      h('div', { class: 'pi-exc-h' }, grip, h('i', { class: 'pb-rank', title: 'Paid in this order' }, c.rank), h('span', { class: 'pi-exc-t' }, h('b', null, c.name), h('small', null, c.fixed ? `Fixed ${money(c.base)} a month${c.lump ? ` (${money(c.fx && c.fx.amount ? c.fx.amount : 0)} monthly + ${money(c.lump.amount)} every ${c.lump.every} months)` : ''}` : c.mixed ? `${money(c.base)} a month` : c.base > 0 ? `Usually ${money(c.base)} a month` : 'Nothing spent lately')),
-        h('span', { class: 'pi-exc-n' }, h('b', null, money(c.funded)), h('small', null, c.base > 0 ? 'of ' + money(c.base) : ''))),
-      bar(c.base > 0 ? c.funded / c.base : 0, st === 'full' ? 'ok' : st === 'part' ? 'mid' : 'bad'),
-      h('div', { class: 'pi-chips' }, links.map((l) => { const sx = al.sources.find((x) => x.key === l.src); return h('span', { class: 'pi-src', style: { '--c': srcColor(al, l.src) } }, h('i'), h('b', null, `#${l.ord}`), ' ', sx ? sx.name.replace(' bonds', '') : l.src, ' ', h('em', null, money(l.amount))); }),
-        st === 'none' ? chip('Unmapped', 'bad') : st === 'part' ? chip('Needs ' + money(c.need), 'mid') : st === 'full' ? chip(c.extra > 0.5 ? 'Funded · ' + money(c.extra) + ' extra' : 'Funded', 'ok') : null,
-        ed ? h('span', { class: 'pi-add' }, links.length ? 'Edit' : '+ Add income') : null));
-    list.append(li);
+// ---------- the board: one column per income, a card per expense it pays, in the order it pays them ----------
+const snapshot = () => JSON.stringify((S.data.settings && S.data.settings.passivePlan) || null);
+/** Runs a plan change and offers to take it back. */
+function change(msg, fn) {
+  const before = snapshot();
+  mutate((d) => { const p = P.planOf(d, S.all); fn(p); if (!p.from) p.from = C.monthKey(S.all.asOf); P.savePlan(d, p); });
+  toast(msg, '', { label: 'Undo', onClick: () => mutate((d) => { d.settings = d.settings || {}; if (before === 'null') delete d.settings.passivePlan; else d.settings.passivePlan = JSON.parse(before); }) });
+}
+/** Puts `cat` at place `idx` in the order of the expenses a source pays. */
+function place(p, al, src, cat, idx) {
+  const names = al.links.filter((l) => l.src === src && l.cat.toLowerCase() !== cat.toLowerCase()).sort((a, b) => a.ord - b.ord).map((l) => l.cat);
+  names.splice(Math.max(0, Math.min(idx, names.length)), 0, cat); p.sorder[src] = names;
+}
+const setAmount = (p, src, cat, amount) => {
+  const i = p.alloc.findIndex((a) => a.src === src && a.cat.toLowerCase() === cat.toLowerCase());
+  if (amount <= 0) { if (i >= 0) p.alloc.splice(i, 1); } else if (i >= 0) p.alloc[i].amount = amount; else p.alloc.push({ id: P.newId(p.alloc, 'pa'), src, cat, amount });
+};
+/** One income paying one expense, from a card dropped into a column: how much, up to what the income has left. */
+function pairSheet(al, srcKey, catName, idx) {
+  const src = al.sources.find((x) => x.key === srcKey), cat = al.cats.find((c) => c.name === catName); if (!src || !cat) return;
+  const avail = Math.max(0, Math.round(src.remaining)), need = Math.max(0, Math.round(cat.need));
+  if (avail < 1) { toast(`${src.name} has nothing left to give. Free some from another expense first.`); return; }
+  const input = h('input', { type: 'number', inputmode: 'numeric', min: '0', step: '100', value: String(Math.min(avail, need || avail)), class: 'pi-amt', 'aria-label': 'Amount per month' }), note = h('p', { class: 'pi-note' }), left = h('b');
+  const chips = [['All that is left', avail], ...(need ? [['What it needs', Math.min(need, avail)]] : [])];
+  const body = h('div', { class: 'form' }, h('div', { class: 'pi-pair' }, h('span', { class: 'pi-dotc', style: { background: srcColor(al, srcKey) } }), h('b', null, src.name), h('span', { class: 'muted' }, '→'), h('b', null, cat.name)),
+    h('label', { class: 'pi-field' }, h('span', null, 'Pays towards it each month (₹)'), input), h('div', { class: 'chips-row' }, chips.map(([l, v]) => h('button', { type: 'button', class: 'chip-btn', onclick: () => { input.value = String(v); check(); } }, `${l} ${money(v)}`))),
+    h('div', { class: 'pi-live' }, h('span', null, `${src.name} left after this`), left), note);
+  let ok = true;
+  const dlg = dialog('Allocate income', body, [{ label: 'Cancel', onclick: (c) => c() }, { label: 'Save allocation', class: 'primary', onclick: (c) => { if (!ok) return; c(); const v = Number(input.value) || 0; change('Allocation saved', (p) => { setAmount(p, srcKey, catName, v); if (v > 0) place(p, al, srcKey, catName, idx == null ? 1e6 : idx); }); } }]);
+  const save = dlg.el.querySelector('footer .primary');
+  function check() { const v = Math.max(0, Number(input.value) || 0); ok = v <= avail + 0.5 && v > 0; left.textContent = money(avail - v); left.className = v > avail ? 'neg' : ''; note.textContent = v > avail ? `${src.name} only has ${money(avail)} left each month.` : ''; note.className = 'pi-note bad'; if (save) save.disabled = !ok; }
+  input.addEventListener('input', check); check(); setTimeout(() => { input.focus(); input.select(); }, 60);
+}
+
+/** Drops a card: reorder inside a column, give an expense to an income, move it to another income, or take it back to Needs income. */
+function drop(al, from, to, cat, idx) {
+  if (from === to) { if (to === 'need') return; change('Order changed', (p) => place(p, al, to, cat, idx)); return; }
+  if (to === 'need') { change(`${cat} is no longer paid from ${(al.sources.find((x) => x.key === from) || {}).name}`, (p) => setAmount(p, from, cat, 0)); return; }
+  if (from === 'need') { pairSheet(al, to, cat, idx); return; }
+  const a = al.links.find((l) => l.src === from && l.cat.toLowerCase() === cat.toLowerCase()), t = al.sources.find((x) => x.key === to); if (!a || !t) return;
+  const room = Math.max(0, Math.round(t.remaining)), mine = al.links.find((l) => l.src === to && l.cat.toLowerCase() === cat.toLowerCase()), take = Math.min(a.amount, room);
+  if (take < 1) { toast(`${t.name} has nothing left to give. Free some from another expense first.`); return; }
+  change(take < a.amount ? `Moved ${money(take)} of ${money(a.amount)} (all that ${t.name} had left)` : `${cat} is now paid from ${t.name}`, (p) => { setAmount(p, from, cat, a.amount - take); setAmount(p, to, cat, (mine ? mine.amount : 0) + take); place(p, al, to, cat, idx); });
+}
+
+function board(al, ed) {
+  const need = al.cats.filter((c) => c.base > 0 && c.funded < c.base - 0.5), cols = [{ key: 'need', name: 'Needs income', tone: 'need' }, ...al.sources.map((x) => ({ key: x.key, name: x.name, src: x }))];
+  if (kcol !== 'all' && !cols.some((c) => c.key === kcol)) kcol = 'all';
+  const scroller = h('div', { class: 'pk' + (kcol !== 'all' ? ' one' : '') });
+  const bodies = new Map();
+  const card = (colKey, c, link) => {
+    const full = c.base > 0 && c.funded >= c.base - 0.5, st = c.funded === 0 ? (c.base > 0 ? 'none' : 'idle') : full ? 'full' : 'part', line = link ? srcColor(al, link.src) : 'var(--neg)';
+    const li = h('li', { class: 'pk-card ' + st, 'data-cat': c.name, 'data-col': colKey, tabindex: ed ? '0' : null, style: { '--c': line }, role: ed ? 'button' : null,
+      onclick: (e) => { if (ed && !li._dragged && !e.target.closest('.pk-grip')) expenseSheet(al, c.name); li._dragged = false; }, onkeydown: (e) => { if (ed && e.target === li && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); expenseSheet(al, c.name); } } },
+      h('div', { class: 'pk-h' }, ed ? h('span', { class: 'pk-grip', 'aria-hidden': 'true', title: 'Drag' }, '⠿') : null, link ? h('i', { class: 'pb-rank', title: 'Order this income pays in' }, link.ord) : null, h('b', null, c.name), h('span', { class: 'pk-amt' }, link ? money(link.amount) : money(c.need))),
+      h('small', null, link ? `${c.fixed ? 'Fixed ' : ''}${money(c.base)} a month · ${c.base > 0 ? Math.round((c.funded / c.base) * 100) : 0}% funded` : c.funded > 0 ? `${money(c.funded)} of ${money(c.base)} funded` : `${money(c.base)} a month, no income yet`));
+    return li;
+  };
+  for (const col of cols) {
+    const x = col.src, list = h('ul', { class: 'pk-list', 'data-col': col.key });
+    if (col.key === 'need') for (const c of need) list.append(card('need', c, null));
+    else for (const l of al.links.filter((q) => q.src === col.key).sort((a, b) => a.ord - b.ord)) { const c = al.cats.find((k) => k.name.toLowerCase() === l.cat.toLowerCase()); if (c) list.append(card(col.key, c, l)); }
+    if (!list.children.length) list.append(h('li', { class: 'pk-empty' }, col.key === 'need' ? 'Every expense has income.' : 'Drop an expense here.'));
+    bodies.set(col.key, list);
+    scroller.append(h('section', { class: 'pk-col' + (col.key === 'need' ? ' need' : ''), 'data-col': col.key, style: x ? { '--c': srcColor(al, x.key) } : null },
+      h('header', { class: 'pk-ch' }, h('b', null, h('i'), col.name), x ? h('span', { class: 'pk-n' }, money(x.monthly), h('small', null, ' / mo')) : h('span', { class: 'pk-n' }, money(need.reduce((a, c) => a + c.need, 0)), h('small', null, ' needed')),
+        x ? bar(x.monthly > 0 ? x.allocated / x.monthly : 0, x.over > 0.5 ? 'bad' : '') : null, x ? h('small', { class: x.over > 0.5 ? 'neg' : x.remaining < 1 ? 'pos' : '' }, x.over > 0.5 ? `${money(x.over)} over-allocated` : `${money(Math.max(0, x.remaining))} left · ${money(x.allocated)} allocated`) : h('small', null, `${need.length} expense${need.length === 1 ? '' : 's'}`)),
+      h('div', { class: 'pk-body' }, list)));
   }
-  if (drag) list.addEventListener('pointerdown', (e) => {
-    const grip = e.target.closest('.pi-grip'); if (!grip) return; e.preventDefault();
-    const li = grip.closest('.pi-exc'), start = [...list.children].map((x) => x.dataset.cat); let raf = 0, cy = e.clientY;
-    li.classList.add('lift'); document.body.classList.add('pi-dragging');   // moving the card in the page drops pointer capture, so the whole window listens
-    const place = () => {
-      for (const sib of [...list.children]) { if (sib === li) continue; const r = sib.getBoundingClientRect(), mid = r.top + r.height / 2, after = !!(li.compareDocumentPosition(sib) & Node.DOCUMENT_POSITION_PRECEDING);
-        if (after && cy < mid) { list.insertBefore(li, sib); break; } if (!after && cy > mid) { sib.after(li); break; } }
+  // dragging a card: it follows the pointer, the column under it lights up and a line shows where it will land
+  if (ed) scroller.addEventListener('pointerdown', (e) => {
+    const cardEl = e.target.closest('.pk-card'); if (!cardEl || e.button > 0) return;
+    const touch = e.pointerType === 'touch' || e.pointerType === 'pen'; if (touch && !e.target.closest('.pk-grip')) return;
+    if (touch) e.preventDefault();
+    const from = cardEl.dataset.col, cat = cardEl.dataset.cat, sx = e.clientX, sy = e.clientY; let ghost = null, mark = null, target = null, idx = 0, cx = sx, cy = sy, raf = 0;
+    const colUnder = () => { const el = document.elementFromPoint(cx, cy); return el && el.closest ? el.closest('.pk-col') : null; };
+    const aim = () => {
+      const col = colUnder(); scroller.querySelectorAll('.pk-col.over').forEach((q) => q.classList.remove('over')); target = col ? col.dataset.col : null;
+      if (mark) { mark.remove(); mark = null; } if (!col) return; col.classList.add('over');
+      const list = bodies.get(target), cards = [...list.querySelectorAll('.pk-card')].filter((q) => q !== cardEl); idx = cards.length;
+      for (let i = 0; i < cards.length; i++) { const r = cards[i].getBoundingClientRect(); if (cy < r.top + r.height / 2) { idx = i; break; } }
+      if (target !== 'need') { mark = h('li', { class: 'pk-mark' }); const empty = list.querySelector('.pk-empty'); if (empty) empty.style.display = 'none'; if (cards[idx]) list.insertBefore(mark, cards[idx]); else list.append(mark); }
     };
-    const tick = () => { raf = 0; const H = window.innerHeight, dy = cy < 90 ? -14 : cy > H - 90 ? 14 : 0; if (dy) { window.scrollBy(0, dy); place(); raf = requestAnimationFrame(tick); } };
-    const move = (ev) => { cy = ev.clientY; place(); if (!raf) raf = requestAnimationFrame(tick); };
-    const up = () => {
-      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); li.classList.remove('lift'); document.body.classList.remove('pi-dragging');
-      const now = [...list.children].map((x) => x.dataset.cat); if (now.join('|') !== start.join('|')) saveOrder(now);
+    const tick = () => {
+      raf = 0; const H = window.innerHeight, W = window.innerWidth; let moved = false;
+      const dy = cy < 80 ? -14 : cy > H - 80 ? 14 : 0; if (dy) { window.scrollBy(0, dy); moved = true; }
+      const sb = scroller.getBoundingClientRect(), dx = cx < sb.left + 50 ? -16 : cx > sb.right - 50 ? 16 : 0; if (dx && scroller.scrollWidth > scroller.clientWidth) { scroller.scrollLeft += dx; moved = true; }
+      const col = colUnder(), body = col && col.querySelector('.pk-body'); if (body) { const r = body.getBoundingClientRect(), by = cy < r.top + 40 ? -12 : cy > r.bottom - 40 ? 12 : 0; if (by && body.scrollHeight > body.clientHeight) { body.scrollTop += by; moved = true; } }
+      if (moved) { aim(); raf = requestAnimationFrame(tick); }
+    };
+    const begin = () => {
+      const r = cardEl.getBoundingClientRect(); ghost = cardEl.cloneNode(true); ghost.classList.add('pk-ghost'); ghost.style.width = r.width + 'px'; ghost.dataset.dx = String(sx - r.left); ghost.dataset.dy = String(sy - r.top); document.body.append(ghost);
+      cardEl.classList.add('pk-ph'); cardEl._dragged = true; document.body.classList.add('pi-dragging');
+    };
+    const move = (ev) => {
+      cx = ev.clientX; cy = ev.clientY;
+      if (!ghost) { if (!touch && Math.hypot(cx - sx, cy - sy) < 6) return; begin(); }
+      ghost.style.left = cx - Number(ghost.dataset.dx) + 'px'; ghost.style.top = cy - Number(ghost.dataset.dy) + 'px'; aim(); if (!raf) raf = requestAnimationFrame(tick);
+    };
+    const up = (ev) => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
+      if (!ghost) return; const t = target; ghost.remove(); if (mark) mark.remove(); cardEl.classList.remove('pk-ph'); document.body.classList.remove('pi-dragging'); scroller.querySelectorAll('.pk-col.over').forEach((q) => q.classList.remove('over')); scroller.querySelectorAll('.pk-empty').forEach((q) => { q.style.display = ''; });
+      if (ev.type === 'pointerup' && t) drop(al, from, t, cat, idx);
     };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
   });
-  return list;
+  const filter = h('nav', { class: 'pk-filter seg', 'aria-label': 'Columns shown' }, [['all', 'All'], ...cols.map((c) => [c.key, c.name.replace(' bonds', '')])].map(([k, l]) => h('button', { type: 'button', class: kcol === k ? 'on' : '', onclick: () => { kcol = k; window.dispatchEvent(new Event('rerender')); } }, l, k === 'need' ? ` ${need.length}` : '')));
+  scroller.querySelectorAll('.pk-col').forEach((c) => { c.hidden = kcol !== 'all' && c.dataset.col !== kcol; });
+  return h('div', null, filter, scroller);
 }
 
 function allocations(root, sm) {
   const al = sm.al, ed = canEdit();
   root.append(h('div', { class: 'kpis pi-kpis' }, kpi('Passive income', money(al.totalIncome) + ' / mo', 'planning figure', { tone: 'pos' }), kpi('Allocated', money(al.allocated), al.totalIncome > 0 ? pct(al.allocated / al.totalIncome, 0) + ' of income' : '', { tone: al.allocated > 0 ? 'pos' : '' }),
     kpi('Unallocated', money(al.unallocated), al.unallocated > 1 ? 'not paying any expense yet' : 'all of it has a job', { tone: al.unallocated > 1 ? 'warn' : 'pos' }), kpi('Unmapped expenses', money(sm.unmappedAmount) + ' / mo', al.unmapped.length ? `${al.unmapped.length} with no income` : 'none', { tone: al.unmapped.length ? 'neg' : 'pos' })));
-  // the income stays pinned while the expenses scroll underneath
-  root.append(h('div', { class: 'pi-strip', role: 'list', 'aria-label': 'Passive income and what is left of it' }, al.sources.map((x) => h('div', { class: 'pi-sc' + (x.over > 0.5 ? ' bad' : ''), role: 'listitem', style: { '--c': srcColor(al, x.key) } },
-    h('span', { class: 'pi-sc-t' }, h('i'), h('b', null, x.name)), h('span', { class: 'pi-sc-n' }, money(x.monthly), h('small', null, ' / mo')), bar(x.monthly > 0 ? x.allocated / x.monthly : 0, x.over > 0.5 ? 'bad' : ''),
-    h('small', { class: x.over > 0.5 ? 'neg' : x.remaining < 1 ? 'pos' : '' }, x.over > 0.5 ? `${money(x.over)} over` : `${money(Math.max(0, x.remaining))} left`)))));
-  const unmapped = al.cats.filter((c) => c.base > 0 && c.funded < c.base - 0.5), shown = filt === 'need' ? unmapped : filt === 'done' ? al.cats.filter((c) => c.funded > 0 && c.funded >= c.base - 0.5) : al.cats;
-  root.append(h('div', { class: 'pi-row' }, h('nav', { class: 'seg', 'aria-label': 'Show' }, [['all', 'All ' + al.cats.length], ['need', 'Needs income ' + unmapped.length], ['done', 'Funded']].map(([k, l]) => h('button', { type: 'button', class: filt === k ? 'on' : '', onclick: () => { filt = k; window.dispatchEvent(new Event('rerender')); } }, l))), sourceTools(al)));
-  root.append(h('p', { class: 'pi-help' }, ed ? 'Tap an expense to choose which income pays for it. Number #1, #2... is the order income is used in each month; drag the handle on a card to change it. The amounts are a plan: a smaller month pays the top ones first.' : 'Only the owner can change allocations.'));
-  root.append(shown.length ? expenseList(al, ed, shown) : h('p', { class: 'empty' }, filt === 'need' ? 'Every expense has income.' : 'Nothing here yet.'));
+  root.append(h('div', { class: 'pi-row' }, h('p', { class: 'pi-help', style: { flex: '1 1 260px' } }, ed ? 'Drag an expense into an income to pay it from there. Move it up or down to change the order (1 is paid first), or back to Needs income to take it off. Tap a card to split it across incomes; on a phone drag by the handle. Amounts are a plan: a smaller month pays the top cards first.' : 'Only the owner can change allocations.'), sourceTools(al)));
+  root.append(board(al, ed));
   if (ed) root.append(h('label', { class: 'pi-carry' }, h('input', { type: 'checkbox', checked: al.plan.carry, onchange: (e) => setPlan((p) => { p.carry = e.target.checked; }) }), h('span', null, 'Carry unused allocation to the next month')));
   if (al.orphans.length) root.append(section('Needs a look', h('div', null, h('p', { class: 'note' }, 'These point to income or an expense that is gone (a bond that ended, say).'), h('ul', { class: 'pi-links' }, al.orphans.map((o) => h('li', null, h('span', null, `${o.src} → ${o.cat}`), h('em', null, money(o.amount)), ed ? h('button', { type: 'button', class: 'chip-btn small', onclick: () => setPlan((p) => { p.alloc = p.alloc.filter((a) => a.id !== o.id); }) }, 'Remove') : null))))));
 }
@@ -261,7 +330,7 @@ function actual(root, sm) {
   const wf = P.monthFlow(S.data, S.all, month);
   if (wf.al.links.length) root.append(section(`This month's income, used in order`, h('div', null,
     h('p', { class: 'note', style: { marginTop: 0 } }, `${money(wf.income)} of passive income ${wf.basis === 'due' ? 'is due' : 'was credited'} against ${money(wf.planned)} allocated. It pays the first expense in the order, then the next.`),
-    h('ol', { class: 'pi-order' }, wf.rows.map((r) => h('li', { class: r.short > 0.5 ? 'short' : '' }, h('i', { class: 'pb-rank' }, r.rank), h('span', null, h('b', null, r.name), h('small', null, `planned ${money(r.planned)}`)), h('span', { class: 'pi-pay' }, bar(r.planned > 0 ? r.paid / r.planned : 0, r.short > 0.5 ? (r.paid > 0 ? 'mid' : 'bad') : 'ok'), h('em', { class: r.short > 0.5 ? 'neg' : 'pos' }, r.short > 0.5 ? `${money(r.paid)} paid · ${money(r.short)} short` : money(r.paid) + ' paid'))))),
+    h('ol', { class: 'pi-order' }, wf.rows.map((r, i) => h('li', { class: r.short > 0.5 ? 'short' : '' }, h('i', { class: 'pb-rank' }, i + 1), h('span', null, h('b', null, r.name), h('small', null, `planned ${money(r.planned)}`)), h('span', { class: 'pi-pay' }, bar(r.planned > 0 ? r.paid / r.planned : 0, r.short > 0.5 ? (r.paid > 0 ? 'mid' : 'bad') : 'ok'), h('em', { class: r.short > 0.5 ? 'neg' : 'pos' }, r.short > 0.5 ? `${money(r.paid)} paid · ${money(r.short)} short` : money(r.paid) + ' paid'))))),
     wf.unused > 0.5 ? h('p', { class: 'note' }, `${money(wf.unused)} of this month's income is not allocated to anything.`) : null)));
   root.append(section('Category by category', a.rows.length ? h('div', { class: 'pi-rows' }, a.rows.map((r) => {
     const lvl = r.state === 'over' || r.state === 'unmapped' ? 'bad' : r.state === 'near' || r.state === 'partial' ? 'mid' : 'ok', frac = r.available > 0 ? r.actual / r.available : r.actual > 0 ? 1 : 0;

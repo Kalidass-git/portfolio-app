@@ -1884,3 +1884,21 @@ dialog.sheet footer button:disabled { opacity: .45; cursor: not-allowed; }
 @media (max-width: 520px) { .pi-srow { grid-template-columns: auto 1fr 110px; } .pi-srow .chip-btn { display: none; } .pi-strip { top: 52px; grid-auto-columns: minmax(138px, 1fr); } }
 .pi-cat-sum { margin: 0; font-size: .82rem; color: var(--brand); } .pi-kept { margin: 0; font-size: .82rem; color: var(--muted); } .pi-kept.warn { color: var(--warn); }
 body.pi-dragging, body.pi-dragging * { cursor: grabbing !important; user-select: none; }
+
+/* passive income: kanban board */
+.pk-filter { margin-bottom: 8px; overflow-x: auto; flex-wrap: nowrap; } .pk-filter button { white-space: nowrap; }
+.pk { display: flex; gap: 12px; align-items: flex-start; overflow-x: auto; padding: 2px 2px 10px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+.pk-col { flex: 1 1 280px; min-width: 260px; max-width: 420px; display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-top: 4px solid var(--c, var(--neg)); border-radius: 14px; background: color-mix(in srgb, var(--line-2) 55%, var(--surface)); scroll-snap-align: start; }
+.pk-col[hidden] { display: none; } .pk.one .pk-col { flex: 1 1 100%; max-width: none; }
+.pk-col.need { background: color-mix(in srgb, var(--neg) 5%, var(--surface)); } .pk-col.over { outline: 2px dashed var(--brand); outline-offset: 2px; }
+.pk-ch { display: grid; gap: 4px; } .pk-ch b { display: flex; align-items: center; gap: 7px; } .pk-ch b i { width: 10px; height: 10px; border-radius: 50%; background: var(--c, var(--neg)); }
+.pk-n { font-weight: 700; font-size: 1.15rem; font-variant-numeric: tabular-nums; } .pk-n small, .pk-ch small { color: var(--muted); font-weight: 400; font-size: .76rem; } .pk-ch small.neg { color: var(--neg); } .pk-ch small.pos { color: var(--pos); }
+.pk-body { max-height: 62vh; overflow-y: auto; } .pk-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; min-height: 48px; }
+.pk-card { display: grid; gap: 3px; padding: 9px 10px; border: 1px solid var(--line); border-left: 4px solid var(--c, var(--neg)); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); user-select: none; -webkit-user-select: none; }
+.pk-card[role=button] { cursor: grab; } .pk-card[role=button]:hover { border-color: var(--brand); border-left-color: var(--c, var(--neg)); }
+.pk-card.part { background: color-mix(in srgb, var(--warn) 5%, var(--surface)); } .pk-card.none { background: color-mix(in srgb, var(--neg) 4%, var(--surface)); }
+.pk-h { display: flex; align-items: center; gap: 6px; } .pk-h b { flex: 1; min-width: 0; overflow-wrap: anywhere; } .pk-amt { font-weight: 700; font-variant-numeric: tabular-nums; } .pk-card small { color: var(--muted); font-size: .76rem; }
+.pk-grip { flex: none; width: 24px; height: 30px; display: grid; place-items: center; margin-left: -4px; color: var(--muted); font-size: 1.2rem; touch-action: none; cursor: grab; }
+.pk-ph { opacity: .35; } .pk-ghost { position: fixed; z-index: 1000; pointer-events: none; margin: 0; box-shadow: 0 12px 30px rgba(0,0,0,.25); transform: rotate(1.5deg); list-style: none; }
+.pk-mark { height: 4px; border-radius: 4px; background: var(--brand); list-style: none; } .pk-empty { list-style: none; padding: 14px; text-align: center; color: var(--muted); font-size: .84rem; border: 1px dashed var(--line); border-radius: 10px; }
+@media (max-width: 760px) { .pk-col { flex: 0 0 86%; max-width: none; } .pk.one .pk-col { flex-basis: 100%; } .pk-body { max-height: none; } }

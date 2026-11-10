@@ -150,6 +150,15 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.83.0 – Passive income: kanban board
+
+The Allocations tab is now a kanban board. One column per income (Monthly bonds, Quarterly bonds, each interest line, other income) plus a first column, **Needs income**, holding every expense that is not fully paid.
+- **Drag a card** from Needs income into an income's column to pay it from there (an amount sheet opens, limited to what that income has left). Drag it between incomes to move it (if the other income has less left, only that much moves and a message says so). Drag it back to Needs income to take it off. Every change has an Undo in the message that appears.
+- **Order is per income**: the card's number is the order that income pays in (1 first). Drag a card up or down inside its column to change it; the other cards renumber. Stored as the optional `settings.passivePlan.sorder` (an income without one follows the order of the expenses). Actual vs plan uses each income's own order.
+- **Tap a card** to split an expense across incomes in one sheet, as before.
+- **On a phone** use the column chips (All / Needs income / each income) to show one column at a time when there is no room across; with All, the columns scroll sideways and dragging a card near the screen edge scrolls them. Phones drag by the handle on the left of a card so normal scrolling still works.
+- Column headers show each income's monthly figure, what is allocated and what is left. The four summary cards stay at the top.
+
 ## Release 8.82.0 – Passive income: new Allocations layout, rent with a lump payment
 
 - **Allocations tab redesigned.** The drag-the-dot board is replaced by a pinned strip of the income sources (each with what is left of it, always visible while you scroll) above a list of expense cards. Tap an expense and one sheet lists every income with an amount box for each (no income can be asked for more than it has left; "Fill" tops up what the expense needs). Filter the list All / Needs income / Funded. The flow picture with connecting lines stays on the Overview tab, now with the order number on each line (for example "1 · 3k").
