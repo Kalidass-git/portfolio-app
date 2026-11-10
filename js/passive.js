@@ -4,7 +4,9 @@
 //   { alloc: [{ id, src, cat, amount }],      amount = ₹ per month that source pays towards that expense category
 //     freq:  { [src]: 'monthly' | 'quarterly' | 'halfyearly' | 'yearly' },   how often an income line is credited (its amount is then divided to a monthly figure)
 //     extra: [{ id, name, amount, freq, match }],   other passive income typed in (rent, dividends...); `match` finds its bank credits
-//     skip:  [category names left out of the plan], carry: true | false, from: 'YYYY-MM' (first month of the plan) }
+//     skip:  [category names left out of the plan], carry: true | false, from: 'YYYY-MM' (first month of the plan),
+//     order: [category names, first = paid first]   the priority a month's income is used in }
+// An allocation is a plan, not a promise: each month the income that really arrives is used in that order, so a smaller month pays the first expenses in full and leaves the last ones short.
 // Nothing here changes a budget: allocations are only ever changed by the owner.
 import * as C from './calc.js';
 import { kindOf } from './categories.js';
@@ -17,14 +19,22 @@ const r0 = (n) => Math.round(n);
 const SALARYISH = /salary|wage|payroll/i;
 
 /** The saved plan with every part present. */
-export function planOf(data) {
+export function planOf(data, all) {
   const p = (data.settings && data.settings.passivePlan) || {};
-  return { alloc: (p.alloc || []).map((a) => ({ ...a })), freq: { ...(p.freq || {}) }, extra: (p.extra || []).map((x) => ({ ...x })), skip: [...(p.skip || [])], carry: p.carry !== false, from: p.from || '' };
+  let alloc = (p.alloc || []).map((a) => ({ ...a }));
+  if (all && all.bonds) {   // allocations saved against one bond now belong to that bond's group (monthly or quarterly)
+    const grp = new Map(all.bonds.map((b) => ['bond:' + b.id, bondGroup(b)]));
+    alloc = alloc.map((a) => (grp.has(a.src) ? { ...a, src: grp.get(a.src) } : a));
+    const seen = new Map(); for (const a of alloc) { const k = a.src + '|' + lc(a.cat), o = seen.get(k); if (o) o.amount = (Number(o.amount) || 0) + (Number(a.amount) || 0); else seen.set(k, a); }
+    alloc = [...seen.values()];
+  }
+  return { alloc, freq: { ...(p.freq || {}) }, extra: (p.extra || []).map((x) => ({ ...x })), skip: [...(p.skip || [])], carry: p.carry !== false, from: p.from || '', order: [...(p.order || [])] };
 }
+export const bondGroup = (b) => (b.credit === 'Quarterly' ? 'bondgrp:quarterly' : 'bondgrp:monthly');
 /** Writes the plan into a data object inside mutate(). */
 export function savePlan(d, plan) {
   d.settings = d.settings || {};
-  d.settings.passivePlan = { alloc: plan.alloc.map((a) => ({ id: a.id, src: a.src, cat: a.cat, amount: r0(a.amount) })), freq: plan.freq, extra: plan.extra, skip: plan.skip, carry: plan.carry !== false, from: plan.from || '' };
+  d.settings.passivePlan = { alloc: plan.alloc.map((a) => ({ id: a.id, src: a.src, cat: a.cat, amount: r0(a.amount) })), freq: plan.freq, extra: plan.extra, skip: plan.skip, carry: plan.carry !== false, from: plan.from || '', order: plan.order || [] };
 }
 export const newId = (list, p) => { let n = list.length + 1; const have = new Set(list.map((x) => x.id)); while (have.has(p + n)) n++; return p + n; };
 
@@ -37,12 +47,16 @@ export const monthlyEquivalent = (amount, freq) => (Number(amount) || 0) / (FREQ
 
 /** Passive income sources: every bond held, every monthly income line that is not salary, and the extra lines typed in. monthly = the planning figure. */
 export function sources(data, all) {
-  const plan = planOf(data), asOf = all.asOf, tds = data.settings.tdsRate ?? 0.1, out = [];
+  const plan = planOf(data, all), asOf = all.asOf, tds = data.settings.tdsRate ?? 0.1, out = [];
+  const groups = { 'bondgrp:monthly': { n: 0, monthly: 0, members: [] }, 'bondgrp:quarterly': { n: 0, monthly: 0, members: [] } };
   for (const b of all.bonds || []) {
     const monthly = Number(b.monthNet) || 0, end = b.closed && b.closed.date ? b.closed.date : b.maturityDate;
-    if (end && end < C.monthStart(asOf)) continue;
-    if (!(monthly > 0.5)) continue;
-    out.push({ key: 'bond:' + b.id, name: b.name, kind: 'bond', sub: [b.company, b.holder].filter(Boolean).join(' · '), freq: b.credit === 'Quarterly' ? 'quarterly' : 'monthly', monthly, fixedFreq: true, tds });
+    if (!(monthly > 0.5) || (end && end < C.monthStart(asOf))) continue;
+    const g = groups[bondGroup(b)]; g.n++; g.monthly += monthly; g.members.push({ id: b.id, name: b.name, monthly });
+  }
+  for (const [key, g] of Object.entries(groups)) if (g.n) {
+    const q = key.endsWith('quarterly');
+    out.push({ key, name: q ? 'Quarterly bonds' : 'Monthly bonds', kind: 'bond', sub: `${g.n} bond${g.n === 1 ? '' : 's'} paying ${q ? 'every quarter' : 'every month'}`, freq: q ? 'quarterly' : 'monthly', monthly: g.monthly, fixedFreq: true, tds, members: g.members });
   }
   for (const m of data.manualMonthlyIncome || []) {
     if (SALARYISH.test(m.name) || !(Number(m.amount) > 0)) continue;
@@ -57,7 +71,7 @@ export function sources(data, all) {
 
 /** Expense categories with what they usually cost a month (the average of up to three finished months, else this month so far). */
 export function categories(data, all) {
-  const plan = planOf(data), kind = kindOf(data), cur = C.monthKey(all.asOf), skip = new Set(plan.skip.map(lc));
+  const plan = planOf(data, all), kind = kindOf(data), cur = C.monthKey(all.asOf), skip = new Set(plan.skip.map(lc));
   const months = C.ledgerMonths(data).filter((m) => m < cur).slice(-3), use = months.length ? months : [cur];
   const by = new Map();
   for (const e of data.ledger || []) {
@@ -69,7 +83,10 @@ export function categories(data, all) {
     by.set(lc(name), r);
   }
   for (const a of plan.alloc) if (!by.has(lc(a.cat))) by.set(lc(a.cat), { name: a.cat, base: 0, cur: 0 });
-  return [...by.values()].map((r) => ({ name: r.name, base: r0(r.base / use.length), cur: r0(r.cur), skipped: skip.has(lc(r.name)) })).sort((a, b) => b.base - a.base || a.name.localeCompare(b.name));
+  const rank = new Map(plan.order.map((n, i) => [lc(n), i]));
+  return [...by.values()].map((r) => ({ name: r.name, base: r0(r.base / use.length), cur: r0(r.cur), skipped: skip.has(lc(r.name)) }))
+    .sort((a, b) => (rank.has(lc(a.name)) ? rank.get(lc(a.name)) : 1e6) - (rank.has(lc(b.name)) ? rank.get(lc(b.name)) : 1e6) || b.base - a.base || a.name.localeCompare(b.name))
+    .map((c, i) => ({ ...c, rank: i + 1 }));
 }
 
 /** What each source gave in a month: expected and received, from the same figures Home shows. */
@@ -91,7 +108,7 @@ export function incomeInMonth(data, all, month) {
 
 /** Expected and received for one source in a month (a source that does not pay that month shows 0 expected). */
 function sourceMonth(src, map) {
-  if (src.key.startsWith('bond:')) { const r = map.get('bond:name:' + lc(src.name)); return r || { expected: 0, received: 0, due: '', late: false }; }
+  if (src.members) { const rs = src.members.map((m) => map.get('bond:name:' + lc(m.name))).filter(Boolean); return { expected: sum(rs, (r) => r.expected), received: sum(rs, (r) => r.received), due: '', late: false }; }
   return map.get(src.key) || { expected: 0, received: 0, due: '', late: false };
 }
 
@@ -108,7 +125,7 @@ export function spendByCategory(data, month, skipNames = []) {
 
 /** Allocation totals: per source (allocated, remaining) and per category (funded), plus the problems with the allocation itself. */
 export function allocation(data, all) {
-  const plan = planOf(data), src = sources(data, all), cats = categories(data, all).filter((c) => !c.skipped);
+  const plan = planOf(data, all), src = sources(data, all), cats = categories(data, all).filter((c) => !c.skipped);
   const srcBy = new Map(src.map((s) => [s.key, s])), catBy = new Map(cats.map((c) => [lc(c.name), c]));
   const live = plan.alloc.filter((a) => srcBy.has(a.src) && catBy.has(lc(a.cat)));
   const orphans = plan.alloc.filter((a) => !srcBy.has(a.src) || !catBy.has(lc(a.cat)));
@@ -121,7 +138,7 @@ export function allocation(data, all) {
 
 /** Actual against plan for one month, with unused allocation carried to the next month when the plan says so. */
 export function actualVsPlan(data, all, month) {
-  const plan = planOf(data), al = allocation(data, all), cur = C.monthKey(all.asOf), from = plan.from && plan.from <= month ? plan.from : month;
+  const plan = planOf(data, all), al = allocation(data, all), cur = C.monthKey(all.asOf), from = plan.from && plan.from <= month ? plan.from : month;
   const names = new Set(al.cats.map((c) => c.name)), skip = plan.skip;
   const rows = new Map(al.cats.map((c) => [lc(c.name), { name: c.name, planned: c.funded, carryIn: 0, actual: 0 }]));
   // walk the months from the start of the plan, so a reserve built earlier is there to use
@@ -144,6 +161,26 @@ export function actualVsPlan(data, all, month) {
   }).filter((r) => r.planned > 0 || r.actual > 0 || r.carryIn > 0).sort((a, b) => (b.over - a.over) || (b.actual - a.actual));
   return { month, rows: list, planned: sum(list, (r) => r.planned), actual: sum(list, (r) => r.actual), carryIn: sum(list, (r) => r.carryIn), remaining: sum(list, (r) => r.remaining), over: sum(list, (r) => r.over),
     unmappedAmount: sum(list.filter((r) => r.state === 'unmapped'), (r) => r.actual) };
+}
+
+/** Uses each source's income, in the order of the expenses, up to what is allocated. A source that has less than it was planned to give pays the first expenses in full and leaves the last ones short.
+ *  `avail` maps a source key to the income it has to give. */
+export function waterfall(al, avail) {
+  const rank = new Map(al.cats.map((c) => [lc(c.name), c.rank])), paid = new Map(), bySource = [];
+  for (const s of al.sources) {
+    let left = Math.max(0, Number(avail.get(s.key)) || 0);
+    const links = al.links.filter((l) => l.src === s.key).sort((a, b) => (rank.get(lc(a.cat)) || 1e6) - (rank.get(lc(b.cat)) || 1e6));
+    for (const l of links) { const take = Math.min(left, l.amount); left -= take; paid.set(lc(l.cat), (paid.get(lc(l.cat)) || 0) + take); }
+    bySource.push({ key: s.key, name: s.name, income: Math.max(0, Number(avail.get(s.key)) || 0), allocated: sum(links, (l) => l.amount), unused: left });
+  }
+  const rows = al.cats.filter((c) => c.funded > 0).map((c) => { const p = paid.get(lc(c.name)) || 0; return { name: c.name, rank: c.rank, planned: c.funded, paid: p, short: Math.max(0, c.funded - p), usual: c.base }; }).sort((a, b) => a.rank - b.rank);
+  return { rows, bySource, income: sum(bySource, (r) => r.income), planned: sum(rows, (r) => r.planned), paid: sum(rows, (r) => r.paid), short: sum(rows, (r) => r.short), unused: sum(bySource, (r) => r.unused), shortCats: rows.filter((r) => r.short > 0.5) };
+}
+/** The waterfall for a month: income that actually arrived for a finished month, what is due for the current one. */
+export function monthFlow(data, all, month) {
+  const al = allocation(data, all), cur = C.monthKey(all.asOf), inc = incomeActual(data, all, month), past = month < cur;
+  const avail = new Map(inc.rows.map((r) => [r.key, past ? r.received : r.expected]));
+  return { ...waterfall(al, avail), month, basis: past ? 'credited' : 'due', al };
 }
 
 /** Passive income actually credited in a month, per source and in total, against what was expected. */
@@ -188,6 +225,8 @@ export function breaches(data, all) {
   const out = [], s = summary(data, all), al = s.al, cur = s.cur, avp = actualVsPlan(data, all, cur), plan = al.plan;
   for (const r of avp.rows.filter((x) => x.state === 'over')) out.push({ level: 'red', type: 'over', title: `${r.name} is over by`, amount: r.over, note: `Spent ${r.actual} of ${r.available} set aside` });
   for (const x of al.sources.filter((q) => q.over > 0.5)) out.push({ level: 'red', type: 'income', title: `${x.name} pays less than is allocated`, amount: x.over, note: 'Lower an allocation of this source' });
+  const wf = monthFlow(data, all, cur);
+  if (wf.short > 0.5) out.push({ level: 'red', type: 'short', title: 'This month\'s income will not cover every allocation', amount: wf.short, note: 'Left short, last in the order: ' + wf.shortCats.slice(-3).map((r) => r.name).join(', ') });
   if (plan.alloc.length && al.totalIncome < al.expenses - 0.5) out.push({ level: 'amber', type: 'gap', title: 'Passive income is below monthly expenses', amount: al.expenses - al.totalIncome, note: 'The rest comes from salary until more passive income is built' });
   for (const r of s.inc.late) out.push({ level: 'red', type: 'late', title: `${r.name} is late`, amount: Math.max(0, r.expected - r.received), note: r.due ? 'Was due ' + r.due : 'Not credited yet' });
   for (const r of avp.rows.filter((x) => x.state === 'unmapped')) out.push({ level: 'amber', type: 'unmapped', title: `${r.name} has no income set aside`, amount: r.actual, note: 'Spent this month with nothing allocated' });
