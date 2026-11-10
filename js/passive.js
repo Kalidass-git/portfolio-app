@@ -5,6 +5,8 @@
 //     freq:  { [src]: 'monthly' | 'quarterly' | 'halfyearly' | 'yearly' },   how often an income line is credited (its amount is then divided to a monthly figure)
 //     extra: [{ id, name, amount, freq, match }],   other passive income typed in (rent, dividends...); `match` finds its bank credits
 //     skip:  [category names left out of the plan], carry: true | false, from: 'YYYY-MM' (first month of the plan),
+//     expense: { [category in lower case]: { name, mode: 'fixed', amount, freq } }   an expense that costs the same every time, instead of the average of past months
+//     merge: { [category in lower case]: 'Other category' }   a category counted as part of another (Maintenance as part of Rent)
 //     order: [category names, first = paid first]   the priority a month's income is used in }
 // An allocation is a plan, not a promise: each month the income that really arrives is used in that order, so a smaller month pays the first expenses in full and leaves the last ones short.
 // Nothing here changes a budget: allocations are only ever changed by the owner.
@@ -28,13 +30,19 @@ export function planOf(data, all) {
     const seen = new Map(); for (const a of alloc) { const k = a.src + '|' + lc(a.cat), o = seen.get(k); if (o) o.amount = (Number(o.amount) || 0) + (Number(a.amount) || 0); else seen.set(k, a); }
     alloc = [...seen.values()];
   }
-  return { alloc, freq: { ...(p.freq || {}) }, extra: (p.extra || []).map((x) => ({ ...x })), skip: [...(p.skip || [])], carry: p.carry !== false, from: p.from || '', order: [...(p.order || [])] };
+  const mg = p.merge || {};
+  if (Object.keys(mg).length) {   // an allocation to a category that is now part of another belongs to the other one
+    alloc = alloc.map((a) => (mg[lc(a.cat)] ? { ...a, cat: mg[lc(a.cat)] } : a));
+    const seen = new Map(); for (const a of alloc) { const k = a.src + '|' + lc(a.cat), o = seen.get(k); if (o) o.amount = (Number(o.amount) || 0) + (Number(a.amount) || 0); else seen.set(k, a); }
+    alloc = [...seen.values()];
+  }
+  return { alloc, freq: { ...(p.freq || {}) }, extra: (p.extra || []).map((x) => ({ ...x })), skip: [...(p.skip || [])], carry: p.carry !== false, from: p.from || '', order: [...(p.order || [])], expense: { ...(p.expense || {}) }, merge: { ...(p.merge || {}) } };
 }
 export const bondGroup = (b) => (b.credit === 'Quarterly' ? 'bondgrp:quarterly' : 'bondgrp:monthly');
 /** Writes the plan into a data object inside mutate(). */
 export function savePlan(d, plan) {
   d.settings = d.settings || {};
-  d.settings.passivePlan = { alloc: plan.alloc.map((a) => ({ id: a.id, src: a.src, cat: a.cat, amount: r0(a.amount) })), freq: plan.freq, extra: plan.extra, skip: plan.skip, carry: plan.carry !== false, from: plan.from || '', order: plan.order || [] };
+  d.settings.passivePlan = { alloc: plan.alloc.map((a) => ({ id: a.id, src: a.src, cat: a.cat, amount: r0(a.amount) })), freq: plan.freq, extra: plan.extra, skip: plan.skip, carry: plan.carry !== false, from: plan.from || '', order: plan.order || [], expense: plan.expense || {}, merge: plan.merge || {} };
 }
 export const newId = (list, p) => { let n = list.length + 1; const have = new Set(list.map((x) => x.id)); while (have.has(p + n)) n++; return p + n; };
 
@@ -69,8 +77,9 @@ export function sources(data, all) {
   return out.map((s) => ({ ...s, monthly: r0(s.monthly) }));
 }
 
-/** Expense categories with what they usually cost a month (the average of up to three finished months, else this month so far). */
-export function categories(data, all) {
+/** Expense categories with what each costs a month. A fixed expense costs its set amount (a quarterly one divided to a month); any other costs the average of up to three finished months,
+ *  else this month so far. A category counted as part of another is folded into it. raw = true gives the categories as the bank entries name them, before folding, for the settings sheet. */
+export function categories(data, all, raw = false) {
   const plan = planOf(data, all), kind = kindOf(data), cur = C.monthKey(all.asOf), skip = new Set(plan.skip.map(lc));
   const months = C.ledgerMonths(data).filter((m) => m < cur).slice(-3), use = months.length ? months : [cur];
   const by = new Map();
@@ -83,8 +92,22 @@ export function categories(data, all) {
     by.set(lc(name), r);
   }
   for (const a of plan.alloc) if (!by.has(lc(a.cat))) by.set(lc(a.cat), { name: a.cat, base: 0, cur: 0 });
+  for (const [k, x] of Object.entries(plan.expense)) if (x && x.mode === 'fixed' && !by.has(k)) by.set(k, { name: x.name || k, base: 0, cur: 0 });
+  const rows = [...by.values()].map((r) => {
+    const usual = r0(r.base / use.length), fx = plan.expense[lc(r.name)], fixed = !!(fx && fx.mode === 'fixed' && Number(fx.amount) > 0);
+    return { name: r.name, usual, base: fixed ? r0(monthlyEquivalent(fx.amount, fx.freq)) : usual, cur: r0(r.cur), fixed, fx: fixed ? { amount: Number(fx.amount), freq: fx.freq || 'monthly' } : null, skipped: skip.has(lc(r.name)), into: plan.merge[lc(r.name)] || '' };
+  });
+  if (raw) return rows.sort((a, b) => b.base - a.base || a.name.localeCompare(b.name));
+  const out = new Map();
+  for (const r of rows) {
+    if (r.skipped) { if (!r.into) { out.set(lc(r.name), { ...r, parts: [] }); } continue; }   // a part that is left out is simply not counted
+    const key = lc(r.into || r.name), part = { name: r.name, base: r.base, fixed: r.fixed, fx: r.fx };
+    const o = out.get(key) || { name: r.into || r.name, base: 0, usual: 0, cur: 0, fixed: true, fx: null, skipped: skip.has(key), parts: [] };
+    o.base += r.base; o.usual += r.usual; o.cur += r.cur; o.parts.push(part); o.fixed = o.fixed && r.fixed; o.fx = o.parts.length === 1 ? r.fx : null;
+    out.set(key, o);
+  }
   const rank = new Map(plan.order.map((n, i) => [lc(n), i]));
-  return [...by.values()].map((r) => ({ name: r.name, base: r0(r.base / use.length), cur: r0(r.cur), skipped: skip.has(lc(r.name)) }))
+  return [...out.values()].map((o) => ({ ...o, fixed: o.parts.length ? o.fixed : false, mixed: o.parts.length > 1 }))
     .sort((a, b) => (rank.has(lc(a.name)) ? rank.get(lc(a.name)) : 1e6) - (rank.has(lc(b.name)) ? rank.get(lc(b.name)) : 1e6) || b.base - a.base || a.name.localeCompare(b.name))
     .map((c, i) => ({ ...c, rank: i + 1 }));
 }
@@ -112,12 +135,13 @@ function sourceMonth(src, map) {
   return map.get(src.key) || { expected: 0, received: 0, due: '', late: false };
 }
 
-/** Expense debits of a month by category (expense kind only, minus skipped categories). */
-export function spendByCategory(data, month, skipNames = []) {
-  const kind = kindOf(data), skip = new Set(skipNames.map(lc)), by = new Map();
+/** Expense debits of a month by category (expense kind only), with a part folded into the category it belongs to and left-out categories dropped. */
+export function spendByCategory(data, month, plan) {
+  const kind = kindOf(data), skip = new Set((plan.skip || []).map(lc)), mg = plan.merge || {}, by = new Map();
   for (const e of C.monthLedger(data, month)) {
     if (!(e.debit > 0) || kind(e.category) !== 'expense') continue;
-    const name = (e.category || 'Unknown').trim(); if (skip.has(lc(name))) continue;
+    const raw = (e.category || 'Unknown').trim(); if (skip.has(lc(raw))) continue;
+    const name = mg[lc(raw)] || raw; if (skip.has(lc(name))) continue;
     by.set(name, (by.get(name) || 0) + e.debit);
   }
   return by;
@@ -139,12 +163,12 @@ export function allocation(data, all) {
 /** Actual against plan for one month, with unused allocation carried to the next month when the plan says so. */
 export function actualVsPlan(data, all, month) {
   const plan = planOf(data, all), al = allocation(data, all), cur = C.monthKey(all.asOf), from = plan.from && plan.from <= month ? plan.from : month;
-  const names = new Set(al.cats.map((c) => c.name)), skip = plan.skip;
+  const names = new Set(al.cats.map((c) => c.name));
   const rows = new Map(al.cats.map((c) => [lc(c.name), { name: c.name, planned: c.funded, carryIn: 0, actual: 0 }]));
   // walk the months from the start of the plan, so a reserve built earlier is there to use
   const carry = new Map();
   for (const m of monthsBetween(from, month)) {
-    const spent = spendByCategory(data, m, skip);
+    const spent = spendByCategory(data, m, plan);
     for (const nm of spent.keys()) if (!names.has(nm) && !rows.has(lc(nm))) rows.set(lc(nm), { name: nm, planned: 0, carryIn: 0, actual: 0 });
     for (const [k, r] of rows) {
       const actual = spent.get(r.name) || 0, cIn = plan.carry ? carry.get(k) || 0 : 0, avail = r.planned + cIn;
@@ -195,7 +219,7 @@ export function salaryProtection(data, all, month, reserveIn = 0) {
   const kind = kindOf(data), rows = C.monthLedger(data, month), plan = planOf(data);
   const salary = sum(rows.filter((e) => /salary/i.test(e.category || '')), (e) => e.credit);
   const invested = sum(rows.filter((e) => kind(e.category) === 'investment'), (e) => e.debit);
-  const spent = sum([...spendByCategory(data, month, plan.skip).values()]);
+  const spent = sum([...spendByCategory(data, month, plan).values()]);
   const passive = incomeActual(data, all, month).received;
   const funded = Math.min(spent, passive + (plan.carry ? reserveIn : 0)), diverted = Math.max(0, spent - funded);
   return { month, salary, invested, spent, passive, funded, diverted, reserveOut: plan.carry ? Math.max(0, reserveIn + passive - spent) : 0, protectedShare: salary > 0 ? Math.max(0, (salary - diverted) / salary) : null };
@@ -205,7 +229,7 @@ export function salaryProtection(data, all, month, reserveIn = 0) {
 export function history(data, all, n = 12) {
   const plan = planOf(data), cur = C.monthKey(all.asOf), months = prevMonths(cur, n - 1).concat(cur), out = []; let reserve = 0;
   for (const m of months) {
-    const spent = sum([...spendByCategory(data, m, plan.skip).values()]), inc = incomeActual(data, all, m), sal = salaryProtection(data, all, m, reserve);
+    const spent = sum([...spendByCategory(data, m, plan).values()]), inc = incomeActual(data, all, m), sal = salaryProtection(data, all, m, reserve);
     reserve = sal.reserveOut;
     out.push({ month: m, spent, received: inc.received, expected: inc.expected, coverage: spent > 0 ? inc.received / spent : null, reserve, diverted: sal.diverted, salary: sal.salary, invested: sal.invested });
   }

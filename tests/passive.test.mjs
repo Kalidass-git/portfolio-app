@@ -42,6 +42,19 @@ if (file) {
   ok(by(w1, 'Rent').paid === 10000 && by(w1, 'Wages').paid === 0 && by(w1, 'Groceries').paid === 0 && w1.short === 13000, 'with 10,000 of interest rent is paid and the rest is left short');
   const w2 = P.waterfall(al2, new Map([['s1', 40000]])); ok(w2.short === 0 && w2.unused === 17000, 'with 40,000 everything is paid and 17,000 is left over');
   const w3 = P.waterfall(al2, new Map([['s1', 16000]])); ok(by(w3, 'Wages').paid === 5000 && by(w3, 'Groceries').paid === 1000, 'income runs out part way through the last expense it reaches');
+  // fixed expenses, quarterly parts and "part of" folding: Rent 25,000 a month plus Maintenance 13,500 a quarter, counted as one expense
+  {
+    const d = JSON.parse(JSON.stringify(data)); P.savePlan(d, { alloc: [{ id: 'a', src: 'inc:x', cat: 'Maintenance', amount: 1000 }], freq: {}, extra: [], skip: [], carry: true, from: '2026-09', order: [],
+      expense: { rent: { name: 'Rent', mode: 'fixed', amount: 25000, freq: 'monthly' }, maintenance: { name: 'Maintenance', mode: 'fixed', amount: 13500, freq: 'quarterly' } }, merge: { maintenance: 'Rent' } });
+    const cs = P.categories(d, all), rentC = cs.find((c) => c.name === 'Rent');
+    ok(rentC && rentC.base === 29500 && rentC.fixed && rentC.mixed && rentC.parts.length === 2, 'rent 25,000 plus maintenance 13,500 a quarter plans as 29,500 a month');
+    ok(!cs.some((c) => c.name === 'Maintenance'), 'a part is folded into the expense it belongs to');
+    ok(P.planOf(d, all).alloc[0].cat === 'Rent', 'an allocation to a folded category moves to the expense it belongs to');
+    const sp = P.spendByCategory(d, '2026-10', P.planOf(d, all)); const raw = P.spendByCategory(data, '2026-10', { skip: [], merge: {} });
+    ok(Math.abs((sp.get('Rent') || 0) - ((raw.get('Rent') || 0) + (raw.get('Maintenance') || 0))) < 1 && !sp.has('Maintenance'), 'spending on the part counts as spending on the expense');
+    const d2 = JSON.parse(JSON.stringify(d)); d2.settings.passivePlan.expense = {}; d2.settings.passivePlan.merge = {};
+    ok(P.categories(d2, all).find((c) => c.name === 'Rent').fixed === false, 'without a fixed amount the average of past months is used');
+  }
   const s = P.summary(data, all); ok(s.required >= 0 && (s.coverage == null || s.coverage >= 0), 'coverage and the income still needed are sane');
 }
 console.log(bad ? 'FAILED' : 'ALL OK'); process.exit(bad ? 1 : 0);

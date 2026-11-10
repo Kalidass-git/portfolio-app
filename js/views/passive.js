@@ -68,7 +68,7 @@ function board(al, editable) {
     const card = h('div', { class: 'pb-card pb-c ' + st, 'data-cat': c.name, tabindex: editable ? '0' : null, role: editable ? 'button' : null,
       onclick: () => pick('c', c.name), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick('c', c.name); } } },
       h('span', { class: 'pb-dot c' }),
-      h('span', { class: 'pb-t' }, h('b', null, h('i', { class: 'pb-rank', title: 'Paid in this order' }, c.rank), c.name), h('small', null, c.base > 0 ? `Usually ${money(c.base)} a month` : 'Nothing spent lately')),
+      h('span', { class: 'pb-t' }, h('b', null, h('i', { class: 'pb-rank', title: 'Paid in this order' }, c.rank), c.name), h('small', null, c.fixed ? `Fixed ${money(c.base)} a month` : c.mixed ? `${money(c.base)} a month, ${c.parts.map((x) => x.name).join(' + ')}` : c.base > 0 ? `Usually ${money(c.base)} a month` : 'Nothing spent lately')),
       h('span', { class: 'pb-n' }, money(c.funded)),
       bar(c.base > 0 ? c.funded / c.base : 0, st === 'full' ? 'ok' : st === 'part' ? 'mid' : 'bad'),
       chip(st === 'full' ? (c.extra > 0.5 ? 'Funded · ' + money(c.extra) + ' extra' : 'Funded') : st === 'part' ? 'Needs ' + money(c.need) : st === 'none' ? 'Unmapped' : 'Not set', st === 'full' ? 'ok' : st === 'part' ? 'mid' : st === 'none' ? 'bad' : 'idle'));
@@ -204,19 +204,31 @@ function freqForm(s) {
   formDialog({ title: s.name, sub: 'Interest income line', value: { freq: s.freq }, fields: [{ key: 'freq', label: 'This line is credited', type: 'select', options: Object.entries(P.FREQ_LABEL).map(([value, label]) => ({ value, label })), hint: `The amount on the line is ${money(s.amount)}. Quarterly means ${money(s.amount / 3)} a month for planning.` }],
     onSave: (v) => setPlan((p) => { if (v.freq === 'monthly') delete p.freq[s.key]; else p.freq[s.key] = v.freq; }) });
 }
-/** Which expense categories are part of the plan. */
+/** How each expense is planned: left out, the average of past months, or a fixed amount (monthly, quarterly...), and whether it counts as part of another expense. */
 function catsDialog() {
-  const all = P.categories(S.data, S.all), boxes = all.map((c) => h('input', { type: 'checkbox', checked: !c.skipped, value: c.name }));
-  const body = h('div', { class: 'form' }, h('p', { class: 'note', style: { marginTop: 0 } }, 'Untick what the plan should leave out, such as one-time payments. It then no longer counts as an expense to fund.'),
-    h('div', { class: 'count-list' }, all.map((c, i) => h('label', { class: 'count-row' }, boxes[i], h('span', { class: 'cr-name' }, c.name), h('span', { class: 'cr-amt' }, money(c.base) + ' / mo')))));
-  dialog('Expenses in the plan', body, [{ label: 'Cancel', onclick: (c) => c() }, { label: 'Save', class: 'primary', onclick: (c) => { c(); setPlan((p) => { p.skip = boxes.filter((b) => !b.checked).map((b) => b.value); }); } }]);
+  const rows = P.categories(S.data, S.all, true), names = rows.map((r) => r.name), plan = P.planOf(S.data, S.all), frq = Object.entries(P.FREQ_LABEL);
+  const ctl = rows.map((r) => {
+    const inc = h('input', { type: 'checkbox', checked: !r.skipped, 'aria-label': 'Include ' + r.name }), mode = h('select', { 'aria-label': r.name + ' amount' }, h('option', { value: 'usual', selected: !r.fixed ? '' : null }, 'Average of past months (' + money(r.usual) + ')'), h('option', { value: 'fixed', selected: r.fixed ? '' : null }, 'Fixed amount')),
+      amt = h('input', { type: 'number', inputmode: 'numeric', min: '0', step: '100', value: r.fx ? String(r.fx.amount) : '', placeholder: 'Amount ₹', 'aria-label': r.name + ' fixed amount' }),
+      fq = h('select', { 'aria-label': r.name + ' paid' }, frq.map(([v, l]) => h('option', { value: v, selected: (r.fx ? r.fx.freq : 'monthly') === v ? '' : null }, 'paid ' + l.toLowerCase()))),
+      into = h('select', { 'aria-label': r.name + ' belongs to' }, h('option', { value: '' }, 'Its own expense'), names.filter((n) => n !== r.name && !plan.merge[n.toLowerCase()]).map((n) => h('option', { value: n, selected: r.into === n ? '' : null }, 'Part of ' + n)));
+    const fxrow = h('div', { class: 'pi-cat-fx' }, amt, fq), sync = () => { fxrow.style.display = mode.value === 'fixed' ? '' : 'none'; }; mode.addEventListener('change', sync); sync();
+    return { r, inc, mode, amt, fq, into, el: h('div', { class: 'pi-cat' }, h('label', { class: 'pi-cat-h' }, inc, h('b', null, r.name), h('span', { class: 'muted' }, r.fixed ? 'Fixed ' + money(r.base) + ' / mo' : money(r.usual) + ' / mo on average')), mode, fxrow, into) };
+  });
+  const body = h('div', { class: 'form' }, h('p', { class: 'note', style: { marginTop: 0 } }, 'Set a fixed amount for an expense that costs the same every time (rent), and keep the average for one that varies (groceries). An expense paid quarterly or yearly is divided to a monthly figure. Count one expense as part of another to plan them together, such as Maintenance as part of Rent. Untick an expense to leave it out.'), h('div', { class: 'pi-cats' }, ctl.map((c) => c.el)));
+  dialog('Plan the expenses', body, [{ label: 'Cancel', onclick: (c) => c() }, { label: 'Save', class: 'primary', onclick: (c) => {
+    c(); setPlan((p) => {
+      p.skip = ctl.filter((x) => !x.inc.checked).map((x) => x.r.name); p.expense = {}; p.merge = {};
+      for (const x of ctl) { const k = x.r.name.toLowerCase(), amount = Number(x.amt.value) || 0; if (x.mode.value === 'fixed' && amount > 0) p.expense[k] = { name: x.r.name, mode: 'fixed', amount, freq: x.fq.value }; if (x.into.value) p.merge[k] = x.into.value; }
+    });
+  } }]);
 }
 
 // ---------- tabs ----------
 function sourceTools(al) {
   return h('div', { class: 'pi-tools' },
     canEdit() ? h('button', { type: 'button', class: 'chip-btn', onclick: () => extraForm(null) }, '+ Add other income') : null,
-    canEdit() ? h('button', { type: 'button', class: 'chip-btn', onclick: catsDialog }, 'Expenses in the plan') : null,
+    canEdit() ? h('button', { type: 'button', class: 'chip-btn', onclick: catsDialog }, 'Plan the expenses') : null,
     al.sources.length ? h('details', { class: 'pi-edit' }, h('summary', { class: 'chip-btn' }, 'Income settings'),
       h('div', { class: 'pi-edit-list' }, al.sources.map((s) => h('button', { type: 'button', class: 'pi-opt', onclick: () => (canEdit() ? freqForm(s) : null) }, h('i', { style: { background: srcColor(al, s.key) } }), h('span', null, h('b', null, s.name), h('small', null, `${P.FREQ_LABEL[s.freq]} · ${money(s.monthly)} a month`)))))) : null);
 }
@@ -256,7 +268,7 @@ function allocations(root, sm) {
     kpi('Unallocated', money(al.unallocated), al.unallocated > 1 ? 'not paying any expense yet' : 'all of it has a job', { tone: al.unallocated > 1 ? 'warn' : 'pos' }), kpi('Unmapped expenses', money(sm.unmappedAmount) + ' / mo', al.unmapped.length ? `${al.unmapped.length} with no income` : 'none', { tone: al.unmapped.length ? 'neg' : 'pos' })));
   root.append(section('Match income to expenses', h('div', null, board(al, ed), !ed ? h('p', { class: 'note' }, 'Only the owner can change allocations.') : null), sourceTools(al)));
   root.append(section('Payment order', h('div', null, h('p', { class: 'note', style: { marginTop: 0 } }, 'Income is used from the top. If a month brings less than planned, the first expenses are paid in full and the last ones are left short. The amounts above are only a plan; nothing is paid out automatically.'),
-    h('ol', { class: 'pi-order' }, al.cats.map((c, i) => h('li', null, h('i', { class: 'pb-rank' }, c.rank), h('span', null, h('b', null, c.name), h('small', null, `${money(c.funded)} planned · usually ${money(c.base)}`)), ed ? h('span', { class: 'pi-mv' }, h('button', { type: 'button', class: 'chip-btn small', disabled: i === 0 ? '' : null, 'aria-label': 'Move ' + c.name + ' up', onclick: () => move(al, c.name, -1) }, '▲'), h('button', { type: 'button', class: 'chip-btn small', disabled: i === al.cats.length - 1 ? '' : null, 'aria-label': 'Move ' + c.name + ' down', onclick: () => move(al, c.name, 1) }, '▼')) : null))))));
+    h('ol', { class: 'pi-order' }, al.cats.map((c, i) => h('li', null, h('i', { class: 'pb-rank' }, c.rank), h('span', null, h('b', null, c.name), h('small', null, `${money(c.funded)} planned · ${c.fixed ? 'fixed' : 'usually'} ${money(c.base)}`)), ed ? h('span', { class: 'pi-mv' }, h('button', { type: 'button', class: 'chip-btn small', disabled: i === 0 ? '' : null, 'aria-label': 'Move ' + c.name + ' up', onclick: () => move(al, c.name, -1) }, '▲'), h('button', { type: 'button', class: 'chip-btn small', disabled: i === al.cats.length - 1 ? '' : null, 'aria-label': 'Move ' + c.name + ' down', onclick: () => move(al, c.name, 1) }, '▼')) : null))))));
   const list = al.links.slice().sort((a, b) => a.cat.localeCompare(b.cat));
   root.append(section('Connections', list.length ? h('ul', { class: 'pi-links' }, list.map((l) => { const s = al.sources.find((x) => x.key === l.src); return h('li', null, h('i', { style: { background: srcColor(al, l.src) } }), h('span', null, h('b', null, s.name), ' → ', h('b', null, l.cat)), h('em', null, money(l.amount) + ' / mo'), ed ? h('button', { type: 'button', class: 'chip-btn small', onclick: () => allocate(al, l.src, l.cat) }, 'Edit') : null); })) : h('p', { class: 'empty' }, 'No connections yet. Tap an income, then an expense.'),
     ed ? h('label', { class: 'pi-carry' }, h('input', { type: 'checkbox', checked: al.plan.carry, onchange: (e) => setPlan((p) => { p.carry = e.target.checked; }) }), h('span', null, 'Carry unused allocation to the next month')) : null));
