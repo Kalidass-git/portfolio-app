@@ -286,27 +286,20 @@ function actual(root, sm) {
   const a = P.actualVsPlan(S.data, S.all, month), inc = P.incomeActual(S.data, S.all, month);
   const sel2 = h('select', { class: 'month-select', 'aria-label': 'Month', onchange: (e) => { month = e.target.value; window.dispatchEvent(new Event('rerender')); } }, months.slice().reverse().map((m) => h('option', { value: m, selected: m === month ? '' : null }, monthLabel(m, true) + (m === cur ? ' (so far)' : ''))));
   root.append(h('div', { class: 'pi-row' }, sel2, h('label', { class: 'pi-carry' }, h('input', { type: 'checkbox', checked: plan.carry, disabled: !canEdit() ? '' : null, onchange: (e) => setPlan((p) => { p.carry = e.target.checked; }) }), h('span', null, 'Carry unused allocation forward'))));
-  const pctUsed = a.planned + a.carryIn > 0 ? a.actual / (a.planned + a.carryIn) : null;
-  root.append(h('div', { class: 'kpis pi-kpis' }, kpi('Planned', money(a.planned), a.carryIn > 0 ? '+ ' + money(a.carryIn) + ' carried' : 'from passive income'), kpi('Spent', money(a.actual), pctUsed == null ? '' : pct(pctUsed, 0) + ' of it', { tone: pctUsed > 1 ? 'neg' : '' }),
-    kpi('Left', money(a.remaining), plan.carry ? 'carries to next month' : 'not carried'), kpi('Over / unmapped', money(a.over + a.unmappedAmount), a.over ? `${money(a.over)} over · ${money(a.unmappedAmount)} unmapped` : a.unmappedAmount ? 'spent with no income set aside' : 'none', { tone: a.over + a.unmappedAmount > 0 ? 'neg' : 'pos' })));
-  const wf = P.monthFlow(S.data, S.all, month);
-  if (wf.al.links.length) root.append(section(`This month's income, used in order`, h('div', null,
-    h('p', { class: 'note', style: { marginTop: 0 } }, `${money(wf.income)} of passive income ${wf.basis === 'due' ? 'is due' : 'was credited'} against ${money(wf.planned)} allocated. It pays the first expense in the order, then the next.`),
-    h('ol', { class: 'pi-order' }, wf.rows.map((r, i) => h('li', { class: r.short > 0.5 ? 'short' : '' }, h('i', { class: 'pb-rank' }, i + 1), h('span', null, h('b', null, r.name), h('small', null, `planned ${money(r.planned)}`)), h('span', { class: 'pi-pay' }, bar(r.planned > 0 ? r.paid / r.planned : 0, r.short > 0.5 ? (r.paid > 0 ? 'mid' : 'bad') : 'ok'), h('em', { class: r.short > 0.5 ? 'neg' : 'pos' }, r.short > 0.5 ? `${money(r.paid)} paid · ${money(r.short)} short` : money(r.paid) + ' paid'))))),
-    wf.unused > 0.5 ? h('p', { class: 'note' }, `${money(wf.unused)} of this month's income is not allocated to anything.`) : null)));
-  // every expense on one line: what was spent, against what the plan allows, and what is left. The ones that need a look come first.
-  const lvlOf = (r) => (r.state === 'over' || r.state === 'unmapped' ? 'bad' : r.state === 'near' || r.state === 'partial' ? 'mid' : 'ok');
-  const word = (r) => (r.state === 'over' ? `Over by ${money(r.over)}` : r.state === 'unmapped' ? 'No income set aside' : r.state === 'partial' ? 'Part funded' : r.state === 'near' ? `Nearly used · ${money(r.remaining)} left` : `${money(r.remaining)} left`);
-  const exRow = (r) => { const lvl = lvlOf(r);
-    return h('li', { class: 'pa-row ' + lvl }, h('div', { class: 'pa-top' }, h('b', null, r.name), h('span', { class: 'pa-st ' + lvl }, word(r))), bar(r.available > 0 ? r.actual / r.available : r.actual > 0 ? 1 : 0, lvl),
-      h('div', { class: 'pa-sub' }, h('span', null, `Spent ${money(r.actual)}`), h('span', null, r.available > 0 ? `of ${money(r.available)}${r.carryIn > 0 ? ` (incl. ${money(r.carryIn)} carried)` : ''}` : 'nothing planned')),
-      r.lump ? h('p', { class: 'pa-note' }, r.lumpDue ? `Includes the ${r.lump.every}-monthly payment of ${money(r.lumpAmount)} that falls due this month.` : `The ${money(r.lumpAmount)} payment is not due yet. ${money(r.kept)} is put by for it (see Set aside below).`) : null,
-      canEdit() && (r.state === 'unmapped' || r.state === 'over' || r.state === 'partial') ? h('button', { type: 'button', class: 'chip-btn small', onclick: () => expenseSheet(sm.al, r.name) }, r.state === 'unmapped' ? 'Set income aside' : 'Add more income to it') : null); };
-  const need = a.rows.filter((r) => lvlOf(r) !== 'ok'), fine = a.rows.filter((r) => lvlOf(r) === 'ok');
-  root.append(section('Expenses this month', a.rows.length ? h('div', null,
-    need.length ? h('div', { class: 'pa-grp' }, h('h4', null, 'Needs a look', h('em', null, need.length)), h('ul', { class: 'pa-list' }, need.map(exRow))) : null,
-    fine.length ? h('div', { class: 'pa-grp' }, h('h4', null, 'On plan', h('em', null, fine.length)), h('ul', { class: 'pa-list' }, fine.map(exRow))) : null,
-    h('div', { class: 'pa-tot' }, h('span', null, 'All expenses'), h('b', null, `${money(a.actual)} spent of ${money(a.planned + a.carryIn)}`))) : h('p', { class: 'empty' }, 'Nothing was spent and nothing is set aside for this month.')));
+  // what passive income really paid, in the order each income pays: the rest of what was spent came out of the owner's pocket
+  const al2 = P.allocation(S.data, S.all), wf = P.waterfall(al2, new Map(inc.rows.map((r) => [r.key, r.received]))), paidBy = new Map(wf.rows.map((r) => [r.name.toLowerCase(), r]));
+  const rows = a.rows.map((r) => { const w = paidBy.get(r.name.toLowerCase()), early = r.lump && r.lumpDue ? r.lumpAmount * (r.lump.every - 1) / r.lump.every : 0, covered = Math.min(r.actual, (w ? w.paid : 0) + r.carryIn + early);
+    return { ...r, covered, pocket: Math.max(0, r.actual - covered), incomeShort: w ? w.short : 0 }; }).filter((r) => r.actual > 0 || r.incomeShort > 0.5);
+  const spent = rows.reduce((x, r) => x + r.actual, 0), covered = rows.reduce((x, r) => x + r.covered, 0), pocket = rows.reduce((x, r) => x + r.pocket, 0), overAll = rows.reduce((x, r) => x + r.over, 0);
+  root.append(h('div', { class: 'kpis pi-kpis' }, kpi('Passive income credited', money(inc.received), `of ${money(inc.expected)} expected`, { tone: inc.received >= inc.expected - 1 ? 'pos' : 'warn' }), kpi('Spent', money(spent), 'on the planned expenses'),
+    kpi('Paid by passive income', money(covered), spent > 0 ? pct(covered / spent, 0) + ' of what was spent' : '', { tone: 'pos' }), kpi('From your pocket', money(pocket), pocket > 0.5 ? (overAll > 0.5 ? money(overAll) + ' of it over the plan' : 'income was not enough') : 'nothing', { tone: pocket > 0.5 ? 'neg' : 'pos' })));
+  const why = (r) => [r.over > 0.5 ? `Went over the plan by ${money(r.over)}` : '', r.state === 'unmapped' ? 'No income was set aside for it' : '', r.incomeShort > 0.5 && r.state !== 'unmapped' ? `Passive income was ${money(r.incomeShort)} short of what was allocated` : ''].filter(Boolean);
+  root.append(section('By expense', rows.length ? h('div', null, h('ul', { class: 'pa-list' }, rows.sort((x, y) => y.pocket - x.pocket || y.actual - x.actual).map((r) => { const lvl = r.pocket > 0.5 ? (r.over > 0.5 || r.state === 'unmapped' ? 'bad' : 'mid') : 'ok';
+      return h('li', { class: 'pa-row ' + lvl }, h('div', { class: 'pa-top' }, h('b', null, r.name), h('span', { class: 'pa-st ' + lvl }, r.pocket > 0.5 ? `${money(r.pocket)} from your pocket` : 'Fully paid by passive income')),
+        bar(r.actual > 0 ? r.covered / r.actual : 0, lvl), h('div', { class: 'pa-sub' }, h('span', null, `Spent ${money(r.actual)}`), h('span', null, `Passive income paid ${money(r.covered)}`)),
+        ...why(r).map((t) => h('p', { class: 'pa-note' }, t)),
+        canEdit() && (r.state === 'unmapped' || r.over > 0.5) ? h('button', { type: 'button', class: 'chip-btn small', onclick: () => expenseSheet(sm.al, r.name) }, r.state === 'unmapped' ? 'Set income aside' : 'Add more income to it') : null); })),
+    h('div', { class: 'pa-tot' }, h('span', null, 'Total'), h('b', null, `${money(spent)} spent · ${money(covered)} passive income · ${money(pocket)} pocket`))) : h('p', { class: 'empty' }, 'Nothing was spent on the planned expenses this month.')));
   const sa = P.setAside(S.data, S.all, month);
   if (sa.rows.length) root.append(section('Set aside for later payments', h('div', null,
     h('p', { class: 'note', style: { marginTop: 0 } }, `Part of your monthly plan that is paid only every few months, such as maintenance at quarter end or a yearly fee. It builds up a little each month and is used when the payment falls due. ${money(sa.total)} should be put by right now.`),

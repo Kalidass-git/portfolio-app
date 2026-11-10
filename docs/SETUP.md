@@ -150,6 +150,10 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.86.0 – Passive income: simpler Actual vs plan
+
+Actual vs plan now answers two questions per expense: how much went over the plan, and how much came out of your pocket because passive income was not enough. The "This month's income, used in order" and "Expenses this month / On plan" sections are gone. Top figures: passive income credited, spent, paid by passive income, from your pocket. *By expense* lists each expense with what it cost, what passive income paid (the credited income used in each income's order, plus carried-over balance), the rest from the pocket, and the reason (over the plan / income short / no income set aside). *Set aside*, income expected vs credited and salary protection stay. Presentation only; nothing stored changes.
+
 ## Release 8.85.0 – Passive income: simpler Overview
 
 The Overview tab no longer draws the allocation picture. *Where the income goes* is a short read-only list: each income, how much of it is allocated, and which expenses it pays. Everything is changed on the Allocations tab (*Open allocations*). Presentation only; nothing stored changes.
