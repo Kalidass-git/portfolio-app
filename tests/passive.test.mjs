@@ -3,6 +3,7 @@
 import fs from 'fs';
 import * as C from '../js/calc.js';
 import * as P from '../js/passive.js';
+import { categoryList } from '../js/categories.js';
 let bad = 0; const ok = (c, m) => { if (!c) { bad++; console.log('FAIL', m); } else console.log('ok  ', m); };
 ok(P.monthlyEquivalent(9000, 'quarterly') === 3000 && P.monthlyEquivalent(12000, 'yearly') === 1000 && P.monthlyEquivalent(500, 'monthly') === 500, 'quarterly and yearly amounts become monthly equivalents');
 ok(P.planOf({ settings: {} }).carry === true && P.planOf({ settings: {} }).alloc.length === 0, 'a file with no plan reads as an empty plan that carries forward');
@@ -29,11 +30,13 @@ if (file) {
   }
   // bonds are grouped by how often they pay, and older allocations saved against one bond move into its group
   const gs = src.filter((x) => x.key.startsWith('bondgrp:')), bondN = (all.bonds || []).filter((b) => b.monthNet > 0.5).length;
-  ok(gs.length > 0 && gs.length <= 2 && gs.every((g) => g.members && g.members.length > 0), 'bonds appear as a monthly group and a quarterly group');
+  ok(gs.length === 1 && gs[0].key === 'bondgrp:all' && gs[0].members.length > 0, 'all bonds appear as one bond interest income');
   const one = all.bonds.find((b) => b.monthNet > 0.5);
   if (one && rent) {
     const d = JSON.parse(JSON.stringify(data)); d.settings.passivePlan = { alloc: [{ id: 'a', src: 'bond:' + one.id, cat: rent.name, amount: 500 }, { id: 'b', src: P.bondGroup(one), cat: rent.name, amount: 300 }] };
-    const pl = P.planOf(d, all); ok(pl.alloc.length === 1 && pl.alloc[0].src === P.bondGroup(one) && pl.alloc[0].amount === 800, 'an allocation on one bond moves into its group and duplicates are added together');
+    const pl = P.planOf(d, all); ok(pl.alloc.length === 1 && pl.alloc[0].src === 'bondgrp:all' && pl.alloc[0].amount === 800, 'an allocation on one bond moves into the bond interest income and duplicates are added together');
+    d.settings.passivePlan = { alloc: [{ id: 'a', src: 'bondgrp:monthly', cat: rent.name, amount: 400 }, { id: 'b', src: 'bondgrp:quarterly', cat: rent.name, amount: 100 }], sorder: { 'bondgrp:monthly': ['A'], 'bondgrp:quarterly': ['B', 'A'] } };
+    const p2 = P.planOf(d, all); ok(p2.alloc.length === 1 && p2.alloc[0].amount === 500 && p2.sorder['bondgrp:all'].join() === 'A,B', 'the older monthly and quarterly bond groups read as one income');
   }
   // the order income is used in: a small month pays the first expenses in full and leaves the last short
   const al2 = { sources: [{ key: 's1' }], cats: [{ name: 'Rent', rank: 1, funded: 10000, base: 10000 }, { name: 'Wages', rank: 2, funded: 5000, base: 5000 }, { name: 'Groceries', rank: 3, funded: 8000, base: 8000 }],
@@ -64,9 +67,21 @@ if (file) {
     const al3 = P.allocation(d, all), ords = al3.links.filter((l) => l.src === key).sort((a, b) => a.ord - b.ord).map((l) => l.cat);
     ok(ords[0] === 'Food' && ords[1] === 'Rent', 'the order each income pays in follows the order of the expenses');
     const o2 = JSON.parse(JSON.stringify(d)); o2.settings.passivePlan.order = ['Rent', 'Food']; ok(P.allocation(o2, all).links.filter((l) => l.src === key).sort((a, b) => a.ord - b.ord)[0].cat === 'Rent', 'changing the order of the expenses renumbers the connections');
-    const jul = P.actualVsPlan(d, all, '2026-08').rows.find((x) => x.name === 'Rent');
-    ok(jul && jul.lump && Math.abs(jul.kept - Math.min(jul.remaining, 4500 * 2)) < 1, 'between payments the quarter\'s share is shown as kept, not free (two months in: 9,000)');
-    const sep = P.actualVsPlan(d, all, '2026-09').rows.find((x) => x.name === 'Rent'); ok(sep && sep.lumpDue && sep.kept === 0, 'in the payment month nothing is held back');
+  }
+  // the plan follows the category budgets: Rent budget 29,500 with 13,500 paid at quarter end, Education 60,000 a year
+  {
+    const d = JSON.parse(JSON.stringify(data)); d.categoryList = categoryList(d).filter((c) => !['rent', 'education'].includes(c.name.toLowerCase())).concat([{ name: 'Rent', kind: 'expense', budget: 29500 }, { name: 'Education', kind: 'expense', budget: 0, yearlyBudget: 60000 }]);
+    P.savePlan(d, { alloc: [{ id: 'a', src: key, cat: 'Rent', amount: 29500 }], freq: {}, extra: [], skip: [], carry: true, from: '2026-11', order: [], expense: { rent: { name: 'Rent', lump: { amount: 13500, every: 3 } } }, merge: {} });
+    const cs = P.categories(d, all), rent = cs.find((c) => c.name === 'Rent'), edu = cs.find((c) => c.name === 'Education');
+    ok(rent && rent.base === 29500 && rent.src === 'budget' && rent.lump && rent.lumpMonthly === 4500, 'an expense costs what its category budget says');
+    ok(edu && edu.base === 5000 && edu.yearly === 60000, 'a yearly budget plans as a twelfth every month');
+    const d2 = JSON.parse(JSON.stringify(d)); d2.categoryList.find((c) => c.name === 'Rent').budget = 0; ok(P.categories(d2, all).find((c) => c.name === 'Rent').src !== 'budget', 'without a budget the older fixed amount or the average is used');
+    const nov = P.actualVsPlan(d, all, '2026-11').rows.find((x) => x.name === 'Rent');
+    ok(nov && nov.state !== 'over' && nov.available === 25000 && nov.kept === 9000, 'in November the regular 25,000 is allowed and 9,000 is put by, with no shortfall shown');
+    const dec = P.actualVsPlan(d, all, '2026-12').rows.find((x) => x.name === 'Rent'); ok(dec && dec.lumpDue && dec.available === 38500, 'in the quarter-end month the payment is allowed on top');
+    const sa = P.setAside(d, all, '2026-11'), sr = sa.rows.find((x) => x.name === 'Rent'), se = sa.rows.find((x) => x.name === 'Education');
+    ok(sr && sr.accrued === 9000 && !sr.due && sr.nextIn === 1 && se && se.share === 5000 && se.kind === 'yearly', 'the set-aside card holds the quarter\'s share and the yearly budget');
+    ok(P.setAside(d, all, '2026-12').rows.find((x) => x.name === 'Rent').due, 'the payment shows as due in its month');
   }
   // each income has its own order, set by its column; without one it follows the order of the expenses
   {

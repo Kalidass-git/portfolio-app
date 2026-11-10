@@ -1902,3 +1902,26 @@ body.pi-dragging, body.pi-dragging * { cursor: grabbing !important; user-select:
 .pk-ph { opacity: .35; } .pk-ghost { position: fixed; z-index: 1000; pointer-events: none; margin: 0; box-shadow: 0 12px 30px rgba(0,0,0,.25); transform: rotate(1.5deg); list-style: none; }
 .pk-mark { height: 4px; border-radius: 4px; background: var(--brand); list-style: none; } .pk-empty { list-style: none; padding: 14px; text-align: center; color: var(--muted); font-size: .84rem; border: 1px dashed var(--line); border-radius: 10px; }
 @media (max-width: 760px) { .pk-col { flex: 0 0 86%; max-width: none; } .pk.one .pk-col { flex-basis: 100%; } .pk-body { max-height: none; } }
+
+/* passive income 8.84.0: overview top-down, needs-income card, expense list */
+.pb { display: block; position: relative; }
+.pb-top { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; position: relative; z-index: 1; }
+.pb-stack { display: grid; gap: 8px; position: relative; z-index: 1; }
+.pb-dot.s { right: auto; left: 50%; top: auto; bottom: -9px; margin: 0 0 0 -9px; }
+.pb-dot.c { left: -9px; }
+.pb-ch { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.pb-by { display: flex; flex-wrap: wrap; gap: 5px; }
+.pb-chip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border: 1px solid var(--c); border-radius: 99px; font-size: .74rem; background: var(--surface); } .pb-chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.pb-card.pb-c { padding: 8px 12px; }
+.pk-wrap { display: grid; gap: 10px; }
+.pk-needcard { max-width: none; min-width: 0; flex: none; } .pk-needcard .pk-nh { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px; }
+.pk-needlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; } .pk-needlist .pk-empty { grid-column: 1 / -1; }
+.pk-filter button:not(.on) { opacity: .55; text-decoration: line-through; } .pk-filter button:first-child:not(.on) { text-decoration: none; }
+.pa-grp { margin-bottom: 14px; } .pa-grp h4 { margin: 0 0 8px; font-size: .86rem; color: var(--muted); display: flex; align-items: center; gap: 6px; } .pa-grp h4 em { font-style: normal; background: var(--line-2); border-radius: 99px; padding: 0 7px; font-size: .74rem; }
+.pa-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pa-row { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-left: 4px solid var(--pos); border-radius: 10px; }
+.pa-row.mid { border-left-color: var(--warn); } .pa-row.bad { border-left-color: var(--neg); background: color-mix(in srgb, var(--neg) 4%, var(--surface)); }
+.pa-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; } .pa-st { font-weight: 600; font-size: .86rem; font-variant-numeric: tabular-nums; } .pa-st.ok { color: var(--pos); } .pa-st.mid { color: var(--warn); } .pa-st.bad { color: var(--neg); }
+.pa-sub { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: .8rem; color: var(--muted); font-variant-numeric: tabular-nums; } .pa-note { margin: 0; font-size: .8rem; color: var(--muted); }
+.pa-tot { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border-top: 2px solid var(--line); font-variant-numeric: tabular-nums; }
+.pi-timing { margin-top: 10px; } .pi-timing .pi-cat-fx { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
