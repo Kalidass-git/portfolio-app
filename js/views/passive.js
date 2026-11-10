@@ -39,42 +39,15 @@ function trend(hist, height = 150) {
 
 // ---------- the flow picture: income on the left, expenses in order on the right, the order and amount on each connection (read only) ----------
 const basis = (c) => (c.src === 'budget' ? 'Budget' : c.src === 'fixed' ? 'Fixed' : 'Usually');
-/** Income at the top, the expenses stacked below it. Each income drops a coloured line down the left side to the expenses it pays; the chips on an expense say who pays it, in what order, and how much. */
-function flow(al) {
-  const wrap = h('div', { class: 'pb' }), top = h('div', { class: 'pb-top' }), stack = h('div', { class: 'pb-stack' }), over = svg('svg', { class: 'pb-svg', 'aria-hidden': 'true' }), cards = new Map(), n = al.sources.length;
-  const gut = 16 + n * 10; stack.style.paddingLeft = gut + 'px'; top.style.marginBottom = 14 + n * 8 + 'px';
-  for (const s of al.sources) {
-    const card = h('div', { class: 'pb-card pb-s' + (s.over > 0.5 ? ' bad' : s.remaining < 1 && s.monthly > 0 ? ' done' : ''), style: { '--c': srcColor(al, s.key) } },
-      h('span', { class: 'pb-t' }, h('b', null, s.name), h('small', null, s.members ? s.sub : `${KIND[s.kind]} · ${P.FREQ_LABEL[s.freq]}`)), h('span', { class: 'pb-n' }, money(s.monthly), h('small', null, ' / month')),
-      bar(s.monthly > 0 ? s.allocated / s.monthly : 0, s.over > 0.5 ? 'bad' : ''), h('span', { class: 'pb-r' }, s.over > 0.5 ? `Over-allocated by ${money(s.over)}` : `${money(s.allocated)} allocated · ${money(Math.max(0, s.remaining))} left`), h('span', { class: 'pb-dot s', style: { '--c': srcColor(al, s.key) } }));
-    cards.set('s:' + s.key, card); top.append(card);
-  }
-  for (const c of al.cats) {
-    const full = c.base > 0 && c.funded >= c.base - 0.5, st = c.funded === 0 ? (c.base > 0 ? 'none' : 'idle') : full ? 'full' : 'part', by = al.links.filter((l) => l.cat.toLowerCase() === c.name.toLowerCase()).sort((a, b) => a.ord - b.ord);
-    const card = h('div', { class: 'pb-card pb-c ' + st }, h('span', { class: 'pb-dot c' }),
-      h('div', { class: 'pb-ch' }, h('span', { class: 'pb-t' }, h('b', null, h('i', { class: 'pb-rank' }, c.rank), c.name), h('small', null, c.base > 0 ? `${basis(c)} ${money(c.base)} a month` : 'Nothing spent lately')), h('span', { class: 'pb-n' }, money(c.funded))),
-      bar(c.base > 0 ? c.funded / c.base : 0, st === 'full' ? 'ok' : st === 'part' ? 'mid' : 'bad'),
-      by.length ? h('div', { class: 'pb-by' }, by.map((l) => { const s = al.sources.find((q) => q.key === l.src); return h('span', { class: 'pb-chip', style: { '--c': srcColor(al, l.src) } }, h('i'), `${l.ord} · ${s ? s.name : l.src} ${compact(l.amount)}`); })) : h('small', { class: 'neg' }, c.base > 0 ? 'No income set aside yet' : ''));
-    cards.set('c:' + c.name, card); stack.append(card);
-  }
-  wrap.append(top, stack, over);
-  if (!al.sources.length) top.append(h('p', { class: 'note' }, 'No passive income found yet.'));
-  const at = (el) => { const a = wrap.getBoundingClientRect(), b = el.getBoundingClientRect(); return { x: b.left - a.left + b.width / 2, y: b.top - a.top + b.height / 2 }; };
-  const layout = () => {
-    over.replaceChildren(); const box = wrap.getBoundingClientRect(); if (!box.width) return;
-    over.setAttribute('viewBox', `0 0 ${box.width} ${box.height}`); over.setAttribute('width', box.width); over.setAttribute('height', box.height);
-    const maxA = Math.max(1, ...al.links.map((l) => l.amount)), tb = top.getBoundingClientRect(), busBase = tb.bottom - box.top + 8;
-    al.sources.forEach((sx, i) => {
-      const sc = cards.get('s:' + sx.key), dot = sc && sc.querySelector('.pb-dot'); if (!dot) return;
-      const a = at(dot), lane = 8 + i * 10, bus = busBase + i * 8, col = srcColor(al, sx.key);
-      for (const l of al.links.filter((q) => q.src === sx.key)) {
-        const cc = cards.get('c:' + l.cat); if (!cc) continue; const b = at(cc.querySelector('.pb-dot'));
-        over.append(svg('path', { d: `M${a.x},${a.y} V${bus} H${lane} V${b.y} H${b.x}`, stroke: col, 'stroke-width': 1.5 + (l.amount / maxA) * 3.5, class: 'pb-path', fill: 'none', 'stroke-linejoin': 'round' }));
-      }
-    });
-  };
-  requestAnimationFrame(() => { layout(); if (typeof ResizeObserver !== 'undefined') { const ro = new ResizeObserver(() => { if (!wrap.isConnected) { ro.disconnect(); return; } layout(); }); ro.observe(wrap); } });
-  return wrap;
+/** A simple read-only summary for the Overview: each income, how much of it is allocated and what it pays. Changing anything is done on the Allocations tab. */
+function summaryList(al) {
+  return h('ul', { class: 'pa-list' }, al.sources.map((x) => {
+    const pays = al.links.filter((l) => l.src === x.key).sort((a, b) => a.ord - b.ord).map((l) => l.cat);
+    return h('li', { class: 'pa-row ' + (x.over > 0.5 ? 'bad' : 'ok'), style: { borderLeftColor: srcColor(al, x.key) } },
+      h('div', { class: 'pa-top' }, h('b', null, x.name), h('span', { class: 'pa-st' }, money(x.monthly) + ' / mo')),
+      bar(x.monthly > 0 ? x.allocated / x.monthly : 0, x.over > 0.5 ? 'bad' : ''),
+      h('div', { class: 'pa-sub' }, h('span', null, x.over > 0.5 ? `Over-allocated by ${money(x.over)}` : `${money(x.allocated)} allocated · ${money(Math.max(0, x.remaining))} left`), h('span', null, pays.length ? 'Pays ' + pays.join(', ') : 'Pays nothing yet')));
+  }));
 }
 
 // ---------- setting an allocation ----------
@@ -158,7 +131,7 @@ function overview(root, sm) {
     kpi('Monthly expenses', money(al.expenses) + ' / mo', 'From your category budgets'),
     h('div', { class: 'kpi pi-cov' }, ring(cov, 76), h('div', null, h('span', { class: 'kpi-label' }, 'Coverage'), h('strong', { class: 'kpi-value ' + tone(cov) }, cov == null ? '–' : pct(cov, 1)), h('span', { class: 'kpi-sub' }, 'Target 100%'))),
     kpi('Unmapped expenses', money(sm.unmappedAmount) + ' / mo', al.unmapped.length ? `${al.unmapped.length} categor${al.unmapped.length === 1 ? 'y' : 'ies'} with no income` : 'Everything has income', { tone: al.unmapped.length ? 'neg' : 'pos', href: '#/passive/allocations' })));
-  root.append(section('Allocation overview', al.sources.length || al.cats.length ? flow(al) : h('p', { class: 'empty' }, 'Nothing to connect yet.'), h('a', { class: 'chip-btn', href: '#/passive/allocations' }, canEdit() ? 'Adjust allocation' : 'View details')));
+  root.append(section('Where the income goes', al.sources.length ? summaryList(al) : h('p', { class: 'empty' }, 'No passive income found yet.'), h('a', { class: 'chip-btn', href: '#/passive/allocations' }, canEdit() ? 'Open allocations' : 'View details')));
   const gap = sm.required, goal = h('div', { class: 'pi-goal ' + tone(cov) }, h('span', { class: 'pi-goal-t' }, h('b', null, 'Goal: fund every expense from passive income'),
     h('small', null, cov == null ? 'Add your income and expenses to begin.' : cov >= 1 ? `Reached. Passive income is ${money(tot - al.expenses)} above the monthly expenses.` : `${pct(cov, 1)} covered. Another ${money(gap)} a month of passive income is needed.`)), bar(cov || 0, tone(cov)));
   const hist6 = sm.hist.slice(-6), att = P.breaches(S.data, S.all);
