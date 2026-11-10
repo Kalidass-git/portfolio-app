@@ -150,6 +150,14 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.84.0 – Passive income: budgets drive the plan, top-down overview, clearer actual vs plan
+
+- **Overview**: the allocation picture now runs top-down. Incomes across the top, the expenses stacked below; each income drops a coloured line down the left side to the expenses it pays, and chips on an expense show who pays it, in what order and how much.
+- **Allocations**: *Needs income* is now a list card above the incomes (drag from it into an income as before). The column filter is multi-select: everything is shown, switch a chip off to focus on the rest (*All* brings everything back). All bond interest is one income, **Bond interest** (no monthly/quarterly split; older plans using the two groups or single bonds are read as this one income, nothing is rewritten until the plan is next saved).
+- **Planning comes from the category budgets** (Income & expenses → Categories): an expense costs its monthly budget plus a twelfth of its yearly budget. A category with no budget keeps using the older fixed amount if one was set, else the average of recent months, and a note says so with a link to set the budget. The *Plan the expenses* dialog is gone; *Expense budgets* opens the Categories page.
+- **Payments made every few months** (maintenance at quarter end): the budget already holds them. Tap an expense card and open *Part of it is paid every few months* to say how much and how often (optional `lump` on `settings.passivePlan.expense`, with an optional `at` month for yearly ones). In an ordinary month only the regular part is allowed, the whole payment in the month it falls due, so the false "short by 4,500" is gone.
+- **Actual vs plan**: *Expenses this month* is one line per expense (spent against allowed, what is left), grouped into *Needs a look* and *On plan*. New **Set aside for later payments** card: the accumulated share of each quarterly/yearly payment and when it falls due, including yearly budgets such as education.
+
 ## Release 8.83.0 – Passive income: kanban board
 
 The Allocations tab is now a kanban board. One column per income (Monthly bonds, Quarterly bonds, each interest line, other income) plus a first column, **Needs income**, holding every expense that is not fully paid.

@@ -9,7 +9,7 @@ const TABS = [['overview', 'Overview'], ['allocations', 'Allocations'], ['actual
 const NS = 'http://www.w3.org/2000/svg';
 const svg = (tag, attrs = {}, ...kids) => { const el = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) if (v != null) el.setAttribute(k, v); for (const kid of kids.flat()) if (kid != null) el.append(kid.nodeType ? kid : document.createTextNode(String(kid))); return el; };
 const PAL = ['#0f8a6a', '#3b82c4', '#c08a1e', '#8b5cf6', '#d4572e', '#2a9d8f'];
-let month = '', range = 12, kcol = 'all';   // kcol: which column of the Allocations board is shown ('all' or a column key)
+let month = '', range = 12; const khide = new Set();   // khide: columns of the Allocations board the owner has switched off (empty = everything shown)
 const tone = (cov) => (cov == null ? 'muted' : cov >= 1 ? 'pos' : cov >= 0.5 ? 'warn' : 'neg');
 const KIND = { bond: 'Bond interest', lending: 'Lending interest', other: 'Other income' };
 const srcColor = (al, key) => PAL[Math.max(0, al.sources.findIndex((s) => s.key === key)) % PAL.length];
@@ -38,35 +38,40 @@ function trend(hist, height = 150) {
 }
 
 // ---------- the flow picture: income on the left, expenses in order on the right, the order and amount on each connection (read only) ----------
+const basis = (c) => (c.src === 'budget' ? 'Budget' : c.src === 'fixed' ? 'Fixed' : 'Usually');
+/** Income at the top, the expenses stacked below it. Each income drops a coloured line down the left side to the expenses it pays; the chips on an expense say who pays it, in what order, and how much. */
 function flow(al) {
-  const wrap = h('div', { class: 'pb' }), left = h('div', { class: 'pb-col' }), right = h('div', { class: 'pb-col' }), over = svg('svg', { class: 'pb-svg', 'aria-hidden': 'true' }), cards = new Map();
+  const wrap = h('div', { class: 'pb' }), top = h('div', { class: 'pb-top' }), stack = h('div', { class: 'pb-stack' }), over = svg('svg', { class: 'pb-svg', 'aria-hidden': 'true' }), cards = new Map(), n = al.sources.length;
+  const gut = 16 + n * 10; stack.style.paddingLeft = gut + 'px'; top.style.marginBottom = 14 + n * 8 + 'px';
   for (const s of al.sources) {
     const card = h('div', { class: 'pb-card pb-s' + (s.over > 0.5 ? ' bad' : s.remaining < 1 && s.monthly > 0 ? ' done' : ''), style: { '--c': srcColor(al, s.key) } },
       h('span', { class: 'pb-t' }, h('b', null, s.name), h('small', null, s.members ? s.sub : `${KIND[s.kind]} · ${P.FREQ_LABEL[s.freq]}`)), h('span', { class: 'pb-n' }, money(s.monthly), h('small', null, ' / month')),
-      bar(s.monthly > 0 ? s.allocated / s.monthly : 0, s.over > 0.5 ? 'bad' : ''), h('span', { class: 'pb-r' }, s.over > 0.5 ? `Over-allocated by ${money(s.over)}` : `${money(s.allocated)} allocated · ${money(Math.max(0, s.remaining))} left`), h('span', { class: 'pb-dot', style: { '--c': srcColor(al, s.key) } }));
-    cards.set('s:' + s.key, card); left.append(card);
+      bar(s.monthly > 0 ? s.allocated / s.monthly : 0, s.over > 0.5 ? 'bad' : ''), h('span', { class: 'pb-r' }, s.over > 0.5 ? `Over-allocated by ${money(s.over)}` : `${money(s.allocated)} allocated · ${money(Math.max(0, s.remaining))} left`), h('span', { class: 'pb-dot s', style: { '--c': srcColor(al, s.key) } }));
+    cards.set('s:' + s.key, card); top.append(card);
   }
   for (const c of al.cats) {
-    const full = c.base > 0 && c.funded >= c.base - 0.5, st = c.funded === 0 ? (c.base > 0 ? 'none' : 'idle') : full ? 'full' : 'part';
+    const full = c.base > 0 && c.funded >= c.base - 0.5, st = c.funded === 0 ? (c.base > 0 ? 'none' : 'idle') : full ? 'full' : 'part', by = al.links.filter((l) => l.cat.toLowerCase() === c.name.toLowerCase()).sort((a, b) => a.ord - b.ord);
     const card = h('div', { class: 'pb-card pb-c ' + st }, h('span', { class: 'pb-dot c' }),
-      h('span', { class: 'pb-t' }, h('b', null, h('i', { class: 'pb-rank' }, c.rank), c.name), h('small', null, c.fixed ? `Fixed ${money(c.base)} a month` : c.base > 0 ? `Usually ${money(c.base)} a month` : 'Nothing spent lately')),
-      h('span', { class: 'pb-n' }, money(c.funded)), bar(c.base > 0 ? c.funded / c.base : 0, st === 'full' ? 'ok' : st === 'part' ? 'mid' : 'bad'));
-    cards.set('c:' + c.name, card); right.append(card);
+      h('div', { class: 'pb-ch' }, h('span', { class: 'pb-t' }, h('b', null, h('i', { class: 'pb-rank' }, c.rank), c.name), h('small', null, c.base > 0 ? `${basis(c)} ${money(c.base)} a month` : 'Nothing spent lately')), h('span', { class: 'pb-n' }, money(c.funded))),
+      bar(c.base > 0 ? c.funded / c.base : 0, st === 'full' ? 'ok' : st === 'part' ? 'mid' : 'bad'),
+      by.length ? h('div', { class: 'pb-by' }, by.map((l) => { const s = al.sources.find((q) => q.key === l.src); return h('span', { class: 'pb-chip', style: { '--c': srcColor(al, l.src) } }, h('i'), `${l.ord} · ${s ? s.name : l.src} ${compact(l.amount)}`); })) : h('small', { class: 'neg' }, c.base > 0 ? 'No income set aside yet' : ''));
+    cards.set('c:' + c.name, card); stack.append(card);
   }
-  wrap.append(left, h('div', { class: 'pb-mid' }), right, over);
-  if (!al.sources.length) left.append(h('p', { class: 'note' }, 'No passive income found yet.'));
+  wrap.append(top, stack, over);
+  if (!al.sources.length) top.append(h('p', { class: 'note' }, 'No passive income found yet.'));
   const at = (el) => { const a = wrap.getBoundingClientRect(), b = el.getBoundingClientRect(); return { x: b.left - a.left + b.width / 2, y: b.top - a.top + b.height / 2 }; };
   const layout = () => {
     over.replaceChildren(); const box = wrap.getBoundingClientRect(); if (!box.width) return;
     over.setAttribute('viewBox', `0 0 ${box.width} ${box.height}`); over.setAttribute('width', box.width); over.setAttribute('height', box.height);
-    const maxA = Math.max(1, ...al.links.map((l) => l.amount));
-    for (const l of al.links) {
-      const sc = cards.get('s:' + l.src), cc = cards.get('c:' + l.cat); if (!sc || !cc) continue;
-      const a = at(sc.querySelector('.pb-dot')), b = at(cc.querySelector('.pb-dot')), col = srcColor(al, l.src), dx = Math.max(20, (b.x - a.x) / 2);
-      const g = svg('g', { class: 'pb-link' }, svg('path', { d: `M${a.x},${a.y} C${a.x + dx},${a.y} ${b.x - dx},${b.y} ${b.x},${b.y}`, stroke: col, 'stroke-width': 2 + (l.amount / maxA) * 5, class: 'pb-path', fill: 'none' }));
-      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, t = `${l.ord} · ${compact(l.amount)}`, tw = Math.max(44, t.length * 6.6 + 14);
-      g.append(svg('rect', { x: mx - tw / 2, y: my - 10, width: tw, height: 20, rx: 10, class: 'pb-pill', stroke: col }), svg('text', { x: mx, y: my + 4, 'text-anchor': 'middle', class: 'pb-pt' }, t)); over.append(g);
-    }
+    const maxA = Math.max(1, ...al.links.map((l) => l.amount)), tb = top.getBoundingClientRect(), busBase = tb.bottom - box.top + 8;
+    al.sources.forEach((sx, i) => {
+      const sc = cards.get('s:' + sx.key), dot = sc && sc.querySelector('.pb-dot'); if (!dot) return;
+      const a = at(dot), lane = 8 + i * 10, bus = busBase + i * 8, col = srcColor(al, sx.key);
+      for (const l of al.links.filter((q) => q.src === sx.key)) {
+        const cc = cards.get('c:' + l.cat); if (!cc) continue; const b = at(cc.querySelector('.pb-dot'));
+        over.append(svg('path', { d: `M${a.x},${a.y} V${bus} H${lane} V${b.y} H${b.x}`, stroke: col, 'stroke-width': 1.5 + (l.amount / maxA) * 3.5, class: 'pb-path', fill: 'none', 'stroke-linejoin': 'round' }));
+      }
+    });
   };
   requestAnimationFrame(() => { layout(); if (typeof ResizeObserver !== 'undefined') { const ro = new ResizeObserver(() => { if (!wrap.isConnected) { ro.disconnect(); return; } layout(); }); ro.observe(wrap); } });
   return wrap;
@@ -83,13 +88,21 @@ function expenseSheet(al, catName) {
     const fill = h('button', { type: 'button', class: 'chip-btn small', onclick: () => { const others = [...rows0].reduce((a, r) => (r.s.key === s.key ? a : a + (Number(r.input.value) || 0)), 0); input.value = String(Math.max(0, Math.min(avail, Math.round(cat.base - others)))); check(); } }, 'Fill');
     return { s, avail, input, el: h('div', { class: 'pi-srow' }, h('span', { class: 'pi-dotc', style: { background: srcColor(al, s.key) } }), h('span', { class: 'pi-sname' }, h('b', null, s.name), h('small', null, `${money(avail)} left each month`)), fill, input) };
   }), rows0 = rows;
+  // part of the budget that is paid only every few months: the budget already holds it, this only says when it is paid so its share is kept back
+  const dlgRef = {}, cur = cat.lump, tAmt = h('input', { type: 'number', inputmode: 'numeric', min: '0', step: '100', value: cur ? String(cur.amount) : '', placeholder: 'Amount each time ₹', 'aria-label': 'Payment made every few months' });
+  const tEvery = h('select', { 'aria-label': 'Paid every' }, [2, 3, 4, 6, 12].map((n) => h('option', { value: String(n), selected: (cur ? cur.every : 3) === n ? '' : null }, n === 12 ? 'every year' : n === 3 ? 'every 3 months (quarter end)' : `every ${n} months`)));
+  const tAt = h('select', { 'aria-label': 'Paid in month' }, Array.from({ length: 12 }, (_, i) => h('option', { value: String(i + 1), selected: (cur && cur.at ? cur.at : 12) === i + 1 ? '' : null }, 'in ' + monthLabel('2026-' + String(i + 1).padStart(2, '0')).split(' ')[0])));
+  const tNote = h('p', { class: 'pi-cat-sum' }), syncT = () => { tAt.style.display = tEvery.value === '12' ? '' : 'none'; const v = Number(tAmt.value) || 0; tNote.textContent = v > 0 ? `${money(Math.round(v / Number(tEvery.value)))} a month is kept back for it, inside the ${money(cat.base)} budget.` : ''; };
+  [tAmt, tEvery].forEach((el) => el.addEventListener('input', syncT)); syncT();
+  const timing = { el: h('details', { class: 'pi-edit pi-timing', open: cur ? '' : null }, h('summary', { class: 'chip-btn' }, 'Part of it is paid every few months'), h('p', { class: 'note' }, 'For maintenance paid at quarter end, say. The budget already includes it. Tell the planner how much and how often, so it keeps a share back each month and does not count it as free to spend.'), h('div', { class: 'pi-cat-fx' }, tAmt, tEvery), tAt, tNote) };
   const cov = h('b'), note = h('p', { class: 'pi-note' });
-  const body = h('div', { class: 'form' }, h('div', { class: 'pi-pair' }, h('b', null, cat.name), h('span', { class: 'muted' }, cat.fixed ? `Fixed ${money(cat.base)} a month` : `Usually ${money(cat.base)} a month`)),
-    h('p', { class: 'note', style: { margin: 0 } }, 'Split it across your income. Each month the income that really arrives pays in the order of the list, so these amounts are a plan.'),
-    rows.length ? h('div', { class: 'pi-srows' }, rows.map((r) => r.el)) : h('p', { class: 'empty' }, 'No passive income to pay from yet.'), h('div', { class: 'pi-live' }, h('span', null, 'Covered'), cov), note);
+  const body = h('div', { class: 'form' }, h('div', { class: 'pi-pair' }, h('b', null, cat.name), h('span', { class: 'muted' }, `${basis(cat)} ${money(cat.base)} a month`)),
+    cat.src === 'budget' ? null : h('p', { class: 'pi-note warn' }, 'No budget is set for this expense, so its recent average is used. ', h('a', { href: '#/flow/categories', onclick: () => { if (dlgRef.close) dlgRef.close(); } }, 'Set a budget'), ' and the plan follows it.'),
+    h('p', { class: 'note', style: { margin: 0 } }, 'The amount comes from the category budget. Split it across your income. Each month the income that really arrives pays in the order of the list, so these amounts are a plan.'),
+    rows.length ? h('div', { class: 'pi-srows' }, rows.map((r) => r.el)) : h('p', { class: 'empty' }, 'No passive income to pay from yet.'), h('div', { class: 'pi-live' }, h('span', null, 'Covered'), cov), note, timing.el);
   let ok = true;
-  const dlg = dialog('Pay ' + cat.name + ' from', body, [{ label: 'Cancel', onclick: (c) => c() }, { label: 'Save', class: 'primary', onclick: (c) => { if (!ok) return; c(); setAllocs(catName, new Map(rows.map((r) => [r.s.key, Number(r.input.value) || 0]))); } }]);
-  const saveBtn = dlg.el.querySelector('footer .primary');
+  const dlg = dlgRef.dlg = dialog('Pay ' + cat.name + ' from', body, [{ label: 'Cancel', onclick: (c) => c() }, { label: 'Save', class: 'primary', onclick: (c) => { if (!ok) return; c(); setAllocs(catName, new Map(rows.map((r) => [r.s.key, Number(r.input.value) || 0])), (p) => { const k = catName.toLowerCase(), v = Number(tAmt.value) || 0, e = { ...(p.expense[k] || { name: catName }) }; if (v > 0) e.lump = { amount: v, every: Number(tEvery.value), ...(tEvery.value === '12' ? { at: Number(tAt.value) } : {}) }; else delete e.lump; if (e.mode === 'fixed' || e.lump) p.expense[k] = e; else delete p.expense[k]; }); } }]);
+  dlgRef.close = dlg.close; const saveBtn = dlg.el.querySelector('footer .primary');
   function check() {
     const tot = rows.reduce((a, r) => a + (Number(r.input.value) || 0), 0), bad = rows.find((r) => (Number(r.input.value) || 0) > r.avail + 0.5);
     ok = !bad; cov.textContent = cat.base > 0 ? `${money(tot)} of ${money(cat.base)} (${Math.round((tot / cat.base) * 100)}%)` : money(tot); cov.className = cat.base > 0 && tot >= cat.base - 0.5 ? 'pos' : '';
@@ -99,7 +112,7 @@ function expenseSheet(al, catName) {
   }
   rows.forEach((r) => r.input.addEventListener('input', check)); check(); setTimeout(() => { const f = rows.find((r) => r.avail > 0) || rows[0]; if (f) { f.input.focus(); f.input.select(); } }, 60);
 }
-function setAllocs(catName, amounts) {
+function setAllocs(catName, amounts, after) {
   mutate((d) => {
     const p = P.planOf(d, S.all);
     for (const [src, amount] of amounts) {
@@ -107,6 +120,7 @@ function setAllocs(catName, amounts) {
       if (amount <= 0) { if (i >= 0) p.alloc.splice(i, 1); } else if (i >= 0) p.alloc[i].amount = amount; else p.alloc.push({ id: P.newId(p.alloc, 'pa'), src, cat: catName, amount });
     }
     if (!p.from) p.from = C.monthKey(S.all.asOf);
+    if (after) after(p);
     P.savePlan(d, p);
   });
   toast('Allocation saved');
@@ -128,42 +142,10 @@ function freqForm(s) {
   formDialog({ title: s.name, sub: 'Interest income line', value: { freq: s.freq }, fields: [{ key: 'freq', label: 'This line is credited', type: 'select', options: Object.entries(P.FREQ_LABEL).map(([value, label]) => ({ value, label })), hint: `The amount on the line is ${money(s.amount)}. Quarterly means ${money(s.amount / 3)} a month for planning.` }],
     onSave: (v) => setPlan((p) => { if (v.freq === 'monthly') delete p.freq[s.key]; else p.freq[s.key] = v.freq; }) });
 }
-/** How each expense is planned: left out, the average of past months, or a fixed amount, with an optional further payment made every few months (maintenance, a quarterly bill). */
-function catsDialog() {
-  const rows = P.categories(S.data, S.all, true), frq = Object.entries(P.FREQ_LABEL), everyOpts = [2, 3, 4, 6, 12];
-  const ctl = rows.map((r) => {
-    const fx = r.fx || { amount: 0, freq: 'monthly', lump: null }, inc = h('input', { type: 'checkbox', checked: !r.skipped, 'aria-label': 'Include ' + r.name });
-    const mode = h('select', { 'aria-label': r.name + ' planning' }, h('option', { value: 'usual', selected: !r.fixed ? '' : null }, 'Average of past months (' + money(r.usual) + ')'), h('option', { value: 'fixed', selected: r.fixed ? '' : null }, 'Fixed amount'));
-    const amt = h('input', { type: 'number', inputmode: 'numeric', min: '0', step: '100', value: fx.amount ? String(fx.amount) : '', placeholder: 'Amount ₹', 'aria-label': r.name + ' fixed amount' });
-    const fq = h('select', { 'aria-label': r.name + ' paid' }, frq.map(([v, l]) => h('option', { value: v, selected: fx.freq === v ? '' : null }, 'paid ' + l.toLowerCase())));
-    const lamt = h('input', { type: 'number', inputmode: 'numeric', min: '0', step: '100', value: fx.lump ? String(fx.lump.amount) : '', placeholder: 'Extra payment ₹', 'aria-label': r.name + ' extra payment' });
-    const lev = h('select', { 'aria-label': r.name + ' extra payment every' }, everyOpts.map((n) => h('option', { value: String(n), selected: (fx.lump ? fx.lump.every : 3) === n ? '' : null }, n === 12 ? 'every year (December)' : n === 3 ? 'every 3 months (quarter end)' : `every ${n} months`)));
-    const sum = h('p', { class: 'pi-cat-sum' }), fxrow = h('div', { class: 'pi-cat-fx' }, amt, fq), lrow = h('div', { class: 'pi-cat-fx' }, lamt, lev);
-    const sync = () => {
-      const fixed = mode.value === 'fixed'; fxrow.style.display = fixed ? '' : 'none'; lrow.style.display = fixed ? '' : 'none'; sum.style.display = fixed ? '' : 'none';
-      const reg = P.monthlyEquivalent(Number(amt.value) || 0, fq.value), lm = (Number(lamt.value) || 0) / Number(lev.value);
-      sum.textContent = `Plans as ${money(Math.round(reg + lm))} a month` + (lm > 0 ? `: ${money(Math.round(reg))} paid regularly + ${money(Math.round(lm))} a month kept for the ${lev.value === '12' ? 'yearly' : lev.value + '-monthly'} payment` : '');
-    };
-    [mode, amt, fq, lamt, lev].forEach((el) => el.addEventListener('input', sync)); sync();
-    return { r, inc, mode, amt, fq, lamt, lev, el: h('div', { class: 'pi-cat' }, h('label', { class: 'pi-cat-h' }, inc, h('b', null, r.name), h('span', { class: 'muted' }, r.fixed ? 'Fixed ' + money(r.base) + ' / mo' : money(r.usual) + ' / mo on average')), mode, fxrow, lrow, sum) };
-  });
-  const body = h('div', { class: 'form' }, h('p', { class: 'note', style: { marginTop: 0 } }, 'Fixed for an expense that costs the same every time (rent), the average for one that varies (groceries). If part of it is paid only every few months, such as maintenance, add it as the extra payment: it is planned as a share of every month, and in between that share is shown as kept for the payment, not as free money. Untick an expense to leave it out.'), h('div', { class: 'pi-cats' }, ctl.map((c) => c.el)));
-  dialog('Plan the expenses', body, [{ label: 'Cancel', onclick: (c) => c() }, { label: 'Save', class: 'primary', onclick: (c) => {
-    c(); setPlan((p) => {
-      p.skip = ctl.filter((x) => !x.inc.checked).map((x) => x.r.name); p.expense = {};
-      for (const x of ctl) {
-        const k = x.r.name.toLowerCase(), amount = Number(x.amt.value) || 0, la = Number(x.lamt.value) || 0;
-        if (x.mode.value === 'fixed' && (amount > 0 || la > 0)) p.expense[k] = { name: x.r.name, mode: 'fixed', amount, freq: x.fq.value, ...(la > 0 ? { lump: { amount: la, every: Number(x.lev.value) } } : {}) };
-      }
-    });
-  } }]);
-}
-
-// ---------- tabs ----------
 function sourceTools(al) {
   return h('div', { class: 'pi-tools' },
     canEdit() ? h('button', { type: 'button', class: 'chip-btn', onclick: () => extraForm(null) }, '+ Add other income') : null,
-    canEdit() ? h('button', { type: 'button', class: 'chip-btn', onclick: catsDialog }, 'Plan the expenses') : null,
+    h('a', { class: 'chip-btn', href: '#/flow/categories' }, 'Expense budgets'),
     al.sources.length ? h('details', { class: 'pi-edit' }, h('summary', { class: 'chip-btn' }, 'Income settings'),
       h('div', { class: 'pi-edit-list' }, al.sources.map((s) => h('button', { type: 'button', class: 'pi-opt', onclick: () => (canEdit() ? freqForm(s) : null) }, h('i', { style: { background: srcColor(al, s.key) } }), h('span', null, h('b', null, s.name), h('small', null, `${P.FREQ_LABEL[s.freq]} · ${money(s.monthly)} a month`)))))) : null);
 }
@@ -173,7 +155,7 @@ function overview(root, sm) {
   const parts = ['bond', 'lending', 'other'].map((k) => [k, al.sources.filter((s) => s.kind === k).reduce((a, s) => a + s.monthly, 0)]).filter((x) => x[1] > 0).map(([k, v]) => `${compact(v)} ${k === 'bond' ? 'bonds' : k === 'lending' ? 'lending' : 'other'}`).join(' + ');
   root.append(h('div', { class: 'kpis pi-kpis' },
     kpi('Passive income', money(tot) + ' / mo', parts || 'Nothing yet', { tone: 'pos' }),
-    kpi('Monthly expenses', money(al.expenses) + ' / mo', 'Usual, from your last months'),
+    kpi('Monthly expenses', money(al.expenses) + ' / mo', 'From your category budgets'),
     h('div', { class: 'kpi pi-cov' }, ring(cov, 76), h('div', null, h('span', { class: 'kpi-label' }, 'Coverage'), h('strong', { class: 'kpi-value ' + tone(cov) }, cov == null ? '–' : pct(cov, 1)), h('span', { class: 'kpi-sub' }, 'Target 100%'))),
     kpi('Unmapped expenses', money(sm.unmappedAmount) + ' / mo', al.unmapped.length ? `${al.unmapped.length} categor${al.unmapped.length === 1 ? 'y' : 'ies'} with no income` : 'Everything has income', { tone: al.unmapped.length ? 'neg' : 'pos', href: '#/passive/allocations' })));
   root.append(section('Allocation overview', al.sources.length || al.cats.length ? flow(al) : h('p', { class: 'empty' }, 'Nothing to connect yet.'), h('a', { class: 'chip-btn', href: '#/passive/allocations' }, canEdit() ? 'Adjust allocation' : 'View details')));
@@ -243,38 +225,40 @@ function drop(al, from, to, cat, idx) {
 }
 
 function board(al, ed) {
-  const need = al.cats.filter((c) => c.base > 0 && c.funded < c.base - 0.5), cols = [{ key: 'need', name: 'Needs income', tone: 'need' }, ...al.sources.map((x) => ({ key: x.key, name: x.name, src: x }))];
-  if (kcol !== 'all' && !cols.some((c) => c.key === kcol)) kcol = 'all';
-  const scroller = h('div', { class: 'pk' + (kcol !== 'all' ? ' one' : '') });
+  const need = al.cats.filter((c) => c.base > 0 && c.funded < c.base - 0.5), cols = [{ key: 'need', name: 'Needs income' }, ...al.sources.map((x) => ({ key: x.key, name: x.name, src: x }))];
+  for (const k of [...khide]) if (!cols.some((c) => c.key === k)) khide.delete(k);
+  const scroller = h('div', { class: 'pk' }), wrap = h('div', { class: 'pk-wrap' });
   const bodies = new Map();
   const card = (colKey, c, link) => {
     const full = c.base > 0 && c.funded >= c.base - 0.5, st = c.funded === 0 ? (c.base > 0 ? 'none' : 'idle') : full ? 'full' : 'part', line = link ? srcColor(al, link.src) : 'var(--neg)';
     const li = h('li', { class: 'pk-card ' + st, 'data-cat': c.name, 'data-col': colKey, tabindex: ed ? '0' : null, style: { '--c': line }, role: ed ? 'button' : null,
       onclick: (e) => { if (ed && !li._dragged && !e.target.closest('.pk-grip')) expenseSheet(al, c.name); li._dragged = false; }, onkeydown: (e) => { if (ed && e.target === li && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); expenseSheet(al, c.name); } } },
       h('div', { class: 'pk-h' }, ed ? h('span', { class: 'pk-grip', 'aria-hidden': 'true', title: 'Drag' }, '⠿') : null, link ? h('i', { class: 'pb-rank', title: 'Order this income pays in' }, link.ord) : null, h('b', null, c.name), h('span', { class: 'pk-amt' }, link ? money(link.amount) : money(c.need))),
-      h('small', null, link ? `${c.fixed ? 'Fixed ' : ''}${money(c.base)} a month · ${c.base > 0 ? Math.round((c.funded / c.base) * 100) : 0}% funded` : c.funded > 0 ? `${money(c.funded)} of ${money(c.base)} funded` : `${money(c.base)} a month, no income yet`));
+      h('small', null, link ? `${basis(c)} ${money(c.base)} a month · ${c.base > 0 ? Math.round((c.funded / c.base) * 100) : 0}% funded` : c.funded > 0 ? `${money(c.funded)} of ${money(c.base)} funded` : `${basis(c)} ${money(c.base)} a month, no income yet`));
     return li;
   };
+  const needTotal = need.reduce((a, c) => a + c.need, 0);
   for (const col of cols) {
-    const x = col.src, list = h('ul', { class: 'pk-list', 'data-col': col.key });
+    const x = col.src, list = h('ul', { class: 'pk-list' + (x ? '' : ' pk-needlist'), 'data-col': col.key });
     if (col.key === 'need') for (const c of need) list.append(card('need', c, null));
     else for (const l of al.links.filter((q) => q.src === col.key).sort((a, b) => a.ord - b.ord)) { const c = al.cats.find((k) => k.name.toLowerCase() === l.cat.toLowerCase()); if (c) list.append(card(col.key, c, l)); }
     if (!list.children.length) list.append(h('li', { class: 'pk-empty' }, col.key === 'need' ? 'Every expense has income.' : 'Drop an expense here.'));
     bodies.set(col.key, list);
-    scroller.append(h('section', { class: 'pk-col' + (col.key === 'need' ? ' need' : ''), 'data-col': col.key, style: x ? { '--c': srcColor(al, x.key) } : null },
-      h('header', { class: 'pk-ch' }, h('b', null, h('i'), col.name), x ? h('span', { class: 'pk-n' }, money(x.monthly), h('small', null, ' / mo')) : h('span', { class: 'pk-n' }, money(need.reduce((a, c) => a + c.need, 0)), h('small', null, ' needed')),
-        x ? bar(x.monthly > 0 ? x.allocated / x.monthly : 0, x.over > 0.5 ? 'bad' : '') : null, x ? h('small', { class: x.over > 0.5 ? 'neg' : x.remaining < 1 ? 'pos' : '' }, x.over > 0.5 ? `${money(x.over)} over-allocated` : `${money(Math.max(0, x.remaining))} left · ${money(x.allocated)} allocated`) : h('small', null, `${need.length} expense${need.length === 1 ? '' : 's'}`)),
+    if (!x) { wrap.append(h('section', { class: 'pk-col need pk-needcard', 'data-col': 'need', hidden: khide.has('need') ? '' : null }, h('header', { class: 'pk-ch pk-nh' }, h('b', null, h('i'), 'Needs income'), h('span', { class: 'pk-n' }, money(needTotal), h('small', null, ` a month · ${need.length} expense${need.length === 1 ? '' : 's'}`))), h('div', { class: 'pk-body' }, list))); continue; }
+    scroller.append(h('section', { class: 'pk-col', 'data-col': col.key, style: { '--c': srcColor(al, x.key) }, hidden: khide.has(col.key) ? '' : null },
+      h('header', { class: 'pk-ch' }, h('b', null, h('i'), col.name), h('span', { class: 'pk-n' }, money(x.monthly), h('small', null, ' / mo')),
+        bar(x.monthly > 0 ? x.allocated / x.monthly : 0, x.over > 0.5 ? 'bad' : ''), h('small', { class: x.over > 0.5 ? 'neg' : x.remaining < 1 ? 'pos' : '' }, x.over > 0.5 ? `${money(x.over)} over-allocated` : `${money(Math.max(0, x.remaining))} left · ${money(x.allocated)} allocated`)),
       h('div', { class: 'pk-body' }, list)));
   }
   // dragging a card: it follows the pointer, the column under it lights up and a line shows where it will land
-  if (ed) scroller.addEventListener('pointerdown', (e) => {
+  if (ed) wrap.addEventListener('pointerdown', (e) => {
     const cardEl = e.target.closest('.pk-card'); if (!cardEl || e.button > 0) return;
     const touch = e.pointerType === 'touch' || e.pointerType === 'pen'; if (touch && !e.target.closest('.pk-grip')) return;
     if (touch) e.preventDefault();
     const from = cardEl.dataset.col, cat = cardEl.dataset.cat, sx = e.clientX, sy = e.clientY; let ghost = null, mark = null, target = null, idx = 0, cx = sx, cy = sy, raf = 0;
     const colUnder = () => { const el = document.elementFromPoint(cx, cy); return el && el.closest ? el.closest('.pk-col') : null; };
     const aim = () => {
-      const col = colUnder(); scroller.querySelectorAll('.pk-col.over').forEach((q) => q.classList.remove('over')); target = col ? col.dataset.col : null;
+      const col = colUnder(); wrap.querySelectorAll('.pk-col.over').forEach((q) => q.classList.remove('over')); target = col ? col.dataset.col : null;
       if (mark) { mark.remove(); mark = null; } if (!col) return; col.classList.add('over');
       const list = bodies.get(target), cards = [...list.querySelectorAll('.pk-card')].filter((q) => q !== cardEl); idx = cards.length;
       for (let i = 0; i < cards.length; i++) { const r = cards[i].getBoundingClientRect(); if (cy < r.top + r.height / 2) { idx = i; break; } }
@@ -298,14 +282,17 @@ function board(al, ed) {
     };
     const up = (ev) => {
       window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
-      if (!ghost) return; const t = target; ghost.remove(); if (mark) mark.remove(); cardEl.classList.remove('pk-ph'); document.body.classList.remove('pi-dragging'); scroller.querySelectorAll('.pk-col.over').forEach((q) => q.classList.remove('over')); scroller.querySelectorAll('.pk-empty').forEach((q) => { q.style.display = ''; });
+      if (!ghost) return; const t = target; ghost.remove(); if (mark) mark.remove(); cardEl.classList.remove('pk-ph'); document.body.classList.remove('pi-dragging'); wrap.querySelectorAll('.pk-col.over').forEach((q) => q.classList.remove('over')); wrap.querySelectorAll('.pk-empty').forEach((q) => { q.style.display = ''; });
       if (ev.type === 'pointerup' && t) drop(al, from, t, cat, idx);
     };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
   });
-  const filter = h('nav', { class: 'pk-filter seg', 'aria-label': 'Columns shown' }, [['all', 'All'], ...cols.map((c) => [c.key, c.name.replace(' bonds', '')])].map(([k, l]) => h('button', { type: 'button', class: kcol === k ? 'on' : '', onclick: () => { kcol = k; window.dispatchEvent(new Event('rerender')); } }, l, k === 'need' ? ` ${need.length}` : '')));
-  scroller.querySelectorAll('.pk-col').forEach((c) => { c.hidden = kcol !== 'all' && c.dataset.col !== kcol; });
-  return h('div', null, filter, scroller);
+  // every column is shown; switch one off to focus on the others (on a phone, when there is no room across)
+  const toggle = (k) => { if (khide.has(k)) khide.delete(k); else if (cols.length - khide.size > 1) khide.add(k); window.dispatchEvent(new Event('rerender')); };
+  const filter = h('nav', { class: 'pk-filter seg', 'aria-label': 'Columns shown' }, h('button', { type: 'button', class: khide.size === 0 ? 'on' : '', onclick: () => { khide.clear(); window.dispatchEvent(new Event('rerender')); } }, 'All'),
+    cols.map((c) => h('button', { type: 'button', class: khide.has(c.key) ? '' : 'on', 'aria-pressed': khide.has(c.key) ? 'false' : 'true', onclick: () => toggle(c.key) }, c.name, c.key === 'need' ? ` ${need.length}` : '')));
+  wrap.prepend(filter); wrap.append(scroller);
+  return wrap;
 }
 
 function allocations(root, sm) {
@@ -313,6 +300,8 @@ function allocations(root, sm) {
   root.append(h('div', { class: 'kpis pi-kpis' }, kpi('Passive income', money(al.totalIncome) + ' / mo', 'planning figure', { tone: 'pos' }), kpi('Allocated', money(al.allocated), al.totalIncome > 0 ? pct(al.allocated / al.totalIncome, 0) + ' of income' : '', { tone: al.allocated > 0 ? 'pos' : '' }),
     kpi('Unallocated', money(al.unallocated), al.unallocated > 1 ? 'not paying any expense yet' : 'all of it has a job', { tone: al.unallocated > 1 ? 'warn' : 'pos' }), kpi('Unmapped expenses', money(sm.unmappedAmount) + ' / mo', al.unmapped.length ? `${al.unmapped.length} with no income` : 'none', { tone: al.unmapped.length ? 'neg' : 'pos' })));
   root.append(h('div', { class: 'pi-row' }, h('p', { class: 'pi-help', style: { flex: '1 1 260px' } }, ed ? 'Drag an expense into an income to pay it from there. Move it up or down to change the order (1 is paid first), or back to Needs income to take it off. Tap a card to split it across incomes; on a phone drag by the handle. Amounts are a plan: a smaller month pays the top cards first.' : 'Only the owner can change allocations.'), sourceTools(al)));
+  const nob = al.cats.filter((c) => c.base > 0 && c.src === 'usual');
+  if (nob.length) root.append(h('p', { class: 'pi-note warn' }, `Expenses come from your category budgets. ${nob.length} ha${nob.length === 1 ? 's' : 've'} no budget yet, so the average of recent months is used: ${nob.slice(0, 4).map((c) => c.name).join(', ')}${nob.length > 4 ? '…' : ''}. `, h('a', { href: '#/flow/categories' }, 'Set budgets')));
   root.append(board(al, ed));
   if (ed) root.append(h('label', { class: 'pi-carry' }, h('input', { type: 'checkbox', checked: al.plan.carry, onchange: (e) => setPlan((p) => { p.carry = e.target.checked; }) }), h('span', null, 'Carry unused allocation to the next month')));
   if (al.orphans.length) root.append(section('Needs a look', h('div', null, h('p', { class: 'note' }, 'These point to income or an expense that is gone (a bond that ended, say).'), h('ul', { class: 'pi-links' }, al.orphans.map((o) => h('li', null, h('span', null, `${o.src} → ${o.cat}`), h('em', null, money(o.amount)), ed ? h('button', { type: 'button', class: 'chip-btn small', onclick: () => setPlan((p) => { p.alloc = p.alloc.filter((a) => a.id !== o.id); }) }, 'Remove') : null))))));
@@ -325,19 +314,34 @@ function actual(root, sm) {
   const sel2 = h('select', { class: 'month-select', 'aria-label': 'Month', onchange: (e) => { month = e.target.value; window.dispatchEvent(new Event('rerender')); } }, months.slice().reverse().map((m) => h('option', { value: m, selected: m === month ? '' : null }, monthLabel(m, true) + (m === cur ? ' (so far)' : ''))));
   root.append(h('div', { class: 'pi-row' }, sel2, h('label', { class: 'pi-carry' }, h('input', { type: 'checkbox', checked: plan.carry, disabled: !canEdit() ? '' : null, onchange: (e) => setPlan((p) => { p.carry = e.target.checked; }) }), h('span', null, 'Carry unused allocation forward'))));
   const pctUsed = a.planned + a.carryIn > 0 ? a.actual / (a.planned + a.carryIn) : null;
-  root.append(h('div', { class: 'kpis pi-kpis' }, kpi('Set aside', money(a.planned), a.carryIn > 0 ? '+ ' + money(a.carryIn) + ' carried' : 'from passive income'), kpi('Spent', money(a.actual), pctUsed == null ? '' : pct(pctUsed, 0) + ' of it', { tone: pctUsed > 1 ? 'neg' : '' }),
+  root.append(h('div', { class: 'kpis pi-kpis' }, kpi('Planned', money(a.planned), a.carryIn > 0 ? '+ ' + money(a.carryIn) + ' carried' : 'from passive income'), kpi('Spent', money(a.actual), pctUsed == null ? '' : pct(pctUsed, 0) + ' of it', { tone: pctUsed > 1 ? 'neg' : '' }),
     kpi('Left', money(a.remaining), plan.carry ? 'carries to next month' : 'not carried'), kpi('Over / unmapped', money(a.over + a.unmappedAmount), a.over ? `${money(a.over)} over · ${money(a.unmappedAmount)} unmapped` : a.unmappedAmount ? 'spent with no income set aside' : 'none', { tone: a.over + a.unmappedAmount > 0 ? 'neg' : 'pos' })));
   const wf = P.monthFlow(S.data, S.all, month);
   if (wf.al.links.length) root.append(section(`This month's income, used in order`, h('div', null,
     h('p', { class: 'note', style: { marginTop: 0 } }, `${money(wf.income)} of passive income ${wf.basis === 'due' ? 'is due' : 'was credited'} against ${money(wf.planned)} allocated. It pays the first expense in the order, then the next.`),
     h('ol', { class: 'pi-order' }, wf.rows.map((r, i) => h('li', { class: r.short > 0.5 ? 'short' : '' }, h('i', { class: 'pb-rank' }, i + 1), h('span', null, h('b', null, r.name), h('small', null, `planned ${money(r.planned)}`)), h('span', { class: 'pi-pay' }, bar(r.planned > 0 ? r.paid / r.planned : 0, r.short > 0.5 ? (r.paid > 0 ? 'mid' : 'bad') : 'ok'), h('em', { class: r.short > 0.5 ? 'neg' : 'pos' }, r.short > 0.5 ? `${money(r.paid)} paid · ${money(r.short)} short` : money(r.paid) + ' paid'))))),
     wf.unused > 0.5 ? h('p', { class: 'note' }, `${money(wf.unused)} of this month's income is not allocated to anything.`) : null)));
-  root.append(section('Category by category', a.rows.length ? h('div', { class: 'pi-rows' }, a.rows.map((r) => {
-    const lvl = r.state === 'over' || r.state === 'unmapped' ? 'bad' : r.state === 'near' || r.state === 'partial' ? 'mid' : 'ok', frac = r.available > 0 ? r.actual / r.available : r.actual > 0 ? 1 : 0;
-    return h('div', { class: 'pi-r ' + lvl }, h('div', { class: 'pi-r-h' }, h('b', null, r.name), chip(r.state === 'over' ? 'Over by ' + money(r.over) : r.state === 'unmapped' ? 'No income set aside' : r.state === 'partial' ? 'Part funded' : r.state === 'near' ? 'Nearly used' : 'Within plan', lvl)),
-      bar(frac, lvl), r.lump && r.over < 0.5 ? h('p', { class: 'pi-kept' + (r.keptShort > 0.5 ? ' warn' : '') }, r.lumpDue ? `The ${r.lump.every}-monthly payment of ${money(r.lump.amount)} falls this month.` : `${money(r.kept)} kept for the ${r.lump.every === 12 ? 'yearly' : r.lump.every + '-monthly'} payment of ${money(r.lump.amount)}${r.keptShort > 0.5 ? `, short by ${money(r.keptShort)}` : ''}. Not free to spend.`) : null, h('div', { class: 'pi-r-n' }, h('span', null, h('small', null, 'Set aside'), money(r.planned) + (r.carryIn > 0 ? ' + ' + compact(r.carryIn) : '')), h('span', null, h('small', null, 'Spent'), money(r.actual)), h('span', null, h('small', null, r.over > 0 ? 'Over' : r.lump && !r.lumpDue ? 'Free to spend' : 'Left'), money(r.over > 0 ? r.over : r.lump && !r.lumpDue ? r.free : r.remaining)), h('span', null, h('small', null, 'Used'), r.used === Infinity ? '–' : pct(r.used, 0))),
-      canEdit() && (r.state === 'unmapped' || r.state === 'over' || r.state === 'partial') ? h('button', { type: 'button', class: 'chip-btn small', onclick: () => (r.state === 'unmapped' ? expenseSheet(sm.al, r.name) : expenseSheet(sm.al, r.name) ) }, r.state === 'unmapped' ? 'Set income aside' : 'Add more income to it') : null);
-  })) : h('p', { class: 'empty' }, 'Nothing was spent and nothing is set aside for this month.')));
+  // every expense on one line: what was spent, against what the plan allows, and what is left. The ones that need a look come first.
+  const lvlOf = (r) => (r.state === 'over' || r.state === 'unmapped' ? 'bad' : r.state === 'near' || r.state === 'partial' ? 'mid' : 'ok');
+  const word = (r) => (r.state === 'over' ? `Over by ${money(r.over)}` : r.state === 'unmapped' ? 'No income set aside' : r.state === 'partial' ? 'Part funded' : r.state === 'near' ? `Nearly used · ${money(r.remaining)} left` : `${money(r.remaining)} left`);
+  const exRow = (r) => { const lvl = lvlOf(r);
+    return h('li', { class: 'pa-row ' + lvl }, h('div', { class: 'pa-top' }, h('b', null, r.name), h('span', { class: 'pa-st ' + lvl }, word(r))), bar(r.available > 0 ? r.actual / r.available : r.actual > 0 ? 1 : 0, lvl),
+      h('div', { class: 'pa-sub' }, h('span', null, `Spent ${money(r.actual)}`), h('span', null, r.available > 0 ? `of ${money(r.available)}${r.carryIn > 0 ? ` (incl. ${money(r.carryIn)} carried)` : ''}` : 'nothing planned')),
+      r.lump ? h('p', { class: 'pa-note' }, r.lumpDue ? `Includes the ${r.lump.every}-monthly payment of ${money(r.lumpAmount)} that falls due this month.` : `The ${money(r.lumpAmount)} payment is not due yet. ${money(r.kept)} is put by for it (see Set aside below).`) : null,
+      canEdit() && (r.state === 'unmapped' || r.state === 'over' || r.state === 'partial') ? h('button', { type: 'button', class: 'chip-btn small', onclick: () => expenseSheet(sm.al, r.name) }, r.state === 'unmapped' ? 'Set income aside' : 'Add more income to it') : null); };
+  const need = a.rows.filter((r) => lvlOf(r) !== 'ok'), fine = a.rows.filter((r) => lvlOf(r) === 'ok');
+  root.append(section('Expenses this month', a.rows.length ? h('div', null,
+    need.length ? h('div', { class: 'pa-grp' }, h('h4', null, 'Needs a look', h('em', null, need.length)), h('ul', { class: 'pa-list' }, need.map(exRow))) : null,
+    fine.length ? h('div', { class: 'pa-grp' }, h('h4', null, 'On plan', h('em', null, fine.length)), h('ul', { class: 'pa-list' }, fine.map(exRow))) : null,
+    h('div', { class: 'pa-tot' }, h('span', null, 'All expenses'), h('b', null, `${money(a.actual)} spent of ${money(a.planned + a.carryIn)}`))) : h('p', { class: 'empty' }, 'Nothing was spent and nothing is set aside for this month.')));
+  const sa = P.setAside(S.data, S.all, month);
+  if (sa.rows.length) root.append(section('Set aside for later payments', h('div', null,
+    h('p', { class: 'note', style: { marginTop: 0 } }, `Part of your monthly plan that is paid only every few months, such as maintenance at quarter end or a yearly fee. It builds up a little each month and is used when the payment falls due. ${money(sa.total)} should be put by right now.`),
+    h('ul', { class: 'pa-list' }, sa.rows.map((r) => h('li', { class: 'pa-row ' + (r.due ? 'mid' : 'ok') },
+      h('div', { class: 'pa-top' }, h('b', null, r.name), h('span', { class: 'pa-st ' + (r.due ? 'mid' : 'ok') }, r.due ? 'Falls due this month' : money(r.accrued) + ' put by')),
+      bar(r.amount > 0 ? r.accrued / r.amount : 0, r.due ? 'mid' : 'ok'),
+      h('div', { class: 'pa-sub' }, h('span', null, `${money(r.share)} a month`), h('span', null, r.kind === 'yearly' ? `${money(r.accrued)} of ${money(r.amount)} a year` : `${money(r.accrued)} of ${money(r.amount)} every ${r.every === 3 ? 'quarter' : r.every === 12 ? 'year' : r.every + ' months'}`)),
+      h('p', { class: 'pa-note' }, r.note + '.'))))))); 
   root.append(section('Income: expected vs credited', h('div', null, h('ul', { class: 'pi-links inc' }, inc.rows.map((r) => h('li', { class: r.late ? 'late' : '' }, h('i', { style: { background: srcColor(sm.al, r.key) } }), h('span', null, h('b', null, r.name), h('small', null, `${P.FREQ_LABEL[r.freq]}${r.late ? ' · late' + (r.due ? ' since ' + r.due : '') : r.expected === 0 ? ' · pays in other months' : ''}`)), h('em', { class: r.late ? 'neg' : '' }, `${money(r.received)} of ${money(r.expected)}`))), h('li', { class: 'tot' }, h('span', null, h('b', null, 'Total')), h('em', null, `${money(inc.received)} of ${money(inc.expected)}`))),
     h('p', { class: 'note' }, 'Expected is what the interest schedule says is due. Credited counts what has arrived (a quarterly line shows 0 in the months it does not pay). Monthly planning figures are on the Allocations tab.'))));
   root.append(salaryCard({ ...sm, cur: month }));
