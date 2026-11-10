@@ -119,7 +119,22 @@ function overview(root, sm) {
     kpi('Monthly expenses', money(al.expenses) + ' / mo', 'From your category budgets'),
     h('div', { class: 'kpi pi-cov' }, ring(cov, 76), h('div', null, h('span', { class: 'kpi-label' }, 'Coverage'), h('strong', { class: 'kpi-value ' + tone(cov) }, cov == null ? '–' : pct(cov, 1)), h('span', { class: 'kpi-sub' }, 'Target 100%'))),
     kpi('Unmapped expenses', money(sm.unmappedAmount) + ' / mo', al.unmapped.length ? `${al.unmapped.length} categor${al.unmapped.length === 1 ? 'y' : 'ies'} with no income` : 'Everything has income', { tone: al.unmapped.length ? 'neg' : 'pos', href: '#/passive/allocations' })));
-  root.append(section('Where the income goes', al.sources.length ? summaryList(al) : h('p', { class: 'empty' }, 'No passive income found yet.'), h('a', { class: 'chip-btn', href: '#/passive/allocations' }, canEdit() ? 'Open allocations' : 'View details')));
+  root.append(h('div', { class: 'pa-cards' }, al.sources.length ? al.sources.map((x) => {
+    const mine = al.links.filter((l) => l.src === x.key).sort((a, b) => a.ord - b.ord);
+    return h('section', { class: 'pa-card', style: { '--c': srcColor(al, x.key) } },
+      h('header', null, h('b', null, h('i'), x.name), h('span', { class: 'pa-n' }, money(x.monthly)), h('small', null, x.members ? x.sub : `${KIND[x.kind]} · ${P.FREQ_LABEL[x.freq]}`)),
+      bar(x.monthly > 0 ? x.allocated / x.monthly : 0, x.over > 0.5 ? 'bad' : ''),
+      mine.length ? h('ul', { class: 'pa-plan' }, mine.map((l) => { const c = al.cats.find((q) => q.name.toLowerCase() === l.cat.toLowerCase()); return h('li', null, h('i', { class: 'pb-rank' }, l.ord), h('span', null, l.cat, c && c.lump ? h('small', null, ` · ${money(c.lump.amount)} every ${c.lump.every === 12 ? 'year' : c.lump.every === 3 ? 'quarter' : c.lump.every + ' months'} included`) : null), h('em', null, money(l.amount))); })) : h('p', { class: 'empty' }, 'Nothing planned on this income yet.'),
+      h('p', { class: 'pa-foot' + (x.over > 0.5 ? ' neg' : '') }, x.over > 0.5 ? `Over-allocated by ${money(x.over)}` : `${money(x.allocated)} allocated · ${money(Math.max(0, x.remaining))} still free`));
+  }) : h('p', { class: 'empty' }, 'No passive income found yet.')));
+  const needs = al.cats.filter((c) => c.base > 0 && c.funded < c.base - 0.5);
+  root.append(section('Expenses', al.cats.filter((c) => c.base > 0).length ? h('div', null, h('div', { class: 'pi-tbl pi-plan-tbl' }, h('div', { class: 'pi-th' }, ['Expense', 'Budget / mo', 'From passive income', 'Gap'].map((t) => h('span', null, t))),
+    al.cats.filter((c) => c.base > 0).map((c) => h('div', { class: 'pi-tr' }, h('span', null, h('b', null, c.name), h('small', null, c.src === 'budget' ? '' : ' · no budget yet')), h('span', null, money(c.base)), h('span', null, money(c.funded)), h('span', { class: c.base - c.funded > 0.5 ? 'neg' : 'pos' }, c.base - c.funded > 0.5 ? money(c.base - c.funded) : 'Covered'))),
+    h('div', { class: 'pi-tr pi-total' }, h('span', null, h('b', null, 'Total')), h('span', null, money(al.expenses)), h('span', null, money(al.allocated)), h('span', { class: al.expenses - al.allocated > 0.5 ? 'neg' : 'pos' }, al.expenses - al.allocated > 0.5 ? money(al.expenses - al.allocated) : 'Covered'))),
+    needs.length ? h('p', { class: 'note' }, `${needs.length} expense${needs.length === 1 ? ' still needs' : 's still need'} income. Connect ${needs.length === 1 ? 'it' : 'them'} on the Allocations tab.`) : h('p', { class: 'pi-ok' }, h('i', null, '✓'), 'Every expense has income planned.')) : h('p', { class: 'empty' }, 'Add budgets for your expense categories to see the plan here.'), h('a', { class: 'chip-btn', href: '#/passive/allocations' }, canEdit() ? 'Open allocations' : 'View details')));
+  const sa = P.setAside(S.data, S.all, sm.cur).rows;
+  if (sa.length) root.append(section('Kept aside every month', h('div', null, h('p', { class: 'note', style: { marginTop: 0 } }, 'Part of the plan paid only every few months. A share is put by each month, inside the budget.'),
+    h('ul', { class: 'pa-plan' }, sa.map((q) => h('li', null, h('span', null, q.name, h('small', null, ` · ${money(q.amount)} ${q.every === 12 ? 'a year' : q.every === 3 ? 'every quarter' : 'every ' + q.every + ' months'}`)), h('em', null, money(q.share) + ' / mo')))))));
   const gap = sm.required, goal = h('div', { class: 'pi-goal ' + tone(cov) }, h('span', { class: 'pi-goal-t' }, h('b', null, 'Goal: fund every expense from passive income'),
     h('small', null, cov == null ? 'Add your income and expenses to begin.' : cov >= 1 ? `Reached. Passive income is ${money(tot - al.expenses)} above the monthly expenses.` : `${pct(cov, 1)} covered. Another ${money(gap)} a month of passive income is needed.`)), bar(cov || 0, tone(cov)));
   root.append(goal);
@@ -255,7 +270,6 @@ function allocations(root, sm) {
   const nob = al.cats.filter((c) => c.base > 0 && c.src === 'usual');
   if (nob.length) root.append(h('p', { class: 'pi-note warn' }, `Expenses come from your category budgets. ${nob.length} ha${nob.length === 1 ? 's' : 've'} no budget yet, so the plan has no exact figure for: ${nob.slice(0, 4).map((c) => c.name).join(', ')}${nob.length > 4 ? '…' : ''}. `, h('a', { href: '#/flow/categories' }, 'Set budgets')));
   root.append(board(al, ed));
-  if (ed) root.append(h('label', { class: 'pi-carry' }, h('input', { type: 'checkbox', checked: al.plan.carry, onchange: (e) => setPlan((p) => { p.carry = e.target.checked; }) }), h('span', null, 'Carry unused allocation to the next month')));
   if (al.orphans.length) root.append(section('Needs a look', h('div', null, h('p', { class: 'note' }, 'These point to income or an expense that is gone (a bond that ended, say).'), h('ul', { class: 'pi-links' }, al.orphans.map((o) => h('li', null, h('span', null, `${o.src} → ${o.cat}`), h('em', null, money(o.amount)), ed ? h('button', { type: 'button', class: 'chip-btn small', onclick: () => setPlan((p) => { p.alloc = p.alloc.filter((a) => a.id !== o.id); }) }, 'Remove') : null))))));
 }
 
@@ -273,22 +287,23 @@ function periodMonths(cur) {
 /** The only place that talks about actuals: how the months went against the plan, income by income. */
 function progress(root, sm) {
   const cur = sm.cur, months = periodMonths(cur), r = P.progressReport(S.data, S.all, months), one = months.length === 1, al = sm.al, n = Math.max(1, months.length), live = months.includes(cur);
-  root.append(h('div', { class: 'pi-row' }, h('nav', { class: 'seg pi-periods', 'aria-label': 'Period' }, PERIODS.map(([k, t]) => h('button', { type: 'button', class: period === k ? 'on' : '', onclick: () => { period = k; window.dispatchEvent(new Event('rerender')); } }, t))),
-    h('label', { class: 'pi-carry' }, h('input', { type: 'checkbox', checked: al.plan.carry, disabled: !canEdit() ? '' : null, onchange: (e) => setPlan((p) => { p.carry = e.target.checked; }) }), h('span', null, 'Carry what is left over to the next month'))));
+  root.append(h('div', { class: 'pi-row' }, h('nav', { class: 'seg pi-periods', 'aria-label': 'Period' }, PERIODS.map(([k, t]) => h('button', { type: 'button', class: period === k ? 'on' : '', onclick: () => { period = k; window.dispatchEvent(new Event('rerender')); } }, t)))));
   const incomeSub = live ? `${money(r.credited)} credited so far` : 'credited in the period';
   root.append(h('div', { class: 'kpis pi-kpis' },
     kpi('Passive income', money(live ? r.income : r.credited), live ? `incl. projected · ${incomeSub}` : incomeSub, { tone: 'pos' }),
     kpi('Spent', money(r.spent), `${monthLabel(months[0], true)}${one ? '' : ' – ' + monthLabel(months[months.length - 1], true)}`),
     kpi('From your pocket', money(r.pocket), r.pocket > 0.5 ? 'passive income was not enough' : 'passive income covered it', { tone: r.pocket > 0.5 ? 'neg' : 'pos' }),
     kpi('More income needed', money(Math.ceil(r.pocket / n)) + ' / mo', r.pocket > 0.5 ? 'would have covered it' : 'nothing more needed', { tone: r.pocket > 0.5 ? 'warn' : 'pos' })));
+  root.append(h('div', { class: 'pa-ind' }, h('div', null, h('small', null, one ? 'Unused this month' : 'Unused in the period'), h('b', null, money(r.left)), h('em', null, 'allocated but not spent')),
+    h('div', null, h('small', null, 'Unused from earlier months'), h('b', null, money(r.earlier)), h('em', null, `before ${monthLabel(months[0], true)}, not added to this plan`))));
   const row = (x) => {
     const lvl = x.over > 0.5 ? 'bad' : x.short > 0.5 ? 'mid' : 'ok';
-    return h('li', { class: 'pa-row ' + lvl }, h('div', { class: 'pa-top' }, h('b', null, x.cat), h('span', { class: 'pa-st ' + lvl }, x.over > 0.5 ? `Over by ${money(x.over)}` : x.short > 0.5 ? 'Income fell short' : x.left > 0.5 && one ? `${money(x.left)} left` : 'On plan')),
+    return h('li', { class: 'pa-row ' + lvl }, h('div', { class: 'pa-top' }, h('b', null, x.cat), h('span', { class: 'pa-st ' + lvl }, x.over > 0.5 ? `Over by ${money(x.over)}` : x.short > 0.5 ? 'Income fell short' : x.left > 0.5 && one ? `${money(x.left)} unused` : 'On plan')),
       bar(x.allowed > 0 ? x.spent / Math.max(x.allowed, x.spent) : x.spent > 0 ? 1 : 0, lvl === 'ok' ? 'ok' : lvl),
       h('div', { class: 'pa-sub' }, h('span', null, `Planned ${money(x.planned)}${one ? '' : ' in all'}`), h('span', null, `Spent ${money(x.spent)}`)),
-      x.carryIn > 0.5 && one ? h('p', { class: 'pa-note' }, `Includes ${money(x.carryIn)} left over from earlier months.`) : null,
+      x.earlier > 0.5 && one ? h('p', { class: 'pa-note earlier' }, `Plus ${money(x.earlier)} unused from earlier months (separate, not added to this month).`) : null,
       x.short > 0.5 ? h('p', { class: 'pa-note' }, `This income paid only ${money(x.paid)} of the ${money(x.planned)} planned.`) : null,
-      x.left > 0.5 && x.over < 0.5 ? h('p', { class: 'pa-note' }, al.plan.carry ? (one ? `${money(x.left)} was not used and moves to ${live && period === 'this' ? 'next month' : 'the following month'}.` : `${money(x.left)} was not used and is still there at the end.`) : `${money(x.left)} was not used.`) : null,
+      x.left > 0.5 && x.over < 0.5 ? h('p', { class: 'pa-note' }, `${money(x.left)} of the plan was not used${one ? ' this month' : ' in the period'}.`) : null,
       x.lump && x.lumpDue ? h('p', { class: 'pa-note' }, 'Includes the payment that falls due this month.') : null);
   };
   root.append(h('div', { class: 'pa-cards' }, r.sources.length ? r.sources.map((x) => h('section', { class: 'pa-card', style: { '--c': srcColor(al, x.key) } },
