@@ -150,6 +150,14 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.81.0 – Passive income: fixed expenses and parts of an expense
+
+The "Expenses in the plan" button is now **Plan the expenses**. For every expense you choose how it is planned:
+- **Average of past months** (the default, good for food and groceries), or **Fixed amount** (rent). A fixed amount can be paid monthly, quarterly, half-yearly or yearly and is divided to a monthly figure, so a quarterly 13,500 plans as 4,500 a month.
+- **Part of another expense**: Maintenance can count as part of Rent. They are planned as one expense (25,000 + 4,500 = 29,500 a month, shown as "Fixed ₹29,500"), allocations made to the part move to the main expense, and spending on the part counts as spending on the main expense in Actual vs plan. Because the maintenance is paid in one lump, switch on "Carry unused allocation" so the months in between build up what the payment month needs.
+- Untick an expense to leave it out of the plan.
+Saved as the optional `settings.passivePlan.expense` and `.merge`; nothing existing changed. Tests in `tests/passive.test.mjs`.
+
 ## Release 8.80.0 – Passive income: grouped bonds, payment order, allocation cards
 
 - **Bonds are grouped** by how they pay: one "Monthly bonds" source and one "Quarterly bonds" source (tap Income settings to see the bonds inside). Allocations saved earlier against a single bond move into its group automatically when read; the saved file is not rewritten until you next change the plan.

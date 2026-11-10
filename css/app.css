@@ -1855,3 +1855,8 @@ dialog.sheet footer button:disabled { opacity: .45; cursor: not-allowed; }
 .pi-order li.short { background: color-mix(in srgb, var(--neg) 5%, transparent); } .pi-pay { display: grid; gap: 4px; width: 44%; max-width: 260px; text-align: right; } .pi-pay em { font-style: normal; font-weight: 650; font-size: .86rem; }
 @media (max-width: 520px) { .pi-order li:has(.pi-pay) { flex-wrap: wrap; } .pi-pay { width: 100%; max-width: none; text-align: left; } }
 .pi-links li > span:not(:has(small)) { display: block; }
+
+/* passive income: planning each expense */
+.pi-cats { display: grid; gap: 10px; max-height: 60vh; overflow: auto; } .pi-cat { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; }
+.pi-cat-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } .pi-cat select, .pi-cat input[type=number] { width: 100%; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); font: inherit; background: var(--surface); color: var(--ink); }
+.pi-cat-fx { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
