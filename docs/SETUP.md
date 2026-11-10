@@ -150,6 +150,10 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.85.0 – Passive income: simpler Overview
+
+The Overview tab no longer draws the allocation picture. *Where the income goes* is a short read-only list: each income, how much of it is allocated, and which expenses it pays. Everything is changed on the Allocations tab (*Open allocations*). Presentation only; nothing stored changes.
+
 ## Release 8.84.0 – Passive income: budgets drive the plan, top-down overview, clearer actual vs plan
 
 - **Overview**: the allocation picture now runs top-down. Incomes across the top, the expenses stacked below; each income drops a coloured line down the left side to the expenses it pays, and chips on an expense show who pays it, in what order and how much.
