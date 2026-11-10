@@ -68,6 +68,14 @@ if (file) {
     ok(jul && jul.lump && Math.abs(jul.kept - Math.min(jul.remaining, 4500 * 2)) < 1, 'between payments the quarter\'s share is shown as kept, not free (two months in: 9,000)');
     const sep = P.actualVsPlan(d, all, '2026-09').rows.find((x) => x.name === 'Rent'); ok(sep && sep.lumpDue && sep.kept === 0, 'in the payment month nothing is held back');
   }
+  // each income has its own order, set by its column; without one it follows the order of the expenses
+  {
+    const d = JSON.parse(JSON.stringify(data)); P.savePlan(d, { alloc: [{ id: 'a', src: key, cat: 'Rent', amount: 100 }, { id: 'b', src: key, cat: 'Food', amount: 100 }, { id: 'c', src: 'inc:zz', cat: 'Rent', amount: 1 }], freq: {}, extra: [], skip: [], carry: true, from: '', order: ['Rent', 'Food'], sorder: { [key]: ['Food', 'Rent'] }, expense: {}, merge: {} });
+    const l = P.allocation(d, all).links, own = l.filter((x) => x.src === key).sort((a, b) => a.ord - b.ord).map((x) => x.cat);
+    ok(own[0] === 'Food' && own[1] === 'Rent', 'an income with its own order pays in that order, not the order of the expenses');
+    d.settings.passivePlan.sorder = {}; const own2 = P.allocation(d, all).links.filter((x) => x.src === key).sort((a, b) => a.ord - b.ord).map((x) => x.cat);
+    ok(own2[0] === 'Rent', 'without its own order an income follows the order of the expenses');
+  }
   const s = P.summary(data, all); ok(s.required >= 0 && (s.coverage == null || s.coverage >= 0), 'coverage and the income still needed are sane');
 }
 console.log(bad ? 'FAILED' : 'ALL OK'); process.exit(bad ? 1 : 0);
