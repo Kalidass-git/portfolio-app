@@ -5,7 +5,8 @@
 //     freq:  { [src]: 'monthly' | 'quarterly' | 'halfyearly' | 'yearly' },   how often an income line is credited (its amount is then divided to a monthly figure)
 //     extra: [{ id, name, amount, freq, match }],   other passive income typed in (rent, dividends...); `match` finds its bank credits
 //     skip:  [category names left out of the plan], carry: true | false, from: 'YYYY-MM' (first month of the plan),
-//     expense: { [category in lower case]: { name, mode: 'fixed', amount, freq } }   an expense that costs the same every time, instead of the average of past months
+//     expense: { [category in lower case]: { name, mode: 'fixed', amount, freq, lump: { amount, every } } }   an expense that costs the same every time, instead of the average of past months;
+//              lump = a further payment made once every `every` months (maintenance at quarter end), planned as a share of every month
 //     merge: { [category in lower case]: 'Other category' }   a category counted as part of another (Maintenance as part of Rent)
 //     order: [category names, first = paid first]   the priority a month's income is used in }
 // An allocation is a plan, not a promise: each month the income that really arrives is used in that order, so a smaller month pays the first expenses in full and leaves the last ones short.
@@ -94,8 +95,9 @@ export function categories(data, all, raw = false) {
   for (const a of plan.alloc) if (!by.has(lc(a.cat))) by.set(lc(a.cat), { name: a.cat, base: 0, cur: 0 });
   for (const [k, x] of Object.entries(plan.expense)) if (x && x.mode === 'fixed' && !by.has(k)) by.set(k, { name: x.name || k, base: 0, cur: 0 });
   const rows = [...by.values()].map((r) => {
-    const usual = r0(r.base / use.length), fx = plan.expense[lc(r.name)], fixed = !!(fx && fx.mode === 'fixed' && Number(fx.amount) > 0);
-    return { name: r.name, usual, base: fixed ? r0(monthlyEquivalent(fx.amount, fx.freq)) : usual, cur: r0(r.cur), fixed, fx: fixed ? { amount: Number(fx.amount), freq: fx.freq || 'monthly' } : null, skipped: skip.has(lc(r.name)), into: plan.merge[lc(r.name)] || '' };
+    const usual = r0(r.base / use.length), fx = plan.expense[lc(r.name)], lump = fx && fx.lump && Number(fx.lump.amount) > 0 ? { amount: Number(fx.lump.amount), every: [2, 3, 4, 6, 12].includes(Number(fx.lump.every)) ? Number(fx.lump.every) : 3 } : null;
+    const fixed = !!(fx && fx.mode === 'fixed' && (Number(fx.amount) > 0 || lump)), regular = fixed ? monthlyEquivalent(Number(fx.amount) || 0, fx.freq) : 0, lumpMonthly = lump ? lump.amount / lump.every : 0;
+    return { name: r.name, usual, base: fixed ? r0(regular + lumpMonthly) : usual, cur: r0(r.cur), fixed, fx: fixed ? { amount: Number(fx.amount) || 0, freq: fx.freq || 'monthly', lump } : null, lump, lumpMonthly: r0(lumpMonthly), skipped: skip.has(lc(r.name)), into: plan.merge[lc(r.name)] || '' };
   });
   if (raw) return rows.sort((a, b) => b.base - a.base || a.name.localeCompare(b.name));
   const out = new Map();
@@ -103,7 +105,7 @@ export function categories(data, all, raw = false) {
     if (r.skipped) { if (!r.into) { out.set(lc(r.name), { ...r, parts: [] }); } continue; }   // a part that is left out is simply not counted
     const key = lc(r.into || r.name), part = { name: r.name, base: r.base, fixed: r.fixed, fx: r.fx };
     const o = out.get(key) || { name: r.into || r.name, base: 0, usual: 0, cur: 0, fixed: true, fx: null, skipped: skip.has(key), parts: [] };
-    o.base += r.base; o.usual += r.usual; o.cur += r.cur; o.parts.push(part); o.fixed = o.fixed && r.fixed; o.fx = o.parts.length === 1 ? r.fx : null;
+    o.base += r.base; o.usual += r.usual; o.cur += r.cur; o.parts.push(part); o.fixed = o.fixed && r.fixed; o.fx = o.parts.length === 1 ? r.fx : null; if (r.lump && !o.lump) { o.lump = r.lump; o.lumpMonthly = r.lumpMonthly; }
     out.set(key, o);
   }
   const rank = new Map(plan.order.map((n, i) => [lc(n), i]));
@@ -155,6 +157,8 @@ export function allocation(data, all) {
   const orphans = plan.alloc.filter((a) => !srcBy.has(a.src) || !catBy.has(lc(a.cat)));
   const sources2 = src.map((s) => { const al = sum(live.filter((a) => a.src === s.key), (a) => a.amount); return { ...s, allocated: al, remaining: s.monthly - al, over: Math.max(0, al - s.monthly) }; });
   const cats2 = cats.map((c) => { const fund = sum(live.filter((a) => lc(a.cat) === lc(c.name)), (a) => a.amount); return { ...c, funded: fund, need: Math.max(0, c.base - fund), extra: Math.max(0, fund - c.base) }; });
+  const rk = new Map(cats.map((c, i) => [lc(c.name), i]));
+  for (const sx of sources2) live.filter((a) => a.src === sx.key).sort((a, b) => rk.get(lc(a.cat)) - rk.get(lc(b.cat))).forEach((a, i) => { a.ord = i + 1; });   // the order this source pays in
   const totalIncome = sum(sources2, (s) => s.monthly), allocated = sum(live, (a) => a.amount), expenses = sum(cats2, (c) => c.base);
   return { plan, sources: sources2, cats: cats2, links: live, orphans, totalIncome, allocated, unallocated: totalIncome - allocated, expenses,
     unmapped: cats2.filter((c) => c.base > 0 && c.funded === 0), partial: cats2.filter((c) => c.funded > 0 && c.funded < c.base - 0.5), covered: Math.min(allocated, expenses) };
@@ -181,7 +185,9 @@ export function actualVsPlan(data, all, month) {
     const avail = r.planned + r.carryIn, remaining = Math.max(0, avail - r.actual), over = avail > 0 ? Math.max(0, r.actual - avail) : 0;
     const used = avail > 0 ? r.actual / avail : r.actual > 0 ? Infinity : 0;
     const state = r.actual > 0 && avail === 0 ? 'unmapped' : over > 0.5 ? 'over' : r.actual > 0 && r.planned < r.actual && r.planned > 0 && !r.carryIn ? 'partial' : used >= 0.9 ? 'near' : 'ok';
-    return { ...r, available: avail, remaining, over, used, state, carryOut: plan.carry ? remaining : 0 };
+    const cat = al.cats.find((c) => lc(c.name) === lc(r.name)), lump = cat && cat.lump, mn = Number(month.slice(5)), kept = lump ? (mn % lump.every === 0 ? 0 : cat.lumpMonthly * (mn % lump.every)) : 0;
+    const keptNow = Math.min(remaining, kept), short = lump && over < 0.5 ? Math.max(0, kept - remaining) : 0;
+    return { ...r, available: avail, remaining, over, used, state: short > 0.5 && state === 'ok' ? 'near' : state, carryOut: plan.carry ? remaining : 0, lump: lump || null, kept: keptNow, free: Math.max(0, remaining - keptNow), keptShort: short, lumpDue: !!lump && mn % lump.every === 0 };
   }).filter((r) => r.planned > 0 || r.actual > 0 || r.carryIn > 0).sort((a, b) => (b.over - a.over) || (b.actual - a.actual));
   return { month, rows: list, planned: sum(list, (r) => r.planned), actual: sum(list, (r) => r.actual), carryIn: sum(list, (r) => r.carryIn), remaining: sum(list, (r) => r.remaining), over: sum(list, (r) => r.over),
     unmappedAmount: sum(list.filter((r) => r.state === 'unmapped'), (r) => r.actual) };
