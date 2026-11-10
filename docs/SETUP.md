@@ -150,6 +150,14 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.82.0 – Passive income: new Allocations layout, rent with a lump payment
+
+- **Allocations tab redesigned.** The drag-the-dot board is replaced by a pinned strip of the income sources (each with what is left of it, always visible while you scroll) above a list of expense cards. Tap an expense and one sheet lists every income with an amount box for each (no income can be asked for more than it has left; "Fill" tops up what the expense needs). Filter the list All / Needs income / Funded. The flow picture with connecting lines stays on the Overview tab, now with the order number on each line (for example "1 · 3k").
+- **Order is part of the expense card.** The separate Payment order section is gone. Each card shows its number (1, 2, 3...), and each income chip on it shows the order that income pays it in (#1, #2...). Drag the handle on a card to move it (touch and mouse; the page scrolls near the screen edge), or focus the handle and press Up or Down. Every chip renumbers itself.
+- **Rent with a quarterly lump.** In Plan the expenses, a fixed expense can have "an extra payment every N months" (every 2, 3, 4, 6 or 12 months; every 3 = quarter end, March, June, September, December). Rent 25,000 monthly plus 13,500 every 3 months plans as 29,500 a month. In Actual vs plan, between payments the share kept for the lump (4,500 a month) is shown as "kept for the 3-monthly payment, not free to spend", and "Free to spend" excludes it; it turns amber if what is left is short of what should be kept.
+- The "Part of another expense" choice is gone from the sheet (data saved by 8.81.0 is still honoured).
+- Optional new saved field: `lump` inside an entry of `settings.passivePlan.expense`. Nothing existing changed.
+
 ## Release 8.81.0 – Passive income: fixed expenses and parts of an expense
 
 The "Expenses in the plan" button is now **Plan the expenses**. For every expense you choose how it is planned:

@@ -1860,3 +1860,27 @@ dialog.sheet footer button:disabled { opacity: .45; cursor: not-allowed; }
 .pi-cats { display: grid; gap: 10px; max-height: 60vh; overflow: auto; } .pi-cat { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; }
 .pi-cat-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } .pi-cat select, .pi-cat input[type=number] { width: 100%; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); font: inherit; background: var(--surface); color: var(--ink); }
 .pi-cat-fx { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+
+/* passive income: pinned income strip, expense list, sheets */
+.pi-strip { position: sticky; top: 58px; z-index: 6; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(150px, 1fr); gap: 8px; overflow-x: auto; padding: 8px 0; background: var(--bg); }
+.pi-sc { display: grid; gap: 3px; padding: 8px 10px; border: 1px solid var(--line); border-left: 4px solid var(--c); border-radius: 12px; background: var(--surface); } .pi-sc.bad { border-color: var(--neg); }
+.pi-sc-t { display: flex; align-items: center; gap: 6px; min-width: 0; } .pi-sc-t i { width: 9px; height: 9px; border-radius: 50%; background: var(--c); flex: none; } .pi-sc-t b { font-size: .84rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pi-sc-n { font-weight: 700; font-variant-numeric: tabular-nums; } .pi-sc-n small, .pi-sc small { color: var(--muted); font-size: .74rem; font-weight: 400; } .pi-sc small.neg { color: var(--neg); } .pi-sc small.pos { color: var(--pos); }
+.pi-help { margin: 0; font-size: .84rem; color: var(--muted); }
+.pi-ex { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pi-exc { display: grid; gap: 7px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); }
+.pi-exc[role=button] { cursor: pointer; } .pi-exc[role=button]:hover { border-color: var(--brand); }
+.pi-exc.none { border-color: color-mix(in srgb, var(--neg) 55%, var(--line)); background: color-mix(in srgb, var(--neg) 5%, var(--surface)); } .pi-exc.part { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); }
+.pi-exc.lift { box-shadow: 0 8px 24px rgba(0,0,0,.18); border-color: var(--brand); position: relative; z-index: 3; }
+.pi-exc-h { display: flex; align-items: center; gap: 8px; } .pi-exc-t { flex: 1; min-width: 0; display: grid; } .pi-exc-t b { overflow-wrap: anywhere; } .pi-exc-t small, .pi-exc-n small { color: var(--muted); font-size: .76rem; }
+.pi-exc-n { display: grid; text-align: right; font-variant-numeric: tabular-nums; } .pi-exc-n b { font-size: 1.02rem; }
+.pi-grip { flex: none; width: 30px; height: 36px; display: grid; place-items: center; margin-left: -6px; color: var(--muted); font-size: 1.3rem; cursor: grab; touch-action: none; user-select: none; border-radius: 8px; } .pi-grip:hover, .pi-grip:focus-visible { background: var(--line-2); color: var(--ink); outline: none; }
+.pi-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pi-src { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px 2px 7px; border-radius: 99px; border: 1px solid color-mix(in srgb, var(--c) 45%, var(--line)); background: color-mix(in srgb, var(--c) 8%, var(--surface)); font-size: .76rem; }
+.pi-src i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); } .pi-src em { font-style: normal; font-weight: 700; }
+.pi-add { margin-left: auto; font-size: .78rem; color: var(--brand); font-weight: 600; }
+.pi-srows { display: grid; gap: 8px; } .pi-srow { display: grid; grid-template-columns: auto 1fr auto 120px; gap: 8px; align-items: center; padding: 8px; border: 1px solid var(--line); border-radius: 12px; } .pi-srow.bad { border-color: var(--neg); }
+.pi-sname { display: grid; min-width: 0; } .pi-sname small { color: var(--muted); font-size: .76rem; } .pi-amt.sm { font-size: 1.05rem; padding: 8px 10px; }
+@media (max-width: 520px) { .pi-srow { grid-template-columns: auto 1fr 110px; } .pi-srow .chip-btn { display: none; } .pi-strip { top: 52px; grid-auto-columns: minmax(138px, 1fr); } }
+.pi-cat-sum { margin: 0; font-size: .82rem; color: var(--brand); } .pi-kept { margin: 0; font-size: .82rem; color: var(--muted); } .pi-kept.warn { color: var(--warn); }
+body.pi-dragging, body.pi-dragging * { cursor: grabbing !important; user-select: none; }

@@ -55,6 +55,19 @@ if (file) {
     const d2 = JSON.parse(JSON.stringify(d)); d2.settings.passivePlan.expense = {}; d2.settings.passivePlan.merge = {};
     ok(P.categories(d2, all).find((c) => c.name === 'Rent').fixed === false, 'without a fixed amount the average of past months is used');
   }
+  // rent 25,000 every month plus 13,500 every 3 months planned as one expense of 29,500, with the quarter's share kept, not free
+  {
+    const d = JSON.parse(JSON.stringify(data)); P.savePlan(d, { alloc: [{ id: 'a', src: key, cat: 'Rent', amount: 3000 }, { id: 'b', src: key, cat: 'Food', amount: 1000 }], freq: {}, extra: [], skip: [], carry: true, from: '2026-07', order: ['Food', 'Rent'],
+      expense: { rent: { name: 'Rent', mode: 'fixed', amount: 25000, freq: 'monthly', lump: { amount: 13500, every: 3 } } }, merge: {} });
+    const r = P.categories(d, all).find((c) => c.name === 'Rent');
+    ok(r && r.base === 29500 && r.fixed && r.lump.every === 3 && r.lumpMonthly === 4500, 'rent 25,000 a month plus 13,500 every 3 months plans as 29,500 a month');
+    const al3 = P.allocation(d, all), ords = al3.links.filter((l) => l.src === key).sort((a, b) => a.ord - b.ord).map((l) => l.cat);
+    ok(ords[0] === 'Food' && ords[1] === 'Rent', 'the order each income pays in follows the order of the expenses');
+    const o2 = JSON.parse(JSON.stringify(d)); o2.settings.passivePlan.order = ['Rent', 'Food']; ok(P.allocation(o2, all).links.filter((l) => l.src === key).sort((a, b) => a.ord - b.ord)[0].cat === 'Rent', 'changing the order of the expenses renumbers the connections');
+    const jul = P.actualVsPlan(d, all, '2026-08').rows.find((x) => x.name === 'Rent');
+    ok(jul && jul.lump && Math.abs(jul.kept - Math.min(jul.remaining, 4500 * 2)) < 1, 'between payments the quarter\'s share is shown as kept, not free (two months in: 9,000)');
+    const sep = P.actualVsPlan(d, all, '2026-09').rows.find((x) => x.name === 'Rent'); ok(sep && sep.lumpDue && sep.kept === 0, 'in the payment month nothing is held back');
+  }
   const s = P.summary(data, all); ok(s.required >= 0 && (s.coverage == null || s.coverage >= 0), 'coverage and the income still needed are sane');
 }
 console.log(bad ? 'FAILED' : 'ALL OK'); process.exit(bad ? 1 : 0);
