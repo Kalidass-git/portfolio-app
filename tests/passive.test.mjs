@@ -83,6 +83,14 @@ if (file) {
     ok(sr && sr.accrued === 9000 && !sr.due && sr.nextIn === 1 && se && se.share === 5000 && se.kind === 'yearly', 'the set-aside card holds the quarter\'s share and the yearly budget');
     ok(P.setAside(d, all, '2026-12').rows.find((x) => x.name === 'Rent').due, 'the payment shows as due in its month');
   }
+  // progress: every spent rupee is either on an income's expense or not planned; the periods add up
+  {
+    const m = P.progressMonth(data, all, '2026-10'), rowsSpent = m.sources.reduce((a, x) => a + x.rows.reduce((b, r) => b + r.spent, 0), 0), un = m.unplanned.reduce((a, u) => a + u.spent, 0);
+    ok(Math.abs(rowsSpent + un - m.spent) < 1, 'progress: what is spent is split between the incomes\' expenses and the unplanned ones');
+    ok(m.pocket <= m.spent + 0.5 && m.pocket >= 0, 'progress: the pocket amount is never more than was spent');
+    const r3 = P.progressReport(data, all, ['2026-08', '2026-09', '2026-10']), one = ['2026-08', '2026-09', '2026-10'].map((x) => P.progressMonth(data, all, x));
+    ok(Math.abs(r3.spent - one.reduce((a, x) => a + x.spent, 0)) < 1 && Math.abs(r3.pocket - one.reduce((a, x) => a + x.pocket, 0)) < 1, 'progress: a period is the sum of its months');
+  }
   // each income has its own order, set by its column; without one it follows the order of the expenses
   {
     const d = JSON.parse(JSON.stringify(data)); P.savePlan(d, { alloc: [{ id: 'a', src: key, cat: 'Rent', amount: 100 }, { id: 'b', src: key, cat: 'Food', amount: 100 }, { id: 'c', src: 'inc:zz', cat: 'Rent', amount: 1 }], freq: {}, extra: [], skip: [], carry: true, from: '', order: ['Rent', 'Food'], sorder: { [key]: ['Food', 'Rent'] }, expense: {}, merge: {} });

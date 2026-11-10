@@ -1925,3 +1925,13 @@ body.pi-dragging, body.pi-dragging * { cursor: grabbing !important; user-select:
 .pa-sub { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: .8rem; color: var(--muted); font-variant-numeric: tabular-nums; } .pa-note { margin: 0; font-size: .8rem; color: var(--muted); }
 .pa-tot { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border-top: 2px solid var(--line); font-variant-numeric: tabular-nums; }
 .pi-timing { margin-top: 10px; } .pi-timing .pi-cat-fx { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+
+/* passive income 8.87.0: progress tab */
+.pi-periods { flex-wrap: wrap; max-width: 100%; }
+.pa-cards { display: grid; gap: 12px; margin-bottom: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); align-items: start; }
+.pa-card { background: var(--surface); border: 1px solid var(--line); border-top: 4px solid var(--c, var(--line)); border-radius: 12px; padding: 12px 14px; display: grid; gap: 10px; }
+.pa-card.bad { --c: var(--neg); margin-bottom: 12px; }
+.pa-card > header { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 2px 8px; }
+.pa-card > header b { display: flex; align-items: center; gap: 8px; } .pa-card > header b i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+.pa-card > header .pa-n { font-weight: 700; font-size: 1.05rem; font-variant-numeric: tabular-nums; } .pa-card > header small { grid-column: 1 / -1; color: var(--muted); }
+.pa-foot { margin: 0; font-size: .84rem; color: var(--muted); } .pa-foot.neg { color: var(--neg); }
