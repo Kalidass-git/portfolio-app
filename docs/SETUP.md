@@ -150,6 +150,10 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.91.0 – Order history as a timeline
+
+Shares & funds → Holdings → *Order history* now opens on a **Timeline** (the *Table* and *By holding* views stay). A line runs down the page grouped by month (each month header shows what was bought and sold), with a dot and a card per order: blue for a buy (money out), green for a sell (money back). Tap a card to open that holding. On phones the orders are cards; on a wide screen each is one aligned row (date, holding, what was done, amount). Presentation only; nothing stored changes.
+
 ## Release 8.90.0 – Cash transactions: balance and more options; account-wide Order history
 
 - **Cash & banks → Transactions**: a *Balance* tile sits in the summary row next to *Paid out* (the balance of the account picked in the filter, else all cash). New options taken from Income & expenses: a view switch (*Entries / By category / By description*; the grouped views follow every filter, tap a category or description to open its entries), a *Filter categories* button (show only the categories you tick, or everything except them), more periods (last 3, 6, 12 months), and *Net* and *Average entry* tiles.
