@@ -385,20 +385,15 @@ function ledger() {
     ] }, rowClass: (e) => 'tx ' + (e.credit ? 'tx-in' : kindOfCat(e.category) === 'investment' ? 'tx-inv' : 'tx-out'), onRow: canEdit() ? (e) => txnForm(data.ledger.find((x) => x.id === e.id)) : null, empty: 'No transactions match these filters.' });
   const t0 = tbl.querySelector('table'); if (t0) t0.classList.add('compact');
   const tile = (cls, ic, label, val) => h('div', { class: 'tx-tile ' + cls }, h('span', { class: 'tx-ti' }, txi(ic)), h('span', { class: 'tx-tt' }, h('small', null, label), h('b', null, val)));
+  const balAcct = fAcct === 'all' ? null : S.all.banks.find((b) => b.id === fAcct);
   const outLabel = fKind === 'all' ? 'Paid out' : fKind === 'investment' ? 'Invested' : 'Spent';
   const summary = h('div', { class: 'tx-sum', role: 'status' },
     tile('', 'list', total === 1 ? 'Entry' : 'Entries', num(total)),
     fKind === 'all' || fKind === 'income' ? tile('pos', 'in', 'Received', money(credit)) : null,
     fKind !== 'income' ? tile(fKind === 'investment' ? 'inv' : 'neg', 'out', outLabel, money(debit)) : null,
+    tile('bal', 'bank', fAcct === 'all' ? 'Balance · all accounts' : 'Balance · ' + (balAcct ? balAcct.name : 'account'), money(fAcct === 'all' ? S.all.cashTotal : balAcct ? balAcct.balance : 0)),
     fKind === 'all' ? tile(credit - debit >= 0 ? 'pos' : 'neg', 'wallet', 'Net', (credit - debit < 0 ? '− ' : '') + money(Math.abs(credit - debit))) : null,
     total > 0 && fKind !== 'all' ? tile('', 'rupee', 'Average entry', money((fKind === 'income' ? credit : debit) / total)) : null);
-  // account balances as cards: tap one to see only that account, tap it again (or All accounts) to see everything
-  const balCard = (id, name, sub, balance, ic) => { const on = fAcct === id, pick = () => { fAcct = on ? 'all' : id; limit = 60; rerender(); };
-    return h('button', { type: 'button', class: 'txb' + (on ? ' on' : '') + (balance < 0 ? ' neg' : ''), 'aria-pressed': String(on), 'aria-label': `${name}. Balance ${money(balance)}. ${on ? 'Showing its transactions' : 'Show its transactions'}`, onclick: pick },
-      h('span', { class: 'txb-top' }, h('span', { class: 'txb-ic' }, txi(ic)), h('span', { class: 'txb-nm' }, h('b', null, name), h('small', null, sub))), h('b', { class: 'txb-bal' + (balance < 0 ? ' neg' : '') }, money(balance))); };
-  const balances = h('div', { class: 'txb-row', role: 'group', 'aria-label': 'Account balances' },
-    balCard('all', 'All accounts', `${S.all.banks.length} account${S.all.banks.length === 1 ? '' : 's'}`, S.all.cashTotal, 'list'),
-    S.all.banks.map((b) => balCard(b.id, b.name, b.holder + (isWallet(b) ? ' · cash in hand' : ''), b.balance, isWallet(b) ? 'wallet' : 'bank')));
   // same choices as Income & expenses: entries, by category or by description, and a filter that ticks several categories
   const VIEWS = [['entries', 'Entries'], ['cat', 'By category'], ['desc', 'By description']];
   const viewSeg = h('nav', { class: 'seg', 'aria-label': 'View' }, VIEWS.map(([k, l]) => h('a', { href: 'javascript:void 0', class: k === fView ? 'on' : '', 'aria-selected': String(k === fView), onclick: (e) => { e.preventDefault(); fView = k; rerender(); } }, l)));
@@ -436,7 +431,7 @@ function ledger() {
     return out;
   };
   const txSec = section('Transactions',
-    h('div', { class: 'txn-card' }, balances, h('div', { class: 'filters' }, seg, viewSeg, catBtn), mbar, bar, summary,
+    h('div', { class: 'txn-card' }, h('div', { class: 'filters' }, seg, viewSeg, catBtn), mbar, bar, summary,
       fView === 'entries' ? tbl : groupedView(),
       fView === 'entries' && total > limit ? btn(`Show more (${total - limit} left)`, () => { limit += 100; rerender(); }, 'wide') : null),
     null);

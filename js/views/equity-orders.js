@@ -1,48 +1,76 @@
-// Order history of one share, ETF or mutual fund: every buy and sell, newest first, with totals and a filter.
+// Order history of the whole account: every buy and sell of shares, ETFs and funds, for any period, with totals.
 import { S } from '../store.js';
-import { h, money, dec, num, dateStr, section, table, stat, route, canEdit, segTabs } from '../ui.js';
+import * as C from '../calc.js';
+import { h, money, dec, num, dateStr, section, table, stat, canEdit, monthLabel, setOptions } from '../ui.js';
 import { symKey, fundKey, BUY_TYPES } from '../trades.js';
-import { tradeForm } from './eqshared.js';
-import { fundTxnForm } from './equity-fund.js';
 
-let side = 'all';   // all | buy | sell (kept while looking at one holding's orders)
-let seenKey = '';
+let period = 'all', side = 'all', kind = 'all', view = 'orders', text = '';
+const rerender = () => window.dispatchEvent(new Event('rerender'));
+
+/** Period choices: [value, label, from, to]. A single month is chosen as its 'YYYY-MM'. */
+function periods(asOf) {
+  const y = Number(asOf.slice(0, 4)), m = Number(asOf.slice(5, 7)), fy = m >= 4 ? y : y - 1, back = (n) => C.addMonths(asOf.slice(0, 7) + '-01', -n), first = asOf.slice(0, 7) + '-01', lastM = C.addMonths(first, -1);
+  return [['all', 'All time', '', '9999-12-31'], ['this', 'This month', first, asOf], ['last', 'Last month', lastM, C.addMonths(first, 0).slice(0, 7) + '-00'], ['3m', 'Last 3 months', back(3), asOf], ['6m', 'Last 6 months', back(6), asOf], ['12m', 'Last 12 months', back(12), asOf],
+    ['ty', `This year (${y})`, `${y}-01-01`, `${y}-12-31`], ['ly', `Last year (${y - 1})`, `${y - 1}-01-01`, `${y - 1}-12-31`], ['tfy', `This financial year (Apr ${fy} – Mar ${fy + 1})`, `${fy}-04-01`, `${fy + 1}-03-31`], ['lfy', `Last financial year (Apr ${fy - 1} – Mar ${fy})`, `${fy - 1}-04-01`, `${fy}-03-31`]];
+}
+const inPeriod = (v, date, asOf) => { if (v === 'all') return true; if (/^\d{4}-\d\d$/.test(v)) return date.slice(0, 7) === v; const p = periods(asOf).find((x) => x[0] === v); return !!p && date >= p[2] && date <= p[3]; };
+
+/** Every order as one shape: shares and ETFs from the trades, funds from the fund transactions. */
+function allOrders() {
+  const { data, all } = S, items = new Map(all.stocks.items.map((x) => [symKey(x.symbol), x])), funds = new Map(all.mf.items.map((x) => [fundKey(x.name), x]));
+  const out = [];
+  for (const t of data.trades || []) {
+    const sk = symKey(t.symbol), it = items.get(sk), etf = it ? it.assetClass !== 'equity' : false, q = Number(t.qty) || 0, buy = t.type !== 'SELL';
+    out.push({ id: t.id, src: 'trade', date: t.date, time: t.time || '', kind: etf ? 'ETF' : 'Share', name: (it && it.name) || t.name || t.symbol, buy, label: buy ? 'Buy' : 'Sell', qty: q, price: q ? t.amount / q : 0, amount: Number(t.amount) || 0, href: it ? '#/equity/holding?sym=' + encodeURIComponent(it.symbol) : null, hold: 's:' + sk });
+  }
+  for (const t of data.mfTxns || []) {
+    const f = funds.get(fundKey(t.scheme)), buy = BUY_TYPES.test(t.type), q = Number(t.units) || 0;
+    out.push({ id: t.id, src: 'fund', date: t.date, time: '', kind: 'Fund', name: (f && f.name) || t.scheme, buy, label: /sip/i.test(t.type) ? 'SIP' : buy ? 'Buy' : 'Sell', qty: q, price: t.nav > 0 ? t.nav : q ? t.amount / q : 0, amount: Number(t.amount) || 0, href: f ? '#/equity/fund?id=' + encodeURIComponent(f.id) : null, hold: 'f:' + fundKey(t.scheme) });
+  }
+  return out.sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : a.date + a.time > b.date + b.time ? -1 : (b.id || 0) - (a.id || 0)));
+}
 
 export function render(root) {
-  const { data, all } = S, q = route().query, fundId = q.get('fund'), sym = symKey(q.get('sym') || '');
-  const fund = fundId ? all.mf.items.find((x) => x.id === fundId) : null, stock = !fund && sym ? all.stocks.items.find((x) => symKey(x.symbol) === sym) : null;
-  const key = fund ? 'f:' + fund.id : 's:' + sym; if (key !== seenKey) { seenKey = key; side = 'all'; }
-  const holdHref = fund ? '#/equity/fund?id=' + encodeURIComponent(fund.id) : '#/equity/holding?sym=' + encodeURIComponent(sym);
-  root.append(h('div', { class: 'pagebar' }, h('a', { class: 'back', href: fund ? '#/equity/holdings?v=funds' : '#/equity/holdings' }, '← Holdings')));
-  if (!fund && !stock) { root.append(h('div', { class: 'card' }, h('p', { class: 'empty' }, 'This holding is not in your list any more. Orders of shares you sold are under History.'))); return; }
-  const name = fund ? fund.name : stock.name;
-  // one list shape for both: date, side, quantity (units), price (NAV), amount
-  const orders = (fund
-    ? (data.mfTxns || []).filter((t) => fundKey(t.scheme) === fundKey(fund.name)).map((t) => ({ id: t.id, date: t.date, time: '', buy: BUY_TYPES.test(t.type), label: /sip/i.test(t.type) ? 'SIP' : BUY_TYPES.test(t.type) ? 'Buy' : 'Sell', qty: Number(t.units) || 0, price: t.nav > 0 ? t.nav : t.units ? t.amount / t.units : 0, amount: Number(t.amount) || 0, raw: t }))
-    : (data.trades || []).filter((t) => symKey(t.symbol) === sym).map((t) => ({ id: t.id, date: t.date, time: t.time || '', buy: t.type !== 'SELL', label: t.type === 'SELL' ? 'Sell' : 'Buy', qty: Number(t.qty) || 0, price: t.qty ? t.amount / t.qty : 0, amount: Number(t.amount) || 0, raw: t })))
-    .sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : a.date + a.time > b.date + b.time ? -1 : (b.id || 0) - (a.id || 0)));
-  const buys = orders.filter((o) => o.buy), sells = orders.filter((o) => !o.buy), sum = (l, f) => l.reduce((a, o) => a + o[f], 0);
-  const unit = fund ? 'units' : 'shares', d = fund ? 3 : 0, p = fund ? 4 : 2;
-  root.append(h('div', { class: 'card' }, h('h2', { style: { margin: 0 } }, name),
-    h('p', { class: 'note', style: { margin: '4px 0 0' } }, fund ? [fund.folio ? 'Folio ' + fund.folio : null, 'Mutual fund'].filter(Boolean).join(' · ') : `${stock.symbol} · ${stock.assetClass === 'equity' ? 'Share' : stock.assetClass === 'goldetf' ? 'Gold ETF' : 'ETF'}`),
-    h('div', { class: 'btn-row', style: { marginTop: 10 } }, h('a', { class: 'btn small', href: holdHref }, 'Open holding'),
-      canEdit() ? h('button', { type: 'button', class: 'small', onclick: () => (fund ? fundTxnForm(fund, null, { type: 'Purchase' }) : tradeForm(null, { type: 'BUY', symbol: sym, name })) }, 'Record a buy') : null)));
-  root.append(h('div', { class: 'stats' },
-    stat('Orders', String(orders.length), orders.length ? `${buys.length} buy${buys.length === 1 ? '' : 's'} · ${sells.length} sell${sells.length === 1 ? '' : 's'}` : 'none recorded'),
-    stat('Bought', money(sum(buys, 'amount')), `${dec(sum(buys, 'qty'), d)} ${unit}`),
-    stat('Sold', money(sum(sells, 'amount')), sells.length ? `${dec(sum(sells, 'qty'), d)} ${unit}` : 'nothing sold'),
-    stat('Average buy price', buys.length && sum(buys, 'qty') ? dec(sum(buys, 'amount') / sum(buys, 'qty'), p) : '–', orders.length ? `first order ${dateStr(orders[orders.length - 1].date)}` : '')));
-  if (!orders.length) { root.append(h('div', { class: 'card' }, h('p', { class: 'empty' }, 'No orders for this holding.'), h('p', { class: 'note' }, fund ? 'Press “Record a buy” each time you invest, or import your history.' : 'This holding was entered by hand, so it has no order history. Import your Groww history (Manage → Import) to see every order.'))); return; }
-  const rows = orders.filter((o) => side === 'all' || (side === 'buy' ? o.buy : !o.buy));
-  root.append(h('nav', { class: 'seg', 'aria-label': 'Orders shown' }, [['all', `All (${orders.length})`], ['buy', `Buys (${buys.length})`], ['sell', `Sells (${sells.length})`]].map(([k, l]) => h('a', { href: 'javascript:void 0', class: k === side ? 'on' : '', 'aria-selected': String(k === side), onclick: (e) => { e.preventDefault(); side = k; window.dispatchEvent(new Event('rerender')); } }, l))));
-  const tone = (o) => (o.buy ? '' : 'neg');
-  root.append(section(`Order history (${rows.length})`, table([
-    { label: 'Date', host: true, get: (o) => dateStr(o.date) + (o.time ? ' · ' + o.time.slice(0, 5) : '') },
-    { label: 'Order', render: (o) => h('span', { class: tone(o) }, o.label) },
-    { label: fund ? 'Units' : 'Qty', mob: 'under', mlabel: '', cls: 'r', get: (o) => (fund ? dec(o.qty, 3) : num(o.qty)) },
-    { label: fund ? 'NAV' : 'Price', mob: 'under', mlabel: 'at ', cls: 'r', get: (o) => dec(o.price, p) },
-    { label: 'Value', cls: 'r', render: (o) => h('span', { class: tone(o) }, (o.buy ? '' : '− ') + money(o.amount)) },
-  ], rows, { m: { key: 'eq-orders', head: 'Date', sub: ['Order'], views: [['Value', fund ? 'Units' : 'Qty'], [fund ? 'NAV' : 'Price']] },
-    onRow: canEdit() ? (o) => (fund ? fundTxnForm(fund, data.mfTxns.find((x) => x.id === o.id)) : tradeForm(data.trades.find((x) => x.id === o.id))) : null, empty: 'No orders of this kind.' }),
-    h('p', { class: 'note' }, 'Newest first. Quantities are as recorded on each order; splits and bonus shares are shown on the holding page.')));
+  const { all } = S, asOf = all.asOf, everything = allOrders();
+  root.append(h('div', { class: 'pagebar' }, h('a', { class: 'back', href: '#/equity/holdings' }, '← Holdings')));
+  root.append(h('div', { class: 'card' }, h('h2', { style: { margin: 0 } }, 'Order history'), h('p', { class: 'note', style: { margin: '4px 0 0' } }, 'Everything you bought and sold across shares, ETFs and mutual funds. Pick a period, or keep All time.')));
+  if (!everything.length) { root.append(h('div', { class: 'card' }, h('p', { class: 'empty' }, 'No orders yet.'), h('p', { class: 'note' }, 'Orders appear when you import your Groww history (Manage → Import) or record buys and sells.'))); return; }
+  const months = [...new Set(everything.map((o) => o.date.slice(0, 7)))].sort().reverse();
+  const sel = h('select', { class: 'month-select', 'aria-label': 'Period', onchange: (e) => { period = e.target.value; rerender(); } });
+  setOptions(sel, [{ group: 'Period', options: periods(asOf).map(([v, l]) => ({ value: v, label: l })) }, { group: 'A single month', options: months.map((m) => ({ value: m, label: monthLabel(m, true) })) }], period);
+  const find = h('input', { type: 'search', placeholder: 'Find a holding', value: text, 'aria-label': 'Find a holding', oninput: (e) => { text = e.target.value; clearTimeout(window.__oq); window.__oq = setTimeout(rerender, 250); } });
+  const segOf = (label, list, cur, set) => h('nav', { class: 'seg', 'aria-label': label }, list.map(([k, l]) => h('a', { href: 'javascript:void 0', class: k === cur ? 'on' : '', 'aria-selected': String(k === cur), onclick: (e) => { e.preventDefault(); set(k); rerender(); } }, l)));
+  const q = text.trim().toLowerCase();
+  const rows = everything.filter((o) => inPeriod(period, o.date, asOf) && (side === 'all' || (side === 'buy' ? o.buy : !o.buy)) && (kind === 'all' || o.kind === kind) && (!q || o.name.toLowerCase().includes(q)));
+  root.append(h('div', { class: 'filters' }, sel, find),
+    h('div', { class: 'filters' }, segOf('Orders shown', [['all', 'All'], ['buy', 'Buys'], ['sell', 'Sells']], side, (k) => { side = k; }), segOf('Type', [['all', 'All types'], ['Share', 'Shares'], ['ETF', 'ETFs'], ['Fund', 'Funds']], kind, (k) => { kind = k; })));
+  const hn = (l) => { const n = new Set(l.map((o) => o.hold)).size; return `${n} holding${n === 1 ? '' : 's'}`; };
+  const buys = rows.filter((o) => o.buy), sells = rows.filter((o) => !o.buy), sum = (l) => l.reduce((a, o) => a + o.amount, 0);
+  root.append(h('div', { class: 'stats' }, stat('Orders', String(rows.length), `${buys.length} buy${buys.length === 1 ? '' : 's'} · ${sells.length} sell${sells.length === 1 ? '' : 's'}`),
+    stat('Bought', money(sum(buys)), hn(buys)), stat('Sold', money(sum(sells)), sells.length ? hn(sells) : 'nothing sold'),
+    stat('Net invested', (sum(buys) - sum(sells) < 0 ? '− ' : '') + money(Math.abs(sum(buys) - sum(sells))), 'bought minus sold')));
+  root.append(segOf('View', [['orders', 'Orders'], ['holding', 'By holding']], view, (k) => { view = k; }));
+  if (!rows.length) { root.append(h('div', { class: 'card' }, h('p', { class: 'empty' }, 'No orders match these filters.'))); return; }
+  const open = (o) => { if (o.href) location.hash = o.href; };
+  const tag = (o) => (o.kind === 'Share' ? null : h('small', { class: 'tag' }, o.kind));
+  if (view === 'orders') {
+    root.append(section(`Orders (${rows.length})`, table([
+      { label: 'Date', mob: 'under', get: (o) => dateStr(o.date) },
+      { label: 'Holding', host: true, render: (o) => h('span', null, o.name, ' ', tag(o)) },
+      { label: 'Order', render: (o) => h('span', { class: o.buy ? '' : 'neg' }, o.label) },
+      { label: 'Qty / units', mob: 'under', mlabel: '', cls: 'r', get: (o) => (o.kind === 'Fund' ? dec(o.qty, 3) : num(o.qty)) },
+      { label: 'Price / NAV', mob: 'under', mlabel: 'at ', cls: 'r', get: (o) => dec(o.price, o.kind === 'Fund' ? 4 : 2) },
+      { label: 'Value', cls: 'r', render: (o) => h('span', { class: o.buy ? '' : 'neg' }, (o.buy ? '' : '− ') + money(o.amount)) },
+    ], rows, { m: { key: 'eq-orders-all', head: 'Holding', sub: (o) => `${dateStr(o.date)} · ${o.label}`, views: [['Value', 'Qty / units'], ['Price / NAV']] }, onRow: open, empty: 'No orders.' }),
+      h('p', { class: 'note' }, 'Newest first. Tap an order to open that holding. Quantities are as recorded on each order.')));
+  } else {
+    const m = new Map();
+    for (const o of rows) { const r = m.get(o.hold) || { name: o.name, kind: o.kind, href: o.href, n: 0, bought: 0, sold: 0, last: '' }; r.n++; if (o.buy) r.bought += o.amount; else r.sold += o.amount; if (o.date > r.last) r.last = o.date; m.set(o.hold, r); }
+    const list = [...m.values()].sort((a, b) => b.bought + b.sold - (a.bought + a.sold));
+    root.append(section(`By holding (${list.length})`, table([
+      { label: 'Holding', host: true, render: (r) => h('span', null, r.name, ' ', r.kind === 'Share' ? null : h('small', { class: 'tag' }, r.kind)) },
+      { label: 'Orders', cls: 'r', get: (r) => String(r.n) }, { label: 'Bought', cls: 'r', get: (r) => money(r.bought) }, { label: 'Sold', cls: 'r', get: (r) => (r.sold ? money(r.sold) : '–') },
+      { label: 'Net', mob: 'under', mlabel: 'net ', cls: 'r', get: (r) => (r.bought - r.sold < 0 ? '− ' : '') + money(Math.abs(r.bought - r.sold)) }, { label: 'Last order', mob: 'under', mlabel: 'last ', get: (r) => dateStr(r.last) },
+    ], list, { m: { key: 'eq-orders-by', head: 'Holding', sub: (r) => `${r.n} order${r.n === 1 ? '' : 's'}`, views: [['Bought', 'Sold'], ['Net', 'Last order']] }, onRow: (r) => { if (r.href) location.hash = r.href; } }), h('p', { class: 'note' }, 'Tap a holding to open it.')));
+  }
 }
