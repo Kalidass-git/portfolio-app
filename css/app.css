@@ -1943,3 +1943,20 @@ body.pi-dragging, body.pi-dragging * { cursor: grabbing !important; user-select:
 .pi-plan-tbl .pi-th, .pi-plan-tbl .pi-tr { grid-template-columns: 1.6fr 1fr 1fr 1fr; } .pi-plan-tbl .pi-tr small { color: var(--muted); } .pi-total { font-weight: 600; border-top: 2px solid var(--line); }
 
 .txn-card .filters { flex-wrap: wrap; gap: 8px; align-items: center; }
+
+/* Order history timeline */
+.otl { display: grid; gap: 18px; }
+.otl-mh { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; padding: 0 0 8px 28px; } .otl-mh span { font-size: .82rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.otl-list { list-style: none; margin: 0; padding: 0 0 0 28px; position: relative; display: grid; gap: 10px; }
+.otl-list::before { content: ''; position: absolute; left: 8px; top: 6px; bottom: 6px; width: 2px; background: var(--line); border-radius: 2px; }
+.otl-item { position: relative; } .otl-dot { position: absolute; left: -26px; top: 14px; width: 12px; height: 12px; border-radius: 50%; background: var(--surface); border: 3px solid var(--inv, #2563eb); box-sizing: border-box; } .otl-item.sell .otl-dot { border-color: var(--pos); }
+.otl-card { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--inv, #2563eb); border-radius: 10px; padding: 9px 12px; display: grid; gap: 2px; } .otl-item.sell .otl-card { border-left-color: var(--pos); }
+.otl-card.link { cursor: pointer; } .otl-card.link:hover, .otl-card.link:focus-visible { background: var(--line-2); outline: none; }
+.otl-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; font-variant-numeric: tabular-nums; } .otl-date { font-size: .8rem; color: var(--muted); } .otl-name { font-weight: 600; } .otl-sub { font-size: .84rem; color: var(--muted); }
+/* Order history timeline on a wide screen: one aligned row per order (date, holding, what was done, amount) so the cards do not stretch */
+@media (min-width: 900px) {
+  .otl-card { grid-template-columns: 150px minmax(0, 1.2fr) minmax(0, 1.8fr) 120px; align-items: center; column-gap: 16px; padding: 10px 16px; }
+  .otl-top { display: contents; } .otl-date { grid-column: 1; grid-row: 1; } .otl-top b { grid-column: 4; grid-row: 1; text-align: right; font-size: 1rem; }
+  .otl-name { grid-column: 2; grid-row: 1; } .otl-sub { grid-column: 3; grid-row: 1; }
+  .otl-mh { padding-left: 28px; } .otl { max-width: 980px; }
+}
