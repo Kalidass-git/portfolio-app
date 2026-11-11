@@ -150,6 +150,10 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.89.0 – Home: no duplicate "Due to you" list
+
+Home → This month in detail → Income no longer repeats the *Due to you, not received yet* list (the income lines above it already show what is due or overdue). The bond-interest bank check stays. Presentation only; nothing stored or calculated changes.
+
 ## Release 8.88.0 – Passive income: fuller Overview, unused allocation shown separately
 
 - **Overview** (plan only) is fuller again: a card per income listing the expenses planned on it in payment order with amounts (and any quarterly/yearly payment included), what is allocated and still free; an *Expenses* table (budget a month, from passive income, gap, total); *Kept aside every month* for quarterly/yearly payments; the coverage goal.
