@@ -1941,3 +1941,15 @@ body.pi-dragging, body.pi-dragging * { cursor: grabbing !important; user-select:
 .pa-note.earlier { color: var(--info, #2563eb); }
 .pa-plan { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; } .pa-plan li { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; font-size: .9rem; } .pa-plan li:not(:has(.pb-rank)) { grid-template-columns: 1fr auto; } .pa-plan em { font-style: normal; font-weight: 600; font-variant-numeric: tabular-nums; } .pa-plan small { color: var(--muted); }
 .pi-plan-tbl .pi-th, .pi-plan-tbl .pi-tr { grid-template-columns: 1.6fr 1fr 1fr 1fr; } .pi-plan-tbl .pi-tr small { color: var(--muted); } .pi-total { font-weight: 600; border-top: 2px solid var(--line); }
+
+/* order history link on the Holdings list */
+.ord-link { display: inline-block; margin-top: 4px; font-size: .78rem; font-weight: 600; color: var(--primary, #0f5c3c); text-decoration: underline; text-underline-offset: 2px; padding: 2px 0; } .ord-row { display: inline-flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+/* Cash & banks: account balance cards on the Transactions tab */
+.txb-row { display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 8px; margin-bottom: 8px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+.txb { flex: 0 0 auto; min-width: 150px; max-width: 220px; text-align: left; display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: inherit; font: inherit; cursor: pointer; scroll-snap-align: start; }
+.txb.on { border-color: var(--primary, #0f5c3c); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary, #0f5c3c) 25%, transparent); } .txb.neg { border-left: 3px solid var(--neg); }
+.txb-top { display: flex; align-items: center; gap: 8px; min-width: 0; } .txb-ic { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: var(--line-2); flex: none; } .txb-ic svg { width: 16px; height: 16px; }
+.txb-nm { display: grid; min-width: 0; } .txb-nm b, .txb-nm small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .txb-nm small { color: var(--muted); font-size: .74rem; }
+.txb-bal { font-size: 1.05rem; font-variant-numeric: tabular-nums; } .txb-bal.neg { color: var(--neg); }
+.txn-card .filters { flex-wrap: wrap; gap: 8px; align-items: center; }

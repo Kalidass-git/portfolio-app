@@ -7,6 +7,7 @@ import { insights, sold } from './equity-insights.js';
 import * as dividends from './dividends.js';
 import * as importView from './equity-import.js';
 import * as holdingView from './equity-holding.js';
+import * as ordersView from './equity-orders.js';
 import * as watchView from './watch.js';
 import * as W from '../watch.js';
 import * as fundView from './equity-fund.js';
@@ -193,6 +194,9 @@ const groupName = (x) => (isFund(x) ? 'funds' : isEtf(x) ? 'ETFs' : 'shares');
 const groupBase = (x) => { const g = groups(); return isFund(x) ? g.funds.current : isEtf(x) ? g.etfs.current : g.shares.current; };
 const expo = (x) => { const b = groupBase(x); return b > 0 ? x.current / b : 0; };
 /** Compact cells: two lines each, colour-coded, so a row fits a phone without sideways scrolling. */
+const ordersHref = (x) => (isFund(x) ? '#/equity/orders?fund=' + encodeURIComponent(x.id) : '#/equity/orders?sym=' + encodeURIComponent(x.symbol));
+/** "Order history" link under a holding's name (opens that holding's buys and sells without opening the holding). */
+const ordersLink = (x) => h('a', { class: 'ord-link', href: ordersHref(x), title: 'See every buy and sell of ' + x.name, onclick: (e) => e.stopPropagation() }, 'Order history');
 function holdCols(kind, tot) {
   // 'mixed' decides per row, so shares, ETFs and funds can sit in one list
   const isF = (x) => kind === 'fund' || (kind === 'mixed' && isFund(x));
@@ -201,7 +205,7 @@ function holdCols(kind, tot) {
   return [
     { label: kind === 'fund' ? 'Fund' : 'Holding', render: (x) => { const fund = isF(x); return h('div', null, h('div', { class: 'nm' }, x.name, x.assetClass === 'goldetf' ? h('small', { class: 'tag' }, 'Gold') : (!fund && isEtf(x) ? h('small', { class: 'tag' }, 'ETF') : null)),
       sub2(fund ? `${dec(x.units, 3)} units · avg ${dec(x.units ? x.invested / x.units : 0, 2)}` : `${num(x.qty)} sh · avg ${dec(x.avgPrice)}`, fund ? (x.folio ? ' · ' + x.folio : '') : h('span', { class: 'desk-i' }, ' · ' + x.symbol),
-        h('span', { class: 'with-meter phone-only-i', title: 'Share of all your ' + groupName(x) }, meter(Math.min(8, expo(x) * 40), 0), pct(expo(x), 1))), fund && canEdit() && !x.schemeCode ? h('button', { class: 'small', style: { marginTop: '4px' }, onclick: (e) => { e.stopPropagation(); linkFund(x); } }, 'Link live NAV') : null); } },
+        h('span', { class: 'with-meter phone-only-i', title: 'Share of all your ' + groupName(x) }, meter(Math.min(8, expo(x) * 40), 0), pct(expo(x), 1))), fund && canEdit() && !x.schemeCode ? h('button', { class: 'small', style: { marginTop: '4px' }, onclick: (e) => { e.stopPropagation(); linkFund(x); } }, 'Link live NAV') : null, ordersLink(x)); } },
     { label: kind === 'fund' ? 'NAV · today' : mixed ? 'Price / NAV · today' : 'Price · today', cls: 'r pc-price', mob: 'under', mu: (x) => (x.day == null ? null : h('span', { class: posNeg(x.day) }, 'today ' + signed(x.day) + ' (' + pct(Math.abs(x.dayPct || 0), 2) + ')')), render: (x) => { const fund = isF(x); return h('div', null, h('div', null, h('span', { class: 'phone-only-i muted' }, fund ? 'NAV ' : 'Price '), dec(fund ? x.liveNav : x.livePrice, fund ? 4 : 2), fund && x.navDate ? h('small', { class: 'muted', title: 'The date of this NAV' }, ' · ' + dateStr(x.navDate).replace(/ \d{4}$/, '')) : null),
       x.day == null ? sub2('–') : sub2(h('span', { class: posNeg(x.day) }, signed(x.day) + ' (' + pct(Math.abs(x.dayPct || 0), 2) + ')'), h('span', { class: 'phone-only-i' }, ' today'))); } },
     { label: 'Value (invested)', cls: 'r', render: (x) => h('div', null, h('div', { class: 'b' }, money(x.current)), sub2(h('span', { class: 'desk-i' }, '(' + money(x.invested) + ')'), h('span', { class: 'phone-only-i' }, 'invested ' + money(x.invested)))) },
@@ -217,7 +221,7 @@ function holdMobile(kind) {
   return {
     key: kind === 'fund' ? 'funds' : mixed ? 'all' : 'shares', head: kind === 'fund' ? 'Fund' : 'Holding', midHead: 'Today',
     first: (x) => { const fund = isF(x); return ({ title: x.name, tag: x.assetClass === 'goldetf' ? 'Gold' : (!fund && isEtf(x) ? 'ETF' : fund && mixed ? 'Fund' : null), sub: fund ? `${dec(x.units, 3)} units` : `${num(x.qty)} ${x.qty === 1 ? 'share' : 'shares'}`,
-      extra: fund && canEdit() && !x.schemeCode ? h('button', { class: 'small', style: { marginTop: '4px' }, onclick: (e) => { e.stopPropagation(); linkFund(x); } }, 'Link live NAV') : null }); },
+      extra: h('span', { class: 'ord-row' }, fund && canEdit() && !x.schemeCode ? h('button', { class: 'small', style: { marginTop: '4px' }, onclick: (e) => { e.stopPropagation(); linkFund(x); } }, 'Link live NAV') : null, ordersLink(x)) }); },
     mid: (x) => (x.day == null ? null : h('div', null, h('div', { class: posNeg(x.day) }, arrow(x.day) + money(Math.abs(x.day))), h('div', { class: posNeg(x.day) }, pct(Math.abs(x.dayPct || 0), 2)))),
     views: [
       { label: 'Value · Invested', main: (x) => money(x.current), sub: (x) => '(' + money(x.invested) + ')' },
@@ -337,6 +341,7 @@ export function render() {
   const root = h('div', { class: 'page' });
   if (route().sub === 'holding') { holdingView.render(root); return root; }
   if (route().sub === 'fund') { fundView.render(root); return root; }
+  if (route().sub === 'orders') { ordersView.render(root); return root; }
   if (route().sub === 'quote') { quoteView.render(root); return root; }
   const rsub = route().sub;
   const LEGACY = { today: '#/equity/overview', alerts: '#/equity/manage?v=alerts', funds: '#/equity/holdings?v=funds', insights: '#/equity/manage?v=insights', sold: '#/equity/history?v=sold', dividends: '#/equity/history?v=dividends', sip: '#/equity/manage?v=planner', import: '#/equity/manage?v=import', stocks: '#/equity/holdings?v=stocks&f=shares', etfs: '#/equity/holdings?v=stocks&f=etfs' };

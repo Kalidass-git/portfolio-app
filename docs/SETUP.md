@@ -150,6 +150,11 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.90.0 – Cash transactions: balance cards and more options; Order history for holdings
+
+- **Cash & banks → Transactions**: account balances as cards at the top (All accounts plus one per account, cash in hand included). Tap a card to see only that account, tap it again to see everything. New options taken from Income & expenses: a view switch (*Entries / By category / By description*; the grouped views follow every filter, tap a category or description to open its entries), a *Filter categories* button (show only the categories you tick, or everything except them), more periods (last 3, 6, 12 months), and extra summary tiles (*Net*, *Average entry*).
+- **Shares & funds → Holdings**: every holding has an *Order history* link under its name (phone and computer). It opens a new details page (`#/equity/orders?sym=…` or `?fund=…`, new file `js/views/equity-orders.js`) with orders, bought / sold totals, average buy price, first order, an All / Buys / Sells switch, and every buy and sell newest first. Tap an order to edit it (owner). Presentation only; nothing stored changes.
+
 ## Release 8.89.0 – Home: no duplicate "Due to you" list
 
 Home → This month in detail → Income no longer repeats the *Due to you, not received yet* list (the income lines above it already show what is due or overdue). The bond-interest bank check stays. Presentation only; nothing stored or calculated changes.

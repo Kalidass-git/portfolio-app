@@ -14,12 +14,15 @@ import { openSummary, closedSummary } from '../savingsummary.js';
 /** Calendar and financial year (April to March) choices for the date filter. */
 const PERIODS = (asOf) => {
   const y = Number(asOf.slice(0, 4)), m = Number(asOf.slice(5, 7)), fy = m >= 4 ? y : y - 1;
-  return [['p:ty', `This year (${y})`, `${y}-01-01`, `${y}-12-31`], ['p:ly', `Last year (${y - 1})`, `${y - 1}-01-01`, `${y - 1}-12-31`],
+  const back = (n) => C.addMonths(asOf.slice(0, 7) + '-01', -n);
+  return [['p:3m', 'Last 3 months', back(3), asOf], ['p:6m', 'Last 6 months', back(6), asOf], ['p:12m', 'Last 12 months', back(12), asOf],
+    ['p:ty', `This year (${y})`, `${y}-01-01`, `${y}-12-31`], ['p:ly', `Last year (${y - 1})`, `${y - 1}-01-01`, `${y - 1}-12-31`],
     ['p:tfy', `This financial year (Apr ${fy} – Mar ${fy + 1})`, `${fy}-04-01`, `${fy + 1}-03-31`], ['p:lfy', `Last financial year (Apr ${fy - 1} – Mar ${fy})`, `${fy - 1}-04-01`, `${fy}-03-31`]];
 };
 const inPeriod = (v, date, asOf) => { if (v === 'all') return true; if (v.startsWith('p:')) { const p = PERIODS(asOf).find((x) => x[0] === v); return !!p && date >= p[2] && date <= p[3]; } return C.monthKey(date) === v; };
 let fAcct = 'all', fMonth = null, fText = '', fKind = 'all', limit = 60;
 let fCat = 'all', fAmtOp = 'any', fAmtVal = '', fSort = 'date', fDir = 'desc';
+let fCats = { mode: 'all', cats: [] }, fView = 'entries';   // fCats: tick several categories to show only them or to leave them out; fView: entries, by category or by description
 const TABS = [['accounts', 'Accounts'], ['ledger', 'Transactions']];
 /** Open the transactions list, optionally pre-filtered. Used by links from other screens. */
 export function openLedger({ text = '', month = null, acct = 'all', kind = 'all' } = {}) { fText = text; fMonth = month; fAcct = acct; fKind = kind; limit = 60; location.hash = '#/cash/ledger'; }
@@ -315,9 +318,10 @@ function ledger() {
   const withBal = sorted.map((e) => { const b = (bal.get(e.acct) || 0) + (e.credit || 0) - (e.debit || 0); bal.set(e.acct, b); return { ...e, balance: b }; });
   const q = fText.toLowerCase();
   const inKind = (e) => fKind === 'all' || (fKind === 'income' ? kindOfCat(e.category) === 'income' && e.credit > 0 : kindOfCat(e.category) === fKind && e.debit > 0);
+  const chosenCats = new Set(fCats.cats.map((c) => c.toLowerCase())), catsOk = (e) => fCats.mode === 'all' || !chosenCats.size || (chosenCats.has(String(e.category || '').toLowerCase()) === (fCats.mode === 'only'));
   const amtOf = (e) => (e.credit > 0 ? e.credit : e.debit) || 0, lim = Number(fAmtVal);
   const amtOk = (e) => fAmtOp === 'any' || fAmtVal === '' || Number.isNaN(lim) || (fAmtOp === 'gt' ? amtOf(e) > lim : amtOf(e) < lim);
-  let rows = withBal.filter((e) => (fAcct === 'all' || e.acct === fAcct) && inPeriod(fMonth, e.date, S.all.asOf) && inKind(e) && (fCat === 'all' || e.category === fCat) && amtOk(e) && (!q || (e.desc + ' ' + e.category).toLowerCase().includes(q)));
+  let rows = withBal.filter((e) => (fAcct === 'all' || e.acct === fAcct) && inPeriod(fMonth, e.date, S.all.asOf) && inKind(e) && (fCat === 'all' || e.category === fCat) && catsOk(e) && amtOk(e) && (!q || (e.desc + ' ' + e.category).toLowerCase().includes(q)));
   rows.reverse();   // newest first
   if (fSort !== 'date' || fDir !== 'desc') {
     const key = (e) => (fSort === 'amount' ? amtOf(e) : fSort === 'category' ? String(e.category || '').toLowerCase() : fSort === 'desc' ? String(e.desc || '').toLowerCase() : e.date);
@@ -333,14 +337,14 @@ function ledger() {
   const inAmt = fAmtOp !== 'any' ? h('input', { type: 'number', min: '0', step: 'any', inputmode: 'decimal', placeholder: '₹ amount', value: fAmtVal, 'aria-label': 'Amount', style: { maxWidth: '9em' }, onchange: (e) => { fAmtVal = e.target.value; reset(); } }) : null;
   const selSort = h('select', { 'aria-label': 'Sort by', onchange: (e) => { fSort = e.target.value; fDir = fSort === 'category' || fSort === 'desc' ? 'asc' : 'desc'; reset(); } }, [['date', 'Date'], ['amount', 'Amount'], ['category', 'Category'], ['desc', 'Description']].map(([v, l]) => h('option', { value: v, selected: v === fSort }, l)));
   const selDir = h('select', { 'aria-label': 'Sort direction', onchange: (e) => { fDir = e.target.value; reset(); } }, (ORDER[fSort] || ORDER.date).map(([v, l]) => h('option', { value: v, selected: v === fDir }, l)));
-  const filtersOn = fCat !== 'all' || fAmtOp !== 'any', sortOn = fSort !== 'date' || fDir !== 'desc';
+  const filtersOn = fCat !== 'all' || fAmtOp !== 'any' || fCats.mode !== 'all', sortOn = fSort !== 'date' || fDir !== 'desc';
   const fld = (ic, label, ...ctl) => h('div', { class: 'tf' }, h('span', { class: 'tf-l' }, txi(ic), label), ...ctl);
   const bar = h('div', { class: 'txn-tools desk-ctl' },
     h('div', { class: 'tt-group' }, h('div', { class: 'tt-h' }, txi('filter'), 'Filter', filtersOn ? h('span', { class: 'tt-on' }, 'active') : null),
       h('div', { class: 'tt-row' }, fld('bank', 'Account', selAcct), fld('cal', 'Period', selMonth), fld('tag', 'Category', selCat), fld('rupee', 'Amount', h('div', { class: 'tf-row' }, selOp, inAmt)), fld('search', 'Search', inSearch))),
     h('div', { class: 'tt-group tt-sort' }, h('div', { class: 'tt-h' }, txi('sort'), 'Sort', sortOn ? h('span', { class: 'tt-on' }, 'changed') : null),
       h('div', { class: 'tt-row' }, fld('sort', 'Sort by', selSort), fld('order', 'Order', selDir),
-        filtersOn || sortOn ? h('button', { type: 'button', class: 'tt-clear', onclick: () => { fCat = 'all'; fAmtOp = 'any'; fAmtVal = ''; fSort = 'date'; fDir = 'desc'; reset(); } }, txi('clear'), 'Clear filters and sort') : null)));
+        filtersOn || sortOn ? h('button', { type: 'button', class: 'tt-clear', onclick: () => { fCat = 'all'; fCats = { mode: 'all', cats: [] }; fAmtOp = 'any'; fAmtVal = ''; fSort = 'date'; fDir = 'desc'; reset(); } }, txi('clear'), 'Clear filters and sort') : null)));
   // phone: Sort and Filter sheets over the same fSort / fDir / fAcct / fMonth / fCat / fAmtOp / fAmtVal the desktop selects use
   const thisMonth = C.monthKey(S.all.asOf);
   const mfilters = { values: { q: fText, acct: fAcct, month: fMonth, cat: fCat, op: fAmtOp, val: fAmtVal },
@@ -385,11 +389,56 @@ function ledger() {
   const summary = h('div', { class: 'tx-sum', role: 'status' },
     tile('', 'list', total === 1 ? 'Entry' : 'Entries', num(total)),
     fKind === 'all' || fKind === 'income' ? tile('pos', 'in', 'Received', money(credit)) : null,
-    fKind !== 'income' ? tile(fKind === 'investment' ? 'inv' : 'neg', 'out', outLabel, money(debit)) : null);
+    fKind !== 'income' ? tile(fKind === 'investment' ? 'inv' : 'neg', 'out', outLabel, money(debit)) : null,
+    fKind === 'all' ? tile(credit - debit >= 0 ? 'pos' : 'neg', 'wallet', 'Net', (credit - debit < 0 ? '− ' : '') + money(Math.abs(credit - debit))) : null,
+    total > 0 && fKind !== 'all' ? tile('', 'rupee', 'Average entry', money((fKind === 'income' ? credit : debit) / total)) : null);
+  // account balances as cards: tap one to see only that account, tap it again (or All accounts) to see everything
+  const balCard = (id, name, sub, balance, ic) => { const on = fAcct === id, pick = () => { fAcct = on ? 'all' : id; limit = 60; rerender(); };
+    return h('button', { type: 'button', class: 'txb' + (on ? ' on' : '') + (balance < 0 ? ' neg' : ''), 'aria-pressed': String(on), 'aria-label': `${name}. Balance ${money(balance)}. ${on ? 'Showing its transactions' : 'Show its transactions'}`, onclick: pick },
+      h('span', { class: 'txb-top' }, h('span', { class: 'txb-ic' }, txi(ic)), h('span', { class: 'txb-nm' }, h('b', null, name), h('small', null, sub))), h('b', { class: 'txb-bal' + (balance < 0 ? ' neg' : '') }, money(balance))); };
+  const balances = h('div', { class: 'txb-row', role: 'group', 'aria-label': 'Account balances' },
+    balCard('all', 'All accounts', `${S.all.banks.length} account${S.all.banks.length === 1 ? '' : 's'}`, S.all.cashTotal, 'list'),
+    S.all.banks.map((b) => balCard(b.id, b.name, b.holder + (isWallet(b) ? ' · cash in hand' : ''), b.balance, isWallet(b) ? 'wallet' : 'bank')));
+  // same choices as Income & expenses: entries, by category or by description, and a filter that ticks several categories
+  const VIEWS = [['entries', 'Entries'], ['cat', 'By category'], ['desc', 'By description']];
+  const viewSeg = h('nav', { class: 'seg', 'aria-label': 'View' }, VIEWS.map(([k, l]) => h('a', { href: 'javascript:void 0', class: k === fView ? 'on' : '', 'aria-selected': String(k === fView), onclick: (e) => { e.preventDefault(); fView = k; rerender(); } }, l)));
+  const catsText = fCats.mode === 'all' || !fCats.cats.length ? '' : (fCats.mode === 'only' ? 'Only ' : 'Leaving out ') + (fCats.cats.length > 3 ? fCats.cats.length + ' categories' : fCats.cats.join(', '));
+  const catsDialog = () => {
+    const chosen = new Set(fCats.cats.map((c) => c.toLowerCase())); let mode = fCats.mode === 'all' ? 'except' : fCats.mode;
+    const boxes = cats.map((n) => h('input', { type: 'checkbox', value: n, checked: chosen.has(n.toLowerCase()), 'aria-label': n }));
+    const modeSel = h('select', { 'aria-label': 'Filter mode', onchange: (e) => { mode = e.target.value; } }, [['only', 'Show only the categories I tick'], ['except', 'Show everything except the ones I tick']].map(([v, l]) => h('option', { value: v, selected: v === mode }, l)));
+    dialog('Filter categories', h('div', { class: 'form' }, h('label', { class: 'field' }, h('span', null, 'How to filter'), modeSel),
+      h('div', { class: 'chips-row' }, h('button', { type: 'button', class: 'chip-btn', onclick: () => boxes.forEach((b) => (b.checked = false)) }, 'Clear ticks')),
+      h('div', { class: 'checklist' }, cats.map((n, i) => h('label', { class: 'check-row' }, boxes[i], h('span', null, n))))),
+    [{ label: 'Show everything', onclick: (c) => { fCats = { mode: 'all', cats: [] }; c(); reset(); } },
+     { label: 'Apply', class: 'primary', onclick: (c) => { const picked = boxes.filter((b) => b.checked).map((b) => b.value); fCats = picked.length ? { mode, cats: picked } : { mode: 'all', cats: [] }; c(); reset(); } }]);
+  };
+  const catBtn = h('span', { class: 'btn-row' }, h('button', { type: 'button', class: 'chip-btn' + (catsText ? ' primary' : ''), onclick: catsDialog }, catsText ? '⚙ ' + catsText : '⚙ Filter categories'), catsText ? h('button', { type: 'button', class: 'chip-btn', onclick: () => { fCats = { mode: 'all', cats: [] }; reset(); } }, 'Clear') : null);
+  const groupedView = () => {
+    const out = h('div');
+    for (const [field, title, tone2, ci] of [['debit', 'Paid out', 'neg', 1], ['credit', 'Received', 'pos', 2]]) {
+      if (field === 'debit' && fKind === 'income') continue; if (field === 'credit' && (fKind === 'expense' || fKind === 'investment')) continue;
+      const list = rows.filter((e) => e[field] > 0); if (!list.length) continue;
+      const tot = list.reduce((a, e) => a + e[field], 0);
+      if (fView === 'cat') {
+        const m = new Map(); for (const e of list) m.set(e.category || 'No category', (m.get(e.category || 'No category') || 0) + e[field]);
+        const rs = [...m.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+        out.append(h('div', { class: 'card inner' }, h('h4', { style: { margin: '0 0 6px' } }, `${title} · ${money(tot)}`), hbars(rs, { fmt: money, colorIndex: ci, onClick: (x) => { fCat = x.label === 'No category' ? 'all' : x.label; fView = 'entries'; reset(); } }), h('p', { class: 'note' }, 'Tap a category to see its entries.')));
+      } else {
+        const ds = C.byDescription(list, field);
+        out.append(h('div', { class: 'card inner' }, h('h4', { style: { margin: '0 0 6px' } }, `${title} · ${money(tot)}`), table([
+          { label: 'Description', host: true, get: (r) => r.desc }, { label: 'Entries', cls: 'r', get: (r) => String(r.count), total: () => String(list.length) }, { label: 'Total', cls: 'r', render: (r) => h('span', { class: tone2 }, money(r.amount)), total: () => money(tot) },
+          { label: 'Average', mob: 'under', mlabel: 'avg ', cls: 'r', get: (r) => money(r.avg) }, { label: 'Share', mob: 'under', mlabel: 'share ', cls: 'r', get: (r) => pct(r.share, 0) }, { label: 'Last', mob: 'under', mlabel: 'last ', get: (r) => dateStr(r.last) },
+        ], ds, { footer: { label: 'Total' }, onRow: (r) => { fText = r.desc; fView = 'entries'; reset(); }, m: { key: 'cash-desc-' + field, head: 'Description', sub: (r) => `${r.count} ${r.count === 1 ? 'entry' : 'entries'}`, views: [['Total', 'Share'], ['Average', 'Entries'], ['Last']] } }), h('p', { class: 'note' }, 'Tap a description to see its entries.')));
+      }
+    }
+    if (!out.children.length) out.append(h('p', { class: 'empty' }, 'No transactions match these filters.'));
+    return out;
+  };
   const txSec = section('Transactions',
-    h('div', { class: 'txn-card' }, h('div', { class: 'filters' }, seg), mbar, bar, summary,
-      tbl,
-      total > limit ? btn(`Show more (${total - limit} left)`, () => { limit += 100; rerender(); }, 'wide') : null),
+    h('div', { class: 'txn-card' }, balances, h('div', { class: 'filters' }, seg, viewSeg, catBtn), mbar, bar, summary,
+      fView === 'entries' ? tbl : groupedView(),
+      fView === 'entries' && total > limit ? btn(`Show more (${total - limit} left)`, () => { limit += 100; rerender(); }, 'wide') : null),
     null);
   txSec.classList.add('flat-sm'); wrap.append(txSec);
   return wrap;
