@@ -9,7 +9,7 @@ import { usualPace, paceSentence, lineTone } from '../spendpace.js';
 import { rateHistory, ageText } from './gold.js';
 import { GROUPS } from './groupmix.js';
 import { allocationBody } from './allocview.js';
-import { monthPlan, pendingToReceive } from '../monthinvest.js';
+import { monthPlan } from '../monthinvest.js';
 import { openInfo } from '../mobilebar.js';
 import { refresh as refreshPrices, agoText } from './equity.js';
 import * as P from '../projector.js';
@@ -733,19 +733,13 @@ function expenseDrill(month, label, cats) {
 }
 
 /**
- * Current month only, under Income: money to receive that is due or overdue (loans and other dues), and the cross-check of this month's bond interest against the
+ * Current month only, under Income: the cross-check of this month's bond interest against the
  * bank's Income Bond credits, in total (nothing is matched bond by bond; a difference under ₹300 is ignored).
  */
 function toReceiveExtras(data, all, mc) {
   const month = C.monthKey(all.asOf);
-  const { rows } = pendingToReceive(data, all, mc);
   const bankGap = C.bondBankGap(mc, month, all.asOf);
-  const over = rows.filter((r) => r.overdue), today = rows.filter((r) => r.dueToday);
   return h('div', { class: 'to-receive' },
-    rows.length ? h('div', null,
-      h('p', { class: 'mini-title', style: { marginTop: '10px' } }, 'Due to you, not received yet'),
-      rowList(rows.map((r) => ({ lead: dateChip(r.due), title: r.name, sub: r.overdue ? h('span', { class: 'neg' }, 'Overdue since ' + shortDate(r.due)) : r.dueToday ? h('span', { class: 'warn' }, 'Due today') : 'Due ' + shortDate(r.due), value: money(r.dueAmount ?? r.expected ?? 0), tone: r.overdue ? 'neg' : r.dueToday ? 'warn' : '' }))),
-      h('p', { class: 'summary-line' }, `Waiting for ${money(rows.reduce((a, r) => a + (r.dueAmount ?? r.expected ?? 0), 0))}`, over.length ? h('span', { class: 'neg' }, ` · ${over.length} overdue`) : null, today.length ? h('span', { class: 'warn' }, ` · ${today.length} due today`) : null)) : null,
     bankGap ? (bankGap.short
       ? h('div', { class: 'bank-gap' }, rowList([{ title: 'Income Bond · not in the bank yet', sub: `due so far ${money(bankGap.due)}, bank shows ${money(bankGap.credited)} · tap for details`, onClick: () => bankGapDialog(bankGap), value: h('span', { class: 'warn' }, money(bankGap.gap)), valueSub: h('span', { class: 'warn' }, 'to check') }]))
       : h('p', { class: 'note bank-ok' }, '✓ Bank check: ', money(bankGap.due), ' of bond interest due so far, ', money(bankGap.credited), ' credited. ', h('a', { href: 'javascript:void 0', onclick: (e) => { e.preventDefault(); bankGapDialog(bankGap); } }, 'Details'))) : null);
