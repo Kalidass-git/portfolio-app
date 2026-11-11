@@ -1941,3 +1941,5 @@ body.pi-dragging, body.pi-dragging * { cursor: grabbing !important; user-select:
 .pa-note.earlier { color: var(--info, #2563eb); }
 .pa-plan { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; } .pa-plan li { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; font-size: .9rem; } .pa-plan li:not(:has(.pb-rank)) { grid-template-columns: 1fr auto; } .pa-plan em { font-style: normal; font-weight: 600; font-variant-numeric: tabular-nums; } .pa-plan small { color: var(--muted); }
 .pi-plan-tbl .pi-th, .pi-plan-tbl .pi-tr { grid-template-columns: 1.6fr 1fr 1fr 1fr; } .pi-plan-tbl .pi-tr small { color: var(--muted); } .pi-total { font-weight: 600; border-top: 2px solid var(--line); }
+
+.txn-card .filters { flex-wrap: wrap; gap: 8px; align-items: center; }
