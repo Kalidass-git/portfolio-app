@@ -4,7 +4,7 @@ import * as C from '../calc.js';
 import { h, money, dec, num, dateStr, section, table, stat, canEdit, monthLabel, setOptions } from '../ui.js';
 import { symKey, fundKey, BUY_TYPES } from '../trades.js';
 
-let period = 'all', side = 'all', kind = 'all', view = 'orders', text = '';
+let period = 'all', side = 'all', kind = 'all', view = 'timeline', text = '';
 const rerender = () => window.dispatchEvent(new Event('rerender'));
 
 /** Period choices: [value, label, from, to]. A single month is chosen as its 'YYYY-MM'. */
@@ -49,11 +49,25 @@ export function render(root) {
   root.append(h('div', { class: 'stats' }, stat('Orders', String(rows.length), `${buys.length} buy${buys.length === 1 ? '' : 's'} · ${sells.length} sell${sells.length === 1 ? '' : 's'}`),
     stat('Bought', money(sum(buys)), hn(buys)), stat('Sold', money(sum(sells)), sells.length ? hn(sells) : 'nothing sold'),
     stat('Net invested', (sum(buys) - sum(sells) < 0 ? '− ' : '') + money(Math.abs(sum(buys) - sum(sells))), 'bought minus sold')));
-  root.append(segOf('View', [['orders', 'Orders'], ['holding', 'By holding']], view, (k) => { view = k; }));
+  root.append(segOf('View', [['timeline', 'Timeline'], ['orders', 'Table'], ['holding', 'By holding']], view, (k) => { view = k; }));
   if (!rows.length) { root.append(h('div', { class: 'card' }, h('p', { class: 'empty' }, 'No orders match these filters.'))); return; }
   const open = (o) => { if (o.href) location.hash = o.href; };
   const tag = (o) => (o.kind === 'Share' ? null : h('small', { class: 'tag' }, o.kind));
-  if (view === 'orders') {
+  if (view === 'timeline') {
+    // newest first, grouped by month; a line runs down the left with a dot for every order (blue for a buy, green for a sell)
+    const groups = new Map(); for (const o of rows) { const k = o.date.slice(0, 7); groups.set(k, [...(groups.get(k) || []), o]); }
+    root.append(h('div', { class: 'otl' }, [...groups.entries()].map(([m, list]) => {
+      const b = list.filter((o) => o.buy), sl = list.filter((o) => !o.buy);
+      return h('section', { class: 'otl-month' },
+        h('header', { class: 'otl-mh' }, h('b', null, monthLabel(m, true)), h('span', null, [b.length ? `Bought ${money(sum(b))}` : '', sl.length ? `Sold ${money(sum(sl))}` : ''].filter(Boolean).join(' · '))),
+        h('ol', { class: 'otl-list' }, list.map((o) => h('li', { class: 'otl-item ' + (o.buy ? 'buy' : 'sell') },
+          h('span', { class: 'otl-dot', 'aria-hidden': 'true' }),
+          h('div', { class: 'otl-card' + (o.href ? ' link' : ''), tabindex: o.href ? 0 : null, role: o.href ? 'link' : null, onclick: () => open(o), onkeydown: (e) => { if (o.href && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(o); } } },
+            h('div', { class: 'otl-top' }, h('span', { class: 'otl-date' }, dateStr(o.date), o.time ? ' · ' + o.time.slice(0, 5) : ''), h('b', { class: o.buy ? 'inv' : 'pos' }, (o.buy ? '− ' : '+ ') + money(o.amount))),
+            h('div', { class: 'otl-name' }, o.name, ' ', tag(o)),
+            h('div', { class: 'otl-sub' }, `${o.label} · ${o.kind === 'Fund' ? dec(o.qty, 3) + ' units' : num(o.qty) + (o.qty === 1 ? ' share' : ' shares')} at ${dec(o.price, o.kind === 'Fund' ? 4 : 2)}`))))));
+    })), h('p', { class: 'note' }, 'Newest first. Money out for a buy, money back for a sell. Tap an order to open that holding.'));
+  } else if (view === 'orders') {
     root.append(section(`Orders (${rows.length})`, table([
       { label: 'Date', mob: 'under', get: (o) => dateStr(o.date) },
       { label: 'Holding', host: true, render: (o) => h('span', null, o.name, ' ', tag(o)) },
