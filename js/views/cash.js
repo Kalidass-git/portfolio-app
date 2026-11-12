@@ -384,14 +384,14 @@ function ledger() {
       { label: 'Amount · Account', main: (e) => h('span', { class: tone(e) }, e.credit ? '+ ' + money(e.credit) : '− ' + money(e.debit)), sub: (e) => acctName.get(e.acct) || '' },
     ] }, rowClass: (e) => 'tx ' + (e.credit ? 'tx-in' : kindOfCat(e.category) === 'investment' ? 'tx-inv' : 'tx-out'), onRow: canEdit() ? (e) => txnForm(data.ledger.find((x) => x.id === e.id)) : null, empty: 'No transactions match these filters.' });
   const t0 = tbl.querySelector('table'); if (t0) t0.classList.add('compact');
-  const tile = (cls, ic, label, val) => h('div', { class: 'tx-tile ' + cls }, h('span', { class: 'tx-ti' }, txi(ic)), h('span', { class: 'tx-tt' }, h('small', null, label), h('b', null, val)));
+  const tile = (cls, ic, label, val) => h('div', { class: 'tx-tile ' + cls + (ic === 'in' || ic === 'out' || ic === 'wallet' ? ' tx-main' : ' tx-sub') }, h('span', { class: 'tx-ti' }, txi(ic)), h('span', { class: 'tx-tt' }, h('small', null, label), h('b', null, val)));
   const balAcct = fAcct === 'all' ? null : S.all.banks.find((b) => b.id === fAcct);
   const outLabel = fKind === 'all' ? 'Paid out' : fKind === 'investment' ? 'Invested' : 'Spent';
-  const summary = h('div', { class: 'tx-sum', role: 'status' },
+  const summary = h('div', { class: 'tx-sum' + (fKind === 'all' ? ' tx-all' : ''), role: 'status' },
     tile('', 'list', total === 1 ? 'Entry' : 'Entries', num(total)),
     fKind === 'all' || fKind === 'income' ? tile('pos', 'in', 'Received', money(credit)) : null,
     fKind !== 'income' ? tile(fKind === 'investment' ? 'inv' : 'neg', 'out', outLabel, money(debit)) : null,
-    tile('bal', 'bank', fAcct === 'all' ? 'Balance · all accounts' : 'Balance · ' + (balAcct ? balAcct.name : 'account'), money(fAcct === 'all' ? S.all.cashTotal : balAcct ? balAcct.balance : 0)),
+    tile('bal', 'bank', h('span', null, 'Balance', h('span', { class: 'tx-more' }, fAcct === 'all' ? ' · all accounts' : ' · ' + (balAcct ? balAcct.name : 'account'))), money(fAcct === 'all' ? S.all.cashTotal : balAcct ? balAcct.balance : 0)),
     fKind === 'all' ? tile(credit - debit >= 0 ? 'pos' : 'neg', 'wallet', 'Net', (credit - debit < 0 ? '− ' : '') + money(Math.abs(credit - debit))) : null,
     total > 0 && fKind !== 'all' ? tile('', 'rupee', 'Average entry', money((fKind === 'income' ? credit : debit) / total)) : null);
   // same choices as Income & expenses: entries, by category or by description, and a filter that ticks several categories
