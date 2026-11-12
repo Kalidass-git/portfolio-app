@@ -150,6 +150,14 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.96.0 – Trendline alerts show the candle still forming
+
+No change to when an alert fires; no data or stored fields changed.
+
+- A weekly trendline alert counts a week only once it has closed (Friday after the market closes), and a daily one only after the day's close. Until then the alert stays quiet. It also fires only when the candle before was on the other side of the line (a fresh cross), not when the price has simply been above the line for a while.
+- New: the "now" text of a trendline alert also shows today / this week / this month so far against the line, and says it counts only if the candle closes there. So a price over the line on a Thursday is visible, with a note that it waits for Friday’s close.
+- New test: `tests/linealert.test.mjs`.
+
 ## Release 8.95.0 – Home "Asset performance" card
 
 Presentation only. Same readings and calculations as the net worth chart; no data or stored fields changed.
