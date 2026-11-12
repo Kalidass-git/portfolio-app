@@ -150,6 +150,15 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.92.0 – Cash & banks takes less room on a phone
+
+Presentation only. No calculations, data or stored fields changed.
+
+- Slimmer tabs, a one-row total on Accounts, and shorter account cards.
+- Transactions: the view switch, filter-categories button and sort/filter bar are tighter.
+- The five summary tiles are one card: Received, Paid out and Net on top, "Entries" and "Balance" on a line below. The account name after Balance shows on wide screens only.
+- Desktop layout is unchanged.
+
 ## Release 8.91.0 – Order history as a timeline
 
 Shares & funds → Holdings → *Order history* now opens on a **Timeline** (the *Table* and *By holding* views stay). A line runs down the page grouped by month (each month header shows what was bought and sold), with a dot and a card per order: blue for a buy (money out), green for a sell (money back). Tap a card to open that holding. On phones the orders are cards; on a wide screen each is one aligned row (date, holding, what was done, amount). Presentation only; nothing stored changes.
