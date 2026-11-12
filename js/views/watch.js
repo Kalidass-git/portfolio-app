@@ -149,7 +149,7 @@ export function alertsTab(root) {
   root.append(section('Your alerts', h('div', null, table([
     { label: 'Share or fund', host: true, get: (a) => a.name },
     { label: 'Rule', mob: 'under', mlabel: '', get: (a) => W.alertText(a) },
-    { label: 'Now', cls: 'r', get: cur },
+    { label: 'Now', cls: 'r', get: cur, render: (a) => (a.rule === 'trendline' ? h('span', { class: 'alert-now' }, W.lineNowParts(a).filter(Boolean).map((t, i) => h('span', { class: i > 1 ? 'muted' : '' }, t))) : cur(a)) },
     { label: 'Status', cls: 'r', render: (a) => (a.on === false ? h('span', { class: 'muted' }, 'off') : hitIds.has(a.id) ? h('b', { class: 'neg' }, 'triggered') : h('span', { class: 'muted' }, 'waiting')) },
   ], al, { m: { key: 'w-alerts', head: 'Share or fund', sub: ['Rule'], views: [['Now', 'Status']] }, onRow: canEdit() ? (a) => alertForm(a) : null, empty: 'No alerts yet.' }), h('p', { class: 'note' }, 'Alerts are checked each time you open this page and when you press Refresh indicators. They show here and on Today; the app does not send phone notifications.')),
     canEdit() ? [btn('New alert', () => alertForm(), 'primary')] : null));

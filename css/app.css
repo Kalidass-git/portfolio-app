@@ -2013,3 +2013,8 @@ body.pi-dragging, body.pi-dragging * { cursor: grabbing !important; user-select:
 .nwp-sp { display: block; min-width: 0; } .nwp-sp .spark { width: 100%; height: 34px; }
 .nwp-ch { display: flex; flex-direction: column; text-align: right; line-height: 1.25; font-variant-numeric: tabular-nums; } .nwp-ch small { font-size: .78rem; }
 .nwp-insight { margin: 10px 0 0; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--pos) 10%, var(--surface)); font-size: .9rem; }
+
+/* 8.96.1 trendline alert "Now": a few short lines that wrap inside the row instead of one long line */
+.alert-now { display: flex; flex-direction: column; align-items: flex-end; white-space: normal; text-align: right; max-width: 100%; line-height: 1.3; font-size: .82rem; font-weight: 500; }
+.alert-now span { display: block; max-width: 100%; overflow-wrap: anywhere; }
+@media (max-width: 700px) { .alert-now { align-items: flex-start; text-align: left; } }

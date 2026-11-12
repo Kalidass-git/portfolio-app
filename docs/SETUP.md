@@ -150,6 +150,10 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.96.1 – Trendline alert "Now" fits on a phone
+
+Layout fix only. The longer "Now" text added in 8.96.0 ran off the screen on phones. It now shows as up to three short lines that wrap inside the row: last finished candle against the line, the candle still forming, and what it waits for.
+
 ## Release 8.96.0 – Trendline alerts show the candle still forming
 
 No change to when an alert fires; no data or stored fields changed.
