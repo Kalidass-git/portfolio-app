@@ -1993,3 +1993,8 @@ body.pi-dragging, body.pi-dragging * { cursor: grabbing !important; user-select:
   .tx-tile.bal .tx-tt { justify-content: flex-end; }
 }
 
+
+/* 8.94.0 chart tooltip: gains green, falls red (tooltip is dark in light theme, so lighter shades) */
+.tip .tp, .tip .tn { white-space: nowrap; } .tip .tp { color: #7ee2a8; font-weight: 600; } .tip .tn { color: #ff9a8f; font-weight: 600; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tip .tp { color: var(--pos); } :root:not([data-theme="light"]) .tip .tn { color: var(--neg); } }
+:root[data-theme="dark"] .tip .tp { color: var(--pos); } :root[data-theme="dark"] .tip .tn { color: var(--neg); }

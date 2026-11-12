@@ -89,7 +89,7 @@ function netWorthHistory(data, all) {
   if (!shownHave.length || (sel !== 'all' && sel !== 'net' && !have(sel))) {
     chart = h('p', { class: 'empty' }, sel !== 'all' && sel !== 'net' ? `No readings of ${(lines.find((l) => l.id === sel) || {}).label} in this period yet. The app now saves it every day you open it on the owner’s device, so the line builds up from today.` : 'Not enough readings in this period yet.');
   } else if (nwMode === 'pct') {
-    const rawTip = (vals) => (v, si, i) => { const at = vals[si].findIndex((x) => x > 0), b = at < 0 ? 0 : vals[si][at], a = vals[si][i]; return `${sg100(v)} · ${a != null && b ? sgn(a - b) : ''} (${money(a)})`; };
+    const rawTip = (vals) => (v, si, i) => { const at = vals[si].findIndex((x) => x > 0), b = at < 0 ? 0 : vals[si][at], a = vals[si][i]; const up = a != null && b ? a - b : 0, c = up > 0 ? 'tp' : up < 0 ? 'tn' : ''; return [h('span', { class: c }, sg100(v)), ' · ', h('span', { class: c }, a != null && b ? sgn(a - b) : ''), ` (${money(a)})`]; };
     // each line as growth since its own first reading in this period: 100 = start. Lines of very different sizes can be compared.
     const idx = shownHave.map((ln) => { const at = ln.values.findIndex((v) => v > 0), base = at < 0 ? 0 : ln.values[at]; return { name: ln.label, color: ln.color, values: ln.values.map((v, i) => (v == null || !base || i < at ? null : (v / base) * 100)) }; });
     const flat = idx.flatMap((x) => x.values).filter((v) => v != null), lo = Math.min(...flat, 100), hi = Math.max(...flat, 100), padv = Math.max(1, (hi - lo) * 0.1);
@@ -105,7 +105,7 @@ function netWorthHistory(data, all) {
     const ser = shownHave.map((ln) => ({ name: ln.label, color: ln.color, values: ln.values }));
     if (sel === 'net' && hasAssets) ser.push({ name: 'Total assets', values: days.map((d) => d.assets), color: 2, dashed: true });
     const ax = fitAxis(ser.flatMap((x) => x.values));   // round, equal steps that fit the lines, so a small move is not squeezed along the bottom
-    const tipAmt = (v, si, i) => { const vals = ser[si].values, at = vals.findIndex((x) => x > 0), b = at < 0 ? 0 : vals[at]; return b ? `${money(v)} · ${sgn(v - b)} · ${sgp((v - b) / Math.abs(b))}` : money(v); };
+    const tipAmt = (v, si, i) => { const vals = ser[si].values, at = vals.findIndex((x) => x > 0), b = at < 0 ? 0 : vals[at]; if (!b) return money(v); const c = v > b ? 'tp' : v < b ? 'tn' : ''; return [money(v), ' · ', h('span', { class: c }, sgn(v - b)), ' · ', h('span', { class: c }, sgp((v - b) / Math.abs(b)))]; };
     chart = lineChart({ labels, tipLabels, fmt: money, tipFmt: tipAmt, yMin: ax.yMin, yMax: ax.yMax, ticks: ax.ticks, height: 260, series: ser });
   }
   const missing = LINES.filter((l) => l.id !== 'other' && !have(l.id));

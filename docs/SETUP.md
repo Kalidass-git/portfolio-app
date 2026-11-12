@@ -150,6 +150,10 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.94.0 – Hover changes in green or red
+
+Presentation only. In the Home net worth chart hover, the rupee change and the percentage show green for a gain and red for a fall (grey when flat), in both Amount and Growth % views. The chart tooltip can now carry coloured parts; other charts are unchanged.
+
 ## Release 8.93.0 – Net worth chart hover shows change and percentage
 
 Presentation only. No data or calculation changes.
