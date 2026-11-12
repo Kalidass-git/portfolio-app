@@ -150,6 +150,16 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.95.0 – Home "Asset performance" card
+
+Presentation only. Same readings and calculations as the net worth chart; no data or stored fields changed.
+
+- Period (1W, 1M, 3M, 6M, 1Y) and Growth % / Value (₹) are now buttons directly above the chart.
+- The chart has a soft fill under each line and a coloured tag at the end of each line (percentage, or amount in Value view).
+- Below the chart, one row per line (net worth, shares & funds, debt & fixed income, gold, others & cash) with value, small trend and change. Tap a row to see that line alone, tap again for all. The old filter chips are gone.
+- A short "Key insight" line says how net worth moved and which line moved the most.
+- Hover still shows amount, change and percentage in green or red. The chart opens on Value.
+
 ## Release 8.94.0 – Hover changes in green or red
 
 Presentation only. In the Home net worth chart hover, the rupee change and the percentage show green for a gain and red for a fall (grey when flat), in both Amount and Growth % views. The chart tooltip can now carry coloured parts; other charts are unchanged.

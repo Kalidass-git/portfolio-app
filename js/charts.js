@@ -82,8 +82,9 @@ const short = (v) => {
 /**
  * Line chart. series: [{name, values:[n|null], dashed}] ; labels: x labels (same length).
  */
-export function lineChart({ labels, series, fmt = (v) => v, height = 220, yMin, yMax, axisFmt, area = false, width, tipLabels, ticks = 4, tipFmt }) {
-  const W = width || defaultWidth(), H = height, pad = { l: 44, r: 12, t: 12, b: 24 };
+export function lineChart({ labels, series, fmt = (v) => v, height = 220, yMin, yMax, axisFmt, area = false, width, tipLabels, ticks = 4, tipFmt, ends = false, areaAll = false }) {
+  const endText = ends ? series.map((s) => s.end || '') : [];
+  const W = width || defaultWidth(), H = height, pad = { l: 44, r: ends ? Math.max(12, Math.max(0, ...endText.map((t) => t.length)) * 6.6 + 24) : 12, t: 12, b: 24 };
   const all = series.flatMap((s) => s.values).filter((v) => v != null);
   const lo = yMin ?? Math.min(0, ...all), hi = yMax ?? niceMax(Math.max(...all, 1));
   const x = (i) => pad.l + (labels.length < 2 ? 0 : (i / (labels.length - 1)) * (W - pad.l - pad.r));
@@ -93,14 +94,26 @@ export function lineChart({ labels, series, fmt = (v) => v, height = 220, yMin, 
     const v = lo + ((hi - lo) * i) / ticks;
     root.append(svg('line', { x1: pad.l, x2: W - pad.r, y1: y(v), y2: y(v), class: 'grid' }), svg('text', { x: pad.l - 6, y: y(v) + 3.5, class: 'axis', 'text-anchor': 'end' }, axisFmt ? axisFmt(v) : short(v)));
   }
-  const step = Math.max(1, Math.ceil(labels.length / 8));
+  const step = Math.max(1, Math.ceil(labels.length / (ends ? 5 : 8)));
   labels.forEach((l, i) => { if ((i % step === 0 && (labels.length - 1 - i >= step * 0.7 || i === 0 || i === labels.length - 1)) || i === labels.length - 1) root.append(svg('text', { x: x(i), y: H - 6, class: 'axis', 'text-anchor': i === 0 ? 'start' : i === labels.length - 1 ? 'end' : 'middle' }, l)); });
   series.forEach((s, si) => {
     let d = '', started = false;
     s.values.forEach((v, i) => { if (v == null) { started = false; return; } d += `${started ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`; started = true; });
+    if (areaAll && !s.dashed) root.append(svg('path', { d: d + `L${x(labels.length - 1)},${y(lo)}L${x(0)},${y(lo)}Z`, fill: color(s.color ?? si), opacity: '.07' }));
     if (area && si === 0) root.append(svg('path', { d: d + `L${x(labels.length - 1)},${y(lo)}L${x(0)},${y(lo)}Z`, fill: color(si), opacity: '.12' }));
     root.append(svg('path', { d, fill: 'none', stroke: color(s.color ?? si), 'stroke-width': 2, 'stroke-dasharray': s.dash || (s.dashed ? '5 4' : null), 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
   });
+  if (ends) {
+    const tags = [];
+    series.forEach((s, si) => { if (!s.end) return; let li = -1; s.values.forEach((v, i) => { if (v != null) li = i; }); if (li < 0) return; tags.push({ si, li, y: y(s.values[li]), t: s.end, c: color(s.color ?? si) }); });
+    tags.sort((a, b) => a.y - b.y); let prev = -1e9;
+    for (const t of tags) { t.ty = Math.max(t.y, prev + 20); prev = t.ty; }
+    const over = prev - (H - pad.b); if (over > 0) tags.forEach((t) => { t.ty -= over; });
+    for (const t of tags) {
+      const w = t.t.length * 6.6 + 14, bx = W - pad.r + 6;
+      root.append(svg('circle', { cx: x(t.li), cy: t.y, r: 3.5, fill: t.c, stroke: 'var(--surface)', 'stroke-width': 1.5 }), svg('rect', { x: bx, y: t.ty - 9, width: w, height: 18, rx: 9, fill: t.c }), svg('text', { x: bx + w / 2, y: t.ty + 4, 'text-anchor': 'middle', class: 'end-tag' }, t.t));
+    }
+  }
   const cross = svg('line', { y1: pad.t, y2: H - pad.b, class: 'cross', style: 'display:none' });
   const dots = series.map((s, si) => svg('circle', { r: 4, fill: color(s.color ?? si), class: 'dot', style: 'display:none' }));
   root.append(cross, ...dots);
