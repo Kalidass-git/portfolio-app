@@ -102,16 +102,17 @@ export const TF_NAME = { D: 'Daily', W: 'Weekly', M: 'Monthly' };
 export const alertText = (a) => { if (a.rule === 'trendline') return `${TF_NAME[a.tf] || 'Daily'} candle closes ${a.dir === 'below' ? 'below' : 'above'} your trendline`; const r = ruleOf(a.rule); return r ? r.label + (r.noValue ? '' : r.unit === '₹' ? ' ₹' + a.value : ' ' + a.value + (r.unit === '%' ? '%' : r.unit === 'times' ? ' times' : '')) : a.rule; };
 
 /** What a trendline alert shows for "now": the latest finished candle against the line. */
-export function lineNow(a) {
+export function lineNowParts(a) {
   const res = LA[a.id];
-  if (!res) return '–';
-  if (res.gone) return 'line was deleted';
+  if (!res) return ['–'];
+  if (res.gone) return ['line was deleted'];
   const fin = res.last ? `${res.last.d.slice(8)}/${res.last.d.slice(5, 7)} close ₹${res.last.close.toFixed(2)} · line ₹${res.last.line.toFixed(2)}` : '–';
   const o = res.open;
-  if (!o || o.line == null) return fin;
+  if (!o || o.line == null) return [fin];
   const word = { D: 'today', W: 'this week', M: 'this month' }[a.tf || 'D'], wait = { D: 'the market closes', W: 'Friday’s close', M: 'the month ends' }[a.tf || 'D'];
-  return `${fin} · ${word} so far ₹${o.close.toFixed(2)} (${o.beyond ? (a.dir === 'below' ? 'below' : 'above') + ' the line, counts only if it stays there at ' + wait : 'not past the line yet'})`;
+  return [fin, `${word} so far ₹${o.close.toFixed(2)}, ${o.beyond ? (a.dir === 'below' ? 'below' : 'above') + ' the line' : 'not past the line yet'}`, o.beyond ? `counts if it stays there at ${wait}` : ''];
 }
+export const lineNow = (a) => lineNowParts(a).filter(Boolean).join(' · ');
 const istNow = () => { const t = new Date(Date.now() + 5.5 * 3600e3), iso = t.toISOString(); return { today: iso.slice(0, 10), afterClose: t.getUTCHours() * 60 + t.getUTCMinutes() >= 15 * 60 + 45 }; };
 /** Check every trendline alert against the price history. Returns the number that are triggered. Safe to call often (the history is cached for the session). */
 export async function refreshLineAlerts(data = S.data) {
