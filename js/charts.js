@@ -82,7 +82,7 @@ const short = (v) => {
 /**
  * Line chart. series: [{name, values:[n|null], dashed}] ; labels: x labels (same length).
  */
-export function lineChart({ labels, series, fmt = (v) => v, height = 220, yMin, yMax, axisFmt, area = false, width, tipLabels, ticks = 4 }) {
+export function lineChart({ labels, series, fmt = (v) => v, height = 220, yMin, yMax, axisFmt, area = false, width, tipLabels, ticks = 4, tipFmt }) {
   const W = width || defaultWidth(), H = height, pad = { l: 44, r: 12, t: 12, b: 24 };
   const all = series.flatMap((s) => s.values).filter((v) => v != null);
   const lo = yMin ?? Math.min(0, ...all), hi = yMax ?? niceMax(Math.max(...all, 1));
@@ -111,7 +111,7 @@ export function lineChart({ labels, series, fmt = (v) => v, height = 220, yMin, 
     const i = Math.max(0, Math.min(labels.length - 1, Math.round(((px - pad.l) / (W - pad.l - pad.r)) * (labels.length - 1))));
     cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.style.display = '';
     series.forEach((s, si) => { const v = s.values[i]; const d = dots[si]; if (v == null) d.style.display = 'none'; else { d.setAttribute('cx', x(i)); d.setAttribute('cy', y(v)); d.style.display = ''; } });
-    showTip(e, [h('b', null, (tipLabels || labels)[i]), ...series.filter((s) => s.values[i] != null).map((s, si) => h('div', null, h('i', { class: 'tip-dot', style: { background: color(s.color ?? si) } }), `${s.name}: ${fmt(s.values[i])}`))]);
+    showTip(e, [h('b', null, (tipLabels || labels)[i]), ...series.filter((s) => s.values[i] != null).map((s, si) => h('div', null, h('i', { class: 'tip-dot', style: { background: color(s.color ?? si) } }), `${s.name}: ${tipFmt ? tipFmt(s.values[i], series.indexOf(s), i) : fmt(s.values[i])}`))]);
   });
   hit.addEventListener('pointerleave', () => { cross.style.display = 'none'; dots.forEach((d) => (d.style.display = 'none')); hideTip(); });
   root.append(hit);

@@ -27,7 +27,7 @@ const RISK_ORDER = ['Safe', 'Medium', 'Medium High', 'High'];
 
 // ---------- net worth over time ----------
 const NW_RANGES = [['1w', '1 week', 7], ['1m', '1 month', 1], ['3m', '3 months', 3], ['6m', '6 months', 6], ['1y', '1 year', 12]];
-let nwRange = '3m', nwLine = 'all', nwMode = 'pct';
+let nwRange = '3m', nwLine = 'all', nwMode = 'amt';
 const dayMs = 86400000, isoMs = (d) => Date.parse(d + 'T00:00:00Z'), msIso = (t) => new Date(t).toISOString().slice(0, 10);
 /** Net worth for every day of the chosen range: readings where they exist, straight lines in between. */
 function nwDaily(pts, from, to) {
@@ -89,6 +89,7 @@ function netWorthHistory(data, all) {
   if (!shownHave.length || (sel !== 'all' && sel !== 'net' && !have(sel))) {
     chart = h('p', { class: 'empty' }, sel !== 'all' && sel !== 'net' ? `No readings of ${(lines.find((l) => l.id === sel) || {}).label} in this period yet. The app now saves it every day you open it on the owner’s device, so the line builds up from today.` : 'Not enough readings in this period yet.');
   } else if (nwMode === 'pct') {
+    const rawTip = (vals) => (v, si, i) => { const at = vals[si].findIndex((x) => x > 0), b = at < 0 ? 0 : vals[si][at], a = vals[si][i]; return `${sg100(v)} · ${a != null && b ? sgn(a - b) : ''} (${money(a)})`; };
     // each line as growth since its own first reading in this period: 100 = start. Lines of very different sizes can be compared.
     const idx = shownHave.map((ln) => { const at = ln.values.findIndex((v) => v > 0), base = at < 0 ? 0 : ln.values[at]; return { name: ln.label, color: ln.color, values: ln.values.map((v, i) => (v == null || !base || i < at ? null : (v / base) * 100)) }; });
     const flat = idx.flatMap((x) => x.values).filter((v) => v != null), lo = Math.min(...flat, 100), hi = Math.max(...flat, 100), padv = Math.max(1, (hi - lo) * 0.1);
@@ -97,17 +98,19 @@ function netWorthHistory(data, all) {
     let stepv = STEPS.find((x) => x * 4 >= hi - lo + 2 * padv) || 1000, yLo = Math.floor((lo - padv) / stepv) * stepv;
     while (yLo + stepv * 4 < hi + padv) { stepv = STEPS[STEPS.indexOf(stepv) + 1] || stepv * 2; yLo = Math.floor((lo - padv) / stepv) * stepv; }
     const yHi = yLo + stepv * 4;
+    const sg100 = (v) => sg(v);
     const sg = (v) => { const x = v - 100; return (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x).toFixed(1) + '%'; };
-    chart = lineChart({ labels, tipLabels, fmt: sg, axisFmt: (v) => { const x = Math.round(v - 100); return (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x) + '%'; }, yMin: yLo, yMax: yHi, height: 260, series: idx });
+    chart = lineChart({ labels, tipLabels, fmt: sg, tipFmt: rawTip(shownHave.map((l) => l.values)), axisFmt: (v) => { const x = Math.round(v - 100); return (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x) + '%'; }, yMin: yLo, yMax: yHi, height: 260, series: idx });
   } else {
     const ser = shownHave.map((ln) => ({ name: ln.label, color: ln.color, values: ln.values }));
     if (sel === 'net' && hasAssets) ser.push({ name: 'Total assets', values: days.map((d) => d.assets), color: 2, dashed: true });
     const ax = fitAxis(ser.flatMap((x) => x.values));   // round, equal steps that fit the lines, so a small move is not squeezed along the bottom
-    chart = lineChart({ labels, tipLabels, fmt: money, yMin: ax.yMin, yMax: ax.yMax, ticks: ax.ticks, height: 260, series: ser });
+    const tipAmt = (v, si, i) => { const vals = ser[si].values, at = vals.findIndex((x) => x > 0), b = at < 0 ? 0 : vals[at]; return b ? `${money(v)} · ${sgn(v - b)} · ${sgp((v - b) / Math.abs(b))}` : money(v); };
+    chart = lineChart({ labels, tipLabels, fmt: money, tipFmt: tipAmt, yMin: ax.yMin, yMax: ax.yMax, ticks: ax.ticks, height: 260, series: ser });
   }
   const missing = LINES.filter((l) => l.id !== 'other' && !have(l.id));
   return section(title, h('div', null, chips, filterBar, modeBar, stats, chart,
-    h('p', { class: 'note' }, (nwMode === 'pct' ? 'Growth % starts every line at 0 on the first day of the period, so a small line and a big one can be compared. ' : '') + `A line also rises when you put new money in, not only when prices rise. The app saves net worth and the four asset lines (shares & funds, debt & fixed income, gold, others & cash) each day you open it on the owner’s device, and fills earlier months from your month-end check-ins; where a day has no reading the line runs straight between the nearest two. ${missing.length ? 'Not enough readings yet for ' + missing.map((l) => l.label).join(', ') + ' in this period: ' : ''}${missing.length ? 'they build up from today. ' : ''}The oldest net worth reading is ${dateStr(first)}. Hover or touch the chart for any day.`)));
+    h('p', { class: 'note' }, (nwMode === 'pct' ? 'Growth % starts every line at 0 on the first day of the period, so a small line and a big one can be compared. ' : '') + `A line also rises when you put new money in, not only when prices rise. The app saves net worth and the four asset lines (shares & funds, debt & fixed income, gold, others & cash) each day you open it on the owner’s device, and fills earlier months from your month-end check-ins; where a day has no reading the line runs straight between the nearest two. ${missing.length ? 'Not enough readings yet for ' + missing.map((l) => l.label).join(', ') + ' in this period: ' : ''}${missing.length ? 'they build up from today. ' : ''}The oldest net worth reading is ${dateStr(first)}. Hover or touch the chart for any day: it shows the amount and the change since the first day of the period.`)));
 }
 
 /** A value for every given day from dated readings (`pts`, oldest first, each with `key`): straight lines between readings, nothing before the first. */

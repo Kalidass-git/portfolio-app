@@ -150,6 +150,13 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.93.0 – Net worth chart hover shows change and percentage
+
+Presentation only. No data or calculation changes.
+
+- Hovering the Home net worth chart now shows, for each line, the amount, the rupee change and the percentage change since the first day of the chosen period. In Growth % view it shows the percentage, the rupee change and the amount.
+- The chart opens on Amount ₹ by default instead of Growth %. Growth % is still one tap away.
+
 ## Release 8.92.0 – Cash & banks takes less room on a phone
 
 Presentation only. No calculations, data or stored fields changed.
