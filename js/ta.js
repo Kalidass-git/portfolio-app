@@ -115,6 +115,13 @@ export function closedCandles(rows, tf, today, afterClose = false) {
   };
   return c.filter(over);
 }
+/** The candle still being formed (today's day, this week, this month) as { d, close, line }, or null when the latest candle is already finished. */
+export function openCandle(rows, tf, today, afterClose = false, L = null) {
+  const all = closedCandles(rows, tf, '9999-12-31', true), done = closedCandles(rows, tf, today, afterClose);
+  if (!all.length || all.length === done.length) return null;
+  const r = all[all.length - 1];
+  return { d: r.d, close: r.c, line: L ? lineValueAt(L, r.d) : null };
+}
 /**
  * Did a candle close above (dir 'above') or below ('below') the trendline, having been on the other side the candle before?
  * candles: finished candles [{ d, c }]; since: ignore candles before this date; recent: how many of the latest candles count as "just happened".

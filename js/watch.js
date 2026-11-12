@@ -4,7 +4,7 @@
 import { S } from './store.js';
 import { call } from './remote.js';
 import { fundNavs, fundMeta, stockOhlc } from './history.js';
-import { closedCandles, lineCross, lineValueAt } from './ta.js';
+import { closedCandles, openCandle, lineCross, lineValueAt } from './ta.js';
 
 const KEY = 'fw.metrics', KEYAT = 'fw.metricsAt';
 let M = {};
@@ -106,7 +106,11 @@ export function lineNow(a) {
   const res = LA[a.id];
   if (!res) return '–';
   if (res.gone) return 'line was deleted';
-  return res.last ? `${res.last.d.slice(8)}/${res.last.d.slice(5, 7)} close ₹${res.last.close.toFixed(2)} · line ₹${res.last.line.toFixed(2)}` : '–';
+  const fin = res.last ? `${res.last.d.slice(8)}/${res.last.d.slice(5, 7)} close ₹${res.last.close.toFixed(2)} · line ₹${res.last.line.toFixed(2)}` : '–';
+  const o = res.open;
+  if (!o || o.line == null) return fin;
+  const word = { D: 'today', W: 'this week', M: 'this month' }[a.tf || 'D'], wait = { D: 'the market closes', W: 'Friday’s close', M: 'the month ends' }[a.tf || 'D'];
+  return `${fin} · ${word} so far ₹${o.close.toFixed(2)} (${o.beyond ? (a.dir === 'below' ? 'below' : 'above') + ' the line, counts only if it stays there at ' + wait : 'not past the line yet'})`;
 }
 const istNow = () => { const t = new Date(Date.now() + 5.5 * 3600e3), iso = t.toISOString(); return { today: iso.slice(0, 10), afterClose: t.getUTCHours() * 60 + t.getUTCMinutes() >= 15 * 60 + 45 }; };
 /** Check every trendline alert against the price history. Returns the number that are triggered. Safe to call often (the history is cached for the session). */
@@ -127,7 +131,8 @@ export async function refreshLineAlerts(data = S.data) {
       const candles = closedCandles(rows, a.tf || 'D', today, afterClose);
       const x = lineCross(candles, L, a.dir === 'below' ? 'below' : 'above', { since: a.created || '', recent: 3 });
       const word = a.dir === 'below' ? 'below' : 'above';
-      LA[a.id] = { hit: x.hit, at, last: x.last, text: x.hit ? `${TF_NAME[a.tf] || 'Daily'} candle of ${x.d.slice(8)}/${x.d.slice(5, 7)} closed ${word} your trendline (₹${x.close.toFixed(2)} vs line ₹${x.line.toFixed(2)})` : '' };
+      const op = openCandle(rows, a.tf || 'D', today, afterClose, L);
+      LA[a.id] = { hit: x.hit, at, last: x.last, open: op ? { ...op, beyond: a.dir === 'below' ? op.close < op.line : op.close > op.line } : null, text: x.hit ? `${TF_NAME[a.tf] || 'Daily'} candle of ${x.d.slice(8)}/${x.d.slice(5, 7)} closed ${word} your trendline (₹${x.close.toFixed(2)} vs line ₹${x.line.toFixed(2)})` : '' };
       if (x.hit) hits++;
     } catch (e) { LA[a.id] = { hit: false, at, error: e.message }; }
   }
