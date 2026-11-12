@@ -1998,3 +1998,18 @@ body.pi-dragging, body.pi-dragging * { cursor: grabbing !important; user-select:
 .tip .tp, .tip .tn { white-space: nowrap; } .tip .tp { color: #7ee2a8; font-weight: 600; } .tip .tn { color: #ff9a8f; font-weight: 600; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tip .tp { color: var(--pos); } :root:not([data-theme="light"]) .tip .tn { color: var(--neg); } }
 :root[data-theme="dark"] .tip .tp { color: var(--pos); } :root[data-theme="dark"] .tip .tn { color: var(--neg); }
+
+/* 8.95.0 Home: asset performance card (controls next to the chart, one row per line) */
+.nwp-ctl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.nwp-seg { display: inline-flex; background: var(--surface-2); border-radius: 99px; padding: 3px; gap: 2px; max-width: 100%; }
+.nwp-seg button { border: 0; background: transparent; color: var(--ink); font: inherit; font-weight: 600; font-size: .84rem; padding: 6px 12px; min-height: 0; border-radius: 99px; cursor: pointer; white-space: nowrap; }
+.nwp-seg button.on { background: var(--brand); color: #fff; }
+.nwp .chart .end-tag { fill: #fff; font-size: 11px; font-weight: 700; }
+.nwp-rows { display: flex; flex-direction: column; margin: 8px 0 0; border-top: 1px solid var(--line); }
+.nwp-row { display: grid; grid-template-columns: 12px minmax(0, 1.6fr) minmax(48px, .7fr) auto; gap: 8px; align-items: center; width: 100%; text-align: left; font: inherit; color: inherit; background: transparent; border: 0; border-bottom: 1px solid var(--line); padding: 10px 6px; cursor: pointer; }
+.nwp-row.on { background: var(--surface-2); border-radius: 10px; }
+.nwp-dot { width: 12px; height: 12px; border-radius: 50%; }
+.nwp-nm { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; } .nwp-nm small { color: var(--muted); font-variant-numeric: tabular-nums; }
+.nwp-sp { display: block; min-width: 0; } .nwp-sp .spark { width: 100%; height: 34px; }
+.nwp-ch { display: flex; flex-direction: column; text-align: right; line-height: 1.25; font-variant-numeric: tabular-nums; } .nwp-ch small { font-size: .78rem; }
+.nwp-insight { margin: 10px 0 0; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--pos) 10%, var(--surface)); font-size: .9rem; }

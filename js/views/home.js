@@ -100,16 +100,33 @@ function netWorthHistory(data, all) {
     const yHi = yLo + stepv * 4;
     const sg100 = (v) => sg(v);
     const sg = (v) => { const x = v - 100; return (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x).toFixed(1) + '%'; };
-    chart = lineChart({ labels, tipLabels, fmt: sg, tipFmt: rawTip(shownHave.map((l) => l.values)), axisFmt: (v) => { const x = Math.round(v - 100); return (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x) + '%'; }, yMin: yLo, yMax: yHi, height: 260, series: idx });
+    idx.forEach((x) => { const v = [...x.values].reverse().find((q) => q != null); x.end = v == null ? '' : sg(v); });
+    chart = lineChart({ labels, tipLabels, ends: true, areaAll: true, fmt: sg, tipFmt: rawTip(shownHave.map((l) => l.values)), axisFmt: (v) => { const x = Math.round(v - 100); return (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x) + '%'; }, yMin: yLo, yMax: yHi, height: 260, series: idx });
   } else {
     const ser = shownHave.map((ln) => ({ name: ln.label, color: ln.color, values: ln.values }));
     if (sel === 'net' && hasAssets) ser.push({ name: 'Total assets', values: days.map((d) => d.assets), color: 2, dashed: true });
     const ax = fitAxis(ser.flatMap((x) => x.values));   // round, equal steps that fit the lines, so a small move is not squeezed along the bottom
     const tipAmt = (v, si, i) => { const vals = ser[si].values, at = vals.findIndex((x) => x > 0), b = at < 0 ? 0 : vals[at]; if (!b) return money(v); const c = v > b ? 'tp' : v < b ? 'tn' : ''; return [money(v), ' · ', h('span', { class: c }, sgn(v - b)), ' · ', h('span', { class: c }, sgp((v - b) / Math.abs(b)))]; };
-    chart = lineChart({ labels, tipLabels, fmt: money, tipFmt: tipAmt, yMin: ax.yMin, yMax: ax.yMax, ticks: ax.ticks, height: 260, series: ser });
+    ser.forEach((x) => { const v = [...x.values].reverse().find((q) => q != null); x.end = v == null || x.dashed ? '' : compact(v); });
+    chart = lineChart({ labels, tipLabels, ends: true, areaAll: true, fmt: money, tipFmt: tipAmt, yMin: ax.yMin, yMax: ax.yMax, ticks: ax.ticks, height: 260, series: ser });
   }
   const missing = LINES.filter((l) => l.id !== 'other' && !have(l.id));
-  return section(title, h('div', null, chips, filterBar, modeBar, stats, chart,
+  // controls sit right above the chart: period, then Growth % / Value
+  const seg = (arr, cur, on, label) => h('div', { class: 'nwp-seg', role: 'group', 'aria-label': label }, arr.map(([k, l]) => h('button', { type: 'button', class: cur === k ? 'on' : '', 'aria-pressed': String(cur === k), onclick: () => on(k) }, l)));
+  const ctl = h('div', { class: 'nwp-ctl' },
+    seg(NW_RANGES.map(([k]) => [k, k.toUpperCase()]), nwRange, (k) => { nwRange = k; rerender(); }, 'Period'),
+    seg([['pct', 'Growth %'], ['amt', 'Value (₹)']], nwMode, (k) => { nwMode = k; rerender(); }, 'Measure'));
+  // one row per line: tap a row to look at that line alone, tap again for all
+  const rowOf = (ln) => { const i = info(ln); if (ln.id !== 'net' && !have(ln.id)) return null; if (!i) return null; const t = tone(i.change);
+    return h('button', { type: 'button', class: 'nwp-row' + (sel === ln.id ? ' on' : ''), 'aria-pressed': String(sel === ln.id), onclick: () => { nwLine = sel === ln.id ? 'all' : ln.id; rerender(); } },
+      h('span', { class: 'nwp-dot', style: { background: color(ln.color) } }),
+      h('span', { class: 'nwp-nm' }, h('b', null, ln.label), h('small', null, money(i.now))),
+      h('span', { class: 'nwp-sp' }, spark(ln.values.filter((v) => v != null), { height: 34, width: 110, tone: ln.color })),
+      h('span', { class: 'nwp-ch ' + t }, h('b', null, i.ret != null ? sgp(i.ret) : '–'), h('small', null, sgn(i.change)))); };
+  const rows = h('div', { class: 'nwp-rows' }, lines.map(rowOf).filter(Boolean));
+  const nwI = info(lines[0]);
+  const insight = nwI && nwI.ret != null ? h('p', { class: 'nwp-insight' }, h('b', null, 'Key insight'), ` Net worth ${nwI.change >= 0 ? 'grew' : 'fell'} by ${pct(Math.abs(nwI.ret), 2)} in ${r[1]}${mover ? `; ${mover.l.label} moved the most (${sgn(mover.i.change)}).` : '.'}`) : null;
+  return section(sel === 'all' ? 'Asset performance' : title, h('div', { class: 'nwp' }, ctl, chart, sel === 'all' ? null : stats, rows, insight,
     h('p', { class: 'note' }, (nwMode === 'pct' ? 'Growth % starts every line at 0 on the first day of the period, so a small line and a big one can be compared. ' : '') + `A line also rises when you put new money in, not only when prices rise. The app saves net worth and the four asset lines (shares & funds, debt & fixed income, gold, others & cash) each day you open it on the owner’s device, and fills earlier months from your month-end check-ins; where a day has no reading the line runs straight between the nearest two. ${missing.length ? 'Not enough readings yet for ' + missing.map((l) => l.label).join(', ') + ' in this period: ' : ''}${missing.length ? 'they build up from today. ' : ''}The oldest net worth reading is ${dateStr(first)}. Hover or touch the chart for any day: it shows the amount and the change since the first day of the period.`)));
 }
 
