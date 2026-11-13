@@ -2018,3 +2018,16 @@ body.pi-dragging, body.pi-dragging * { cursor: grabbing !important; user-select:
 .alert-now { display: flex; flex-direction: column; align-items: flex-end; white-space: normal; text-align: right; max-width: 100%; line-height: 1.3; font-size: .82rem; font-weight: 500; }
 .alert-now span { display: block; max-width: 100%; overflow-wrap: anywhere; }
 @media (max-width: 700px) { .alert-now { align-items: flex-start; text-align: left; } }
+
+/* 8.97.0 Progress: expense by expense with a carried-forward balance; the carry switch in the expense sheet */
+.pi-carry { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; }
+.pi-carry input { margin-top: 4px; width: 18px; height: 18px; flex: none; }
+.pi-carry span { display: flex; flex-direction: column; gap: 2px; } .pi-carry small { color: var(--muted); }
+.pa-cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.pa-cat { border: 1px solid var(--line); border-radius: 14px; padding: 12px; background: var(--surface); display: flex; flex-direction: column; gap: 8px; }
+.pa-cat header { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.pa-tag { margin-left: 8px; font-size: .7rem; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: color-mix(in srgb, var(--brand) 14%, var(--surface)); color: var(--brand); }
+.pa-eq { margin: 0; display: grid; gap: 4px; } .pa-eq > div { display: flex; justify-content: space-between; gap: 8px; } .pa-eq dt { color: var(--muted); } .pa-eq dd { margin: 0; font-variant-numeric: tabular-nums; }
+.pa-eq .tot { border-top: 1px dashed var(--line); padding-top: 4px; font-weight: 700; } .pa-eq .tot dt { color: var(--ink); }
+.pa-mini { list-style: none; margin: 0; padding: 6px 0 0; border-top: 1px solid var(--line); display: grid; gap: 4px; font-size: .82rem; }
+.pa-mini li { display: grid; grid-template-columns: 52px 1fr auto; gap: 8px; align-items: baseline; white-space: nowrap; } .pa-mini li span:nth-child(2) { color: var(--muted); font-variant-numeric: tabular-nums; }

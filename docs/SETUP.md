@@ -150,6 +150,13 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.97.0 – Carry unused forward, expense by expense on Progress
+
+- New switch **Carry unused forward** in an expense's sheet (Allocations → tap the expense). Stored as one optional field, `carry: true`, inside `settings.passivePlan.expense[<name>]`. Nothing existing is renamed or removed; plans without it behave exactly as before (unused budget is only shown as "Unused", never carried).
+- For an expense with the switch on, the balance builds month by month from the start of the plan: balance = last month's balance + this month's set-aside − spent (never below 0). Spending is taken from the balance first, so it is not counted as paid from your pocket. Overspending beyond the balance shows as Over.
+- Progress tab: new **Expense by expense** section. Each card shows which income paid it and how much of the plan it paid, how much came from the carried balance, and for carrying expenses brought forward + set aside − spent = carried forward, with a month-by-month line for a longer period.
+- Tests: carry cases added to `tests/passive.test.mjs`.
+
 ## Release 8.96.1 – Trendline alert "Now" fits on a phone
 
 Layout fix only. The longer "Now" text added in 8.96.0 ran off the screen on phones. It now shows as up to three short lines that wrap inside the row: last finished candle against the line, the candle still forming, and what it waits for.

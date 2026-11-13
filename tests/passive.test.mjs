@@ -82,6 +82,22 @@ if (file) {
     ok(sr && sr.accrued === 9000 && !sr.due && sr.nextIn === 1 && se && se.share === 5000 && se.kind === 'yearly', 'the set-aside card holds the quarter\'s share and the yearly budget');
     ok(P.setAside(d, all, '2026-12').rows.find((x) => x.name === 'Rent').due, 'the payment shows as due in its month');
   }
+  // carry forward: Travel 2,000 a month with the switch on; 1,000 spent each month, so the unspent part piles up
+  {
+    const d = JSON.parse(JSON.stringify(data)); d.categoryList = categoryList(d).filter((c) => c.name.toLowerCase() !== 'travel').concat([{ name: 'Travel', kind: 'expense', budget: 2000 }]);
+    const tpl = (d.ledger || []).find((e) => e.debit > 0) || {}; d.ledger = (d.ledger || []).filter((e) => String(e.category).toLowerCase() !== 'travel');
+    for (const dt of ['2026-09-10', '2026-10-10', '2026-11-05']) d.ledger.push({ ...tpl, id: 'trv' + dt, date: dt, debit: 1000, credit: 0, category: 'Travel', desc: 'Trip' });
+    const mk = (carry) => { const x = JSON.parse(JSON.stringify(d)); P.savePlan(x, { alloc: [{ id: 'a', src: key, cat: 'Travel', amount: 2000 }], freq: {}, extra: [], skip: [], carry: true, from: '2026-09', order: [], expense: carry ? { travel: { name: 'Travel', carry: true } } : {}, merge: {} }); return x; };
+    const x = mk(true), tv = (m) => P.progressMonth(x, all, m).cats.find((c) => c.name === 'Travel');
+    ok(tv('2026-09').bf === 0 && tv('2026-09').left === 1000, 'carry: the first month leaves 1,000 unspent');
+    ok(tv('2026-10').bf === 1000 && tv('2026-10').available === 3000 && tv('2026-10').left === 2000, 'carry: the next month has 3,000 and leaves 2,000');
+    ok(tv('2026-11').bf === 2000 && tv('2026-11').available === 4000 && tv('2026-11').left === 3000, 'carry: and so on');
+    ok(tv('2026-11').pocket === 0, 'carry: spending taken from the carried balance is not from the pocket');
+    const y = mk(false), tn = P.progressMonth(y, all, '2026-10').cats.find((c) => c.name === 'Travel'); ok(tn && tn.bf === 0 && tn.available === 2000, 'without the switch nothing is carried');
+    const rep = P.progressReport(x, all, ['2026-09', '2026-10', '2026-11']).cats.find((c) => c.name === 'Travel'); ok(rep && rep.bf === 0 && rep.planned === 6000 && rep.spent === 3000 && rep.left === 3000 && rep.months.length === 3, 'carry: a period shows the balance at its end');
+    const over = JSON.parse(JSON.stringify(x)); over.ledger.push({ ...tpl, id: 'trv-big', date: '2026-11-06', debit: 5000, credit: 0, category: 'Travel', desc: 'Big trip' });
+    const ov = P.progressMonth(over, all, '2026-11').cats.find((c) => c.name === 'Travel'); ok(ov.over === 2000 && ov.left === 0 && ov.fromBalance === 2000, 'carry: spending above the balance is over, and the balance is used up');
+  }
   // progress: every spent rupee is either on an income's expense or not planned; the periods add up
   {
     const m = P.progressMonth(data, all, '2026-10'), rowsSpent = m.sources.reduce((a, x) => a + x.rows.reduce((b, r) => b + r.spent, 0), 0), un = m.unplanned.reduce((a, u) => a + u.spent, 0);

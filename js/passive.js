@@ -103,7 +103,7 @@ export function categories(data, all, raw = false) {
   }
   for (const [k, b] of bud) if (!by.has(k)) by.set(k, { name: b.name, base: 0, cur: 0 });
   for (const a of plan.alloc) if (!by.has(lc(a.cat))) by.set(lc(a.cat), { name: a.cat, base: 0, cur: 0 });
-  for (const [k, x] of Object.entries(plan.expense)) if (x && (x.mode === 'fixed' || x.lump) && !by.has(k)) by.set(k, { name: x.name || k, base: 0, cur: 0 });
+  for (const [k, x] of Object.entries(plan.expense)) if (x && (x.mode === 'fixed' || x.lump || x.carry) && !by.has(k)) by.set(k, { name: x.name || k, base: 0, cur: 0 });
   const rows = [...by.values()].map((r) => {
     const usual = r0(r.base / use.length), k = lc(r.name), b = bud.get(k), fx = plan.expense[k];
     const budget = b ? r0(b.monthly + b.yearly / 12) : 0, legacy = fx && fx.mode === 'fixed' && Number(fx.amount) > 0 ? r0(monthlyEquivalent(Number(fx.amount), fx.freq)) : 0;
@@ -112,15 +112,15 @@ export function categories(data, all, raw = false) {
     const lump = tl || null, yearly = !tl && b && b.yearly > 0 ? b.yearly : 0;
     const lumpMonthly = lump ? lump.amount / lump.every : 0, legacyLump = !budget && fx && fx.mode === 'fixed' ? r0(legacy + lumpMonthly) : 0;
     const src = budget > 0 ? 'budget' : legacyLump > 0 ? 'fixed' : 'usual';
-    return { name: r.name, usual, base: src === 'budget' ? budget : src === 'fixed' ? legacyLump : usual, cur: r0(r.cur), src, fixed: src !== 'usual', budget, yearly, lump, lumpMonthly: r0(lumpMonthly), skipped: skip.has(k), into: plan.merge[k] || '' };
+    return { carry: !!(fx && fx.carry), name: r.name, usual, base: src === 'budget' ? budget : src === 'fixed' ? legacyLump : usual, cur: r0(r.cur), src, fixed: src !== 'usual', budget, yearly, lump, lumpMonthly: r0(lumpMonthly), skipped: skip.has(k), into: plan.merge[k] || '' };
   });
   if (raw) return rows.sort((a, b) => b.base - a.base || a.name.localeCompare(b.name));
   const out = new Map();
   for (const r of rows) {
     if (r.skipped) { if (!r.into) { out.set(lc(r.name), { ...r, parts: [] }); } continue; }   // a part that is left out is simply not counted
     const key = lc(r.into || r.name), part = { name: r.name, base: r.base, fixed: r.fixed };
-    const o = out.get(key) || { name: r.into || r.name, base: 0, usual: 0, cur: 0, fixed: true, src: r.src, budget: 0, yearly: 0, lump: null, lumpMonthly: 0, skipped: skip.has(key), parts: [] };
-    o.base += r.base; o.usual += r.usual; o.cur += r.cur; o.budget += r.budget; o.yearly += r.yearly; o.parts.push(part); o.fixed = o.fixed && r.fixed; if (o.src !== r.src) o.src = o.src === 'usual' || r.src === 'usual' ? 'usual' : 'budget';
+    const o = out.get(key) || { carry: false, name: r.into || r.name, base: 0, usual: 0, cur: 0, fixed: true, src: r.src, budget: 0, yearly: 0, lump: null, lumpMonthly: 0, skipped: skip.has(key), parts: [] };
+    o.base += r.base; o.usual += r.usual; o.cur += r.cur; o.budget += r.budget; o.yearly += r.yearly; o.parts.push(part); o.carry = o.carry || r.carry || !!(plan.expense[key] && plan.expense[key].carry); o.fixed = o.fixed && r.fixed; if (o.src !== r.src) o.src = o.src === 'usual' || r.src === 'usual' ? 'usual' : 'budget';
     if (r.lump && !o.lump) { o.lump = r.lump; o.lumpMonthly = r.lumpMonthly; }
     out.set(key, o);
   }
@@ -205,7 +205,7 @@ export function allocation(data, all) {
 export function actualVsPlan(data, all, month) {
   const plan = planOf(data, all), al = allocation(data, all), cur = C.monthKey(all.asOf), from = plan.from && plan.from <= month ? plan.from : month;
   const names = new Set(al.cats.map((c) => c.name));
-  const rows = new Map(al.cats.map((c) => [lc(c.name), { name: c.name, planned: c.funded, carryIn: 0, earlier: 0, actual: 0 }]));
+  const rows = new Map(al.cats.map((c) => [lc(c.name), { name: c.name, planned: c.funded, carryIn: 0, earlier: 0, actual: 0, carry: !!c.carry && !c.lump, bf: 0 }]));
   // walk the months from the start of the plan, so a reserve built earlier is there to use
   const carry = new Map();
   for (const m of monthsBetween(from, month)) {
@@ -213,7 +213,9 @@ export function actualVsPlan(data, all, month) {
     for (const nm of spent.keys()) if (!names.has(nm) && !rows.has(lc(nm))) rows.set(lc(nm), { name: nm, planned: 0, carryIn: 0, earlier: 0, actual: 0 });
     for (const [k, r] of rows) {
       const actual = spent.get(r.name) || 0, cIn = carry.get(k) || 0;
-      carry.set(k, cIn + Math.max(0, r.planned - actual));   // unused allocation of earlier months: only shown, never added to a month's allowance
+      // a category that carries forward keeps a running balance: what was set aside and not spent is there next month, and what is spent is taken from it first
+      if (r.carry) { carry.set(k, Math.max(0, cIn + r.planned - actual)); if (m === month) { r.bf = cIn; r.actual = actual; } continue; }
+      carry.set(k, cIn + Math.max(0, r.planned - actual));   // other categories: unused allocation of earlier months is only shown, never added to a month's allowance
       if (m === month) { r.earlier = cIn; r.actual = actual; }
     }
   }
@@ -221,12 +223,12 @@ export function actualVsPlan(data, all, month) {
   const list = [...rows.values()].map((r) => {
     const cat = al.cats.find((c) => lc(c.name) === lc(r.name)), lump = cat && cat.lump, f = cat && cat.base > 0 ? Math.min(1, r.planned / cat.base) : 1;
     // an expense with a payment every few months: only its regular part is allowed in an ordinary month, the whole payment in the month it falls due; the rest is set aside (see Set aside)
-    const st = lump ? lumpState(lump, mn) : null, avail = lump ? f * (cat.base - cat.lumpMonthly + (st.due ? lump.amount : 0)) : r.planned, carryIn = 0, earlier = lump ? 0 : r.earlier;
+    const st = lump ? lumpState(lump, mn) : null, avail = lump ? f * (cat.base - cat.lumpMonthly + (st.due ? lump.amount : 0)) : r.planned + (r.carry ? r.bf : 0), carryIn = r.carry ? r.bf : 0, earlier = lump || r.carry ? 0 : r.earlier;
     const remaining = Math.max(0, avail - r.actual), over = avail > 0 ? Math.max(0, r.actual - avail) : 0;
     const used = avail > 0 ? r.actual / avail : r.actual > 0 ? Infinity : 0;
     const state = r.actual > 0 && avail === 0 ? 'unmapped' : over > 0.5 ? 'over' : r.actual > 0 && r.planned < r.actual && r.planned > 0 && !carryIn && !lump ? 'partial' : used >= 0.9 ? 'near' : 'ok';
-    return { ...r, carryIn, earlier, available: avail, remaining, over, used, state, carryOut: 0, lump: lump || null, lumpDue: !!st && st.due, lumpAmount: lump ? lump.amount : 0, kept: st ? Math.round(st.accrued) : 0 };
-  }).filter((r) => r.planned > 0 || r.actual > 0 || r.earlier > 0).sort((a, b) => (b.over - a.over) || (b.actual - a.actual));
+    return { ...r, carryIn, earlier, available: avail, remaining, over, used, state, carryOut: r.carry ? remaining : 0, carry: r.carry, lump: lump || null, lumpDue: !!st && st.due, lumpAmount: lump ? lump.amount : 0, kept: st ? Math.round(st.accrued) : 0 };
+  }).filter((r) => r.planned > 0 || r.actual > 0 || r.earlier > 0 || r.carryIn > 0).sort((a, b) => (b.over - a.over) || (b.actual - a.actual));
   return { month, rows: list, planned: sum(list, (r) => r.planned), actual: sum(list, (r) => r.actual), carryIn: 0, earlier: sum(list, (r) => r.earlier), remaining: sum(list, (r) => r.remaining), over: sum(list, (r) => r.over),
     unmappedAmount: sum(list.filter((r) => r.state === 'unmapped'), (r) => r.actual) };
 }
@@ -264,29 +266,30 @@ export function progressMonth(data, all, month) {
   for (const r of inc.rows) { const t = sources.find((q) => q.key === r.key); if (t) { t.expected = r.expected; t.received = r.received; } }
   for (const b of wf.bySource) { const t = sources.find((q) => q.key === b.key); if (t) { t.allocated = b.allocated; t.unused = b.unused; t.short = Math.max(0, b.allocated - b.income); } }
   let pocket = 0, over = 0, left = 0, spent = 0;
-  const unplanned = [];
+  const unplanned = [], cats = [];
   for (const r of av.rows) {
     const ls = by.get(lc(r.name)) || [], P = ls.reduce((a, l) => a + l.amount, 0), takes = wf.takes.filter((t) => lc(t.cat) === lc(r.name)), paid = takes.reduce((a, t) => a + t.take, 0);
-    const early = r.lump && r.lumpDue ? r.lumpAmount * (r.lump.every - 1) / r.lump.every : 0, covered = Math.min(r.actual, paid + early), pk = Math.max(0, r.actual - covered);
+    const early = r.lump && r.lumpDue ? r.lumpAmount * (r.lump.every - 1) / r.lump.every : 0, used = Math.min(r.carryIn || 0, Math.max(0, r.actual - paid - early)), covered = Math.min(r.actual, paid + early + used), pk = Math.max(0, r.actual - covered);
+    if (r.carry || ls.length) cats.push({ name: r.name, carry: !!r.carry, planned: P, bf: r.carryIn || 0, available: r.available, spent: r.actual, left: r.remaining, over: r.over, paid, short: Math.max(0, P - paid), pocket: pk, fromBalance: used, sources: ls.map((l) => { const t = takes.find((q) => q.src === l.src), sr = al.sources.find((q) => q.key === l.src); return { name: sr ? sr.name : l.src, key: l.src, planned: l.amount, paid: t ? t.take : 0 }; }) });
     spent += r.actual; pocket += pk; over += r.over; left += r.remaining;
     if (!ls.length || P <= 0) { if (r.actual > 0) unplanned.push({ cat: r.name, spent: r.actual }); continue; }
     let rest = r.actual;
     ls.forEach((l, i) => {
       const cap = r.available * (l.amount / P), take = Math.min(rest, cap), last = i === ls.length - 1, ov = last ? Math.max(0, rest - cap) : 0;
       rest -= take; if (last) rest = 0;
-      const t = takes.find((q) => q.src === l.src), row = { cat: r.name, planned: l.amount, earlier: i === 0 ? r.earlier : 0, allowed: cap, spent: take + ov, over: ov, left: Math.max(0, cap - take), paid: t ? t.take : 0, short: Math.max(0, l.amount - (t ? t.take : 0)), lump: !!r.lump, lumpDue: r.lumpDue };
+      const t = takes.find((q) => q.src === l.src), row = { cat: r.name, planned: l.amount, earlier: i === 0 ? r.earlier : 0, carryIn: i === 0 ? r.carryIn : 0, allowed: cap, spent: take + ov, over: ov, left: Math.max(0, cap - take), paid: t ? t.take : 0, short: Math.max(0, l.amount - (t ? t.take : 0)), lump: !!r.lump, lumpDue: r.lumpDue };
       const src = sources.find((q) => q.key === l.src); if (src) src.rows.push(row);
     });
   }
   const salary = salaryProtection(data, all, month, 0);
-  return { month, past, sources, unplanned, spent, pocket, over, left, earlier: av.earlier, credited: inc.received, expected: inc.expected, income: wf.income, short: wf.short, unused: wf.unused, salary };
+  return { month, past, sources, unplanned, cats, spent, pocket, over, left, earlier: av.earlier, credited: inc.received, expected: inc.expected, income: wf.income, short: wf.short, unused: wf.unused, salary };
 }
 
 /** One or many months, added up. Planned, spent and over are totals; left over is what stood at the end of the last month. */
 export function progressReport(data, all, months) {
   const per = months.map((m) => progressMonth(data, all, m));
-  if (!per.length) return { months: [], per, sources: [], unplanned: [], spent: 0, pocket: 0, over: 0, left: 0, credited: 0, expected: 0, income: 0, short: 0, unused: 0 };
-  const last = per[per.length - 1], sources = new Map(), un = new Map();
+  if (!per.length) return { months: [], per, sources: [], unplanned: [], cats: [], spent: 0, pocket: 0, over: 0, left: 0, credited: 0, expected: 0, income: 0, short: 0, unused: 0 };
+  const last = per[per.length - 1], sources = new Map(), un = new Map(), cats = new Map();
   for (const m of per) {
     for (const x of m.sources) {
       const t = sources.get(x.key) || { key: x.key, name: x.name, kind: x.kind, monthly: x.monthly, expected: 0, received: 0, allocated: 0, unused: 0, short: 0, rows: new Map() }; sources.set(x.key, t);
@@ -294,10 +297,16 @@ export function progressReport(data, all, months) {
       for (const r of x.rows) { const k = lc(r.cat), o = t.rows.get(k) || { cat: r.cat, planned: 0, earlier: 0, spent: 0, over: 0, left: 0, paid: 0, short: 0, lump: r.lump, lumpDue: false }; t.rows.set(k, o);
         o.planned += r.planned; o.spent += r.spent; o.over += r.over; o.paid += r.paid; o.short += r.short; o.left += r.left; o.allowed = r.allowed; if (m === per[0]) o.earlier = r.earlier; o.lumpDue = r.lumpDue; }
     }
+    for (const c of m.cats) {
+      const o = cats.get(lc(c.name)) || { name: c.name, carry: c.carry, planned: 0, bf: c.bf, spent: 0, over: 0, paid: 0, short: 0, pocket: 0, fromBalance: 0, left: 0, available: 0, sources: new Map(), months: [] };
+      cats.set(lc(c.name), o); o.carry = o.carry || c.carry; o.planned += c.planned; o.spent += c.spent; o.over += c.over; o.paid += c.paid; o.short += c.short; o.pocket += c.pocket; o.fromBalance += c.fromBalance; o.left = c.left; o.available = c.available;
+      o.months.push({ month: m.month, bf: c.bf, planned: c.planned, spent: c.spent, left: c.left, over: c.over });
+      for (const x of c.sources) { const q = o.sources.get(x.key) || { name: x.name, key: x.key, planned: 0, paid: 0 }; q.planned += x.planned; q.paid += x.paid; o.sources.set(x.key, q); }
+    }
     for (const u of m.unplanned) un.set(lc(u.cat), { cat: u.cat, spent: (un.get(lc(u.cat)) || { spent: 0 }).spent + u.spent });
   }
   const sum2 = (f) => per.reduce((a, m) => a + f(m), 0);
-  return { months, per, last, sources: [...sources.values()].map((t) => ({ ...t, rows: [...t.rows.values()] })), unplanned: [...un.values()], spent: sum2((m) => m.spent), pocket: sum2((m) => m.pocket), over: sum2((m) => m.over), left: sum2((m) => m.left), earlier: per[0].earlier, credited: sum2((m) => m.credited), expected: sum2((m) => m.expected), income: sum2((m) => m.income), short: sum2((m) => m.short), unused: last.unused, salary: last.salary };
+  return { months, per, last, cats: [...cats.values()].map((c) => ({ ...c, sources: [...c.sources.values()] })), sources: [...sources.values()].map((t) => ({ ...t, rows: [...t.rows.values()] })), unplanned: [...un.values()], spent: sum2((m) => m.spent), pocket: sum2((m) => m.pocket), over: sum2((m) => m.over), left: sum2((m) => m.left), earlier: per[0].earlier, credited: sum2((m) => m.credited), expected: sum2((m) => m.expected), income: sum2((m) => m.income), short: sum2((m) => m.short), unused: last.unused, salary: last.salary };
 }
 
 export function incomeActual(data, all, month) {

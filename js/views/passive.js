@@ -56,13 +56,14 @@ function expenseSheet(al, catName) {
   const tNote = h('p', { class: 'pi-cat-sum' }), syncT = () => { tAt.style.display = tEvery.value === '12' ? '' : 'none'; const v = Number(tAmt.value) || 0; tNote.textContent = v > 0 ? `${money(Math.round(v / Number(tEvery.value)))} a month is kept back for it, inside the ${money(cat.base)} budget.` : ''; };
   [tAmt, tEvery].forEach((el) => el.addEventListener('input', syncT)); syncT();
   const timing = { el: h('details', { class: 'pi-edit pi-timing', open: cur ? '' : null }, h('summary', { class: 'chip-btn' }, 'Part of it is paid every few months'), h('p', { class: 'note' }, 'For maintenance paid at quarter end, say. The budget already includes it. Tell the planner how much and how often, so it keeps a share back each month and does not count it as free to spend.'), h('div', { class: 'pi-cat-fx' }, tAmt, tEvery), tAt, tNote) };
+  const carryBox = h('input', { type: 'checkbox', checked: cat.carry ? '' : null, 'aria-label': 'Carry unused forward' }), carry = h('label', { class: 'pi-carry' }, carryBox, h('span', null, h('b', null, 'Carry unused forward'), h('small', null, 'Money set aside for this expense and not spent stays available next month and keeps adding up, like Travel. Off: each month starts fresh.')));
   const cov = h('b'), note = h('p', { class: 'pi-note' });
   const body = h('div', { class: 'form' }, h('div', { class: 'pi-pair' }, h('b', null, cat.name), h('span', { class: 'muted' }, `${basis(cat)} ${money(cat.base)} a month`)),
     cat.src === 'budget' ? null : h('p', { class: 'pi-note warn' }, 'No budget is set for this expense yet. ', h('a', { href: '#/flow/categories', onclick: () => { if (dlgRef.close) dlgRef.close(); } }, 'Set a budget'), ' and the plan follows it.'),
     h('p', { class: 'note', style: { margin: 0 } }, 'The amount comes from the category budget. Split it across your income. Each month the income that really arrives pays in the order of the list, so these amounts are a plan.'),
-    rows.length ? h('div', { class: 'pi-srows' }, rows.map((r) => r.el)) : h('p', { class: 'empty' }, 'No passive income to pay from yet.'), h('div', { class: 'pi-live' }, h('span', null, 'Covered'), cov), note, timing.el);
+    rows.length ? h('div', { class: 'pi-srows' }, rows.map((r) => r.el)) : h('p', { class: 'empty' }, 'No passive income to pay from yet.'), h('div', { class: 'pi-live' }, h('span', null, 'Covered'), cov), note, carry, timing.el);
   let ok = true;
-  const dlg = dlgRef.dlg = dialog('Pay ' + cat.name + ' from', body, [{ label: 'Cancel', onclick: (c) => c() }, { label: 'Save', class: 'primary', onclick: (c) => { if (!ok) return; c(); setAllocs(catName, new Map(rows.map((r) => [r.s.key, Number(r.input.value) || 0])), (p) => { const k = catName.toLowerCase(), v = Number(tAmt.value) || 0, e = { ...(p.expense[k] || { name: catName }) }; if (v > 0) e.lump = { amount: v, every: Number(tEvery.value), ...(tEvery.value === '12' ? { at: Number(tAt.value) } : {}) }; else delete e.lump; if (e.mode === 'fixed' || e.lump) p.expense[k] = e; else delete p.expense[k]; }); } }]);
+  const dlg = dlgRef.dlg = dialog('Pay ' + cat.name + ' from', body, [{ label: 'Cancel', onclick: (c) => c() }, { label: 'Save', class: 'primary', onclick: (c) => { if (!ok) return; c(); setAllocs(catName, new Map(rows.map((r) => [r.s.key, Number(r.input.value) || 0])), (p) => { const k = catName.toLowerCase(), v = Number(tAmt.value) || 0, e = { ...(p.expense[k] || { name: catName }) }; if (v > 0) e.lump = { amount: v, every: Number(tEvery.value), ...(tEvery.value === '12' ? { at: Number(tAt.value) } : {}) }; else delete e.lump; if (carryBox.checked) e.carry = true; else delete e.carry; if (e.mode === 'fixed' || e.lump || e.carry) p.expense[k] = e; else delete p.expense[k]; }); } }]);
   dlgRef.close = dlg.close; const saveBtn = dlg.el.querySelector('footer .primary');
   function check() {
     const tot = rows.reduce((a, r) => a + (Number(r.input.value) || 0), 0), bad = rows.find((r) => (Number(r.input.value) || 0) > r.avail + 0.5);
@@ -310,6 +311,22 @@ function progress(root, sm) {
     h('header', null, h('b', null, h('i'), x.name), h('span', { class: 'pa-n' }, money(live ? Math.max(x.expected, x.received) : x.received)), h('small', null, live ? `${money(x.received)} credited of ${money(x.expected)} expected${x.expected > x.received + 1 ? ', rest projected' : ''}` : `${money(x.received)} credited`)),
     x.rows.length ? h('ul', { class: 'pa-list' }, x.rows.map(row)) : h('p', { class: 'empty' }, 'No expense is planned on this income.'),
     x.short > 0.5 ? h('p', { class: 'pa-foot neg' }, `${money(x.short)} short of what was allocated to it.`) : x.unused > 0.5 ? h('p', { class: 'pa-foot' }, `${money(x.unused)} of this income was not used.`) : null)) : h('p', { class: 'empty' }, 'No passive income found yet.')));
+  if (r.cats.length) {
+    const sorted = r.cats.slice().sort((a, b) => (b.carry - a.carry) || b.spent - a.spent);
+    const card = (c) => {
+      const lvl = c.over > 0.5 ? 'bad' : c.pocket > 0.5 || c.short > 0.5 ? 'mid' : 'ok', pool = c.bf + c.planned;
+      const eq = c.carry
+        ? [['Brought forward', money(c.bf)], [one ? 'Set aside' : 'Set aside in all', '+ ' + money(c.planned)], ['Spent', '− ' + money(c.spent)], ['Carried forward', money(c.left), 'tot']]
+        : [['Planned', money(c.planned)], ['Spent', money(c.spent)], [c.over > 0.5 ? 'Over' : one ? 'Unused' : 'Unused in all', money(c.over > 0.5 ? c.over : Math.max(0, c.planned - c.spent))], null];
+      return h('section', { class: 'pa-cat ' + lvl },
+        h('header', null, h('b', null, c.name, c.carry ? h('span', { class: 'pa-tag' }, 'carries forward') : null), h('span', { class: 'pa-st ' + lvl }, c.over > 0.5 ? `Over by ${money(c.over)}` : c.pocket > 0.5 ? `${money(c.pocket)} from pocket` : c.short > 0.5 ? 'Income fell short' : 'Covered')),
+        bar(pool > 0 ? c.spent / Math.max(pool, c.spent) : c.spent > 0 ? 1 : 0, lvl),
+        h('dl', { class: 'pa-eq' }, eq.filter(Boolean).map(([t, v, k]) => h('div', { class: k || '' }, h('dt', null, t), h('dd', null, v)))),
+        c.carry && !one ? h('ul', { class: 'pa-mini' }, c.months.map((m) => h('li', null, h('span', null, ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(m.month.slice(5)) - 1] + ' ' + m.month.slice(2, 4)), h('span', null, `${money(m.bf)} + ${money(m.planned)} − ${money(m.spent)}`), h('b', null, money(m.left))))) : null,
+        h('p', { class: 'pa-note' }, 'Met from ' + (c.sources.length ? c.sources.map((x) => `${x.name} ${money(x.paid)} of ${money(x.planned)}`).join(' · ') : 'no income') + (c.fromBalance > 0.5 ? `; ${money(c.fromBalance)} came from the balance carried forward` : '') + '.'));
+    };
+    root.append(section('Expense by expense', h('div', null, h('p', { class: 'note', style: { marginTop: 0 } }, 'How each expense was met: which income paid it, what it left over, and for expenses set to carry forward, the balance that builds up. Turn carrying on or off from the expense in Allocations.'), h('div', { class: 'pa-cats' }, sorted.map(card)))));
+  }
   if (r.unplanned.length) root.append(h('section', { class: 'pa-card bad' }, h('header', null, h('b', null, 'Not planned on any income'), h('small', null, 'Paid from your pocket')),
     h('ul', { class: 'pa-list' }, r.unplanned.map((u) => h('li', { class: 'pa-row bad' }, h('div', { class: 'pa-top' }, h('b', null, u.cat), h('span', { class: 'pa-st bad' }, money(u.spent))))))));
   if (!one) root.append(section('Month by month', h('div', { class: 'pi-tbl' }, h('div', { class: 'pi-th' }, ['Month', 'Income', 'Spent', 'From pocket'].map((t) => h('span', null, t))),
