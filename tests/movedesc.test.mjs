@@ -20,4 +20,9 @@ ok(d3.categories.some((x) => x.desc === 'Brand new' && x.category === 'Family su
 let threw = false; try { CAT.moveDescriptions(mk(), [{ desc: 'x', from: 'y' }], 'Nowhere'); } catch (x) { threw = true; } ok(threw, 'an unknown target is refused');
 const d4 = mk(), before = JSON.stringify(d4.ledger.map((x) => x.debit + '|' + x.credit)); CAT.moveDescriptions(d4, [{ desc: 'To Amma', from: 'Others' }], 'Family support');
 ok(before === JSON.stringify(d4.ledger.map((x) => x.debit + '|' + x.credit)), 'amounts never change');
+const d5 = mk(), r5 = CAT.moveEntries(d5, [1, 3], 'Family support');
+ok(r5.entries === 2 && d5.ledger[0].category === 'Family support' && d5.ledger[2].category === 'Family support' && d5.ledger[1].category === 'Others', 'single entries move by id');
+ok(d5.categories.find((r) => r.desc === 'To Amma').category === 'Others', 'moving single entries leaves the rule alone');
+ok(CAT.moveEntries(d5, [1], 'Family support').entries === 0, 'already there: nothing moves');
+let t2 = false; try { CAT.moveEntries(mk(), [1], 'Nowhere'); } catch (x) { t2 = true; } ok(t2, 'entries: unknown target refused');
 console.log(bad ? 'FAILED' : 'all passed'); process.exit(bad ? 1 : 0);

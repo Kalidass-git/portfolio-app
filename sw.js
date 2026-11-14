@@ -1,5 +1,5 @@
 // Offline shell: the app files are cached; data lives in the browser's storage, so the last synced numbers show without internet.
-const CACHE = 'family-wealth-v198';
+const CACHE = 'family-wealth-v199';
 const FILES = ['./', './index.html', './css/app.css', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/mark.svg', './icons/favicon-32.png', './icons/apple-touch-180.png',
   './js/main.js', './js/notify.js', './js/native.js', './js/store.js', './js/remote.js', './js/calc.js', './js/prices.js', './js/ui.js', './js/mobilebar.js', './js/charts.js', './js/ta.js', './js/mchart.js', './js/fullview.js', './js/savingsummary.js', './js/spendpace.js', './js/classes.js', './js/axis.js', './js/chartcolors.js', './js/views/terminal.js', './js/passive.js', './js/views/passive.js', './js/views/watchbtn.js', './js/views/fundchart.js', './js/views/linealert.js',
   './js/views/home.js', './js/views/cash.js', './js/views/fixed.js', './js/views/equity.js', './js/views/equity-orders.js',

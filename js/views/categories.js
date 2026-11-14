@@ -160,6 +160,114 @@ function moveDialog(startFrom = '') {
   draw();
 }
 
+// ---- one category on its own page: pick descriptions or single entries and move them to another category ----
+const pg = { cat: '', tab: 'desc', q: '', sort: 'amount', open: new Set(), pd: new Set(), pe: new Set(), to: '', newName: '', newKind: 'expense', rules: true, limit: 60 };
+const dkey = (g) => g.desc.toLowerCase();
+const catLink = (name) => `#/flow/category?name=${encodeURIComponent(name)}`;
+export const categoryLink = catLink;
+
+export function renderCategory(name) {
+  const { data } = S;
+  if (pg.cat !== name) Object.assign(pg, { cat: name, tab: 'desc', q: '', sort: 'amount', open: new Set(), pd: new Set(), pe: new Set(), to: '', newName: '', newKind: 'expense', rules: true, limit: 60 });
+  const root = h('div', { class: 'page cp' });
+  const list = CAT.categoryList(data), cat = list.find((c) => c.name.toLowerCase() === (name || '').toLowerCase());
+  const back = h('a', { class: 'cp-back', href: '#/flow/categories' }, '‹ All categories');
+  if (!cat) { root.append(back, h('p', { class: 'note' }, 'This category no longer exists.')); return root; }
+  const editable = canEdit(), lc = (x) => (x || '').toLowerCase();
+  const entries = data.ledger.filter((e) => lc(e.category) === lc(cat.name));
+  const amt = (e) => (e.debit || 0) + (e.credit || 0);
+  const groups = CAT.descriptionGroups(data).filter((g) => lc(g.category) === lc(cat.name));
+  const total = entries.reduce((a, e) => a + amt(e), 0);
+  const k = CAT.KINDS.find((x) => x.key === cat.kind);
+  root.append(back, h('div', { class: 'cp-head' },
+    h('div', null, h('h2', null, cat.name + (CAT.isProtected(cat.name) ? ' 🔒' : '')), h('p', { class: 'note', style: { margin: 0 } }, `${k ? k.one : cat.kind} · ${num(entries.length)} entries · ${num(groups.length)} ${groups.length === 1 ? "description" : "descriptions"} · ${money(total)}${cat.budget ? ' · budget ' + money(cat.budget) + '/month' : ''}`)),
+    editable ? h('div', { class: 'cp-actions' }, btn('Edit category', () => categoryForm(cat, cat.kind), 'small'), btn('Move from all categories', () => moveDialog(''), 'small')) : null));
+
+  const tabs = [['desc', 'Descriptions'], ['entries', 'Entries'], ['rules', 'Rules']];
+  root.append(h('nav', { class: 'seg', role: 'tablist', 'aria-label': 'Category views' }, tabs.map(([key, label]) => h('button', { type: 'button', role: 'tab', class: pg.tab === key ? 'on' : '', 'aria-selected': pg.tab === key ? 'true' : 'false', onclick: () => { pg.tab = key; pg.q = ''; pg.limit = 60; rerender(); } }, label))));
+
+  if (pg.tab === 'rules') {
+    const rules = data.categories.filter((r) => lc(r.category) === lc(cat.name)).sort((a, b) => a.desc.localeCompare(b.desc));
+    root.append(h('p', { class: 'note' }, 'Auto-fill rules that put new entries into this category. Tap one to change or remove it.'),
+      rules.length ? h('div', { class: 'cp-list' }, rules.map((r) => h('button', { type: 'button', class: 'cp-row', onclick: editable ? () => ruleForm(r) : null }, h('span', { class: 'mv-main' }, h('b', null, r.desc)), h('span', { class: 'mv-amt' }, r.type || '')))) : h('p', { class: 'note' }, 'No auto-fill rules point here.'));
+    return root;
+  }
+
+  const search = h('input', { type: 'search', placeholder: pg.tab === 'desc' ? 'Search descriptions' : 'Search entries', value: pg.q, 'aria-label': 'Search', oninput: (e) => { pg.q = e.target.value; pg.limit = 60; clearTimeout(window.__cpq); window.__cpq = setTimeout(() => { rerender(); const i = document.querySelector('.cp input[type=search]'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 250); } });
+  const sorts = pg.tab === 'desc' ? [['amount', 'Biggest total'], ['count', 'Most entries'], ['latest', 'Latest first'], ['name', 'A to Z']] : [['latest', 'Latest first'], ['amount', 'Biggest first']];
+  if (!sorts.some(([v]) => v === pg.sort)) pg.sort = sorts[0][0];
+  const sortSel = h('select', { 'aria-label': 'Sort', onchange: (e) => { pg.sort = e.target.value; rerender(); } }, sorts.map(([v, l]) => h('option', { value: v, selected: v === pg.sort }, l)));
+  root.append(h('div', { class: 'filters cp-filters' }, search, sortSel));
+
+  const t = pg.q.trim().toLowerCase();
+  const entryRow = (e, nested) => h('label', { class: 'mv-row' + (pg.pe.has(e.id) ? ' on' : '') + (nested ? ' cp-sub' : '') },
+    h('input', { type: 'checkbox', checked: pg.pe.has(e.id), disabled: !editable, 'aria-label': `${e.desc} ${dateStr(e.date)}`, onchange: (ev) => { ev.target.checked ? pg.pe.add(e.id) : pg.pe.delete(e.id); rerender(); } }),
+    h('span', { class: 'mv-main' }, nested ? h('b', null, dateStr(e.date)) : h('b', null, e.desc), nested ? null : h('small', null, dateStr(e.date))),
+    h('span', { class: 'mv-amt' }, (e.credit ? '+' : '') + money(amt(e))));
+  const byDate = (a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0);
+
+  let body;
+  if (pg.tab === 'desc') {
+    let rows = groups.filter((g) => !t || g.desc.toLowerCase().includes(t));
+    const tot = (g) => g.debit + g.credit;
+    rows.sort(pg.sort === 'count' ? (a, b) => b.count - a.count : pg.sort === 'latest' ? (a, b) => (a.last < b.last ? 1 : -1) : pg.sort === 'name' ? (a, b) => a.desc.localeCompare(b.desc) : (a, b) => tot(b) - tot(a));
+    const shown = rows.slice(0, pg.limit);
+    body = h('div', { class: 'cp-list' }, shown.length ? shown.map((g) => {
+      const key = dkey(g), isOpen = pg.open.has(key), on = pg.pd.has(key);
+      const kids = isOpen ? entries.filter((e) => lc(e.desc.trim()) === key).sort(byDate).map((e) => entryRow(e, true)) : [];
+      return h('div', { class: 'cp-group' },
+        h('div', { class: 'mv-row cp-desc' + (on ? ' on' : '') },
+          h('input', { type: 'checkbox', checked: on, disabled: !editable, 'aria-label': g.desc, onchange: (ev) => { ev.target.checked ? pg.pd.add(key) : pg.pd.delete(key); rerender(); } }),
+          h('button', { type: 'button', class: 'cp-exp', 'aria-expanded': isOpen ? 'true' : 'false', onclick: () => { isOpen ? pg.open.delete(key) : pg.open.add(key); rerender(); } },
+            h('span', { class: 'mv-main' }, h('b', null, g.desc), h('small', null, `${num(g.count)} ${g.count === 1 ? 'entry' : 'entries'} · last ${dateStr(g.last)}`))),
+          h('span', { class: 'mv-amt' }, money(tot(g)), h('i', { class: 'cp-chev' }, isOpen ? '▴' : '▾'))),
+        ...kids);
+    }) : [h('p', { class: 'note' }, 'No descriptions match.')]);
+    if (rows.length > pg.limit) body = h('div', null, body, btn(`Show more (${rows.length - pg.limit} left)`, () => { pg.limit += 100; rerender(); }, 'wide'));
+  } else {
+    const rows = entries.filter((e) => !t || (e.desc || '').toLowerCase().includes(t)).sort(pg.sort === 'amount' ? (a, b) => amt(b) - amt(a) : byDate);
+    const shown = rows.slice(0, pg.limit);
+    body = h('div', null, h('div', { class: 'cp-list' }, shown.length ? shown.map((e) => entryRow(e, false)) : [h('p', { class: 'note' }, 'No entries match.')]),
+      rows.length > pg.limit ? btn(`Show more (${rows.length - pg.limit} left)`, () => { pg.limit += 100; rerender(); }, 'wide') : null);
+  }
+  root.append(body);
+
+  if (!editable) return root;
+  // sticky move bar
+  const pickedDesc = groups.filter((g) => pg.pd.has(dkey(g)));
+  const descIds = new Set(entries.filter((e) => pg.pd.has(lc(e.desc.trim()))).map((e) => e.id));
+  const extra = entries.filter((e) => pg.pe.has(e.id) && !descIds.has(e.id));
+  const nEntries = descIds.size + extra.length, nAmt = entries.filter((e) => descIds.has(e.id)).reduce((a, e) => a + amt(e), 0) + extra.reduce((a, e) => a + amt(e), 0);
+  const others = list.filter((c) => c.name.toLowerCase() !== cat.name.toLowerCase());
+  const to = h('select', { 'aria-label': 'Move to', onchange: (e) => { pg.to = e.target.value; rerender(); } }, h('option', { value: '' }, 'Move to…'), h('option', { value: '__new', selected: pg.to === '__new' }, '＋ New category…'),
+    ...CAT.KINDS.map((kk) => h('optgroup', { label: kk.label }, others.filter((c) => c.kind === kk.key).map((c) => h('option', { value: c.name, selected: pg.to === c.name }, c.name)))));
+  const tk = pg.to === '__new' ? pg.newKind : (list.find((c) => c.name === pg.to) || {}).kind;
+  const warn = tk && tk !== cat.kind && nEntries ? h('p', { class: 'mv-warn' }, `These are counted as ${cat.kind} now. Moving them to a ${tk} category changes what they count as in your totals.`) : null;
+  const newBox = pg.to === '__new' ? h('div', { class: 'mv-new' },
+    h('input', { type: 'text', placeholder: 'New category name', 'aria-label': 'New category name', maxlength: '40', value: pg.newName, oninput: (e) => { pg.newName = e.target.value; } }),
+    h('select', { 'aria-label': 'New category type', onchange: (e) => { pg.newKind = e.target.value; rerender(); } }, CAT.KINDS.map((kk) => h('option', { value: kk.key, selected: kk.key === pg.newKind }, kk.label)))) : null;
+  const rulesBox = pickedDesc.length ? h('label', { class: 'check-inline cp-rule' }, h('input', { type: 'checkbox', checked: pg.rules, onchange: (e) => { pg.rules = e.target.checked; } }), ' Also update the auto-fill rule') : null;
+  const go = () => {
+    if (!nEntries) return toast('Tick something to move first.', 'warn');
+    if (!pg.to) return toast('Choose where to move it.', 'warn');
+    if (pg.to === '__new' && !pg.newName.trim()) return toast('Type a name for the new category.', 'warn');
+    let res, target, n = 0;
+    try {
+      mutate((d) => {
+        target = pg.to === '__new' ? CAT.add(d, { name: pg.newName.trim(), kind: pg.newKind }) : pg.to;
+        if (pickedDesc.length) { res = CAT.moveDescriptions(d, pickedDesc.map((g) => ({ desc: g.desc, from: cat.name })), target, { updateRules: pg.rules }); n += res.entries; }
+        if (extra.length) n += CAT.moveEntries(d, extra.map((e) => e.id), target).entries;
+      });
+    } catch (e) { return fail(e); }
+    Object.assign(pg, { pd: new Set(), pe: new Set(), to: '', newName: '' });
+    toast(`Moved ${num(n)} ${n === 1 ? 'entry' : 'entries'} to ${target}.`);
+  };
+  root.append(h('div', { class: 'cp-bar' + (nEntries ? ' has' : ''), role: 'region', 'aria-label': 'Move picked items' },
+    h('div', { class: 'cp-bar-top' }, h('b', null, nEntries ? `${num(nEntries)} picked · ${money(nAmt)}` : 'Nothing picked'), nEntries ? h('button', { type: 'button', class: 'chip-btn', onclick: () => { pg.pd = new Set(); pg.pe = new Set(); rerender(); } }, 'Clear') : null),
+    h('div', { class: 'cp-bar-row' }, to, btn('Move', go, 'primary')), newBox, rulesBox, warn));
+  return root;
+}
+
 export function render() {
   const { data } = S;
   const root = h('div', { class: 'page' });
@@ -169,7 +277,7 @@ export function render() {
 
   root.append(budgetCard());
   if (editable) root.append(section('Move descriptions', h('div', null, h('p', { class: 'note', style: { marginTop: 0 } }, 'Tidy up quickly: pick a category, tick the descriptions that belong in it (for example “To Amma” into a new “Family support”), and move them in one go. Past entries and the auto-fill rule move together.'), btn('Move descriptions between categories', () => moveDialog(), 'wide'))));
-  root.append(h('p', { class: 'note', style: { marginTop: 0 } }, 'Categories decide where each transaction is counted. Tap a row to rename it, change what it counts as, set a monthly and/or yearly budget, or merge it into another category.'));
+  root.append(h('p', { class: 'note', style: { marginTop: 0 } }, 'Categories decide where each transaction is counted. Tap a category to open its page: see its descriptions and entries, move them to another category, or edit the category itself (rename, budgets, merge).'));
 
   for (const k of CAT.KINDS) {
     const rows = list.filter((c) => c.kind === k.key).map((c) => ({ ...c, u: usage.get(c.name.toLowerCase()) || { count: 0, recent: 0, last: '' } })).sort((a, b) => b.u.recent - a.u.recent || a.name.localeCompare(b.name));
@@ -183,7 +291,7 @@ export function render() {
         ...(showBudget ? [{ label: 'Budget / month', cls: 'r', get: (c) => (c.budget ? money(c.budget) : '–'), total: () => (budgetTotal ? money(budgetTotal) : '') }, { label: 'Budget / year', cls: 'r', get: (c) => (c.yearlyBudget ? money(c.yearlyBudget) : '–'), total: () => (yearTotal ? money(yearTotal) : '') }] : []),
       ], rows, { footer: showBudget && (budgetTotal || yearTotal) ? { label: 'Total budget' } : null, m: { key: 'cat-' + k.key, head: 'Category', title: (c) => c.name + (CAT.isProtected(c.name) ? ' 🔒' : ''), sub: (c) => `${num(c.u.count)} ${c.u.count === 1 ? 'entry' : 'entries'}`,
         views: showBudget ? [['Last 12 months', 'Entries'], ['Budget / month', 'Budget / year']] : [['Last 12 months', 'Entries']],
-        sort: [{ value: 'none', label: 'Most used first', kind: 'none' }, { value: 'recent', label: 'Spent in last 12 months', kind: 'num', get: (c) => c.u.recent }, { value: 'count', label: 'Number of entries', kind: 'num', get: (c) => c.u.count }, ...(showBudget ? [{ value: 'budget', label: 'Monthly budget', kind: 'num', get: (c) => c.budget || 0 }, { value: 'ybudget', label: 'Yearly budget', kind: 'num', get: (c) => c.yearlyBudget || 0 }] : []), { value: 'name', label: 'Category name', kind: 'text', get: (c) => String(c.name || '').toLowerCase() }], sortDefault: { value: 'none', dir: 'asc' } }, onRow: editable ? (c) => categoryForm(list.find((x) => x.name === c.name)) : null, empty: 'No categories of this kind yet.' }),
+        sort: [{ value: 'none', label: 'Most used first', kind: 'none' }, { value: 'recent', label: 'Spent in last 12 months', kind: 'num', get: (c) => c.u.recent }, { value: 'count', label: 'Number of entries', kind: 'num', get: (c) => c.u.count }, ...(showBudget ? [{ value: 'budget', label: 'Monthly budget', kind: 'num', get: (c) => c.budget || 0 }, { value: 'ybudget', label: 'Yearly budget', kind: 'num', get: (c) => c.yearlyBudget || 0 }] : []), { value: 'name', label: 'Category name', kind: 'text', get: (c) => String(c.name || '').toLowerCase() }], sortDefault: { value: 'none', dir: 'asc' } }, onRow: (c) => { location.hash = catLink(c.name); }, empty: 'No categories of this kind yet.' }),
       editable ? [btn('Add category', () => categoryForm(null, k.key), 'primary')] : null));
   }
 
