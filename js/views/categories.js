@@ -2,7 +2,7 @@
 import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
 import * as CAT from '../categories.js';
-import { h, money, dateStr, section, table, btn, formDialog, canEdit, toast, empty, num, monthLabel, rowList } from '../ui.js';
+import { h, money, dateStr, section, table, btn, formDialog, canEdit, toast, empty, num, monthLabel, rowList, dialog } from '../ui.js';
 import * as BUD from '../budget.js';
 import { openLedger } from './cash.js';
 
@@ -98,6 +98,68 @@ function budgetCard() {
     canEdit() ? [btn('Change budget', budgetForm)] : null);
 }
 
+/**
+ * Move descriptions from one category to another: pick the target, pick the descriptions (all categories, or from one), then move.
+ * The past entries with those descriptions and their auto-fill rules go together, so future entries land in the new category as well.
+ */
+function moveDialog(startFrom = '') {
+  const { data } = S, list = CAT.categoryList(data), kindOf = new Map(list.map((c) => [c.name.toLowerCase(), c.kind]));
+  const groups = CAT.descriptionGroups(data).sort((a, b) => (b.debit + b.credit) - (a.debit + a.credit));
+  const picked = new Set(); let q = '', limit = 120;
+  const keyOf = (g) => g.desc.toLowerCase() + '\u0001' + g.category.toLowerCase();
+  const optGroups = (skipFrom) => CAT.KINDS.map((k) => h('optgroup', { label: k.label }, list.filter((c) => c.kind === k.key).map((c) => h('option', { value: c.name }, c.name))));
+  const to = h('select', { 'aria-label': 'Move to' }, h('option', { value: '' }, 'Choose a category…'), h('option', { value: '__new' }, '＋ New category…'), ...optGroups());
+  const newName = h('input', { type: 'text', placeholder: 'New category name', 'aria-label': 'New category name', maxlength: '40' });
+  const newKind = h('select', { 'aria-label': 'New category type' }, CAT.KINDS.map((k) => h('option', { value: k.key, selected: k.key === 'expense' }, k.label)));
+  const newBox = h('div', { class: 'mv-new', hidden: true }, newName, newKind);
+  const from = h('select', { 'aria-label': 'Show descriptions from' }, h('option', { value: '' }, 'All categories'), ...optGroups());
+  if (startFrom) from.value = startFrom;
+  const search = h('input', { type: 'search', placeholder: 'Search descriptions', 'aria-label': 'Search descriptions' });
+  const listEl = h('div', { class: 'mv-list', role: 'group', 'aria-label': 'Descriptions' }), sum = h('p', { class: 'mv-sum', 'aria-live': 'polite' }), warn = h('p', { class: 'mv-warn', hidden: true });
+  const rules = h('input', { type: 'checkbox', checked: true, 'aria-label': 'Also change the auto-fill rule' });
+  const visible = () => {
+    const tgt = to.value === '__new' ? '' : to.value.toLowerCase(), f = from.value.toLowerCase(), t = q.trim().toLowerCase();
+    return groups.filter((g) => g.category.toLowerCase() !== tgt && (!f || g.category.toLowerCase() === f) && (!t || g.desc.toLowerCase().includes(t)));
+  };
+  const draw = () => {
+    const vis = visible(), shown = vis.slice(0, limit);
+    listEl.replaceChildren(...(shown.length ? shown.map((g) => { const k = keyOf(g);
+      return h('label', { class: 'mv-row' + (picked.has(k) ? ' on' : '') },
+        h('input', { type: 'checkbox', checked: picked.has(k), 'aria-label': g.desc, onchange: (e) => { e.target.checked ? picked.add(k) : picked.delete(k); e.target.closest('.mv-row').classList.toggle('on', e.target.checked); update(); } }),
+        h('span', { class: 'mv-main' }, h('b', null, g.desc), h('small', null, `in ${g.category} · ${num(g.count)} ${g.count === 1 ? 'entry' : 'entries'} · last ${dateStr(g.last)}`)),
+        h('span', { class: 'mv-amt' }, money(g.debit + g.credit))); })
+      : [h('p', { class: 'note' }, 'No descriptions match.')]), ...(vis.length > limit ? [btn(`Show more (${vis.length - limit} left)`, () => { limit += 150; draw(); }, 'wide')] : []));
+    update();
+  };
+  const update = () => {
+    const sel = groups.filter((g) => picked.has(keyOf(g))), vis = visible();
+    sum.textContent = sel.length ? `${sel.length} ${sel.length === 1 ? 'description' : 'descriptions'} selected · ${num(sel.reduce((a, g) => a + g.count, 0))} entries · ${money(sel.reduce((a, g) => a + g.debit + g.credit, 0))}` : 'Nothing picked yet.';
+    const tk = to.value && to.value !== '__new' ? kindOf.get(to.value.toLowerCase()) : to.value === '__new' ? newKind.value : null;
+    const diff = tk ? [...new Set(sel.map((g) => kindOf.get(g.category.toLowerCase())).filter((x) => x && x !== tk))] : [];
+    warn.hidden = !diff.length; warn.textContent = diff.length ? `Some of these are now counted as ${diff.join(' and ')}. Moving them to a ${tk} category changes what they count as in your totals.` : '';
+    selAll.textContent = vis.length && vis.every((g) => picked.has(keyOf(g))) ? 'Clear shown' : `Pick all shown (${vis.length})`;
+  };
+  const selAll = h('button', { type: 'button', class: 'chip-btn', onclick: () => { const vis = visible(), all = vis.length && vis.every((g) => picked.has(keyOf(g))); vis.forEach((g) => (all ? picked.delete(keyOf(g)) : picked.add(keyOf(g)))); draw(); } }, '');
+  to.onchange = () => { newBox.hidden = to.value !== '__new'; draw(); }; newKind.onchange = update;
+  from.onchange = () => { limit = 120; draw(); }; search.oninput = (e) => { q = e.target.value; limit = 120; draw(); };
+  const body = h('div', { class: 'form mv' },
+    h('p', { class: 'note', style: { marginTop: 0 } }, 'Pick the category to move into, then tick the descriptions to move. Their past entries move, and the auto-fill rule is updated so new entries with the same description land in the new category. Amounts do not change.'),
+    h('label', { class: 'field' }, h('span', null, 'Move to'), to), newBox,
+    h('label', { class: 'field' }, h('span', null, 'Show descriptions from'), from), search,
+    h('div', { class: 'chips-row' }, selAll), listEl, sum, warn,
+    h('label', { class: 'check-inline', style: { display: 'flex', gap: '8px', alignItems: 'center' } }, rules, ' Also change the auto-fill rule for these descriptions'));
+  dialog('Move descriptions', body, [{ label: 'Cancel', onclick: (c) => c() }, { label: 'Move', class: 'primary', onclick: (c) => {
+    const sel = groups.filter((g) => picked.has(keyOf(g)));
+    if (!to.value) return toast('Choose the category to move into.', 'warn');
+    if (to.value === '__new' && !newName.value.trim()) return toast('Type a name for the new category.', 'warn');
+    if (!sel.length) return toast('Tick at least one description.', 'warn');
+    let res, target;
+    try { mutate((d) => { target = to.value === '__new' ? CAT.add(d, { name: newName.value.trim(), kind: newKind.value }) : to.value; res = CAT.moveDescriptions(d, sel.map((g) => ({ desc: g.desc, from: g.category })), target, { updateRules: rules.checked }); }); } catch (e) { return toast(e.message, 'warn'); }
+    c(); toast(`Moved ${res.descriptions} ${res.descriptions === 1 ? 'description' : 'descriptions'} (${num(res.entries)} entries) to ${target}.`);
+  } }]);
+  draw();
+}
+
 export function render() {
   const { data } = S;
   const root = h('div', { class: 'page' });
@@ -106,6 +168,7 @@ export function render() {
   const editable = canEdit();
 
   root.append(budgetCard());
+  if (editable) root.append(section('Move descriptions', h('div', null, h('p', { class: 'note', style: { marginTop: 0 } }, 'Tidy up quickly: pick a category, tick the descriptions that belong in it (for example “To Amma” into a new “Family support”), and move them in one go. Past entries and the auto-fill rule move together.'), btn('Move descriptions between categories', () => moveDialog(), 'wide'))));
   root.append(h('p', { class: 'note', style: { marginTop: 0 } }, 'Categories decide where each transaction is counted. Tap a row to rename it, change what it counts as, set a monthly and/or yearly budget, or merge it into another category.'));
 
   for (const k of CAT.KINDS) {
