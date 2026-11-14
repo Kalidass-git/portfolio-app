@@ -2061,3 +2061,13 @@ body.pi-dragging, body.pi-dragging * { cursor: grabbing !important; user-select:
 .bd-total th, .bd-total td { border-top: 2px solid var(--line); }
 .bd-setup { display: grid; gap: 6px; } .bd-sh, .bd-sr { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-items: center; }
 .bd-sh { font-size: .72rem; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; } .bd-sr input { width: 100%; min-width: 0; text-align: right; }
+
+/* 9.0.0 Categories: move descriptions between categories */
+.mv .field { display: flex; flex-direction: column; gap: 4px; } .mv .field > span { font-size: .8rem; color: var(--muted); font-weight: 600; }
+.mv-new { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 8px; }
+.mv-list { max-height: 42vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; padding: 4px; display: flex; flex-direction: column; gap: 2px; }
+.mv-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 8px; border-radius: 10px; cursor: pointer; }
+.mv-row.on { background: color-mix(in srgb, var(--brand) 12%, var(--surface)); } .mv-row input { width: 18px; height: 18px; }
+.mv-main { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; } .mv-main b { overflow-wrap: anywhere; } .mv-main small { color: var(--muted); }
+.mv-amt { font-variant-numeric: tabular-nums; font-weight: 600; font-size: .9rem; }
+.mv-sum { margin: 2px 0; font-weight: 600; } .mv-warn { margin: 0; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, #d98a00 14%, var(--surface)); color: var(--ink); font-size: .85rem; }

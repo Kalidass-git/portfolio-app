@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 9.0.0 – Move descriptions between categories
+
+- Expenses → Categories has a new card, **Move descriptions**. Pick the category to move into (or create a new one on the spot), optionally narrow the list to one category, search, tick the descriptions, and press Move.
+- Moves the past bank entries that have that description (in the category they are in now) and, unless you untick it, updates the auto-fill rule for the description (or creates one), so future entries land in the new category. Amounts never change. A warning shows if you move between types (for example expense to income).
+- Only the owner sees it. No new stored fields: it uses the existing entry category and auto-fill rules. Engine: `descriptionGroups` and `moveDescriptions` in `js/categories.js`; test `tests/movedesc.test.mjs`.
+
 ## Release 8.99.0 – Budget report (Income & expenses → Budget report)
 
 New tab, read-only apart from the budget setup sheet. No new stored fields.

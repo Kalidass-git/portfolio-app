@@ -144,6 +144,37 @@ export function setRule(d, desc, category) {
 }
 export function removeRule(d, desc) { d.categories = d.categories.filter((r) => lc(r.desc) !== lc(desc)); }
 
+/** Every description used in the bank entries, one row per description and the category it is in now: { desc, category, count, debit, credit, last }. Lets the owner see what sits inside a category. */
+export function descriptionGroups(data) {
+  const m = new Map();
+  for (const e of data.ledger) {
+    const desc = (e.desc || '').trim(); if (!desc) continue;
+    const key = lc(desc) + '\u0001' + lc(e.category);
+    const g = m.get(key) || { desc, category: e.category, count: 0, debit: 0, credit: 0, last: '' };
+    g.count++; g.debit += e.debit || 0; g.credit += e.credit || 0; if (e.date > g.last) g.last = e.date;
+    m.set(key, g);
+  }
+  return [...m.values()];
+}
+
+/**
+ * Move whole descriptions into another category. picks: [{ desc, from }]; the bank entries with that description that are in `from` now get the new category,
+ * and (unless turned off) the auto-fill rule for the description points at it too, so future entries land there. Returns { entries, descriptions }.
+ */
+export function moveDescriptions(d, picks, to, { updateRules = true } = {}) {
+  const list = ensure(d), target = list.find((c) => lc(c.name) === lc(to));
+  if (!target) throw new Error('Pick a category to move to.');
+  const want = new Map(); for (const p of picks) want.set(lc(p.desc) + '\u0001' + lc(p.from), p);
+  let entries = 0; const moved = new Set();
+  for (const e of d.ledger) {
+    const k = lc(e.desc) + '\u0001' + lc(e.category);
+    if (!want.has(k) || lc(e.category) === lc(target.name)) continue;
+    e.category = target.name; entries++; moved.add(lc(e.desc));
+  }
+  if (updateRules) for (const p of picks) setRule(d, p.desc, target.name);
+  return { entries, descriptions: moved.size };
+}
+
 /** Budget lines for a month: spending categories that have a monthly budget. */
 export function budgetLines(data, spentByCategory) {
   const spent = new Map(spentByCategory.map((x) => [lc(x.category), x.amount]));
