@@ -2031,3 +2031,33 @@ body.pi-dragging, body.pi-dragging * { cursor: grabbing !important; user-select:
 .pa-eq .tot { border-top: 1px dashed var(--line); padding-top: 4px; font-weight: 700; } .pa-eq .tot dt { color: var(--ink); }
 .pa-mini { list-style: none; margin: 0; padding: 6px 0 0; border-top: 1px solid var(--line); display: grid; gap: 4px; font-size: .82rem; }
 .pa-mini li { display: grid; grid-template-columns: 52px 1fr auto; gap: 8px; align-items: baseline; white-space: nowrap; } .pa-mini li span:nth-child(2) { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* 8.99.0 Budget report */
+.bd-ctl { align-items: center; }
+.bd-line { margin: 12px 2px 0; font-weight: 600; } .bd-line.bad { color: var(--neg); } .bd-line.ok { color: var(--pos); }
+.bd-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; }
+.bd-row { border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; background: var(--surface); }
+.bd-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.bd-st { font-size: .76rem; font-weight: 700; padding: 2px 9px; border-radius: 99px; } .bd-st.ok { background: color-mix(in srgb, var(--pos) 14%, var(--surface)); color: var(--pos); }
+.bd-st.mid { background: color-mix(in srgb, #d98a00 16%, var(--surface)); color: #a66a00; } .bd-st.bad { background: color-mix(in srgb, var(--neg) 14%, var(--surface)); color: var(--neg); }
+.bd-bar { position: relative; height: 10px; border-radius: 99px; background: var(--surface-2); overflow: visible; }
+.bd-bar i { display: block; height: 100%; border-radius: 99px; background: var(--hb); }
+.bd-bar u { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); opacity: .65; text-decoration: none; }
+.bd-nums { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: .88rem; font-variant-numeric: tabular-nums; } .bd-nums .neg { color: var(--neg); font-weight: 600; } .bd-nums .pos { color: var(--pos); }
+.bd-note { margin: 0; font-size: .82rem; color: var(--muted); }
+.bd-plain > div { display: flex; justify-content: space-between; padding: 7px 2px; border-bottom: 1px solid var(--line); }
+.bd-legend { margin-top: 12px; }
+.bd-cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.bd-dow { text-align: center; font-size: .72rem; color: var(--muted); font-weight: 700; }
+.bd-day { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 48px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); font-size: .8rem; padding: 3px 0; }
+.bd-day b { font-size: .8rem; } .bd-day small { font-size: .64rem; font-weight: 700; min-height: .9em; }
+.bd-day.hz { background: var(--hb); border-color: var(--hd); color: var(--hf); } .bd-day.empty { border: 0; background: transparent; } .bd-day.future { opacity: .45; border-style: dashed; }
+.bd-hscroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -4px; padding: 0 4px; }
+.bd-heat { border-collapse: separate; border-spacing: 3px; width: 100%; min-width: 640px; font-size: .78rem; }
+.bd-heat th { font-weight: 700; color: var(--muted); font-size: .72rem; padding: 2px 0; text-align: center; }
+.bd-heat th.bd-h1 { text-align: left; position: sticky; left: 0; background: var(--surface); z-index: 1; min-width: 96px; max-width: 120px; color: var(--ink); font-size: .8rem; padding-right: 6px; } .bd-h1 small { color: var(--muted); font-weight: 500; }
+.bd-hc { text-align: center; border-radius: 7px; min-width: 40px; height: 34px; background: var(--surface-2); font-weight: 700; }
+.bd-hc.hz { background: var(--hb); color: var(--hf); } .bd-hc.empty { border: 1px dashed var(--line); background: transparent; } .bd-hc.cur { outline: 2px solid var(--ink); outline-offset: -2px; }
+.bd-total th, .bd-total td { border-top: 2px solid var(--line); }
+.bd-setup { display: grid; gap: 6px; } .bd-sh, .bd-sr { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-items: center; }
+.bd-sh { font-size: .72rem; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; } .bd-sr input { width: 100%; min-width: 0; text-align: right; }

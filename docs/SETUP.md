@@ -150,6 +150,15 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.99.0 – Budget report (Income & expenses → Budget report)
+
+New tab, read-only apart from the budget setup sheet. No new stored fields.
+
+- Uses the budgets already on the expense categories (`categoryList[].budget` monthly, `yearlyBudget` yearly, either or both), the same ones Categories and the passive income plan use. **Set budgets** opens one list to set monthly and yearly budgets for all expenses; it saves through the existing category update. Month budget = monthly + yearly ÷ 12; year budget = monthly × 12 + yearly.
+- **Month** view: budget, spent, left, even pace today and a projected month end for the current month; each expense with a progress bar and a pace marker; running total against an even pace; a day-by-day calendar heat map (same six colour bands as Month in detail); spending with no budget.
+- **Year** view: heat map of every budgeted expense by month (an expense with only a yearly budget is judged by money spent so far against the part of the year gone); spent against budget by month; the year so far against an even pace; each expense for the whole year with where it is heading; best, costliest and average month.
+- Only expense categories use up a budget (investments, transfers and income never do). Engine in `js/budgetreport.js`, screen in `js/views/budgetreport.js`, test `tests/budgetreport.test.mjs`.
+
 ## Release 8.98.0 – Each spending line on its own, one choice of what counts
 
 - Clothes, Entertainment, Vacation and Gifts are separate lines everywhere (Home and Month in detail), no longer one grouped line. Totals are unchanged while all of them count.
