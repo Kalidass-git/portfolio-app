@@ -150,6 +150,10 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 9.3.1 – Interest received on closed bonds
+
+- **Fixed income → Closed → Bonds**: the list now shows **Interest received** (what the bond actually paid until it closed, after TDS) right after **Invested**. On phones it is the first view: Invested · Interest received. Presentation only; no data changes.
+
 ## Release 9.3.0 – Ownership report
 
 - New **Insights → Ownership** tab: a chart of who owns what across everything in the Report (bonds, lending, FDs, EPF/PPF/LIC, chits, stocks, funds, gold, banks, others), with each person's share.

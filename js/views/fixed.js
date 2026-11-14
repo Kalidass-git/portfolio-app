@@ -424,11 +424,12 @@ function closedView(root) {
       { label: 'Name', host: true, get: (x) => x.name }, { label: 'Holder', mob: 'under', get: (x) => x.holder || x.account || '' },
       { label: 'Started', mob: 'hide', get: (x) => dateStr(x.depositDate) }, { label: 'Closed', mob: 'under', mlabel: 'closed ', get: (x) => dateStr(x.closed.date) },
       { label: 'Invested', cls: 'r', get: (x) => money(x.principal), total: (rs) => money(rs.reduce((a, x) => a + x.principal, 0)) },
+      ...(key === 'bonds' ? [{ label: 'Interest received', mob: 'under', mlabel: 'interest ', cls: 'r', get: (x) => money(C.interestReceived(x, all.asOf)), total: (rs) => money(rs.reduce((a, x) => a + C.interestReceived(x, all.asOf), 0)) }] : []),
       { label: 'Came back', cls: 'r', get: (x) => money(x.closed.amount), total: (rs) => money(rs.reduce((a, x) => a + x.closed.amount, 0)) },
       { label: 'XIRR', mob: 'under', mlabel: 'XIRR ', cls: 'r', render: (x) => (x.xirr == null ? '–' : h('span', { class: posNeg(x.xirr) }, pct(x.xirr, 1))) },
       { label: 'Money went to', mob: 'hide', get: (x) => (x.closed.acct ? acct.get(x.closed.acct) || '' : 'not added') },
     ], list, { mobile: { key: 'closed', head: 'Name', first: (x) => ({ title: x.name, sub: [x.holder || x.account, 'closed ' + dateStr(x.closed.date)].filter(Boolean).join(' · ') }),
-      views: [{ label: 'Invested · Came back', main: (x) => money(x.principal), sub: (x) => h('span', { class: posNeg(x.closed.amount - x.principal) }, money(x.closed.amount)) }, { label: 'XIRR · Started', main: (x) => (x.xirr == null ? '–' : h('span', { class: posNeg(x.xirr) }, pct(x.xirr, 1))), sub: (x) => 'started ' + dateStr(x.depositDate) }] }, footer: { label: 'Total', phone: false }, onRow: (x) => openClosedItem(key, x), empty: 'Nothing closed yet. Open one and press “Close it”.' })));
+      views: [...(key === 'bonds' ? [{ label: 'Invested · Interest received', main: (x) => money(x.principal), sub: (x) => h('span', { class: 'pos' }, money(C.interestReceived(x, all.asOf))) }] : []), { label: 'Invested · Came back', main: (x) => money(x.principal), sub: (x) => h('span', { class: posNeg(x.closed.amount - x.principal) }, money(x.closed.amount)) }, { label: 'XIRR · Started', main: (x) => (x.xirr == null ? '–' : h('span', { class: posNeg(x.xirr) }, pct(x.xirr, 1))), sub: (x) => 'started ' + dateStr(x.depositDate) }] }, footer: { label: 'Total', phone: false }, onRow: (x) => openClosedItem(key, x), empty: 'Nothing closed yet. Open one and press “Close it”.' })));
   }
   const rcs = all.closed.receivables;
   root.append(section(`Money to receive, closed (${rcs.length})`, table([
