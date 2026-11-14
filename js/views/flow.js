@@ -240,17 +240,21 @@ function detail(q) {
   const view = ['cat', 'desc', 'all'].includes(viewQ) && (viewQ !== 'cat' || cat === '*') ? viewQ : (cat === '*' ? 'cat' : 'desc');
   const descFilter = q.get('desc') || '';
   const months = C.ledgerMonths(data);
-  const range = C.periodRange(period, all.asOf);
-  const s = C.rangeSummary(data, range.from, range.to, filter);
+  // a link from Month in detail can pass its own dates and the list of categories that count as spending
+  const cf = q.get('from'), ct = q.get('to'), custom = /^\d{4}-\d\d-\d\d$/.test(cf || '') && /^\d{4}-\d\d-\d\d$/.test(ct || '');
+  const range = custom ? { from: cf, to: ct, label: dateStr(cf) + ' to ' + dateStr(ct), months: null } : C.periodRange(period, all.asOf);
+  const catList = (q.get('cats') || '').split('|').map((x) => x.trim().toLowerCase()).filter(Boolean), listLabel = q.get('label') || '';
+  const s = C.rangeSummary(data, range.from, range.to, custom || catList.length ? { mode: 'all', cats: [] } : filter);
   let rows = dir === 'credit' ? s.incomeRows : s.expenseRows.concat(s.investRows);
   if (cat !== '*') rows = rows.filter((e) => (e.category || '').toLowerCase() === cat.toLowerCase());
+  if (catList.length) rows = rows.filter((e) => catList.includes((e.category || '').toLowerCase()));
   if (descFilter) rows = rows.filter((e) => (e.desc || '').trim().toLowerCase() === descFilter.toLowerCase());
   const total = rows.reduce((a, e) => a + (e[dir] || 0), 0);
-  const name = periodName(period, range);
-  const label = cat === '*' ? (dir === 'credit' ? 'All income' : 'All expenses & investments') : cat;
-  const base = `#/flow/detail?cat=${encodeURIComponent(cat)}&dir=${dir}`;
+  const name = custom ? range.label : periodName(period, range);
+  const label = cat === '*' ? (listLabel || (dir === 'credit' ? 'All income' : 'All expenses & investments')) : cat;
+  const base = `#/flow/detail?cat=${encodeURIComponent(cat)}&dir=${dir}${custom ? '&from=' + cf + '&to=' + ct : ''}${catList.length ? '&cats=' + encodeURIComponent(catList.join('|')) : ''}${listLabel ? '&label=' + encodeURIComponent(listLabel) : ''}`;
   const root = h('div', { class: 'page' });
-  root.append(h('div', { class: 'pagebar' }, h('a', { class: 'back', href: '#/flow' }, '← Income & expenses'), controls(months, data)));
+  root.append(h('div', { class: 'pagebar' }, h('a', { class: 'back', href: custom ? '#/monthdetail' : '#/flow' }, custom ? '← Month in detail' : '← Income & expenses'), custom ? null : controls(months, data)));
   root.append(h('div', { class: 'card dir-' + (dir === 'credit' ? 'in' : 'out') },
     h('h2', { style: { margin: 0 } }, label + (descFilter ? ' · ' + descFilter : '')),
     h('p', { class: 'note', style: { marginTop: 4 } }, `${name} · ${rows.length} entr${rows.length === 1 ? 'y' : 'ies'}`)));
@@ -264,7 +268,7 @@ function detail(q) {
     const m = new Map();
     for (const e of rows) m.set(e.category || 'Other', (m.get(e.category || 'Other') || 0) + (e[dir] || 0));
     const cats = [...m.entries()].map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount);
-    root.append(h('div', { class: 'card' }, cats.length ? hbars(cats.map((x) => ({ label: x.category, value: x.amount })), { fmt: money, colorIndex: dir === 'credit' ? 2 : 1, onClick: (x) => { location.hash = detailLink(x.label, dir); } }) : h('p', { class: 'empty' }, 'No entries for this period and filter.'),
+    root.append(h('div', { class: 'card' }, cats.length ? hbars(cats.map((x) => ({ label: x.category, value: x.amount })), { fmt: money, colorIndex: dir === 'credit' ? 2 : 1, onClick: (x) => { location.hash = detailLink(x.label, dir) + (custom ? `&from=${cf}&to=${ct}` : ''); } }) : h('p', { class: 'empty' }, 'No entries for this period and filter.'),
       h('p', { class: 'note' }, 'Tap a category to open it.')));
   } else if (view === 'desc') {
     const list = C.byDescription(rows, dir);

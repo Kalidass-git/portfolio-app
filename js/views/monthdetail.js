@@ -7,7 +7,7 @@ import { hbars, barChart, donut, legend, usualKey } from '../charts.js';
 import { usualPace, lineTone } from '../spendpace.js';
 import { BANDS, HEAT_MAX, bandOf, monthInsight, periodMonths, monthRow, periodTotal, mixOf } from '../monthdetail.js';
 
-let period = 'this', ledgerOpen = false;
+let period = 'this', ledgerOpen = false, whereBy = 'cat';
 const rerender = () => window.dispatchEvent(new Event('rerender'));
 const PERIODS = [['this', 'This month'], ['prev', 'Previous month'], ['ty', 'This year'], ['py', 'Previous year']];
 const sgn = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + money(Math.abs(n));
@@ -125,11 +125,24 @@ export function render() {
   // for a single month: what each line usually is (by this day for the current month, over the whole month for a finished one), from the earlier months
   const dimOf = (m) => new Date(Date.UTC(Number(m.slice(0, 4)), Number(m.slice(5, 7)), 0)).getUTCDate();
   const ref = single ? usualPace(data, r0.mc, r0.month, r0.month === cur ? new Date(all.asOf).getUTCDate() : dimOf(r0.month)) : null, usualBy = new Map(ref ? ref.lines.map((l) => [l.name, l]) : []);
-  root.append(h('div', { class: 'grid2' },
-    section('Where it went', counted.length ? h('div', null, hbars(counted.map((x) => { const u = usualBy.get(x.name), tone = u ? lineTone(x.amount, u.usualNow, u.kind) : null; return { label: x.name, value: x.amount, mark: u && u.usualNow > 0 ? u.usualNow : 0, tone, note: u ? (u.usualNow > 0 ? `${x.name}: ${money(x.amount)} against a usual ${money(u.usualNow)}` : `${x.name}: ${money(x.amount)}, not usual in most months`) : null }; }), { fmt: money, colorIndex: 1 }),
-      usualBy.size ? usualKey(cur === r0.month ? 'usual by now' : 'usual') : null,
-      left.length ? h('p', { class: 'note' }, `Left out: ${left.map((x) => `${x.name} ${money(x.amount)}`).join(', ')}. Change this under “What counts as spending”.`) : null) : h('p', { class: 'empty' }, 'Nothing counted as spending.')),
-    section('Share of spending', counted.length ? h('div', null, donut(counted.map((x) => ({ label: x.name, value: x.amount })), { fmt: money, center: compact(tot.spent), sub: 'spent', size: 190 }), legend(counted.map((x) => ({ label: x.name, value: x.amount })), { fmt: money })) : h('p', { class: 'empty' }, 'Nothing to show.'))));
+  // tapping a bar opens the entries behind it: one category, or one description across everything that counts
+  const dFrom = months[0] + '-01', dTo = (() => { const m = months[months.length - 1]; return m + '-' + String(new Date(Date.UTC(Number(m.slice(0, 4)), Number(m.slice(5, 7)), 0)).getUTCDate()).padStart(2, '0'); })(), range = `&from=${dFrom}&to=${dTo}`;
+  const spell = (key) => { const e = data.ledger.find((x) => (x.category || '').trim().toLowerCase() === key); return e ? e.category.trim() : key; };
+  const linkCat = (x) => { const l = counted.find((c) => c.name === x.label); location.hash = `#/flow/detail?cat=${encodeURIComponent(spell((l && l.cats && l.cats[0]) || x.label.toLowerCase()))}&dir=debit${range}`; };
+  const monthSet = new Set(months), keySet = new Set(counted.flatMap((x) => x.cats || [x.name.toLowerCase()]));
+  const entries = data.ledger.filter((e) => e.debit > 0 && monthSet.has((e.date || '').slice(0, 7)) && keySet.has((e.category || '').trim().toLowerCase()));
+  const descs = C.byDescription(entries, 'debit');
+  const descTop = descs.slice(0, 15), descRest = descs.slice(15).reduce((a, r) => a + r.amount, 0);
+  const linkDesc = (d) => { location.hash = `#/flow/detail?cat=*&dir=debit&view=all&desc=${encodeURIComponent(d)}&cats=${encodeURIComponent([...keySet].join('|'))}&label=${encodeURIComponent('Spending that counts')}${range}`; };
+  const toggle = h('nav', { class: 'seg', 'aria-label': 'View' }, [['cat', 'By category'], ['desc', 'By description']].map(([k, l]) => h('button', { type: 'button', role: 'tab', class: whereBy === k ? 'on' : '', 'aria-selected': whereBy === k ? 'true' : 'false', onclick: () => { whereBy = k; rerender(); } }, l)));
+  const byDesc = whereBy === 'desc';
+  root.append(toggle, h('div', { class: 'grid2' },
+    section(byDesc ? 'Where it went, by description' : 'Where it went', counted.length ? h('div', null, byDesc
+      ? [hbars(descTop.map((r) => ({ label: r.desc, value: r.amount, note: `${r.desc}: ${money(r.amount)} in ${r.count} ${r.count === 1 ? 'entry' : 'entries'}` })), { fmt: money, colorIndex: 1, onClick: (x) => linkDesc(x.label) }), descs.length > 15 ? h('p', { class: 'note' }, `Top 15 of ${descs.length} descriptions${descRest ? ', ' + money(descRest) + ' in the rest' : ''}.`) : null, h('p', { class: 'note' }, 'Tap a description to see its entries.')]
+      : [hbars(counted.map((x) => { const u = usualBy.get(x.name), tone = u ? lineTone(x.amount, u.usualNow, u.kind) : null; return { label: x.name, value: x.amount, mark: u && u.usualNow > 0 ? u.usualNow : 0, tone, note: u ? (u.usualNow > 0 ? `${x.name}: ${money(x.amount)} against a usual ${money(u.usualNow)}` : `${x.name}: ${money(x.amount)}, not usual in most months`) : null }; }), { fmt: money, colorIndex: 1, onClick: (x) => linkCat(x) }),
+        usualBy.size ? usualKey(cur === r0.month ? 'usual by now' : 'usual') : null, h('p', { class: 'note' }, 'Tap a bar to see its entries.'),
+        left.length ? h('p', { class: 'note' }, `Left out: ${left.map((x) => `${x.name} ${money(x.amount)}`).join(', ')}. Change this under “What counts as spending”.`) : null]) : h('p', { class: 'empty' }, 'Nothing counted as spending.')),
+    section(byDesc ? 'Share by description' : 'Share of spending', counted.length ? (() => { const items = byDesc ? descTop.slice(0, 8).map((r) => ({ label: r.desc, value: r.amount })).concat(descs.length > 8 ? [{ label: 'Everything else', value: descs.slice(8).reduce((a, r) => a + r.amount, 0) }] : []) : counted.map((x) => ({ label: x.name, value: x.amount })); return h('div', null, donut(items, { fmt: money, center: compact(tot.spent), sub: 'spent', size: 190 }), legend(items, { fmt: money })); })() : h('p', { class: 'empty' }, 'Nothing to show.'))));
 
   // month table
   if (!single) {
