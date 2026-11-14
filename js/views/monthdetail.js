@@ -1,6 +1,7 @@
 // Spend & plan → Month in detail: the "This month in detail" card of Home as a page, for a month or a whole year.
 import { S } from '../store.js';
 import * as C from '../calc.js';
+import { mutate } from '../store.js';
 import { h, money, compact, pct, monthLabel, section, stat, table, dialog, setOptions, monthGroups, rowList, canEdit } from '../ui.js';
 import { hbars, barChart, donut, legend, usualKey } from '../charts.js';
 import { usualPace, lineTone } from '../spendpace.js';
@@ -8,9 +9,6 @@ import { BANDS, HEAT_MAX, bandOf, monthInsight, periodMonths, monthRow, periodTo
 
 let period = 'this', ledgerOpen = false;
 const rerender = () => window.dispatchEvent(new Event('rerender'));
-const KEY = 'pt.md.count';
-const loadOv = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { return {}; } };
-const saveOv = (o) => { try { localStorage.setItem(KEY, JSON.stringify(o)); } catch (e) { /* private window */ } };
 const PERIODS = [['this', 'This month'], ['prev', 'Previous month'], ['ty', 'This year'], ['py', 'Previous year']];
 const sgn = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + money(Math.abs(n));
 const tone = (n) => (n > 0 ? 'pos' : n < 0 ? 'neg' : '');
@@ -37,22 +35,31 @@ function insightRow(yearRows, focus, cur, single) {
     h('span', { class: 'hz-dot hz-' + ins.band, 'aria-hidden': 'true' }), h('span', { class: 'hz-txt' }, h('b', null, ins.title), h('small', null, ins.text)), single ? null : h('span', { class: 'hz-go', 'aria-hidden': 'true' }, '\u203a'));
 }
 
-/** Choose which lines count as spending. One-time payments (tax, EMI, rent, other) can be left out. */
-function countDialog(rows, ov) {
-  const names = mixOf(rows);
-  const boxes = names.map((x) => h('input', { type: 'checkbox', checked: x.counted, 'aria-label': x.name, value: x.name.toLowerCase() }));
+/** Choose which lines count as spending. The choice is saved with the data and is the same one Home uses for Spent. */
+function countDialog(rows) {
+  const names = mixOf(rows), ed = canEdit();
+  const boxes = names.map((x) => h('input', { type: 'checkbox', checked: x.counted, disabled: !ed, 'aria-label': x.name, value: x.name.toLowerCase() }));
   const set = (f) => names.forEach((x, i) => { boxes[i].checked = f(x); });
   const body = h('div', { class: 'form' },
-    h('p', { class: 'note', style: { marginTop: 0 } }, 'Tick what counts as spending against the interest income. Leave out one-time payments you do not want to judge a month by. This is kept on this device only.'),
-    h('div', { class: 'chips-row' },
+    h('p', { class: 'note', style: { marginTop: 0 } }, 'Tick what counts as spending against the interest income. Leave out one-time payments you do not want to judge a month by. Home uses the same choice for “Spent this month”.'),
+    ed ? h('div', { class: 'chips-row' },
       h('button', { type: 'button', class: 'chip-btn', onclick: () => set((x) => !x.other && !/^rent$/i.test(x.name)) }, 'Regular only (no rent, EMI, tax, other)'),
       h('button', { type: 'button', class: 'chip-btn', onclick: () => set((x) => !x.other) }, 'Leave out EMI, tax & other'),
-      h('button', { type: 'button', class: 'chip-btn', onclick: () => set(() => true) }, 'Count everything')),
+      h('button', { type: 'button', class: 'chip-btn', onclick: () => set(() => true) }, 'Count everything')) : h('p', { class: 'note' }, 'Only the owner can change this.'),
     h('div', { class: 'count-list' }, names.map((x, i) => h('label', { class: 'count-row' }, boxes[i], h('span', { class: 'cr-name' }, x.name, x.other ? h('small', { class: 'tag' }, 'other payment') : null), h('span', { class: 'cr-amt' }, money(x.amount))))));
-  dialog('What counts as spending', body, [
-    { label: 'Like Home', onclick: (c) => { saveOv({}); c(); rerender(); } },
-    { label: 'Apply', class: 'primary', onclick: (c) => { const o = {}; boxes.forEach((b) => { o[b.value] = b.checked; }); saveOv(o); c(); rerender(); } },
-  ]);
+  dialog('What counts as spending', body, ed ? [
+    { label: 'Cancel', onclick: (c) => c() },
+    { label: 'Save', class: 'primary', onclick: (c) => { c(); saveCounts(names.map((x, i) => ({ key: (x.cats && x.cats[0]) || x.name.toLowerCase(), other: !!x.other, on: boxes[i].checked }))); } },
+  ] : [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
+}
+/** Saves the shared choice: lines that are normally counted are listed when turned off, other payments when turned on. */
+function saveCounts(picks) {
+  mutate((d) => {
+    d.settings = d.settings || {};
+    const off = new Set((d.settings.homeSpendOff || []).map((x) => String(x).toLowerCase())), on = new Set((d.settings.homeSpendExtra || []).map((x) => String(x).toLowerCase()));
+    for (const p of picks) { const k = String(p.key).toLowerCase(); if (p.other) { p.on ? on.add(k) : on.delete(k); } else { p.on ? off.delete(k) : off.add(k); } }
+    d.settings.homeSpendOff = [...off]; d.settings.homeSpendExtra = [...on];
+  });
 }
 
 /** One tile per month of the year, coloured by how much of its limit was used. Tap a month to open it. */
@@ -71,7 +78,7 @@ function monthMap(year, rowsByMonth, sel) {
 
 export function render() {
   const { data, all } = S;
-  const ov = loadOv();
+  const ov = {};   // what counts is now one shared setting (see countDialog)
   const ledger = C.ledgerMonths(data), cur = C.monthKey(all.asOf);
   if (!PERIODS.some((p) => p[0] === period) && !ledger.concat(cur).includes(period)) period = 'this';
   const months = periodMonths(period, all.asOf, ledger);
@@ -80,8 +87,8 @@ export function render() {
   const sel = h('select', { class: 'month-select', 'aria-label': 'Period', onchange: (e) => { period = e.target.value; rerender(); } });
   setOptions(sel, [{ group: 'Period', options: PERIODS.map(([v, l]) => ({ value: v, label: l })) }, ...monthGroups(ledger).map((g) => ({ group: g.label || 'A single month', options: g.months.map((m) => ({ value: m, label: monthLabel(m, true) })) }))], period);
   const rows = months.map((m) => monthRow(data, all, m, ov));
-  const customised = Object.keys(ov).length > 0;
-  root.append(h('div', { class: 'filters' }, sel, h('button', { class: 'chip-btn' + (customised ? ' primary' : ''), onclick: () => countDialog(rows, ov) }, customised ? '⚙ Spending: your choice' : '⚙ What counts as spending')));
+  const customised = ((data.settings.homeSpendOff || []).length + (data.settings.homeSpendExtra || []).length) > 0;
+  root.append(h('div', { class: 'filters' }, sel, h('button', { class: 'chip-btn' + (customised ? ' primary' : ''), onclick: () => countDialog(rows) }, '⚙ What counts as spending')));
 
   if (!rows.length) { root.append(h('div', { class: 'card' }, h('p', { class: 'empty' }, 'No bank entries in this period yet.'))); return root; }
   const tot = periodTotal(rows), single = rows.length === 1, r0 = rows[0];

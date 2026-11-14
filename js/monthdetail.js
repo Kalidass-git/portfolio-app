@@ -67,12 +67,14 @@ export function periodMonths(key, asOf, ledgerMonths) {
 
 /**
  * The lines of a month with whether each counts. `override` maps a lowercase line name to true/false;
- * without one a line counts the way Home counts it (groups always, other payments only if ticked on Home).
+ * without one a line counts the way Home counts it (the shared setting of what counts as spending).
  */
 export function monthLines(mc, override = {}) {
   const other = new Map(mc.others.map((o) => [o.name.toLowerCase(), o]));
-  const lines = mc.spend.concat([mc.lifestyle]).map((g) => ({ name: g.name, amount: g.amount, cats: g.cats || [], other: other.has(g.name.toLowerCase()), homeCounts: true }))
-    .concat(mc.others.filter((o) => !o.counted).map((o) => ({ name: o.name, amount: o.amount, cats: [o.key], other: true, homeCounts: false })));
+  // mc.lines holds every line with whether it counts (the setting shared with Home); a month built without it falls back to the older shape
+  const lines = mc.lines ? mc.lines.map((g) => ({ name: g.name, amount: g.amount, cats: g.cats || [], other: !!g.other, homeCounts: !!g.counted }))
+    : mc.spend.concat([mc.lifestyle]).map((g) => ({ name: g.name, amount: g.amount, cats: g.cats || [], other: other.has(g.name.toLowerCase()), homeCounts: true }))
+      .concat(mc.others.filter((o) => !o.counted).map((o) => ({ name: o.name, amount: o.amount, cats: [o.key], other: true, homeCounts: false })));
   return lines.filter((l) => l.amount > 0.5).map((l) => { const v = override[l.name.toLowerCase()]; return { ...l, counted: v == null ? l.homeCounts : !!v }; });
 }
 
