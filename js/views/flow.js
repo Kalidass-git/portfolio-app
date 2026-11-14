@@ -13,7 +13,8 @@ let period = 'this';
 let filter = { mode: 'all', cats: [] };
 const rerender = () => window.dispatchEvent(new Event('rerender'));
 import * as archiveView from './archive.js';
-const TABS = [['month', 'Overview'], ['categories', 'Categories & budgets'], ['archive', 'Archive']];
+import * as budgetView from './budgetreport.js';
+const TABS = [['month', 'Overview'], ['categories', 'Categories & budgets'], ['budget', 'Budget report'], ['archive', 'Archive']];
 
 const PERIODS = [['this', 'This month'], ['last', 'Last month'], ['ytd', 'This year so far'], ['12m', 'Past 12 months'], ['all', 'All time']];
 const periodName = (key, range) => (/^\d{4}-\d\d$/.test(key) ? monthLabel(key, true) : range.label);
@@ -62,6 +63,11 @@ export function render() {
   if (r.sub === 'categories') {
     const page = categoriesView.render();
     page.prepend(h('div', { class: 'pagebar' }, segTabs(TABS, 'categories', 'Expense views')));
+    return page;
+  }
+  if (r.sub === 'budget') {
+    const page = budgetView.render();
+    page.prepend(h('div', { class: 'pagebar' }, segTabs(TABS, 'budget', 'Expense views')));
     return page;
   }
   if (r.sub === 'archive') {
