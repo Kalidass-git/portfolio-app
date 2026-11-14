@@ -300,11 +300,11 @@ export function riskColor(id, index = 0, count = 1) {
 }
 
 /** Stacked area: each series sits on top of the one before, filled in its own colour. series: [{name, values, color}] (color = palette index or a CSS colour). */
-export function stackedArea({ labels, series, fmt = (v) => v, height = 240, width, onSelect = null }) {
+export function stackedArea({ labels, series, fmt = (v) => v, height = 240, width, onSelect = null, yMax = null }) {
   const W = width || defaultWidth(), H = height, pad = { l: 44, r: 12, t: 12, b: 24 };
   const n = labels.length;
   const totals = labels.map((_, i) => series.reduce((a, s) => a + Math.max(0, s.values[i] || 0), 0));
-  const hi = niceMax(Math.max(1, ...totals));
+  const hi = yMax || niceMax(Math.max(1, ...totals));
   const x = (i) => pad.l + (n < 2 ? 0 : (i / (n - 1)) * (W - pad.l - pad.r));
   const y = (v) => pad.t + (1 - v / hi) * (H - pad.t - pad.b);
   const col = (s, i) => (typeof s.color === 'string' ? s.color : color(s.color ?? i));

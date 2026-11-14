@@ -5,7 +5,7 @@ import * as C from '../calc.js';
 import * as P from '../projector.js';
 import { fitAxis } from '../axis.js';
 import { h, money, pct, dateStr, monthLabel, section, stat, table, setOptions } from '../ui.js';
-import { lineChart, stackedArea } from '../charts.js';
+import { lineChart, stackedArea, spark, color } from '../charts.js';
 import * as I from '../insights.js';
 import { btn } from '../ui.js';
 import * as PL from '../planner.js';
@@ -113,7 +113,10 @@ export function render() {
 
 // Broad categories over time. Month-end snapshots that saved their asset classes, plus today's live position.
 const ALLOC_OF = Object.fromEntries(I.ALLOC.flatMap((a) => a.from.map((c) => [c, a.key])));
-let mixDrill = null;
+let mixDrill = null, mixMode = 'amt';
+const sgn = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + money(Math.abs(n));
+const sgp = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + pct(Math.abs(n), 1);
+const MIX_RANGES = [['3m', '3M'], ['6m', '6M'], ['12m', '12M'], ['year', 'YTD'], ['all', 'All']];
 function mixChart(data, all, months, lbl) {
   const cur = C.monthKey(all.asOf);
   const by = new Map();
@@ -129,10 +132,28 @@ function mixChart(data, all, months, lbl) {
     const val = (classes, k) => Object.entries(classes).reduce((a, [c, v]) => a + ((mixDrill ? ALLOC_OF[c] === k : I.GROUP_OF[ALLOC_OF[c]] === k) ? Math.max(0, Number(v) || 0) : 0), 0);
     const series = keys.map((k, i) => ({ id: mixDrill ? k.key : k.id, name: k.label, color: i, values: ms.map((m) => val(by.get(m), mixDrill ? k.key : k.id)) }));
     const title = mixDrill ? (I.GOAL_GROUPS.find((g) => g.id === mixDrill) || {}).label : 'All groups';
+    const seg = (arr, cur, on, label) => h('div', { class: 'nwp-seg', role: 'group', 'aria-label': label }, arr.map(([k, l]) => h('button', { type: 'button', class: cur === k ? 'on' : '', 'aria-pressed': String(cur === k), onclick: () => on(k) }, l)));
+    const ctl = h('div', { class: 'nwp-ctl' },
+      seg(MIX_RANGES, range, (k) => { range = k; rerender(); }, 'Period'),
+      seg([['amt', 'Value (₹)'], ['share', 'Share %']], mixMode, (k) => { mixMode = k; draw(); }, 'Measure'));
+    const tot = ms.map((_, i) => series.reduce((a, x) => a + x.values[i], 0));
+    const shown = mixMode === 'share' ? series.map((x) => ({ ...x, values: x.values.map((v, i) => (tot[i] ? (v / tot[i]) * 100 : 0)) })) : series;
+    const fmt = mixMode === 'share' ? (v) => v.toFixed(1) + '%' : money;
+    const pick = mixDrill ? null : (sr) => { mixDrill = sr.id; draw(); };
+    const info = (x) => { const at = x.values.findIndex((v) => v > 0); if (at < 0) return null; const a0 = x.values[at], a1 = x.values[x.values.length - 1]; return { now: a1, change: a1 - a0, ret: a0 ? (a1 - a0) / a0 : null }; };
+    const rows = h('div', { class: 'nwp-rows' }, series.map((x) => { const i = info(x); if (!i) return null; const t = i.change > 0 ? 'pos' : i.change < 0 ? 'neg' : '', last = tot[tot.length - 1];
+      return h(pick ? 'button' : 'div', pick ? { type: 'button', class: 'nwp-row', onclick: () => pick(x) } : { class: 'nwp-row' },
+        h('span', { class: 'nwp-dot', style: { background: color(x.color) } }),
+        h('span', { class: 'nwp-nm' }, h('b', null, x.name), h('small', null, money(i.now) + (last ? ' · ' + pct(i.now / last, 1) : ''))),
+        h('span', { class: 'nwp-sp' }, spark(x.values, { height: 34, width: 110, tone: x.color })),
+        h('span', { class: 'nwp-ch ' + t }, h('b', null, i.ret != null ? sgp(i.ret) : '–'), h('small', null, sgn(i.change)))); }).filter(Boolean));
+    const infos = series.map((x) => ({ x, i: info(x) })).filter((q) => q.i).sort((a, b) => Math.abs(b.i.change) - Math.abs(a.i.change));
+    const insight = infos.length ? h('p', { class: 'nwp-insight' }, h('b', null, 'Key insight'), ` ${infos[0].x.name} moved the most since ${monthLabel(ms[0], true)} (${sgn(infos[0].i.change)}${infos[0].i.ret != null ? ', ' + sgp(infos[0].i.ret) : ''}).`) : null;
     box.replaceChildren(...[
-      mixDrill && ms.length >= 2 ? h('div', { style: { marginBottom: '6px' } }, btn('← All groups', () => { mixDrill = null; draw(); }, 'small'), h('b', { style: { marginLeft: '8px' } }, title)) : ms.length >= 2 ? h('p', { class: 'note', style: { marginTop: 0 } }, 'Tap a colour to see what is inside it.') : null,
+      mixDrill && ms.length >= 2 ? h('div', { style: { marginBottom: '6px' } }, btn('← All groups', () => { mixDrill = null; draw(); }, 'small'), h('b', { style: { marginLeft: '8px' } }, title)) : null,
       ms.length < 2 ? h('p', { class: 'note', style: { margin: 0 } }, 'Not enough history to draw this yet. It needs at least one saved month-end check-in before this month, besides today (Wealth outlook → Month-end check-in). Each one keeps how much sat in debts, equity, gold and others, and the chart then shows how that mix moved.')
-        : stackedArea({ labels: ms.map((m) => lbl(m, months.indexOf(m))), series, fmt: money, height: 240, onSelect: mixDrill ? null : (sr) => { mixDrill = sr.id; draw(); } })].filter(Boolean));
+        : h('div', { class: 'nwp' }, ctl, stackedArea({ labels: ms.map((m) => lbl(m, months.indexOf(m))), series: shown, fmt, height: 240, onSelect: pick, yMax: mixMode === 'share' ? 100 : null }), rows, insight,
+          h('p', { class: 'note' }, mixDrill ? 'Each row is one part of ' + title + '. Change is since the first month shown.' : 'Tap a colour or a row to see what is inside it. Change is since the first month shown, so it also moves when you put new money in.'))].filter(Boolean));
   };
   draw();
   return section('What you own, month by month', box);
