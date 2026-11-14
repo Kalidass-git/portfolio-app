@@ -175,6 +175,18 @@ export function moveDescriptions(d, picks, to, { updateRules = true } = {}) {
   return { entries, descriptions: moved.size };
 }
 
+/**
+ * Move single bank entries (by id) into another category. The auto-fill rules are left as they are, because one entry
+ * does not say what future entries with the same description should be. Returns { entries }.
+ */
+export function moveEntries(d, ids, to) {
+  const list = ensure(d), target = list.find((c) => lc(c.name) === lc(to));
+  if (!target) throw new Error('Pick a category to move to.');
+  const want = new Set(ids); let entries = 0;
+  for (const e of d.ledger) { if (!want.has(e.id) || lc(e.category) === lc(target.name)) continue; e.category = target.name; entries++; }
+  return { entries };
+}
+
 /** Budget lines for a month: spending categories that have a monthly budget. */
 export function budgetLines(data, spentByCategory) {
   const spent = new Map(spentByCategory.map((x) => [lc(x.category), x.amount]));

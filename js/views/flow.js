@@ -65,6 +65,10 @@ export function render() {
     page.prepend(h('div', { class: 'pagebar' }, segTabs(TABS, 'categories', 'Expense views')));
     return page;
   }
+  if (r.sub === 'category') {
+    const page = categoriesView.renderCategory(r.query.get('name') || '');
+    return page;
+  }
   if (r.sub === 'budget') {
     const page = budgetView.render();
     page.prepend(h('div', { class: 'pagebar' }, segTabs(TABS, 'budget', 'Expense views')));

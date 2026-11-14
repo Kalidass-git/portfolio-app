@@ -2071,3 +2071,19 @@ body.pi-dragging, body.pi-dragging * { cursor: grabbing !important; user-select:
 .mv-main { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; } .mv-main b { overflow-wrap: anywhere; } .mv-main small { color: var(--muted); }
 .mv-amt { font-variant-numeric: tabular-nums; font-weight: 600; font-size: .9rem; }
 .mv-sum { margin: 2px 0; font-weight: 600; } .mv-warn { margin: 0; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, #d98a00 14%, var(--surface)); color: var(--ink); font-size: .85rem; }
+
+/* 9.1.0 category page */
+.cp-back { display: inline-block; margin-bottom: 6px; font-weight: 600; text-decoration: none; color: var(--brand); }
+.cp-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: flex-start; margin-bottom: 10px; } .cp-head h2 { margin: 0 0 2px; }
+.cp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.cp-filters { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin: 10px 0; }
+.cp-list { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--line); border-radius: 12px; padding: 4px; background: var(--surface); }
+.cp-group { display: flex; flex-direction: column; }
+.cp-desc { grid-template-columns: 22px minmax(0, 1fr) auto; } .cp-desc .cp-exp { background: none; border: 0; padding: 0; text-align: left; color: inherit; font: inherit; cursor: pointer; min-width: 0; }
+.cp-chev { margin-left: 8px; color: var(--muted); font-style: normal; }
+.cp-sub { margin-left: 22px; border-left: 2px solid var(--line); border-radius: 0 10px 10px 0; }
+.cp-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 10px; border: 0; background: none; text-align: left; font: inherit; color: inherit; cursor: pointer; border-radius: 10px; }
+.cp-bar { position: sticky; bottom: 0; z-index: 5; margin: 14px -4px 0; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--line); box-shadow: 0 -6px 16px rgba(0,0,0,.08); display: flex; flex-direction: column; gap: 8px; border-radius: 14px 14px 0 0; }
+.cp-bar-top { display: flex; justify-content: space-between; align-items: center; } .cp-bar-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.cp-bar .mv-warn { margin: 0; } .cp-rule { display: flex; gap: 8px; align-items: center; font-size: .9rem; }
+@media (max-width: 700px) { .cp-bar { margin-bottom: 64px; bottom: 56px; } }

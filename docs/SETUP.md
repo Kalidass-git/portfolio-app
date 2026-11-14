@@ -150,6 +150,14 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 9.1.0 – Category page
+
+- Tapping a category on **Income & expenses → Categories & budgets** now opens a full page for that category (`#/flow/category?name=…`). **Edit category** (rename, budgets, merge) is a button on that page.
+- Tabs: **Descriptions** (tick boxes, search, sort, tap to expand into the single entries), **Entries** (every entry, tick any), **Rules** (auto-fill rules pointing here).
+- A bottom bar shows "N picked · ₹X", a **Move to…** picker (including a new category), one green **Move** button and a switch to also update the auto-fill rule. Moved rows leave the list, so you can carry on.
+- Moving single entries never changes the auto-fill rules. Moving whole descriptions does (unless switched off).
+- The 9.0.0 popup stays as **Move from all categories**. No stored data changes.
+
 ## Release 9.0.0 – Move descriptions between categories
 
 - Expenses → Categories has a new card, **Move descriptions**. Pick the category to move into (or create a new one on the spot), optionally narrow the list to one category, search, tick the descriptions, and press Move.
