@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 9.2.0 – Passive income goal
+
+- **Passive income → Progress** now starts with **Your goal**, three steps for the chosen period: (1) passive income pays all expenses (coverage %, months covered, streak, income still missing), (2) save from passive income (what is left after expenses against a monthly savings target), (3) put it back into investments (investments made in the same months, capped at what was left over, and how much is still to invest). A chart and a month list show income, spent and left over.
+- **Set a monthly savings target** stores one optional number, `settings.passivePlan.saveGoal`. Files without it work as before; nothing is renamed or removed.
+- "Reinvested" counts investments made in those months from any account, because the bank ledger cannot tell which rupee came from passive income.
+
 ## Release 9.1.0 – Category page
 
 - Tapping a category on **Income & expenses → Categories & budgets** now opens a full page for that category (`#/flow/category?name=…`). **Edit category** (rename, budgets, merge) is a button on that page.
