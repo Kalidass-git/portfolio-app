@@ -2099,3 +2099,11 @@ body.pi-dragging, body.pi-dragging * { cursor: grabbing !important; user-select:
 .gl-months { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; border-top: 1px solid var(--line); }
 .gl-months li { display: grid; grid-template-columns: 1fr auto 20px; gap: 8px; padding: 8px 2px; border-bottom: 1px solid var(--line); font-size: .92rem; font-variant-numeric: tabular-nums; }
 .gl-months li.ok i { color: var(--pos, #0f8a6a); } .gl-months li.bad i, .gl-months li.bad span:nth-child(2) { color: #c4472a; } .gl-months i { font-style: normal; font-weight: 700; }
+
+/* 9.3.0 ownership */
+.own { display: flex; flex-direction: column; align-items: stretch; gap: 10px; } .own .donut-svg { align-self: center; }
+.own-people { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.own-p button { width: 100%; display: grid; grid-template-columns: 12px minmax(0, 1fr) auto 52px; gap: 10px; align-items: center; text-align: left; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); font: inherit; color: inherit; cursor: pointer; }
+.own-p.on button { border-color: var(--brand); box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 25%, transparent); }
+.own-p i { width: 12px; height: 12px; border-radius: 50%; } .own-p small { text-align: right; color: var(--muted); } .own-n { overflow-wrap: anywhere; font-weight: 600; }
+.own .legend li { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto 52px; gap: 10px; align-items: center; } .own .legend li small { text-align: right; color: var(--muted); } .own .legend li i { width: 12px; height: 12px; border-radius: 3px; }
