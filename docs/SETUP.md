@@ -150,6 +150,13 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 9.3.0 – Ownership report
+
+- New **Insights → Ownership** tab: a chart of who owns what across everything in the Report (bonds, lending, FDs, EPF/PPF/LIC, chits, stocks, funds, gold, banks, others), with each person's share.
+- Tap a person (the chart or the list) to see **their own asset allocation** and the holdings behind it; "Show everyone" goes back to the overall allocation.
+- Bonds, FDs, lending, savings and banks use the holder on each one. Stocks, funds and gold use **Who owns which account** (a Gold row was added there; stored as `taxOwners.gold`, optional). Anything without an owner shows as "Owner not set". Loans are not counted.
+- No stored data changes beyond that optional key.
+
 ## Release 9.2.0 – Passive income goal
 
 - **Passive income → Progress** now starts with **Your goal**, three steps for the chosen period: (1) passive income pays all expenses (coverage %, months covered, streak, income still missing), (2) save from passive income (what is left after expenses against a monthly savings target), (3) put it back into investments (investments made in the same months, capped at what was left over, and how much is still to invest). A chart and a month list show income, spent and left over.

@@ -11,9 +11,9 @@ import { groupedTable } from './groupmix.js';
 import * as IC from '../interestcert.js';
 import { openInfo } from '../mobilebar.js';
 
-const TABS = [['tax', 'Tax summary'], ['calendar', 'Cash calendar'], ['review', 'Annual review'], ['anomalies', 'Spending insights'], ['allocation', 'Allocation goal'], ['certificate', 'Interest certificate']];
+const TABS = [['tax', 'Tax summary'], ['calendar', 'Cash calendar'], ['review', 'Annual review'], ['anomalies', 'Spending insights'], ['ownership', 'Ownership'], ['allocation', 'Allocation goal'], ['certificate', 'Interest certificate']];
 const rerender = () => window.dispatchEvent(new Event('rerender'));
-const st = { fy: null, months: 12, year: null, month: null, who: 'all', calKinds: [], calOnly: false };
+const st = { who2: '', fy: null, months: 12, year: null, month: null, who: 'all', calKinds: [], calOnly: false };
 const signed = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + money(Math.abs(n));
 const tone = (n) => (n > 0 ? 'pos' : n < 0 ? 'neg' : '');
 const note = (t) => h('p', { class: 'note' }, t);
@@ -27,8 +27,37 @@ export function render() {
   const root = h('div', { class: 'page' });
   const tab = subTab(TABS.map((t) => t[0]));
   root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Insights')));
-  ({ tax, calendar, review, anomalies, allocation, certificate: certView })[tab](root);
+  ({ tax, calendar, review, anomalies, ownership, allocation, certificate: certView })[tab](root);
   return root;
+}
+
+
+// ---------- Ownership: who holds what, and each person's own asset mix ----------
+function ownership(root) {
+  const { data, all } = S, o = I.ownership(data, all), people = I.taxPeople(data);
+  if (!o.total) { root.append(h('p', { class: 'empty' }, 'No assets found yet.')); return; }
+  if (st.who2 && !o.people.some((p) => p.owner === st.who2)) st.who2 = '';
+  const sel = o.people.find((p) => p.owner === st.who2) || null;
+  const pick = (name) => { st.who2 = st.who2 === name ? '' : name; rerender(); };
+  const pItems = o.people.map((p, i) => ({ label: p.owner, value: p.total, color: p.owner === I.NO_OWNER ? 'var(--muted)' : color(i) }));
+  root.append(section('Who owns what', h('div', { class: 'own' },
+    h('p', { class: 'note', style: { marginTop: 0 } }, 'Everything you own, split by whose name it is in. Tap a person to see their own asset allocation. Loans are not counted.'),
+    donut(pItems, { fmt: money, center: compact(o.total), sub: 'total owned', size: 210, onSelect: (it) => pick(it.label) }),
+    h('ul', { class: 'own-people' }, o.people.map((p, i) => h('li', { class: 'own-p' + (sel && sel.owner === p.owner ? ' on' : '') },
+      h('button', { type: 'button', onclick: () => pick(p.owner), 'aria-pressed': sel && sel.owner === p.owner ? 'true' : 'false' },
+        h('i', { style: { background: pItems[i].color } }), h('span', { class: 'own-n' }, p.owner === I.NO_OWNER ? 'Owner not set' : p.owner), h('b', null, money(p.total)), h('small', null, pct(p.share)))))))));
+  const view = sel || { owner: 'Everyone', total: o.total, types: o.types, items: o.items, share: 1 };
+  const tItems = view.types.map((t, i) => ({ label: t.type, value: t.value, color: color(i + 2) }));
+  root.append(section(sel ? `${sel.owner === I.NO_OWNER ? 'Owner not set' : sel.owner}: asset allocation` : 'Overall asset allocation', h('div', { class: 'own' },
+    sel ? h('p', { class: 'note', style: { marginTop: 0 } }, `${money(sel.total)} · ${pct(sel.share)} of everything owned. `, h('button', { type: 'button', class: 'chip-btn', onclick: () => pick(sel.owner) }, 'Show everyone')) : null,
+    donut(tItems, { fmt: money, center: compact(view.total), sub: sel ? 'owned' : 'total owned', size: 210 }),
+    h('ul', { class: 'legend' }, tItems.map((t) => h('li', null, h('i', { style: { background: t.color } }), h('span', { class: 'lg-name' }, t.label), h('b', null, money(t.value)), h('small', null, pct(view.total > 0 ? t.value / view.total : 0))))))));
+  const rows = view.items.slice().sort((a, b) => b.value - a.value);
+  root.append(section(sel ? 'What it is made of' : 'Every holding', table([
+    { label: 'Holding', host: true, get: (r) => r.name }, { label: 'Kind', mob: 'under', get: (r) => r.type }, ...(sel ? [] : [{ label: 'Owner', mob: 'under', mlabel: 'in the name of ', get: (r) => (r.owner === I.NO_OWNER ? 'Not set' : r.owner) }]),
+    { label: 'Value', cls: 'r', get: (r) => money(r.value) }], rows, { m: { key: 'own-rows', head: 'Holding', views: sel ? [['Kind', 'Value']] : [['Kind', 'Value'], ['Owner']] } })));
+  if (o.unassigned > 0.5) root.append(h('p', { class: 'note' }, `${money(o.unassigned)} has no owner yet. Bonds, FDs, lending, savings and banks take the holder written on each one; set the owner of stocks, funds and gold below.`));
+  root.append(ownersCard(data, people));
 }
 
 // ---------- 1. Tax summary ----------
@@ -161,6 +190,7 @@ function ownersCard(data, people) {
   const rows = [
     { key: 'stocks', label: 'Stocks & ETFs account', note: 'dividends and share gains', now: I.ownerOfSource(data, 'stocks') },
     { key: 'funds', label: 'Mutual fund account', note: 'fund gains', now: I.ownerOfSource(data, 'funds') },
+    { key: 'gold', label: 'Gold & jewellery', note: 'shown on the Ownership tab', now: I.ownerOfSource(data, 'gold') },
     ...(data.accounts || []).map((a) => ({ key: 'acct:' + a.id, label: a.name + ' (bank)', note: 'salary and interest credited', now: I.acctOwner(data, a.id) })),
   ];
   const listId = 'tax-people';

@@ -50,6 +50,32 @@ export const itemOwner = (it) => { const h = String(it.holder || '').trim(); if 
 /** Who owns what for the tax summary: data.taxOwners maps 'stocks', 'funds' and 'acct:<id>' to a person. Bonds, FDs, lending and savings use their own holder. */
 export const ownerOfSource = (data, key, fallback) => String((data.taxOwners && data.taxOwners[key]) || fallback || '').trim() || NO_OWNER;
 export const acctOwner = (data, acctId) => ownerOfSource(data, 'acct:' + acctId, ((data.accounts || []).find((a) => a.id === acctId) || {}).holder);
+/**
+ * Who owns what: every asset the Report lists, with its owner, grouped by person and by kind of asset.
+ * Bonds, FDs, lending, savings and bank accounts use their own holder. Stocks, funds and gold use the owner set under "Who owns which account" (data.taxOwners: stocks, funds, gold).
+ * Anything with no owner is listed under NO_OWNER. Loans are not counted: this is what is owned.
+ */
+export const OWN_TYPES = ['Bonds', 'Private lending', 'Fixed deposits', 'EPF, PPF & LIC', 'Chits', 'Equity, ETFs & funds', 'Gold', 'Bank accounts', 'Others'];
+export function ownership(data, all) {
+  const items = [], add = (type, name, owner, value) => { if (Math.abs(value) > 0.5) items.push({ type, name, owner: String(owner || '').trim() || NO_OWNER, value }); };
+  const sum = (a, f) => a.reduce((t, x) => t + (Number(f(x)) || 0), 0);
+  for (const b of all.bonds || []) add('Bonds', b.name, itemOwner(b), b.principal);
+  for (const l of (all.lending || []).filter((x) => x.principal !== 0)) add('Private lending', String(l.name || '').replace(/^To /, ''), itemOwner(l), l.principal + (l.accrued || 0));
+  for (const f of all.fds || []) add('Fixed deposits', f.name, itemOwner(f), f.value);
+  for (const sv of (all.savings || []).filter((x) => x.type !== 'Chit')) add('EPF, PPF & LIC', sv.name, itemOwner(sv), sv.principal);
+  for (const sv of (all.savings || []).filter((x) => x.type === 'Chit')) add('Chits', sv.name, itemOwner(sv), sv.principal);
+  add('Equity, ETFs & funds', 'Stocks & ETFs', ownerOfSource(data, 'stocks'), all.stocks ? all.stocks.current : 0);
+  add('Equity, ETFs & funds', 'Mutual funds', ownerOfSource(data, 'funds'), all.mf ? all.mf.current : 0);
+  add('Gold', 'Jewellery & gold', ownerOfSource(data, 'gold'), all.gold ? all.gold.value : 0);
+  for (const b of all.banks || []) add('Bank accounts', b.name, b.holder, b.balance);
+  for (const o of (all.gold && all.gold.others) || []) add('Others', o.name, '', o.amount);
+  const total = sum(items, (x) => x.value), by = new Map();
+  for (const it of items) { const k = it.owner.toLowerCase(), o = by.get(k) || { owner: it.owner, total: 0, items: [] }; o.total += it.value; o.items.push(it); by.set(k, o); }
+  const people = [...by.values()].sort((a, b) => (a.owner === NO_OWNER) - (b.owner === NO_OWNER) || b.total - a.total).map((p) => ({ ...p, share: total > 0 ? p.total / total : 0,
+    types: OWN_TYPES.map((t) => ({ type: t, value: sum(p.items.filter((x) => x.type === t), (x) => x.value) })).filter((t) => Math.abs(t.value) > 0.5) }));
+  const types = OWN_TYPES.map((t) => ({ type: t, value: sum(items.filter((x) => x.type === t), (x) => x.value) })).filter((t) => Math.abs(t.value) > 0.5);
+  return { items, total, people, types, unassigned: sum(items.filter((x) => x.owner === NO_OWNER), (x) => x.value) };
+}
 /** Everyone named anywhere, each spelled once, with the app's own owner first. */
 export function taxPeople(data) {
   const seen = new Map();
