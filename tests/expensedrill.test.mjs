@@ -10,9 +10,20 @@ const all = computeAll(dat, { asOf: '2026-10-22' });
 const mc = monthCashflow(dat, all, '2026-09');
 const groc = mc.spend.find((x) => x.name === 'Groceries & needs');
 ok(groc && groc.cats.length === 1 && groc.cats[0] === 'family budget', 'groceries line lists its category');
-ok(mc.lifestyle.cats.includes('cloths') && mc.lifestyle.cats.includes('gifts') && mc.lifestyle.cats.length === 4, 'the clothes line lists its four categories');
+ok(['Clothes', 'Entertainment', 'Vacation', 'Gifts'].every((n) => mc.lines.some((l) => l.name === n && l.cats.length === 1)), 'clothes, entertainment, vacation and gifts are each their own line');
 const rows = monthLedger(dat, '2026-09').filter((x) => x.debit > 0 && groc.cats.includes(x.category.toLowerCase()));
 const list = byDescription(rows, 'debit');
 ok(list.length === 2 && list[0].desc === 'Vegetables' && list[0].amount === 650 && list[0].count === 2, 'September vegetables add up to 650 over 2 entries, October is left out');
 ok(Math.abs(list.reduce((a, r) => a + r.amount, 0) - groc.amount) < 0.01, 'the list adds up to the line on Home');
+// What counts as spending is one shared choice: each line on its own, turn lines off (homeSpendOff) or other payments on (homeSpendExtra).
+{
+  const total = (d) => monthCashflow(d, computeAll(d, { asOf: '2026-10-22' }), '2026-09');
+  const base = total(dat);
+  ok(base.totalSpent === 2050 && base.notCounted === 700, 'by default groceries 750, clothes 800 and gifts 500 count and the pets payment does not: ' + base.totalSpent);
+  const off = JSON.parse(JSON.stringify(dat)); off.settings.homeSpendOff = ['cloths', 'gifts'];
+  const o = total(off); ok(o.totalSpent === 750 && o.notCounted === 2000, 'turning clothes and gifts off takes them out of spent, on their own: ' + o.totalSpent);
+  const on = JSON.parse(JSON.stringify(dat)); on.settings.homeSpendExtra = ['pets'];
+  ok(total(on).totalSpent === 2750 && total(on).notCounted === 0, 'turning an other payment on adds it');
+}
+
 console.log(bad ? 'FAILED' : 'all passed'); process.exit(bad ? 1 : 0);

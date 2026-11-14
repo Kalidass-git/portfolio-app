@@ -150,6 +150,14 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 8.98.0 – Each spending line on its own, one choice of what counts
+
+- Clothes, Entertainment, Vacation and Gifts are separate lines everywhere (Home and Month in detail), no longer one grouped line. Totals are unchanged while all of them count.
+- One shared choice of what counts as spending, used by both Home ("Spent this month", Biggest spends, the pace check) and Month in detail. Home: This month in detail → **What counts ›**. Month in detail: **What counts as spending**. Both list every line of the month with a tick.
+- Stored in `settings`, two optional lists: `homeSpendOff` (lines that normally count and were turned off, by category key such as `rent`, `cloths`) and the existing `homeSpendExtra` (other payments turned on). Files without `homeSpendOff` behave as before. Nothing existing was renamed or removed.
+- Month in detail no longer keeps its own device-only choice (`pt.md.count` is no longer read); it follows the shared one. Only the owner can change it; family members see it.
+- Test added to `tests/expensedrill.test.mjs`.
+
 ## Release 8.97.0 – Carry unused forward, expense by expense on Progress
 
 - New switch **Carry unused forward** in an expense's sheet (Allocations → tap the expense). Stored as one optional field, `carry: true`, inside `settings.passivePlan.expense[<name>]`. Nothing existing is renamed or removed; plans without it behave exactly as before (unused budget is only shown as "Unused", never carried).

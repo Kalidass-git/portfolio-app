@@ -732,15 +732,14 @@ export function monthCashflow(data, all, month) {
   }
   const totalExpected = sum(income, (x) => x.expected), totalReceived = sum(income, (x) => x.received);
   const groupOf = (label, cats) => ({ name: label, amount: sum(cats, debit), cats });
-  const spend = [
-    groupOf('Groceries & needs', ['family budget']), groupOf('Outside food', ['food']), groupOf('Medical', ['medical']),
-    groupOf('Travel', ['travel']), groupOf('Rent', ['rent']), groupOf('Utilities', ['utilities']),
-  ];
-  const lifestyle = groupOf('Clothes, entertainment, vacation, gifts', ['cloths', 'entertainment', 'vacation', 'gifts']);
-  // Everything else that was paid out and is not income, an investment or a transfer (EMI, tax, "others", custom categories).
-  // These are not in Home's groups. The owner can choose to count each one (optional setting, old files work without it).
-  const grouped = new Set(['family budget', 'food', 'medical', 'travel', 'rent', 'utilities', 'cloths', 'entertainment', 'vacation', 'gifts']);
-  const kinds = kindOf(data), counted = new Set((data.settings.homeSpendExtra || []).map((x) => String(x).toLowerCase()));
+  // Every line of spending on its own: groceries, outside food, medical, travel, rent, utilities, clothes, entertainment, vacation, gifts, then any other category paid from the bank.
+  // What counts as spending is one setting shared by Home and Month in detail: lines of the first kind count unless the owner turned them off (settings.homeSpendOff),
+  // other categories count only if the owner turned them on (settings.homeSpendExtra). Both are optional, older files work without them (then the first kind all count and the others do not).
+  const off = new Set((data.settings.homeSpendOff || []).map((x) => String(x).toLowerCase())), counted = new Set((data.settings.homeSpendExtra || []).map((x) => String(x).toLowerCase()));
+  const fixedLines = [['Groceries & needs', 'family budget'], ['Outside food', 'food'], ['Medical', 'medical'], ['Travel', 'travel'], ['Rent', 'rent'], ['Utilities', 'utilities'], ['Clothes', 'cloths'], ['Entertainment', 'entertainment'], ['Vacation', 'vacation'], ['Gifts', 'gifts']];
+  const lines = fixedLines.map(([label, key]) => ({ ...groupOf(label, [key]), key, other: false, counted: !off.has(key) }));
+  const grouped = new Set(fixedLines.map((x) => x[1]));
+  const kinds = kindOf(data);
   const oth = new Map();
   for (const e of rows) {
     const key = (e.category || '').trim().toLowerCase();
@@ -749,12 +748,14 @@ export function monthCashflow(data, all, month) {
     r.amount += e.debit; r.count++; oth.set(key, r);
   }
   const others = [...oth.values()].sort((a, b) => b.amount - a.amount);
-  for (const o of others) if (o.counted) spend.push({ name: o.name, amount: o.amount, cats: [o.key] });
-  const notCounted = sum(others.filter((o) => !o.counted), (o) => o.amount);
-  const totalSpent = sum(spend, (x) => x.amount); // sheet's G55 excludes the lifestyle line, we show it separately
+  for (const o of others) lines.push({ name: o.name, amount: o.amount, cats: [o.key], key: o.key, other: true, counted: o.counted, count: o.count });
+  const spend = lines.filter((l) => l.counted);
+  const lifestyle = { name: 'Clothes, entertainment, vacation, gifts', amount: 0, cats: [] };   // kept so older code keeps working: the four lines are now separate lines above
+  const notCounted = sum(lines.filter((l) => !l.counted), (l) => l.amount);
+  const totalSpent = sum(spend, (x) => x.amount);
   // The budget to judge spending against: the interest income expected (default) or the amount the owner fixed for the month. Expected, received and spent above are not touched.
   const bud = budgetFor(data, month, monthKey(all.asOf), totalExpected);
-  return { month, income, totalExpected, totalReceived, yetToReceive: totalExpected - totalReceived, spend, lifestyle, totalSpent, remaining: totalExpected - totalSpent, others, notCounted, budget: bud.amount, budgetSource: bud.source };
+  return { month, income, totalExpected, totalReceived, yetToReceive: totalExpected - totalReceived, spend, lines, lifestyle, totalSpent, remaining: totalExpected - totalSpent, others, notCounted, budget: bud.amount, budgetSource: bud.source };
 }
 
 /**

@@ -26,7 +26,7 @@ function kindOf(byDay, total, present, n, day, dim) {
  */
 export function usualPace(data, mc, month, day, opts = {}) {
   const want = opts.months || 6;
-  const groups = mc.spend.concat([mc.lifestyle]).filter((g) => g.cats && g.cats.length);
+  const groups = mc.spend.concat(mc.lifestyle && mc.lifestyle.cats && mc.lifestyle.cats.length ? [mc.lifestyle] : []).filter((g) => g.cats && g.cats.length);
   const hist = C.ledgerMonths(data).filter((m) => m < month).slice(-want);
   const per = hist.map((m) => {
     const rows = C.monthLedger(data, m).filter((e) => e.debit > 0);

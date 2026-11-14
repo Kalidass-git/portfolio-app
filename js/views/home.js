@@ -322,7 +322,7 @@ function tiles(all, data, mc, plan) {
   const anyDay = mk.total.hasDay || !!gd;
   const baseAll = (mk.total.dayPct ? mk.total.day / mk.total.dayPct : 0) + (gd ? all.gold.value - gd.total : 0);
   const dayPctAll = baseAll ? dayAll / baseAll : 0;
-  const spent = mc.totalSpent + mc.lifestyle.amount;
+  const spent = mc.totalSpent;
   const budget = mc.budget, used = budget ? spent / budget : 0;   // same budget as This month in detail
   const bar = budget ? h('div', { class: 'kt-barrow' }, h('div', { class: 'kt-bar', role: 'img', 'aria-label': `${pct(used, 0)} of the budget spent` }, h('i', { style: { width: Math.min(100, Math.max(2, used * 100)).toFixed(1) + '%' } })), h('b', { class: 'kt-pctl' }, pct(used, 0))) : null;
   const spentSub = h('span', { class: 'kt-one' }, (budget ? `${pct(used, 0)} of ${money(budget)} budget` : 'no budget income yet') + (mc.notCounted > 0 ? ` · ${money(mc.notCounted)} not counted` : ''));
@@ -337,12 +337,12 @@ function tiles(all, data, mc, plan) {
 
 /** Short expense summary for the drop-down. */
 function spentBody(mc, spent) {
-  const top = mc.spend.concat([mc.lifestyle]).filter((x) => x.amount > 0).sort((a, b) => b.amount - a.amount).slice(0, 5);
+  const top = mc.spend.filter((x) => x.amount > 0).sort((a, b) => b.amount - a.amount).slice(0, 5);
   return h('div', null,
     h('p', { class: 'mini-title' }, 'Biggest spends so far'),
     top.length ? rowList(top.map((x) => ({ title: x.name, value: money(x.amount), valueSub: spent ? pct(x.amount / spent, 0) : null }))) : h('p', { class: 'empty' }, 'No expenses recorded this month.'),
     h('p', { class: 'summary-line' }, 'Spent ', h('b', null, money(spent)), mc.budget ? ' of ' + money(mc.budget) + ' budget · left ' : null, mc.budget ? h('b', { class: tone(mc.budget - spent) }, sgn(mc.budget - spent)) : null),
-    mc.notCounted > 0 ? h('p', { class: 'note' }, `${money(mc.notCounted)} of other payments (${mc.others.filter((o) => !o.counted).map((o) => o.name).join(', ')}) is not counted here. Open “Review” under This month in detail to count them.`) : null,
+    mc.notCounted > 0 ? h('p', { class: 'note' }, `${money(mc.notCounted)} (${mc.lines.filter((o) => !o.counted && o.amount > 0.5).map((o) => o.name).join(', ')}) is not counted here. Open “What counts” under This month in detail to change it.`) : null,
     h('p', null, h('a', { href: '#/flow' }, 'See where it went')));
 }
 
@@ -768,8 +768,8 @@ let monthTab = 'expenses';   // which list shows under the month summary on Home
 function thisMonth(data, all, months) {
   const mc = C.monthCashflow(data, all, selMonth);
   const isCur = selMonth === C.monthKey(all.asOf);
-  const spend = mc.spend.concat([mc.lifestyle]).filter((x) => x.amount > 0).sort((a, b) => b.amount - a.amount);
-  const spent = mc.totalSpent + mc.lifestyle.amount, exp = mc.totalExpected, rec = mc.totalReceived;
+  const spend = mc.spend.filter((x) => x.amount > 0).sort((a, b) => b.amount - a.amount);
+  const spent = mc.totalSpent, exp = mc.totalExpected, rec = mc.totalReceived;
   const bud = mc.budget, manual = mc.budgetSource === 'manual';   // the budget: interest income expected, or the amount fixed in Categories & budgets
   const pend = Math.max(0, exp - rec), left = bud - spent;
   const got = exp ? Math.min(1, rec / exp) : 0;
@@ -810,15 +810,21 @@ function thisMonth(data, all, months) {
       rowList(up.lines.map((l) => ({ title: l.name, sub: `${kindText[l.kind]} · usual by now ${money(l.usualNow)} · usual for the month ${money(l.usualMonth)}`, value: money(l.spent), valueSub: h('span', { class: l.diff > 0.5 ? 'neg' : l.diff < -0.5 ? 'pos' : 'muted' }, l.diff > 0.5 ? '+' + money(l.diff) : l.diff < -0.5 ? '−' + money(-l.diff) : 'on pace') }))),
       h('p', { class: 'summary-line' }, `By now ${money(up.spent)} against a usual ${money(up.expectedNow)}. Month end at this rate: about ${money(up.projected)} (usual month ${money(up.expectedMonth)}).`)), [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
   }
-  const toggle = (o, on) => mutate((d) => { const set = new Set((d.settings.homeSpendExtra || []).map((x) => String(x).toLowerCase())); on ? set.add(o.key) : set.delete(o.key); d.settings.homeSpendExtra = [...set]; });
   const review = () => {
-    const box = (o) => h('label', { class: 'check-inline', style: { display: 'flex', gap: '8px', alignItems: 'center' } }, h('input', { type: 'checkbox', checked: o.counted, disabled: !canEdit(), onchange: (e) => toggle(o, e.target.checked) }), ' count in Spent');
-    dialog('Other payments in ' + monthLabel(selMonth), h('div', null,
-      h('p', { class: 'note' }, 'Spent adds up groceries, outside food, medical, travel, rent, utilities and the clothes, entertainment, vacation and gifts line. These other payments from your bank entries are not in it unless you tick them. Investments, transfers and income are never counted as spending.'),
-      rowList(mc.others.map((o) => ({ title: o.name, sub: `${o.count} ${o.count === 1 ? 'entry' : 'entries'}`, value: money(o.amount), valueSub: canEdit() ? box(o) : (o.counted ? 'counted' : 'not counted') }))),
-      canEdit() ? null : h('p', { class: 'note' }, 'Only the owner can change this.')), [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
+    const ed = canEdit(), lines = mc.lines.filter((l) => l.amount > 0.5), picks = new Map(lines.map((l) => [l.key, l.counted]));
+    const box = (l) => h('label', { class: 'check-inline', style: { display: 'flex', gap: '8px', alignItems: 'center' } }, h('input', { type: 'checkbox', checked: l.counted, disabled: !ed, onchange: (e) => picks.set(l.key, e.target.checked) }), ' count in Spent');
+    dialog('What counts in ' + monthLabel(selMonth), h('div', null,
+      h('p', { class: 'note' }, 'Choose which spending adds up in Spent. Each line is on its own: groceries, outside food, medical, travel, rent, utilities, clothes, entertainment, vacation, gifts, and any other payment from your bank entries. Investments, transfers and income are never counted as spending. The same choice is used in Month in detail.'),
+      rowList(lines.map((l) => ({ title: l.name, sub: l.other ? `other payment · ${l.count} ${l.count === 1 ? 'entry' : 'entries'}` : '', value: money(l.amount), valueSub: ed ? box(l) : (l.counted ? 'counted' : 'not counted') }))),
+      ed ? null : h('p', { class: 'note' }, 'Only the owner can change this.')),
+      ed ? [{ label: 'Cancel', onclick: (c) => c() }, { label: 'Save', class: 'primary', onclick: (c) => { c(); mutate((d) => {
+        d.settings = d.settings || {};
+        const off = new Set((d.settings.homeSpendOff || []).map((x) => String(x).toLowerCase())), on = new Set((d.settings.homeSpendExtra || []).map((x) => String(x).toLowerCase()));
+        for (const l of lines) { const k = String(l.key).toLowerCase(), v = picks.get(l.key); if (l.other) { v ? on.add(k) : on.delete(k); } else { v ? off.delete(k) : off.add(k); } }
+        d.settings.homeSpendOff = [...off]; d.settings.homeSpendExtra = [...on];
+      }); } }] : [{ label: 'Done', class: 'primary', onclick: (c) => c() }]);
   };
-  const others = mc.others.length ? h('div', { class: 'md-other' }, h('span', null, mc.notCounted > 0 ? `${money(mc.notCounted)} other payments not counted` : 'All other payments counted'), h('a', { href: 'javascript:void 0', onclick: (e) => { e.preventDefault(); review(); } }, 'Review ›')) : null;
+  const others = h('div', { class: 'md-other' }, h('span', null, mc.notCounted > 0 ? `${money(mc.notCounted)} not counted in Spent` : 'Everything is counted in Spent'), h('a', { href: 'javascript:void 0', onclick: (e) => { e.preventDefault(); review(); } }, 'What counts ›'));
   const incomePanel = h('div', { class: 'md-panel md-income' }, h('h3', { class: 'md-ph' }, 'Income'),
     h('p', { class: 'big-line' }, h('b', null, money(rec)), h('span', { class: 'muted' }, ` of ${money(exp)} expected`)),
     bar(rec, exp, 'good'),
