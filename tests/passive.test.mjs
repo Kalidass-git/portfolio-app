@@ -116,4 +116,6 @@ if (file) {
   }
   const s = P.summary(data, all); ok(s.required >= 0 && (s.coverage == null || s.coverage >= 0), 'coverage and the income still needed are sane');
 }
+{ const d = { settings: {} }; P.savePlan(d, { ...P.planOf(d), saveGoal: 5000.4 }); ok(d.settings.passivePlan.saveGoal === 5000 && P.planOf(d).saveGoal === 5000, 'the monthly savings target is saved and read back');
+  const d2 = { settings: {} }; P.savePlan(d2, P.planOf(d2)); ok(!('saveGoal' in d2.settings.passivePlan) && P.planOf({ settings: {} }).saveGoal === 0, 'no target: nothing extra is stored'); }
 console.log(bad ? 'FAILED' : 'ALL OK'); process.exit(bad ? 1 : 0);

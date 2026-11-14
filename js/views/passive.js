@@ -3,7 +3,8 @@
 import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
 import * as P from '../passive.js';
-import { h, money, compact, pct, monthLabel, section, kpi, segTabs, subTab, dialog, formDialog, toast, canEdit } from '../ui.js';
+import { barChart } from '../charts.js';
+import { h, money, btn, compact, pct, monthLabel, section, kpi, segTabs, subTab, dialog, formDialog, toast, canEdit } from '../ui.js';
 
 const TABS = [['overview', 'Overview'], ['allocations', 'Allocations'], ['progress', 'Progress']];
 const NS = 'http://www.w3.org/2000/svg';
@@ -285,10 +286,39 @@ function periodMonths(cur) {
   return Array.from({ length: Number(cur.slice(5)) }, (_, i) => cur.slice(0, 4) + '-' + String(i + 1).padStart(2, '0'));
 }
 
+
+/** The goal at the top of Progress: expenses paid by passive income, then what is left saved, then put back into investments. */
+function goalCard(root, months, one) {
+  const g = P.goalProgress(S.data, S.all, months), ed = canEdit(), n = g.per.length, hasGoal = g.goal > 0;
+  const covFrac = g.spent > 0 ? Math.min(1, g.income / g.spent) : g.income > 0 ? 1 : 0, allCovered = g.coveredMonths === n && n > 0;
+  const step = (no, title, state, frac, lvl, line, note) => h('li', { class: 'gl-step ' + lvl }, h('span', { class: 'gl-no' }, no),
+    h('div', { class: 'gl-body' }, h('div', { class: 'gl-top' }, h('b', null, title), h('span', { class: 'pa-st ' + lvl }, state)), bar(frac, lvl), h('p', { class: 'gl-line' }, line), note ? h('p', { class: 'pa-note' }, note) : null));
+  const s1 = step('1', 'Passive income pays all expenses', allCovered ? 'Done' : g.coverage == null ? 'No spending yet' : `${Math.round(g.coverage * 100)}% covered`, covFrac, allCovered ? 'ok' : covFrac >= 0.8 ? 'mid' : 'bad',
+    `${money(g.income)} income · ${money(g.spent)} spent${one ? '' : ' in ' + n + ' months'}`,
+    allCovered ? (g.streak > 1 ? `Covered ${g.streak} months in a row.` : 'Covered.') : `${money(g.needCover)} more income a month would cover everything.${n > 1 ? ` Covered in ${g.coveredMonths} of ${n} months.` : ''}`);
+  const s2 = hasGoal
+    ? step('2', 'Save from passive income', g.saveFrac >= 1 ? 'Target met' : `${Math.round((g.saveFrac || 0) * 100)}% of target`, g.saveFrac, g.saveFrac >= 1 ? 'ok' : g.surplus > 0 ? 'mid' : 'bad', `${money(g.surplus)} left after expenses · target ${money(g.target)}${one ? '' : ' (' + money(g.goal) + ' a month)'}`, g.saveFrac < 1 ? `${money(g.needMore)} more income a month reaches the target.` : null)
+    : step('2', 'Save from passive income', g.surplus > 0 ? money(g.surplus) + ' left' : 'No target set', g.surplus > 0 ? 1 : 0, g.surplus > 0 ? 'ok' : 'mid', `${money(g.surplus)} was left after expenses${one ? '' : ' in the period'}.`, ed ? 'Set how much you want to save every month to see how far you are.' : null);
+  const s3 = step('3', 'Put it back into investments', g.surplus <= 0 ? 'Nothing to invest yet' : g.toInvest < 0.5 ? 'All invested' : `${money(g.toInvest)} to invest`, g.surplus > 0 ? g.reinvested / g.surplus : 0, g.surplus <= 0 ? 'mid' : g.toInvest < 0.5 ? 'ok' : 'mid', `${money(g.reinvested)} invested of the ${money(g.surplus)} left over.`, g.surplus > 0 && g.toInvest >= 0.5 ? `Put ${money(g.toInvest)} into an investment to complete this step. Investments made in these months count, from any account.` : null);
+  const chartMonths = n > 1 ? months : P.monthsBetween(C.addMonths(months[0] + '-01', -5).slice(0, 7), months[0]), gp = n > 1 ? g : P.goalProgress(S.data, S.all, chartMonths);
+  root.append(section('Your goal', h('div', { class: 'gl' },
+    h('p', { class: 'note', style: { marginTop: 0 } }, 'Pay every expense from passive income, save what is left, and put that back into investments.'),
+    h('ol', { class: 'gl-steps' }, s1, s2, s3),
+    ed ? h('div', { class: 'gl-actions' }, btn(hasGoal ? `Monthly savings target: ${money(g.goal)}` : 'Set a monthly savings target', () => goalForm(g.goal), 'small')) : null,
+    barChart({ groups: gp.per.map((m) => ({ label: monthLabel(m.month, true).slice(0, 3), title: monthLabel(m.month, true), values: [m.income, m.spent, m.surplus] })), names: ['Passive income', 'Spent', 'Left over'], fmt: (v) => money(v), height: 200, colors: [0, 1, 2] }),
+    h('ul', { class: 'gl-months' }, gp.per.slice().reverse().map((m) => h('li', { class: m.covered ? 'ok' : 'bad' }, h('span', null, monthLabel(m.month, true)), h('span', null, m.covered ? (m.surplus > 0.5 ? '+ ' + money(m.surplus) + ' left' : 'Covered') : money(m.gap) + ' short'), h('i', null, m.covered ? '✓' : '✗')))))));
+}
+function goalForm(cur) {
+  formDialog({ title: 'Monthly savings target', value: { goal: cur || '' }, saveLabel: 'Save',
+    fields: [{ key: 'goal', label: 'Put back into investments every month (₹)', type: 'number', hint: 'The part of passive income you want left over after all expenses are paid. Leave empty to remove the target.' }],
+    onSave: (v) => setPlan((p) => { p.saveGoal = Math.max(0, Number(v.goal) || 0); }) });
+}
+
 /** The only place that talks about actuals: how the months went against the plan, income by income. */
 function progress(root, sm) {
   const cur = sm.cur, months = periodMonths(cur), r = P.progressReport(S.data, S.all, months), one = months.length === 1, al = sm.al, n = Math.max(1, months.length), live = months.includes(cur);
   root.append(h('div', { class: 'pi-row' }, h('nav', { class: 'seg pi-periods', 'aria-label': 'Period' }, PERIODS.map(([k, t]) => h('button', { type: 'button', class: period === k ? 'on' : '', onclick: () => { period = k; window.dispatchEvent(new Event('rerender')); } }, t)))));
+  goalCard(root, months, one);
   const incomeSub = live ? `${money(r.credited)} credited so far` : 'credited in the period';
   root.append(h('div', { class: 'kpis pi-kpis' },
     kpi('Passive income', money(live ? r.income : r.credited), live ? `incl. projected · ${incomeSub}` : incomeSub, { tone: 'pos' }),

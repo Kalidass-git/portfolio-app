@@ -9,6 +9,7 @@
 //              lump = a further payment made once every `every` months (maintenance at quarter end), planned as a share of every month
 //     merge: { [category in lower case]: 'Other category' }   a category counted as part of another (Maintenance as part of Rent)
 //     order: [category names, first = paid first]   the default priority, used for an income that has no order of its own
+//     saveGoal: ₹ a month the owner wants to put back into investments out of the passive income left after expenses (optional)
 //     sorder: { [source key]: [category names] }   the order one income pays its expenses in (set by dragging cards in its column) }
 // An allocation is a plan, not a promise: each month the income that really arrives is used in that order, so a smaller month pays the first expenses in full and leaves the last ones short.
 // Nothing here changes a budget: allocations are only ever changed by the owner.
@@ -39,7 +40,7 @@ export function planOf(data, all) {
     const seen = new Map(); for (const a of alloc) { const k = a.src + '|' + lc(a.cat), o = seen.get(k); if (o) o.amount = (Number(o.amount) || 0) + (Number(a.amount) || 0); else seen.set(k, a); }
     alloc = [...seen.values()];
   }
-  return { alloc, freq: { ...(p.freq || {}) }, extra: (p.extra || []).map((x) => ({ ...x })), skip: [...(p.skip || [])], carry: p.carry !== false, from: p.from || '', order: [...(p.order || [])], sorder: (() => { const o = {}; for (const [k, v] of Object.entries(p.sorder || {})) { const key = LEGACY_GRP.has(k) ? BONDS : k; o[key] = [...(o[key] || []), ...v.filter((n) => !(o[key] || []).some((q) => lc(q) === lc(n)))]; } return o; })(), expense: { ...(p.expense || {}) }, merge: { ...(p.merge || {}) } };
+  return { alloc, freq: { ...(p.freq || {}) }, extra: (p.extra || []).map((x) => ({ ...x })), skip: [...(p.skip || [])], carry: p.carry !== false, from: p.from || '', order: [...(p.order || [])], sorder: (() => { const o = {}; for (const [k, v] of Object.entries(p.sorder || {})) { const key = LEGACY_GRP.has(k) ? BONDS : k; o[key] = [...(o[key] || []), ...v.filter((n) => !(o[key] || []).some((q) => lc(q) === lc(n)))]; } return o; })(), expense: { ...(p.expense || {}) }, merge: { ...(p.merge || {}) }, saveGoal: Math.max(0, Number(p.saveGoal) || 0) };
 }
 export const BONDS = 'bondgrp:all';   // all bond interest is one income; older plans saved a monthly and a quarterly group
 const LEGACY_GRP = new Set(['bondgrp:monthly', 'bondgrp:quarterly']);
@@ -47,7 +48,7 @@ export const bondGroup = () => BONDS;
 /** Writes the plan into a data object inside mutate(). */
 export function savePlan(d, plan) {
   d.settings = d.settings || {};
-  d.settings.passivePlan = { alloc: plan.alloc.map((a) => ({ id: a.id, src: a.src, cat: a.cat, amount: r0(a.amount) })), freq: plan.freq, extra: plan.extra, skip: plan.skip, carry: plan.carry !== false, from: plan.from || '', order: plan.order || [], sorder: plan.sorder || {}, expense: plan.expense || {}, merge: plan.merge || {} };
+  d.settings.passivePlan = { alloc: plan.alloc.map((a) => ({ id: a.id, src: a.src, cat: a.cat, amount: r0(a.amount) })), freq: plan.freq, extra: plan.extra, skip: plan.skip, carry: plan.carry !== false, from: plan.from || '', order: plan.order || [], sorder: plan.sorder || {}, expense: plan.expense || {}, merge: plan.merge || {}, ...(plan.saveGoal > 0 ? { saveGoal: r0(plan.saveGoal) } : {}) };
 }
 export const newId = (list, p) => { let n = list.length + 1; const have = new Set(list.map((x) => x.id)); while (have.has(p + n)) n++; return p + n; };
 
@@ -335,6 +336,28 @@ export function history(data, all, n = 12) {
     out.push({ month: m, spent, received: inc.received, expected: inc.expected, coverage: spent > 0 ? inc.received / spent : null, reserve, diverted: sal.diverted, salary: sal.salary, invested: sal.invested });
   }
   return out.filter((r, i) => r.spent > 0 || r.received > 0 || i === out.length - 1);
+}
+
+/**
+ * Progress towards the goal: passive income pays every expense, and what is left over goes back into investments.
+ * Per month: income (credited for a finished month, the larger of due and credited for the running one), spent, covered?, surplus = income left after expenses.
+ * Over the period: the surplus added up, how much of it has been put into investments (investments made, capped at the surplus), and the target (saveGoal x months).
+ * Reinvested is the investments made in the same months, because the bank ledger cannot tell which rupee came from passive income.
+ */
+export function goalProgress(data, all, months) {
+  const plan = planOf(data, all), cur = C.monthKey(all.asOf), goal = plan.saveGoal || 0;
+  const per = months.map((m) => {
+    const past = m < cur, inc = incomeActual(data, all, m), spent = sum([...spendByCategory(data, m, plan).values()]);
+    const income = past ? inc.received : Math.max(inc.expected, inc.received), invested = salaryProtection(data, all, m, 0).invested;
+    const covered = spent > 0 ? income >= spent - 0.5 : income > 0;
+    return { month: m, past, income, received: inc.received, spent, covered, gap: Math.max(0, spent - income), surplus: Math.max(0, income - spent), invested, saved: goal > 0 ? income - spent >= goal - 0.5 : null };
+  });
+  const income = sum(per, (m) => m.income), spent = sum(per, (m) => m.spent), surplus = sum(per, (m) => m.surplus), invested = sum(per, (m) => m.invested);
+  const reinvested = Math.min(surplus, invested), target = goal * per.length;
+  let streak = 0; for (let i = per.length - 1; i >= 0; i--) { if (!per[i].past && i === per.length - 1 && per.length > 1) continue; if (per[i].covered) streak++; else break; }
+  const avgSpent = per.length ? spent / per.length : 0, avgIncome = per.length ? income / per.length : 0;
+  return { per, goal, income, spent, surplus, invested, reinvested, toInvest: Math.max(0, surplus - reinvested), target, coverage: spent > 0 ? income / spent : null, coveredMonths: per.filter((m) => m.covered).length,
+    streak, avgSpent, avgIncome, needMore: Math.max(0, avgSpent + goal - avgIncome), needCover: Math.max(0, avgSpent - avgIncome), saveFrac: target > 0 ? Math.min(1, surplus / target) : null };
 }
 
 /** The headline figures. Coverage is the monthly passive income over the usual monthly expenses. */
