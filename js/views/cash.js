@@ -6,7 +6,7 @@ import { hbars } from '../charts.js';
 import { closeForm, reopen, removeCredits } from './closing.js';
 import { openBankImport } from './cash-import.js';
 import { bulkForm } from './bulk.js';
-import { confirmDialog, pct, posNeg, stat, datalistId, icon, rowList } from '../ui.js';
+import { confirmDialog, pct, posNeg, stat, datalistId, icon, rowList, typeahead } from '../ui.js';
 import { chitCards, isWallet } from '../monthinvest.js';
 import { sortFilterBar } from '../mobilebar.js';
 import { monthGroups } from '../ui.js';
@@ -190,7 +190,6 @@ export function splitForm(entry) {
   const kind = entry.credit > 0 ? 'credit' : 'debit', total = kind === 'credit' ? entry.credit : entry.debit;
   const acct = data.accounts.find((a) => a.id === entry.acct);
   const known = new Map(data.categories.map((c) => [c.desc.toLowerCase(), c.category]));
-  const listId = datalistId('desc-list', data.categories.map((c) => c.desc));
   // categories you can split into: not transfers (they need two sides) and not a new category (add it first from Edit)
   const opts = categoryOptions(data, kind, entry.category).filter((g) => !g.group || !['Between my own accounts', 'Not in the list'].includes(g.group));
   const rows = [{ desc: entry.desc || '', category: entry.category || '', amount: String(total) }, { desc: '', category: '', amount: '' }];
@@ -205,12 +204,14 @@ export function splitForm(entry) {
   };
   const draw = () => {
     list.replaceChildren(...rows.map((r, i) => {
-      const desc = h('input', { type: 'text', value: r.desc, list: listId, placeholder: 'Description', 'aria-label': `Row ${i + 1} description`, style: { flex: '2 1 11em', minWidth: '0' }, oninput: (e) => { r.desc = e.target.value; const c = known.get(r.desc.trim().toLowerCase()); if (c && [...cat.options].some((o) => o.value === c)) { cat.value = c; r.category = c; } } });
+      const desc = h('input', { type: 'text', value: r.desc, placeholder: 'Description', 'aria-label': `Row ${i + 1} description`, style: { width: '100%' }, oninput: (e) => { r.desc = e.target.value; const c = known.get(r.desc.trim().toLowerCase()); if (c && [...cat.options].some((o) => o.value === c)) { cat.value = c; r.category = c; } } });
+      const descWrap = h('div', { style: { position: 'relative', flex: '2 1 11em', minWidth: '0' } }, desc);
+      typeahead(desc, () => data.categories.map((c) => c.desc), { host: descWrap });
       const cat = h('select', { 'aria-label': `Row ${i + 1} category`, style: { flex: '2 1 10em', minWidth: '0' }, onchange: (e) => { r.category = e.target.value; } });
       setOptions(cat, [{ value: '', label: 'Category…' }, ...opts], r.category);
       const amount = h('input', { type: 'number', step: 'any', inputmode: 'decimal', value: r.amount, placeholder: 'Amount ₹', 'aria-label': `Row ${i + 1} amount`, style: { flex: '1 1 6em', minWidth: '0' }, oninput: (e) => { r.amount = e.target.value; showLeft(); } });
       const rm = rows.length > 2 ? h('button', { class: 'icon', type: 'button', 'aria-label': `Remove row ${i + 1}`, title: 'Remove this row', onclick: () => { rows.splice(i, 1); draw(); } }, '✕') : null;
-      return h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--line-2)' } }, desc, cat, amount, rm);
+      return h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--line-2)' } }, descWrap, cat, amount, rm);
     }));
     showLeft();
   };
