@@ -2107,3 +2107,14 @@ body.pi-dragging, body.pi-dragging * { cursor: grabbing !important; user-select:
 .own-p.on button { border-color: var(--brand); box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 25%, transparent); }
 .own-p i { width: 12px; height: 12px; border-radius: 50%; } .own-p small { text-align: right; color: var(--muted); } .own-n { overflow-wrap: anywhere; font-weight: 600; }
 .own .legend li { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto 52px; gap: 10px; align-items: center; } .own .legend li small { text-align: right; color: var(--muted); } .own .legend li i { width: 12px; height: 12px; border-radius: 3px; }
+
+/* 9.7.0 budget tabs and alerts on Income & expenses */
+.bt-tabs { display: flex; gap: 8px; margin: 0 0 12px; }
+.bt { flex: 1 1 0; display: grid; grid-template-columns: 1fr auto; grid-template-areas: "t n" "s n"; align-items: center; text-align: left; gap: 0 10px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); font: inherit; color: inherit; cursor: pointer; }
+.bt small { grid-area: s; color: var(--muted); } .bt .bt-n { grid-area: n; min-width: 34px; height: 34px; border-radius: 17px; display: grid; place-items: center; font-weight: 700; background: var(--line); }
+.bt.on { box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 35%, transparent); border-color: var(--brand); }
+.bt.bad .bt-n { background: #c4472a; color: #fff; } .bt.warn .bt-n { background: #c08a1e; color: #fff; } .bt.good .bt-n { background: var(--pos, #0f8a6a); color: #fff; }
+.bt.bad small { color: #c4472a; } .bt.good small { color: var(--pos, #0f8a6a); }
+.bx .ax-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; cursor: default; } .bx .dismiss-link { font-size: .85em; white-space: nowrap; }
+.bx .ax-tabs a.bad .ax-n { background: #c4472a; color: #fff; } .bx .ax-tabs a.warn .ax-n { background: #c08a1e; color: #fff; }
+.bx .ax-body { padding-top: 8px; } .bx .findings { margin: 0; }
