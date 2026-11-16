@@ -5,6 +5,7 @@ import * as CAT from '../categories.js';
 import { hbars } from '../charts.js';
 import { closeForm, reopen, removeCredits } from './closing.js';
 import { openBankImport } from './cash-import.js';
+import { bulkForm } from './bulk.js';
 import { confirmDialog, pct, posNeg, stat, datalistId, icon, rowList } from '../ui.js';
 import { chitCards, isWallet } from '../monthinvest.js';
 import { sortFilterBar } from '../mobilebar.js';
@@ -32,7 +33,7 @@ export function render() {
   const old = route().sub;
   if (old === 'savings' || old === 'closed') location.replace('#/savings' + (old === 'closed' ? '/closed' : ''));
   const tab = subTab(TABS.map((t) => t[0]));
-  root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Cash views'), canEdit() ? h('span', { class: 'btn-row cash-btns' }, (() => { const b = btn('Import', () => openBankImport(categoryOptions)); b.classList.add('only-lg'); b.title = 'Import bank transactions from a CSV file'; return b; })(), btn('Transfer', () => transferForm()), btn('Add transaction', () => txnForm(), 'primary')) : null));
+  root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Cash views'), canEdit() ? h('span', { class: 'btn-row cash-btns' }, (() => { const b = btn('Import', () => openBankImport(categoryOptions)); b.classList.add('only-lg'); b.title = 'Import bank transactions from a CSV file'; return b; })(), (() => { const b = btn('Add many', () => bulkForm(), '', { keep: true }); b.classList.add('only-lg'); b.title = 'Add many income and expense entries in one go'; return b; })(), btn('Transfer', () => transferForm()), btn('Add transaction', () => txnForm(), 'primary')) : null));
   root.append(tab === 'ledger' ? ledger() : accounts());
   if (canEdit()) root.append(cashFab(tab === 'ledger' ? fKind : 'accounts'));
   return root;
