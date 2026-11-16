@@ -333,15 +333,18 @@ export function render() {
         : stat('Gold today', '–', 'turns on after the gold rate is refreshed'); })(),
     rateStat()));
 
+  // the note typed when a chit was closed is kept on the chit; show it with the gold it bought
+  const closedNote = new Map([...(data.gold.chits || []), ...(data.gold.schemes || [])].filter((c) => c.closed && c.closed.purchaseId && c.closed.note).map((c) => [c.closed.purchaseId, c.closed.note]));
+  const noteOf = (p) => p.note || closedNote.get(p.id) || '';
   root.append(section('Gold purchases',
     table([
-      { label: 'Date', mob: 'under', get: (p) => dateStr(p.date) }, { label: 'What', host: true, get: (p) => p.desc },
+      { label: 'Date', mob: 'under', get: (p) => dateStr(p.date) }, { label: 'What', host: true, render: (p) => h('div', null, h('div', null, p.desc), noteOf(p) ? h('div', { class: 'sub2' }, noteOf(p)) : null) },
       { label: 'Grams', cls: 'r', get: (p) => dec(p.grams, 2), total: () => dec(g.main.grams, 2) },
       { label: 'Paid · rate / g', cls: 'r', render: (p) => h('div', null, h('div', { class: 'b' }, money(p.amount)), h('div', { class: 'sub2' }, p.grams ? money(p.amount / p.grams) + ' / g' : '–')), total: () => money(g.main.invested) },
       { label: 'Value now', cls: 'r', get: (p) => money(p.grams * g.rate), total: () => money(g.main.value) },
       { label: 'Gain', mob: 'under', mlabel: 'gain ', cls: 'r', render: (p) => gainText(p.grams * g.rate - p.amount), total: () => money(g.main.gain) },
     ], data.gold.purchases.slice().reverse().map((p) => p), { footer: { label: 'Total' }, mobile: { key: 'gold-buys', head: 'Purchase',
-      first: (p) => ({ title: p.desc, sub: dateStr(p.date) }),
+      first: (p) => ({ title: p.desc, sub: [dateStr(p.date), noteOf(p)].filter(Boolean).join(' · ') }),
       views: [
         { label: 'Paid · Rate / g', main: (p) => money(p.amount), sub: (p) => (p.grams ? money(p.amount / p.grams) + ' / g' : '–'), total: () => ({ main: money(g.main.invested) }) },
         { label: 'Grams · Value now', main: (p) => dec(p.grams, 2) + ' g', sub: (p) => money(p.grams * g.rate), total: () => ({ main: dec(g.main.grams, 2) + ' g', sub: money(g.main.value) }) },
