@@ -14,6 +14,7 @@ let filter = { mode: 'all', cats: [] };
 const rerender = () => window.dispatchEvent(new Event('rerender'));
 import * as archiveView from './archive.js';
 import * as budgetView from './budgetreport.js';
+const budgetUi = { budgets: 'month', alerts: 'month' };
 const TABS = [['month', 'Overview'], ['categories', 'Categories & budgets'], ['budget', 'Budget report'], ['archive', 'Archive']];
 
 const PERIODS = [['this', 'This month'], ['last', 'Last month'], ['ytd', 'This year so far'], ['12m', 'Past 12 months'], ['all', 'All time']];
@@ -126,6 +127,7 @@ function overview() {
     filtered ? stat('Filter total', money(s.totalExpense), 'expenses + loan & tax in the filter', 'exp') : null));
 
   // alert: a budget that is nearly used up (this month against monthly budgets, this year against yearly ones)
+  let yearlyLines = [], yearlyYear = '';
   {
     const mo = C.periodRange('this', all.asOf), yr = C.periodRange('ytd', all.asOf);
     const none = { mode: 'all', cats: [] };
@@ -134,42 +136,58 @@ function overview() {
     const DK = 'fw.budgetAlertDismissed';
     const dismissedOn = () => { try { return (JSON.parse(localStorage.getItem(DK) || '{}'))[sig] || ''; } catch (_) { return ''; } };
     const hidden = (() => { const d = dismissedOn(); return !!d && (new Date(C.todayISO()) - new Date(d)) / 86400000 < 5; })();
-    if (al.length && !hidden) root.append(h('div', { class: 'alert' + (al.some((x) => x.over) ? '' : ' warn'), style: { position: 'relative' } },
-      h('a', { href: '#', class: 'dismiss-link', title: 'Hide this for 5 days', style: { position: 'absolute', top: '8px', right: '12px', fontSize: '0.85em' },
-        onclick: (e) => { e.preventDefault(); try { const o = JSON.parse(localStorage.getItem(DK) || '{}'); o[sig] = C.todayISO(); localStorage.setItem(DK, JSON.stringify(o)); } catch (_) { /* private mode */ } e.target.closest('.alert').remove(); } }, 'Dismiss'),
-      h('b', null, al.some((x) => x.over) ? `${al.filter((x) => x.over).length} over budget` + (al.some((x) => !x.over) ? `, ${al.filter((x) => !x.over).length} close to it` : '') : `${al.length} budget${al.length > 1 ? 's' : ''} nearly used up`),
-      h('ul', { class: 'findings' }, al.map((x) => h('li', null, h('b', { class: x.over ? 'neg' : 'warn' }, x.name), ` ${x.scope === 'month' ? 'this month' : 'this year'}: ${pct(x.used, 0)} of the ${x.scope === 'month' ? 'monthly' : 'yearly'} budget used (${money(x.spent)} of ${money(x.budget)})${x.over ? ', over by ' + money(-x.left) : ''}`)))));
+    if (al.length && !hidden) {
+      const ofScope = (k) => al.filter((x) => x.scope === k), nOver = (k) => ofScope(k).filter((x) => x.over).length;
+      if (!ofScope(budgetUi.alerts).length) budgetUi.alerts = ofScope('month').length ? 'month' : 'year';
+      const tabs = [['month', 'Monthly over'], ['year', 'Yearly over']];
+      const rows = ofScope(budgetUi.alerts);
+      root.append(h('section', { class: 'card ax bx needs' },
+        h('div', { class: 'ax-top' }, h('div', { class: 'ax-ttl' }, h('h2', null, 'Budget alerts'),
+          h('p', { class: 'ax-sub' }, al.some((x) => x.over) ? `${al.filter((x) => x.over).length} over budget` + (al.some((x) => !x.over) ? `, ${al.filter((x) => !x.over).length} close to it` : '') : `${al.length} budget${al.length > 1 ? 's' : ''} nearly used up`)),
+          h('a', { href: '#', class: 'dismiss-link', title: 'Hide this for 5 days', onclick: (e) => { e.preventDefault(); try { const o = JSON.parse(localStorage.getItem(DK) || '{}'); o[sig] = C.todayISO(); localStorage.setItem(DK, JSON.stringify(o)); } catch (_) { /* private mode */ } e.target.closest('section').remove(); } }, 'Dismiss')),
+        h('nav', { class: 'ax-tabs', role: 'tablist', 'aria-label': 'Budget alerts' }, tabs.map(([k, l]) => h('a', { href: 'javascript:void 0', role: 'tab', class: (budgetUi.alerts === k ? 'on ' : '') + (nOver(k) ? 'bad' : ofScope(k).length ? 'warn' : ''), 'aria-selected': String(budgetUi.alerts === k), onclick: (e) => { e.preventDefault(); budgetUi.alerts = k; rerender(); } }, l, h('span', { class: 'ax-n' }, String(nOver(k)))))),
+        h('div', { class: 'ax-body' }, rows.length ? h('ul', { class: 'findings' }, rows.map((x) => h('li', null, h('b', { class: x.over ? 'neg' : 'warn' }, x.name), ` ${pct(x.used, 0)} of the ${x.scope === 'month' ? 'monthly' : 'yearly'} budget used (${money(x.spent)} of ${money(x.budget)})${x.over ? ', over by ' + money(-x.left) : ', ' + money(x.left) + ' left'}`))) : h('p', { class: 'empty' }, 'Nothing here.'))));
+    }
     const yl = CAT.yearlyLines(data, C.rangeSummary(data, yr.from, yr.to, none).expense).filter((l) => passes(l.name));
-    if (yl.length) root.append(section('Yearly budget · ' + yr.from.slice(0, 4), h('div', null,
-      table([
-        { label: 'Category', host: true, get: (l) => l.name },
-        { label: 'Spent so far', cls: 'r', get: (l) => money(l.spent) },
-        { label: 'Yearly budget', mob: 'under', mlabel: 'budget ', cls: 'r', get: (l) => money(l.budget) },
-        { label: 'Used', mob: 'under', mlabel: 'used ', cls: 'r', render: (l) => h('span', { class: 'with-meter' }, meter(Math.min(1, l.used), l.used > 1 ? 7 : l.used >= 0.8 ? 3 : 2), h('span', { class: l.used > 1 ? 'neg' : l.used >= 0.8 ? 'warn' : '' }, pct(l.used, 0))) },
-        { label: 'Left', cls: 'r', render: (l) => h('span', { class: l.left < 0 ? 'neg' : 'pos' }, money(l.left)) },
-      ], yl, { m: { key: 'flow-yearly', head: 'Category', views: [['Spent so far', 'Yearly budget'], ['Left', 'Used']],
-        sort: [{ value: 'none', label: 'As listed', kind: 'none' }, { value: 'used', label: 'Budget used %', kind: 'num', get: (l) => l.used }, { value: 'spent', label: 'Spent so far', kind: 'num', get: (l) => l.spent }, { value: 'left', label: 'Left', kind: 'num', get: (l) => l.left }, { value: 'name', label: 'Category', kind: 'text', get: (l) => String(l.name || '').toLowerCase() }], sortDefault: { value: 'none', dir: 'asc' } } }),
-      h('p', { class: 'note' }, 'Spending from 1 January to today, whatever period is chosen above.')),
-      [h('a', { class: 'btn small', href: '#/flow/categories' }, 'Edit budgets')]));
+    yearlyLines = yl; yearlyYear = yr.from.slice(0, 4);
   }
 
-  // budgets: monthly budget × months in the period
-  if (range.months) {
-    const lines = CAT.budgetLines(data, s.expense).map((l) => ({ ...l, budget: l.budget * range.months, left: l.budget * range.months - l.spent, used: l.spent / (l.budget * range.months) })).filter((l) => passes(l.name));
-    if (lines.length) {
-      const tb = lines.reduce((a, l) => a + l.budget, 0), ts = lines.reduce((a, l) => a + l.spent, 0);
-      root.append(section('Budget · ' + name, h('div', null,
-        table([
+  // budgets: monthly budget × months in the period, and yearly budgets so far this year, as two tabs with the number over budget
+  {
+    const lines = range.months ? CAT.budgetLines(data, s.expense).map((l) => ({ ...l, budget: l.budget * range.months, left: l.budget * range.months - l.spent, used: l.spent / (l.budget * range.months) })).filter((l) => passes(l.name)) : [];
+    const yl = yearlyLines;
+    if (lines.length || yl.length) {
+      const nOver = (a) => a.filter((l) => l.used > 1).length, nNear = (a) => a.filter((l) => l.used >= 0.8 && l.used <= 1).length;
+      const tone = (a) => (nOver(a) ? 'bad' : nNear(a) ? 'warn' : 'good');
+      const tabs = [lines.length ? ['month', 'Monthly', lines] : null, yl.length ? ['year', 'Yearly', yl] : null].filter(Boolean);
+      if (!tabs.some((t) => t[0] === budgetUi.budgets)) budgetUi.budgets = tabs[0][0];
+      const cur = budgetUi.budgets;
+      const sortOpts = (spentLabel) => [{ value: 'none', label: 'As listed', kind: 'none' }, { value: 'used', label: 'Budget used %', kind: 'num', get: (l) => l.used }, { value: 'spent', label: spentLabel, kind: 'num', get: (l) => l.spent }, { value: 'left', label: 'Left', kind: 'num', get: (l) => l.left }, { value: 'name', label: 'Category', kind: 'text', get: (l) => String(l.name || '').toLowerCase() }];
+      let body;
+      if (cur === 'month') {
+        const tb = lines.reduce((a, l) => a + l.budget, 0), ts = lines.reduce((a, l) => a + l.spent, 0);
+        body = h('div', null, table([
           { label: 'Category', host: true, get: (l) => l.name },
           { label: 'Spent', cls: 'r', get: (l) => money(l.spent), total: () => money(ts) },
           { label: 'Budget', mob: 'under', mlabel: 'budget ', cls: 'r', get: (l) => money(l.budget), total: () => money(tb) },
           { label: 'Used', mob: 'under', mlabel: 'used ', cls: 'r', render: (l) => h('span', { class: 'with-meter' }, meter(Math.min(1, l.used), l.used > 1 ? 7 : l.used > .85 ? 3 : 2), h('span', { class: l.used > 1 ? 'neg' : '' }, pct(l.used, 0))), total: () => pct(tb ? ts / tb : 0, 0) },
           { label: 'Left', cls: 'r', render: (l) => h('span', { class: l.left < 0 ? 'neg' : 'pos' }, money(l.left)), total: () => h('span', { class: tb - ts < 0 ? 'neg' : '' }, money(tb - ts)) },
-        ], lines, { footer: { label: 'Total' }, m: { key: 'flow-budget', head: 'Category', views: [['Spent', 'Budget'], ['Left', 'Used']],
-          sort: [{ value: 'none', label: 'As listed', kind: 'none' }, { value: 'used', label: 'Budget used %', kind: 'num', get: (l) => l.used }, { value: 'spent', label: 'Spent', kind: 'num', get: (l) => l.spent }, { value: 'left', label: 'Left', kind: 'num', get: (l) => l.left }, { value: 'name', label: 'Category', kind: 'text', get: (l) => String(l.name || '').toLowerCase() }], sortDefault: { value: 'none', dir: 'asc' } } }),
-        h('p', { class: 'note' }, 'Budgets are set per category each month. Categories without a budget are not listed.')),
-        [h('a', { class: 'btn small', href: '#/flow/categories' }, 'Edit budgets')]));
-    } else if (canEdit() && !filtered) {
+        ], lines, { footer: { label: 'Total' }, m: { key: 'flow-budget', head: 'Category', views: [['Spent', 'Budget'], ['Left', 'Used']], sort: sortOpts('Spent'), sortDefault: { value: 'none', dir: 'asc' } } }),
+        h('p', { class: 'note' }, 'Monthly budgets for ' + name + ', set per category. Categories without a budget are not listed.'));
+      } else {
+        body = h('div', null, table([
+          { label: 'Category', host: true, get: (l) => l.name },
+          { label: 'Spent so far', cls: 'r', get: (l) => money(l.spent) },
+          { label: 'Yearly budget', mob: 'under', mlabel: 'budget ', cls: 'r', get: (l) => money(l.budget) },
+          { label: 'Used', mob: 'under', mlabel: 'used ', cls: 'r', render: (l) => h('span', { class: 'with-meter' }, meter(Math.min(1, l.used), l.used > 1 ? 7 : l.used >= 0.8 ? 3 : 2), h('span', { class: l.used > 1 ? 'neg' : l.used >= 0.8 ? 'warn' : '' }, pct(l.used, 0))) },
+          { label: 'Left', cls: 'r', render: (l) => h('span', { class: l.left < 0 ? 'neg' : 'pos' }, money(l.left)) },
+        ], yl, { m: { key: 'flow-yearly', head: 'Category', views: [['Spent so far', 'Yearly budget'], ['Left', 'Used']], sort: sortOpts('Spent so far'), sortDefault: { value: 'none', dir: 'asc' } } }),
+        h('p', { class: 'note' }, 'Spending from 1 January to today, whatever period is chosen above.'));
+      }
+      const nav = tabs.length > 1 ? h('nav', { class: 'bt-tabs', role: 'tablist', 'aria-label': 'Budgets' }, tabs.map(([k, l, a]) => h('button', { type: 'button', role: 'tab', class: 'bt ' + tone(a) + (cur === k ? ' on' : ''), 'aria-selected': String(cur === k), title: nOver(a) ? `${nOver(a)} over budget` : nNear(a) ? `${nNear(a)} close to the budget` : 'All within budget', onclick: () => { budgetUi.budgets = k; rerender(); } }, l,
+        h('span', { class: 'bt-n' }, String(nOver(a))), h('small', null, nOver(a) ? 'over' : nNear(a) ? nNear(a) + ' near' : 'all within')))) : null;
+      root.append(section(cur === 'year' ? 'Yearly budget · ' + yearlyYear : 'Budget · ' + name, h('div', null, nav, body), [h('a', { class: 'btn small', href: '#/flow/categories' }, 'Edit budgets')]));
+    } else if (canEdit() && !filtered && range.months) {
       root.append(h('div', { class: 'card' }, h('p', null, 'Set a monthly budget for categories like groceries, food or travel to see how much is left.'), h('a', { class: 'btn small', href: '#/flow/categories' }, 'Set budgets')));
     }
   }
