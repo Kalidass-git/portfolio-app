@@ -150,6 +150,35 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 9.7.0 – Budget tabs and alerts on Income & expenses
+
+- **Overview**: the monthly and yearly budget tables are now one **Budget** card with **Monthly / Yearly** tabs, opening on Monthly. Each tab carries the **number of categories over budget** in a coloured badge: red when any is over, amber when some are close (80% or more), green when all are within budget.
+- The budget alert banner is now a **Budget alerts** card in the style of Home's Action centre, with **Monthly over / Yearly over** tabs and the same counts. Dismiss (5 days) works as before. Presentation only.
+
+## Release 9.6.0 – Type-ahead in the Split transaction window
+
+- In **Cash & banks → Split transaction**, each part's description suggests your known descriptions as you type (same list as Add expense). Tab or tap fills it, and the category follows when known. No data changes.
+
+## Release 9.5.3 – Edit the note on a gold purchase
+
+- Tapping a gold purchase now has a **Note** field. For gold from a closed chit it edits the chit's closing note; for other purchases it stores an optional `note` on the purchase. Older purchases work as before.
+
+## Release 9.5.2 – Gold chit note on the gold purchase
+
+- The note typed when a gold chit or scheme is closed now shows on the **Gold purchases** card under the purchase it created, including for chits closed earlier. Read from the chit; no data changes.
+
+## Release 9.5.1 – "Add many" on Cash & banks
+
+- Cash & banks has an **Add many** button (browser version, hidden on phones like Import) opening the same many-entries form as Income & expenses. No data changes.
+
+## Release 9.5.0 – Month in detail: by description, tap to see entries
+
+- **Where it went** has a **By category / By description** switch. Tapping a category or description bar opens the entries behind it on the Income & expenses detail page for the same month or period. That page accepts optional `from`, `to`, `cats` and `label` in its link. No data changes.
+
+## Release 9.4.0 – Net worth: "What you own" in the Home style
+
+- **Net worth → What you own, month by month** has period buttons and a Value (₹) / Share % switch above the chart, rows per group with trend and change, and a Key insight line. Tapping a colour or a row drills in as before. Presentation only.
+
 ## Release 9.3.1 – Interest received on closed bonds
 
 - **Fixed income → Closed → Bonds**: the list now shows **Interest received** (what the bond actually paid until it closed, after TDS) right after **Invested**. On phones it is the first view: Invested · Interest received. Presentation only; no data changes.
