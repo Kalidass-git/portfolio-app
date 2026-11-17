@@ -150,6 +150,10 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 9.7.2 – Budget cards look like the Action centre
+
+- The **Budget alerts** and **Budget** cards on Income & expenses → Overview now use the same card as Home's Action centre: round icon with a red count badge, title, one-line summary, chevron to open and close, and a red edge when something is over budget. Both start collapsed. Alert rows look like Action centre alerts and open the category's entries when tapped. New file `js/axcard.js`. Presentation only.
+
 ## Release 9.7.1 – Budget cards start collapsed
 
 - On **Income & expenses → Overview**, the **Budget alerts** and **Budget** cards now start collapsed, like Home's Action centre. The header keeps the summary (for example "Monthly: 3 over · Yearly: 1 over", red, amber or green); tap it to open the tabs and the table. Presentation only.
