@@ -152,7 +152,7 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 
 ## Release 9.7.5 – One closing row on the Family report
 
-- The three closing rows (below zero, total, loans and net worth) are now **one row**: **Total assets** on the left and a highlighted **Net worth** on the right (with the loans it is after). Same figures as the cards at the top, less vertical space. Presentation only.
+- The three closing rows (below zero, total, loans and net worth) are now **one row**: **Total assets** on the left and a highlighted **Net worth** on the right (soft gold block, bold figure, with the loans it is after). Same figures as the cards at the top, less vertical space. Presentation only.
 
 ## Release 9.7.4 – Net worth row on the Family report
 
