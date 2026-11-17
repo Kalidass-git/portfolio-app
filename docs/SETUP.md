@@ -150,6 +150,10 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 9.7.1 – Budget cards start collapsed
+
+- On **Income & expenses → Overview**, the **Budget alerts** and **Budget** cards now start collapsed, like Home's Action centre. The header keeps the summary (for example "Monthly: 3 over · Yearly: 1 over", red, amber or green); tap it to open the tabs and the table. Presentation only.
+
 ## Release 9.7.0 – Budget tabs and alerts on Income & expenses
 
 - **Overview**: the monthly and yearly budget tables are now one **Budget** card with **Monthly / Yearly** tabs, opening on Monthly. Each tab carries the **number of categories over budget** in a coloured badge: red when any is over, amber when some are close (80% or more), green when all are within budget.

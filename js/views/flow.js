@@ -14,7 +14,7 @@ let filter = { mode: 'all', cats: [] };
 const rerender = () => window.dispatchEvent(new Event('rerender'));
 import * as archiveView from './archive.js';
 import * as budgetView from './budgetreport.js';
-const budgetUi = { budgets: 'month', alerts: 'month' };
+const budgetUi = { budgets: 'month', alerts: 'month', budgetsOpen: false, alertsOpen: false };
 const TABS = [['month', 'Overview'], ['categories', 'Categories & budgets'], ['budget', 'Budget report'], ['archive', 'Archive']];
 
 const PERIODS = [['this', 'This month'], ['last', 'Last month'], ['ytd', 'This year so far'], ['12m', 'Past 12 months'], ['all', 'All time']];
@@ -141,12 +141,14 @@ function overview() {
       if (!ofScope(budgetUi.alerts).length) budgetUi.alerts = ofScope('month').length ? 'month' : 'year';
       const tabs = [['month', 'Monthly over'], ['year', 'Yearly over']];
       const rows = ofScope(budgetUi.alerts);
-      root.append(h('section', { class: 'card ax bx needs' },
-        h('div', { class: 'ax-top' }, h('div', { class: 'ax-ttl' }, h('h2', null, 'Budget alerts'),
-          h('p', { class: 'ax-sub' }, al.some((x) => x.over) ? `${al.filter((x) => x.over).length} over budget` + (al.some((x) => !x.over) ? `, ${al.filter((x) => !x.over).length} close to it` : '') : `${al.length} budget${al.length > 1 ? 's' : ''} nearly used up`)),
-          h('a', { href: '#', class: 'dismiss-link', title: 'Hide this for 5 days', onclick: (e) => { e.preventDefault(); try { const o = JSON.parse(localStorage.getItem(DK) || '{}'); o[sig] = C.todayISO(); localStorage.setItem(DK, JSON.stringify(o)); } catch (_) { /* private mode */ } e.target.closest('section').remove(); } }, 'Dismiss')),
-        h('nav', { class: 'ax-tabs', role: 'tablist', 'aria-label': 'Budget alerts' }, tabs.map(([k, l]) => h('a', { href: 'javascript:void 0', role: 'tab', class: (budgetUi.alerts === k ? 'on ' : '') + (nOver(k) ? 'bad' : ofScope(k).length ? 'warn' : ''), 'aria-selected': String(budgetUi.alerts === k), onclick: (e) => { e.preventDefault(); budgetUi.alerts = k; rerender(); } }, l, h('span', { class: 'ax-n' }, String(nOver(k)))))),
-        h('div', { class: 'ax-body' }, rows.length ? h('ul', { class: 'findings' }, rows.map((x) => h('li', null, h('b', { class: x.over ? 'neg' : 'warn' }, x.name), ` ${pct(x.used, 0)} of the ${x.scope === 'month' ? 'monthly' : 'yearly'} budget used (${money(x.spent)} of ${money(x.budget)})${x.over ? ', over by ' + money(-x.left) : ', ' + money(x.left) + ' left'}`))) : h('p', { class: 'empty' }, 'Nothing here.'))));
+      const sumText = al.some((x) => x.over) ? `${al.filter((x) => x.over).length} over budget` + (al.some((x) => !x.over) ? `, ${al.filter((x) => !x.over).length} close to it` : '') : `${al.length} budget${al.length > 1 ? 's' : ''} nearly used up`, open = budgetUi.alertsOpen;
+      root.append(h('section', { class: 'card ax bx needs ' + (open ? 'is-open' : 'is-closed') },
+        h('button', { type: 'button', class: 'bx-toggle', 'aria-expanded': String(open), 'aria-label': 'Budget alerts. ' + sumText + (open ? '. Tap to collapse' : '. Tap to open'), onclick: () => { budgetUi.alertsOpen = !open; rerender(); } },
+          h('span', { class: 'ax-ttl' }, h('h2', null, 'Budget alerts'), h('span', { class: 'ax-sub' }, sumText)), h('i', { class: 'bx-chev', 'aria-hidden': 'true' }, '▾')),
+        !open ? null : h('div', { class: 'bx-panel' },
+          h('nav', { class: 'ax-tabs', role: 'tablist', 'aria-label': 'Budget alerts' }, tabs.map(([k, l]) => h('a', { href: 'javascript:void 0', role: 'tab', class: (budgetUi.alerts === k ? 'on ' : '') + (nOver(k) ? 'bad' : ofScope(k).length ? 'warn' : ''), 'aria-selected': String(budgetUi.alerts === k), onclick: (e) => { e.preventDefault(); budgetUi.alerts = k; rerender(); } }, l, h('span', { class: 'ax-n' }, String(nOver(k)))))),
+          h('div', { class: 'ax-body' }, rows.length ? h('ul', { class: 'findings' }, rows.map((x) => h('li', null, h('b', { class: x.over ? 'neg' : 'warn' }, x.name), ` ${pct(x.used, 0)} of the ${x.scope === 'month' ? 'monthly' : 'yearly'} budget used (${money(x.spent)} of ${money(x.budget)})${x.over ? ', over by ' + money(-x.left) : ', ' + money(x.left) + ' left'}`))) : h('p', { class: 'empty' }, 'Nothing here.')),
+          h('p', { class: 'note' }, h('a', { href: '#', onclick: (e) => { e.preventDefault(); try { const o = JSON.parse(localStorage.getItem(DK) || '{}'); o[sig] = C.todayISO(); localStorage.setItem(DK, JSON.stringify(o)); } catch (_) { /* private mode */ } e.target.closest('section').remove(); } }, 'Hide this for 5 days')))));
     }
     const yl = CAT.yearlyLines(data, C.rangeSummary(data, yr.from, yr.to, none).expense).filter((l) => passes(l.name));
     yearlyLines = yl; yearlyYear = yr.from.slice(0, 4);
@@ -186,7 +188,12 @@ function overview() {
       }
       const nav = tabs.length > 1 ? h('nav', { class: 'bt-tabs', role: 'tablist', 'aria-label': 'Budgets' }, tabs.map(([k, l, a]) => h('button', { type: 'button', role: 'tab', class: 'bt ' + tone(a) + (cur === k ? ' on' : ''), 'aria-selected': String(cur === k), title: nOver(a) ? `${nOver(a)} over budget` : nNear(a) ? `${nNear(a)} close to the budget` : 'All within budget', onclick: () => { budgetUi.budgets = k; rerender(); } }, l,
         h('span', { class: 'bt-n' }, String(nOver(a))), h('small', null, nOver(a) ? 'over' : nNear(a) ? nNear(a) + ' near' : 'all within')))) : null;
-      root.append(section(cur === 'year' ? 'Yearly budget · ' + yearlyYear : 'Budget · ' + name, h('div', null, nav, body), [h('a', { class: 'btn small', href: '#/flow/categories' }, 'Edit budgets')]));
+      const bOpen = budgetUi.budgetsOpen, tone2 = tabs.some(([, , a]) => nOver(a)) ? 'bad' : tabs.some(([, , a]) => nNear(a)) ? 'warn' : 'good';
+      const bSum = tabs.map(([k, l, a]) => `${l}: ${nOver(a) ? nOver(a) + ' over' : nNear(a) ? nNear(a) + ' near' : 'all within'}`).join(' · ');
+      root.append(section('Budget', h('div', { class: 'bx2 ' + (bOpen ? 'is-open' : 'is-closed') },
+        h('button', { type: 'button', class: 'bx-toggle bx-' + tone2, 'aria-expanded': String(bOpen), 'aria-label': 'Budget. ' + bSum + (bOpen ? '. Tap to collapse' : '. Tap to open'), onclick: () => { budgetUi.budgetsOpen = !bOpen; rerender(); } },
+          h('span', { class: 'ax-ttl' }, h('span', { class: 'ax-sub bx-sum' }, bSum)), h('i', { class: 'bx-chev', 'aria-hidden': 'true' }, '▾')),
+        bOpen ? h('div', { class: 'bx-panel' }, h('p', { class: 'note', style: { marginTop: 0 } }, cur === 'year' ? 'Yearly budget · ' + yearlyYear : 'Budget · ' + name), nav, body) : null), bOpen ? [h('a', { class: 'btn small', href: '#/flow/categories' }, 'Edit budgets')] : []));
     } else if (canEdit() && !filtered && range.months) {
       root.append(h('div', { class: 'card' }, h('p', null, 'Set a monthly budget for categories like groceries, food or travel to see how much is left.'), h('a', { class: 'btn small', href: '#/flow/categories' }, 'Set budgets')));
     }
