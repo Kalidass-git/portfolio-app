@@ -2118,3 +2118,11 @@ body.pi-dragging, body.pi-dragging * { cursor: grabbing !important; user-select:
 .bx .ax-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; cursor: default; } .bx .dismiss-link { font-size: .85em; white-space: nowrap; }
 .bx .ax-tabs a.bad .ax-n { background: #c4472a; color: #fff; } .bx .ax-tabs a.warn .ax-n { background: #c08a1e; color: #fff; }
 .bx .ax-body { padding-top: 8px; } .bx .findings { margin: 0; }
+
+/* 9.7.1 collapsed budget cards */
+.bx-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0; margin: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.bx-toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: 4px; border-radius: 10px; }
+.bx-toggle .ax-ttl h2 { margin: 0; } .bx-toggle .ax-sub { display: block; color: var(--muted); font-size: .92rem; } .bx2 .bx-sum { font-weight: 600; color: var(--ink); }
+.bx2 .bx-bad .bx-sum { color: #c4472a; } .bx2 .bx-warn .bx-sum { color: #a8741a; } .bx2 .bx-good .bx-sum { color: var(--pos, #0f8a6a); }
+.bx-chev { font-style: normal; font-size: 1.1rem; color: var(--muted); transition: transform .2s; flex: 0 0 auto; } .is-open > .bx-toggle .bx-chev, .bx-toggle[aria-expanded="true"] .bx-chev { transform: rotate(180deg); }
+.bx-panel { margin-top: 10px; } .bx.is-closed { padding-bottom: 14px; }
