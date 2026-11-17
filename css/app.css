@@ -2130,3 +2130,7 @@ body.pi-dragging, body.pi-dragging * { cursor: grabbing !important; user-select:
 /* 9.7.2 budget cards share the Action centre look */
 .ax .ax-val { font-weight: 650; font-size: .85rem; white-space: nowrap; } .ax .ax-val.neg { color: var(--ax-red); } .ax .ax-val.warn { color: var(--ax-amber); }
 .ax .ax-panel .bt-tabs { margin-top: 2px; } .ax .ax-tabs a.bad .ax-n { background: var(--ax-red); color: #fff; } .ax .ax-tabs a.warn .ax-n { background: var(--ax-amber); color: #fff; }
+
+/* 9.7.3 family report total row */
+.rpt-tbl tfoot .rpt-total td { border-top: 2px solid var(--ink, #222); padding-top: 9px; padding-bottom: 9px; font-weight: 700; background: color-mix(in srgb, var(--brand, #0f6b4e) 7%, transparent); }
+.rpt-tbl tfoot .cnt { font-weight: 400; opacity: .7; }
