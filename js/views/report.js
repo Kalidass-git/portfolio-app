@@ -87,6 +87,10 @@ function holdingsTable(secs, rep, notes) {
     }
     tbl.append(tb);
   });
+  const tot = secs.reduce((a, x) => a + x.total, 0), mon = secs.reduce((a, x) => a + (x.monthly || 0), 0), cnt = secs.reduce((a, x) => a + x.items.length, 0);
+  const diff = rep.total - tot;   // kinds that are below zero (an overdrawn account, say) are not listed above but are in Total assets
+  tbl.append(h('tfoot', null, Math.abs(diff) > 0.5 ? h('tr', { class: 'rpt-child' }, h('td'), h('td', { class: 'ch-name' }, 'Below zero (overdrawn accounts etc.)'), h('td', { class: 'hide-sm' }), h('td', { class: 'r' }, money(diff)), h('td', { class: 'r hide-sm' }), h('td', { class: 'r hide-sm' }), h('td')) : null, h('tr', { class: 'rpt-total' }, h('td'), h('td', null, h('b', null, 'Total'), h('span', { class: 'cnt' }, ` ${cnt} item${cnt === 1 ? '' : 's'}`)), h('td', { class: 'hide-sm' }),
+    h('td', { class: 'r' }, h('b', null, money(tot + (Math.abs(diff) > 0.5 ? diff : 0)))), h('td', { class: 'r hide-sm' }, ''), h('td', { class: 'r hide-sm' }, mon ? h('b', null, money(mon)) : ''), h('td'))));
   return tbl;
 }
 
