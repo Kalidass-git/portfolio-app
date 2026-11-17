@@ -67,7 +67,7 @@ function mergeSame(items, notes) {
 const pctOf = (v, t) => (t > 0 ? Math.round((v / t) * 100) + '%' : '');
 
 /** Parent row per kind of holding, with every item underneath in smaller type (tap a parent on screen to fold it; print always shows all). */
-function holdingsTable(secs, rep, notes) {
+function holdingsTable(secs, rep, notes, liab = 0) {
   const rows = [];
   const tbl = h('table', { class: 'rpt-tbl rpt-detail' },
     h('thead', null, h('tr', null, [['', ''], ['What', ''], ['Held by', 'hide-sm'], ['Amount', 'r'], ['Share', 'r hide-sm'], ['Monthly', 'r hide-sm'], ['Held with / contact', '']].map(([t, c]) => h('th', { class: c }, t)))));
@@ -90,7 +90,10 @@ function holdingsTable(secs, rep, notes) {
   const tot = secs.reduce((a, x) => a + x.total, 0), mon = secs.reduce((a, x) => a + (x.monthly || 0), 0), cnt = secs.reduce((a, x) => a + x.items.length, 0);
   const diff = rep.total - tot;   // kinds that are below zero (an overdrawn account, say) are not listed above but are in Total assets
   tbl.append(h('tfoot', null, Math.abs(diff) > 0.5 ? h('tr', { class: 'rpt-child' }, h('td'), h('td', { class: 'ch-name' }, 'Below zero (overdrawn accounts etc.)'), h('td', { class: 'hide-sm' }), h('td', { class: 'r' }, money(diff)), h('td', { class: 'r hide-sm' }), h('td', { class: 'r hide-sm' }), h('td')) : null, h('tr', { class: 'rpt-total' }, h('td'), h('td', null, h('b', null, 'Total'), h('span', { class: 'cnt' }, ` ${cnt} item${cnt === 1 ? '' : 's'}`)), h('td', { class: 'hide-sm' }),
-    h('td', { class: 'r' }, h('b', null, money(tot + (Math.abs(diff) > 0.5 ? diff : 0)))), h('td', { class: 'r hide-sm' }, ''), h('td', { class: 'r hide-sm' }, mon ? h('b', null, money(mon)) : ''), h('td'))));
+    h('td', { class: 'r' }, h('b', null, money(tot + (Math.abs(diff) > 0.5 ? diff : 0)))), h('td', { class: 'r hide-sm' }, ''), h('td', { class: 'r hide-sm' }, mon ? h('b', null, money(mon)) : ''), h('td')),
+    h('tr', { class: 'rpt-child rpt-loans' }, h('td'), h('td', { class: 'ch-name' }, 'Less: loans to repay'), h('td', { class: 'hide-sm' }), h('td', { class: 'r neg' }, liab ? '−' + money(liab) : money(0)), h('td', { class: 'r hide-sm' }), h('td', { class: 'r hide-sm' }), h('td')),
+    h('tr', { class: 'rpt-net' }, h('td'), h('td', null, h('b', null, 'Net worth'), h('span', { class: 'cnt' }, ' assets less loans')), h('td', { class: 'hide-sm' }),
+      h('td', { class: 'r' }, h('b', { class: rep.total - liab < 0 ? 'neg' : '' }, money(rep.total - liab))), h('td', { class: 'r hide-sm' }), h('td', { class: 'r hide-sm' }), h('td'))));
   return tbl;
 }
 
@@ -119,7 +122,7 @@ export function render() {
       h('div', { class: 'kpi k2' }, h('span', null, 'Loans to repay'), h('strong', { title: money(liab) }, words(liab))),
       h('div', { class: 'kpi k3 key' }, h('span', null, 'Net worth'), h('strong', { title: money(net) }, words(net))),
       h('div', { class: 'kpi k4 key' }, h('span', null, 'Monthly interest income'), h('strong', null, money(rep.monthly)))),
-    h('div', { class: 'rpt-scroll' }, holdingsTable(secs, rep, notes)),
+    h('div', { class: 'rpt-scroll' }, holdingsTable(secs, rep, notes, liab)),
     '');
 
   // ---------- page 2 ----------
