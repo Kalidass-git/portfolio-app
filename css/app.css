@@ -2135,8 +2135,12 @@ body.pi-dragging, body.pi-dragging * { cursor: grabbing !important; user-select:
 .rpt-tbl tfoot .rpt-total td { border-top: 2px solid var(--ink, #222); padding-top: 9px; padding-bottom: 9px; font-weight: 700; background: color-mix(in srgb, var(--brand, #0f6b4e) 7%, transparent); }
 .rpt-tbl tfoot .cnt { font-weight: 400; opacity: .7; }
 
-/* 9.7.4 net worth row under the total */
-.rpt-tbl tfoot .rpt-loans td { font-size: .92em; opacity: .9; } .rpt-tbl tfoot .rpt-loans td.neg { color: var(--neg, #c4472a); }
-.rpt-tbl tfoot .rpt-net td { padding-top: 12px; padding-bottom: 12px; font-size: 1.12em; font-weight: 800; color: #fff; background: var(--brand, #0f6b4e); border-top: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-.rpt-tbl tfoot .rpt-net td:first-child { border-radius: 0 0 0 10px; } .rpt-tbl tfoot .rpt-net td:last-child { border-radius: 0 0 10px 0; }
-.rpt-tbl tfoot .rpt-net .cnt { color: #fff; opacity: .8; font-weight: 400; font-size: .75em; } .rpt-tbl tfoot .rpt-net b.neg { color: #ffd0c2; }
+/* 9.7.5 one closing row: total assets and net worth */
+.rpt-tbl tfoot .rpt-one td { padding: 0; border-top: 2px solid var(--ink, #222); background: none; }
+.rpt-tot-line { display: grid; grid-template-columns: 1fr 1fr; }
+.rpt-tot-a, .rpt-tot-n { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 10px 14px; }
+.rpt-tot-a { background: color-mix(in srgb, var(--brand, #0f6b4e) 7%, transparent); }
+.rpt-tot-n { background: #fff6dc; color: #1d2b27; justify-content: flex-end; text-align: right; border-left: 3px solid #d9a21b; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.rpt-tot-n b { font-size: 1.3em; }
+.rpt-tot-line span { font-size: .8em; text-transform: uppercase; letter-spacing: .04em; opacity: .75; } .rpt-tot-line b { font-size: 1.15em; font-variant-numeric: tabular-nums; } .rpt-tot-line small { flex-basis: 100%; opacity: .75; }
+.rpt-tot-n.neg b { color: #c4472a; } .rpt-tot-n small { text-align: right; }

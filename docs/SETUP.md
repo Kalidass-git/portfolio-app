@@ -150,6 +150,10 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 9.7.5 – One closing row on the Family report
+
+- The three closing rows (below zero, total, loans and net worth) are now **one row**: **Total assets** on the left and a highlighted **Net worth** on the right (soft gold block, bold figure, with the loans it is after). Same figures as the cards at the top, less vertical space. Presentation only.
+
 ## Release 9.7.4 – Net worth row on the Family report
 
 - Under the **Total** row of the Family report table there is now **Less: loans to repay** and a highlighted **Net worth** row (dark green band, larger type), so assets, loans and net worth read down one column. Same figures as the cards at the top. Presentation only.
