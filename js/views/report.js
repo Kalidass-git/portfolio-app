@@ -87,13 +87,11 @@ function holdingsTable(secs, rep, notes, liab = 0) {
     }
     tbl.append(tb);
   });
-  const tot = secs.reduce((a, x) => a + x.total, 0), mon = secs.reduce((a, x) => a + (x.monthly || 0), 0), cnt = secs.reduce((a, x) => a + x.items.length, 0);
-  const diff = rep.total - tot;   // kinds that are below zero (an overdrawn account, say) are not listed above but are in Total assets
-  tbl.append(h('tfoot', null, Math.abs(diff) > 0.5 ? h('tr', { class: 'rpt-child' }, h('td'), h('td', { class: 'ch-name' }, 'Below zero (overdrawn accounts etc.)'), h('td', { class: 'hide-sm' }), h('td', { class: 'r' }, money(diff)), h('td', { class: 'r hide-sm' }), h('td', { class: 'r hide-sm' }), h('td')) : null, h('tr', { class: 'rpt-total' }, h('td'), h('td', null, h('b', null, 'Total'), h('span', { class: 'cnt' }, ` ${cnt} item${cnt === 1 ? '' : 's'}`)), h('td', { class: 'hide-sm' }),
-    h('td', { class: 'r' }, h('b', null, money(tot + (Math.abs(diff) > 0.5 ? diff : 0)))), h('td', { class: 'r hide-sm' }, ''), h('td', { class: 'r hide-sm' }, mon ? h('b', null, money(mon)) : ''), h('td')),
-    h('tr', { class: 'rpt-child rpt-loans' }, h('td'), h('td', { class: 'ch-name' }, 'Less: loans to repay'), h('td', { class: 'hide-sm' }), h('td', { class: 'r neg' }, liab ? '−' + money(liab) : money(0)), h('td', { class: 'r hide-sm' }), h('td', { class: 'r hide-sm' }), h('td')),
-    h('tr', { class: 'rpt-net' }, h('td'), h('td', null, h('b', null, 'Net worth'), h('span', { class: 'cnt' }, ' assets less loans')), h('td', { class: 'hide-sm' }),
-      h('td', { class: 'r' }, h('b', { class: rep.total - liab < 0 ? 'neg' : '' }, money(rep.total - liab))), h('td', { class: 'r hide-sm' }), h('td', { class: 'r hide-sm' }), h('td'))));
+  const cnt = secs.reduce((a, x) => a + x.items.length, 0), mon = secs.reduce((a, x) => a + (x.monthly || 0), 0), net = rep.total - liab;
+  // one closing row: total assets on the left, net worth (after loans) highlighted on the right
+  tbl.append(h('tfoot', null, h('tr', { class: 'rpt-total rpt-one' }, h('td', { colspan: '7' }, h('div', { class: 'rpt-tot-line' },
+    h('div', { class: 'rpt-tot-a' }, h('span', null, 'Total assets'), h('b', null, money(rep.total)), h('small', null, `${cnt} item${cnt === 1 ? '' : 's'}${mon ? ' · ' + money(mon) + ' a month' : ''}`)),
+    h('div', { class: 'rpt-tot-n' + (net < 0 ? ' neg' : '') }, h('span', null, 'Net worth'), h('b', null, money(net)), h('small', null, liab ? 'after ' + money(liab) + ' loans' : 'no loans')))))));
   return tbl;
 }
 
