@@ -2144,3 +2144,17 @@ body.pi-dragging, body.pi-dragging * { cursor: grabbing !important; user-select:
 .rpt-tot-n b { font-size: 1.3em; }
 .rpt-tot-line span { font-size: .8em; text-transform: uppercase; letter-spacing: .04em; opacity: .75; } .rpt-tot-line b { font-size: 1.15em; font-variant-numeric: tabular-nums; } .rpt-tot-line small { flex-basis: 100%; opacity: .75; }
 .rpt-tot-n.neg b { color: #c4472a; } .rpt-tot-n small { text-align: right; }
+
+/* 9.8.0 chart full screen */
+.fs-lock, .fs-lock body { overflow: hidden; }
+.fs-overlay { position: fixed; inset: 0; z-index: 2000; background: var(--bg, #f6f7f5); display: flex; flex-direction: column; padding-top: env(safe-area-inset-top); }
+.fs-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--surface); flex-wrap: wrap; }
+.fs-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 1.05rem; } .fs-hint { color: var(--muted); font-size: .8rem; order: 3; flex-basis: 100%; }
+.fs-btns { display: flex; align-items: center; gap: 6px; } .fs-btns button { width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-size: 1.2rem; line-height: 1; color: inherit; cursor: pointer; }
+.fs-btns .fs-x { background: var(--ink, #222); color: var(--surface, #fff); border-color: transparent; } .fs-z { min-width: 46px; text-align: center; font-variant-numeric: tabular-nums; font-size: .85rem; color: var(--muted); }
+.fs-body { flex: 1; overflow: auto; padding: 8px 12px calc(12px + env(safe-area-inset-bottom)); -webkit-overflow-scrolling: touch; }
+.fs-panel { margin: 0; box-shadow: none; border: 0; background: transparent; }
+.fs-panel .card-head h2 { display: none; } .fs-panel .card-head { margin: 0; min-height: 0; }
+.fs-box { overflow: hidden; touch-action: none; position: relative; cursor: zoom-in; } .fs-box.fs-zoomed { cursor: grab; }
+.chart-box { -webkit-tap-highlight-color: transparent; }
+@media (min-width: 900px) { .fs-box .chart { max-height: 72vh; } }
