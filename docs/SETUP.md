@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 9.9.1 – Home budget shows monthly budgets only
+
+- The **Budget** part of Home → This month in detail now lists only categories that have a **monthly budget**, against that monthly amount. Categories with only a yearly budget are no longer shown, and a yearly budget is no longer divided by 12 or added to a monthly one.
+- The total, "left" and the over/near counts use the monthly budgets only. Spending on categories without a monthly budget is mentioned in one line.
+- Yearly budgets are still on Income & expenses → Budget → Yearly. Presentation only: no data changed.
+
 ## Release 9.9.0 – Budget in This month in detail
 
 - Home → **This month in detail** now has a **Budget** part next to Income and Expenses. It lists every category that has a budget (Expenses → Categories): spent so far, budget, % used, what is left or how much over, and a thin meter. Sorted with the most used first. Tap a line to see what it is made of; "Edit budgets" opens Categories.
