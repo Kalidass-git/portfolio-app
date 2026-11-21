@@ -150,6 +150,14 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 9.9.0 – Budget in This month in detail
+
+- Home → **This month in detail** now has a **Budget** part next to Income and Expenses. It lists every category that has a budget (Expenses → Categories): spent so far, budget, % used, what is left or how much over, and a thin meter. Sorted with the most used first. Tap a line to see what it is made of; "Edit budgets" opens Categories.
+- **Computer:** shown **below** Income and Expenses, in two columns.
+- **Phone:** a third sub tab, **Income | Expenses | Budget**. The Budget tab shows the % used.
+- Works for the month picked at the top right of the card. A yearly-only budget is spread over 12 months, as on Income & expenses → Budget. Spending in categories with no budget is mentioned in one line.
+- Shown only when at least one category has a budget; otherwise Home looks as before. Same figures as Income & expenses → Budget (`monthReport`). Presentation only: no data or calculation changed.
+
 ## Release 9.8.0 – Chart full screen
 
 - Double-tap (phone) or double-click (computer) a chart panel to open it full screen. Works on Home (Asset performance) and on Net worth (the month-by-month line chart and "What you own").
