@@ -888,7 +888,7 @@ function thisMonth(data, all, months) {
   return section(isCur ? 'This month in detail' : monthLabel(selMonth) + ' in detail', h('div', { class: 'md' + (hasBudgets ? ' has-budget' : ''), 'data-tab': monthTab },
     budget, others,
     h('div', { class: 'md-tabs', role: 'tablist' }, tabBtn('income', 'Income', compact(rec)), tabBtn('expenses', 'Expenses', compact(spent)), hasBudgets ? tabBtn('budget', 'Budget', pct(bl.reduce((a, l) => a + l.spent, 0) / bl.reduce((a, l) => a + l.budget, 0), 0)) : null),
-    incomePanel, expensePanel, budgetPanel),
+    incomePanel, h('div', { class: 'md-right' }, expensePanel, budgetPanel)),
     [monthPicker(months, selMonth, (m) => { selMonth = m; rerender(); })]);
 }
 
