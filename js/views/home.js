@@ -6,6 +6,7 @@ import { h, money, compact, pct, dateStr, monthLabel, section, stat, monthPicker
 import { strip, legend, hbars, lineChart, donut, spark, color, riskColor } from '../charts.js';
 import * as R from '../risk.js';
 import { usualPace, paceSentence, lineTone } from '../spendpace.js';
+import { monthReport } from '../budgetreport.js';
 import { rateHistory, ageText } from './gold.js';
 import { GROUPS } from './groupmix.js';
 import { allocationBody } from './allocview.js';
@@ -842,12 +843,38 @@ function thisMonth(data, all, months) {
     spend.length ? hbars(spend.map((s) => { const u = usualBy.get(s.name), tone = u ? lineTone(s.amount, u.usualNow, u.kind) : null; return { label: s.name, value: s.amount, cats: s.cats, mark: u && u.usualNow > 0 ? u.usualNow : 0, tone, note: u ? (u.usualNow > 0 ? `${s.name}: ${money(s.amount)} against a usual ${money(u.usualNow)}${isCur ? ' by day ' + day : ''}` : `${s.name}: ${money(s.amount)}, not usual in most months`) : null }; }), { fmt: money, colorIndex: 1, onClick: (x) => expenseDrill(selMonth, x.label, x.cats) }) : h('p', { class: 'empty' }, 'No expenses recorded in this month.'),
     spend.length && usualBy.size ? h('div', { class: 'md-key', 'aria-hidden': 'true' }, h('span', null, h('i', { class: 't' }), isCur ? 'usual by now' : 'usual'), h('span', null, h('i', { class: 'g' }), 'under'), h('span', null, h('i', { class: 'w' }), 'near'), h('span', null, h('i', { class: 'r' }), 'above')) : null,
     spend.length ? h('p', { class: 'md-hint' }, 'Tap a bar for details · ', h('a', { href: '#/flow' }, 'See where it went ›')) : null);
-  const tabBtn = (id, text, val) => h('button', { type: 'button', role: 'tab', class: 'md-tab' + (monthTab === id ? ' on' : ''), 'aria-selected': monthTab === id ? 'true' : 'false', onclick: () => { monthTab = id; rerender(); } }, text, h('small', null, val));
-  // phones: one list at a time under the tabs; wide screens: both lists at once (income under the summary, expenses beside it) so there is no empty space
-  return section(isCur ? 'This month in detail' : monthLabel(selMonth) + ' in detail', h('div', { class: 'md', 'data-tab': monthTab },
+  // budget spending: each category that has a budget (Expenses → Categories), this month's spending against it. Same figures as Income & expenses → Budget.
+  let br = null; try { br = monthReport(data, selMonth, all.asOf); } catch (e) { br = null; }
+  const hasBudgets = !!(br && br.lines.length);
+  const budgetPanel = hasBudgets ? (() => {
+    const tone2 = br.status === 'over' ? 'bad' : br.status === 'near' ? 'warn' : 'good';
+    const dim = br.days, pastDay = isCur ? Math.min(day, dim) : null;
+    return h('div', { class: 'md-panel md-budget' }, h('h3', { class: 'md-ph' }, 'Budget'),
+      h('p', { class: 'big-line' }, h('b', { class: br.left < 0 ? 'neg' : '' }, money(br.spent)), h('span', { class: 'muted' }, ` of ${money(br.budget)} budgeted · ${pct(br.used, 0)} used`)),
+      bar(br.spent, br.budget, tone2),
+      h('p', { class: 'md-bsum' }, br.left >= 0 ? h('span', { class: 'pos' }, `${money(br.left)} left`) : h('span', { class: 'neg' }, `over by ${money(-br.left)}`),
+        br.over.length ? h('span', { class: 'md-chip warn' }, `${br.over.length} over`) : null,
+        br.near.length ? h('span', { class: 'md-chip warn' }, `${br.near.length} near`) : null,
+        !br.over.length && !br.near.length ? h('span', { class: 'md-chip good' }, '✓ all within') : null),
+      rowList(br.lines.map((l) => ({
+        title: l.name,
+        sub: `budget ${money(l.budget)}${l.yearlyOnly ? ' (yearly ÷ 12)' : ''} · ${pct(l.used, 0)} used` + (isCur && l.ahead ? ` · ahead of pace (${money(l.expected)} by day ${pastDay})` : ''),
+        value: money(l.spent),
+        tone: l.status === 'over' ? 'neg' : '',
+        valueSub: l.left < 0 ? h('span', { class: 'neg' }, 'over by ' + money(-l.left)) : h('span', { class: l.status === 'near' ? 'warn' : 'pos' }, money(l.left) + ' left'),
+        extra: h('span', { class: 'md-bmeter ' + (l.status === 'over' ? 'bad' : l.status === 'near' ? 'warn' : 'good') }, h('i', { style: { width: Math.min(100, l.used * 100).toFixed(1) + '%' } })),
+        onClick: () => expenseDrill(selMonth, l.name, [l.name]),
+      }))),
+      br.unbudgetedTotal > 0.5 ? h('p', { class: 'md-hint' }, `${money(br.unbudgetedTotal)} went on categories with no budget (${br.unbudgeted.slice(0, 3).map((u) => u.name).join(', ')}${br.unbudgeted.length > 3 ? ' and more' : ''}).`) : null,
+      h('p', { class: 'md-hint' }, 'Tap a line for details · ', h('a', { href: '#/flow/categories' }, 'Edit budgets ›')));
+  })() : null;
+  if (!hasBudgets && monthTab === 'budget') monthTab = 'expenses';
+  const tabBtn = (id, text, val) => h('button', { type: 'button', role: 'tab', class: 'md-tab md-tab-' + id + (monthTab === id ? ' on' : ''), 'aria-selected': monthTab === id ? 'true' : 'false', onclick: () => { monthTab = id; rerender(); } }, text, h('small', null, val));
+  // phones: one list at a time under the tabs (Income, Expenses, Budget); wide screens: all lists at once (income under the summary, expenses beside it, budget below) so there is no empty space
+  return section(isCur ? 'This month in detail' : monthLabel(selMonth) + ' in detail', h('div', { class: 'md' + (hasBudgets ? ' has-budget' : ''), 'data-tab': monthTab },
     budget, others,
-    h('div', { class: 'md-tabs', role: 'tablist' }, tabBtn('income', 'Income', compact(rec)), tabBtn('expenses', 'Expenses', compact(spent))),
-    incomePanel, expensePanel),
+    h('div', { class: 'md-tabs', role: 'tablist' }, tabBtn('income', 'Income', compact(rec)), tabBtn('expenses', 'Expenses', compact(spent)), hasBudgets ? tabBtn('budget', 'Budget', pct(br.used, 0)) : null),
+    incomePanel, expensePanel, budgetPanel),
     [monthPicker(months, selMonth, (m) => { selMonth = m; rerender(); })]);
 }
 
