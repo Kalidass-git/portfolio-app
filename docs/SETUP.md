@@ -150,6 +150,11 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 9.9.2 – Budget sits under Expenses on the computer
+
+- On a computer, Home → This month in detail now shows the **Budget** part in the right column, **directly under Expenses**, with each category on its own row (stacked one under another) instead of two columns across the bottom.
+- Phone unchanged: Income | Expenses | Budget sub tabs. Presentation only.
+
 ## Release 9.9.1 – Home budget shows monthly budgets only
 
 - The **Budget** part of Home → This month in detail now lists only categories that have a **monthly budget**, against that monthly amount. Categories with only a yearly budget are no longer shown, and a yearly budget is no longer divided by 12 or added to a monthly one.

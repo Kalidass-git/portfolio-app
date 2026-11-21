@@ -1746,9 +1746,8 @@ body.tm-lock { overflow: hidden; }
   .md-hero { grid-column: 1; grid-row: 1; } .md-other { grid-column: 1; grid-row: 2; margin-top: 0; }
   .md-tabs { display: none; } .md-ph { display: block; }
   .md[data-tab] .md-income, .md[data-tab] .md-expense, .md[data-tab] .md-budget { display: block; }
-  .md-income { grid-column: 1; grid-row: 3; } .md-expense { grid-column: 2; grid-row: 1 / span 3; }
-  .md-budget { grid-column: 1 / -1; grid-row: 4; }
-  .md-budget .rl { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); column-gap: 24px; }
+  .md-income { grid-column: 1; grid-row: 3; }
+  .md-right { grid-column: 2; grid-row: 1 / span 3; display: flex; flex-direction: column; gap: 22px; min-width: 0; }
 }
 
 /* usual-spending marks on the expense bars: a tick at the usual amount, bar coloured by how the line compares */

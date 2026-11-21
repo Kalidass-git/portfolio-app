@@ -2,7 +2,7 @@
 
 > **Starting a new session? Do this first.** 1) Read this file, then the top three entries of `docs/SETUP.md`. 2) Clone, branch `release-X.Y.Z` off `origin/main` (check which PRs the owner has merged: `git log origin/main`). 3) Say what you have read, list "Waiting for the owner" below, and ask what to build. 4) The owner works in short numbered requests; do them all in one release, test, bump, open one PR. He checks on his real data, which you never see: say how each rule works so he can check it.
 
-**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 9.9.1 (cache `family-wealth-v217`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
+**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 9.9.2 (cache `family-wealth-v218`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
 
 Read this first, then `docs/SETUP.md` (release notes, newest first) and `README.md`.
 
@@ -50,7 +50,7 @@ Branch off `origin/main` (`release-X.Y.Z`), change files, bump `js/version.js` a
 
 ## State after 9.9.0
 
-- Home `thisMonth()` (views/home.js): third part `budgetPanel` (class `md-budget`) from `monthReport` (`js/budgetreport.js`) fed through `budgetLines` (`js/categories.js`), so it has MONTHLY budgets only (9.9.1: the owner does not want yearly budgets divided by 12 on Home; yearly-only categories are left out and mentioned in the 'no monthly budget' line). Phone: `monthTab` can be 'income' | 'expenses' | 'budget' (falls back to 'expenses' when no category has a budget; the tab is then not drawn). Desktop (min 900px): panel spans both columns in grid row 4, below Income and Expenses. CSS: `.md-budget`, `.md-bsum`, `.md-bmeter`, `.md.has-budget .md-tab` at the end of the `.md-*` block in app.css.
+- Home `thisMonth()` (views/home.js): third part `budgetPanel` (class `md-budget`) from `monthReport` (`js/budgetreport.js`) fed through `budgetLines` (`js/categories.js`), so it has MONTHLY budgets only (9.9.1: the owner does not want yearly budgets divided by 12 on Home; yearly-only categories are left out and mentioned in the 'no monthly budget' line). Phone: `monthTab` can be 'income' | 'expenses' | 'budget' (falls back to 'expenses' when no category has a budget; the tab is then not drawn). Desktop (min 900px): `expensePanel` and `budgetPanel` are wrapped in `.md-right` (grid column 2, flex column) so Budget sits directly under Expenses with its items stacked one per row; Income stays in column 1. CSS: `.md-budget`, `.md-bsum`, `.md-bmeter`, `.md.has-budget .md-tab` at the end of the `.md-*` block in app.css.
 - Budget lines here use expense categories with a monthly budget, NOT the "What counts in Spent" choice, so they match Income & expenses → Budget, not the Spent hero above.
 - Ask the owner to check on real data: that the Budget tab figures match Income & expenses → Budget for the same month, and that it looks right on his phone.
 
