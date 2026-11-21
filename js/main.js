@@ -1,3 +1,4 @@
+import { initChartFullscreen } from './chartfs.js';
 import { VERSION } from './version.js';
 import { S, resolveGuard, dailyPoint, init, subscribe, pull, setData, setCfg, connect, recompute, startOfDaySnapshot, resolveConflict } from './store.js';
 import { h, $, toast, dialog, btn, formDialog, route } from './ui.js';
@@ -209,6 +210,7 @@ init();
 document.documentElement.style.setProperty('--fs', S.cfg.fontScale || 1);
 document.documentElement.dataset.theme = S.cfg.theme === 'auto' ? '' : S.cfg.theme;
 shell();
+initChartFullscreen();
 window.addEventListener('hashchange', renderView);
 window.addEventListener('rerender', renderView);
 let t;
