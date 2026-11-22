@@ -1613,6 +1613,22 @@ dialog.sheet.bulk { width: min(1180px, 96vw); }
 .tm-figs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px 16px; }
 .tm-fig { display: flex; flex-direction: column; gap: 2px; min-width: 0; } .tm-fl { font-size: .76rem; color: var(--muted); } .tm-fig b { font-size: 1.02rem; overflow-wrap: anywhere; } .tm-fig small { color: var(--muted); font-size: .76rem; line-height: 1.3; }
 .tm-rng { position: relative; display: block; height: 4px; border-radius: 3px; background: var(--line); margin-top: 6px; } .tm-rng i { position: absolute; top: -3px; width: 4px; height: 10px; border-radius: 2px; background: var(--brand); transform: translateX(-50%); }
+/* Key figures card (stock page): Performance, Fundamentals list, Growth, Analyst view, About */
+.kf-sec { padding: 16px 0 4px; border-top: 1px solid var(--line); } .kf-sec:first-child { border-top: 0; padding-top: 2px; }
+.kf-h { margin: 0 0 12px; font-size: 1.08rem; font-weight: 700; }
+.kf-range { margin: 0 0 20px; } .kf-ends { display: flex; justify-content: space-between; gap: 12px; } .kf-ends > div { display: flex; flex-direction: column; gap: 1px; } .kf-ends .r { align-items: flex-end; text-align: right; }
+.kf-ends small, .kf-stat small, .kf-analyst small, .kf-growth small { color: var(--muted); font-size: .76rem; font-weight: 500; } .kf-ends b { font-size: 1.02rem; font-variant-numeric: tabular-nums; }
+.kf-bars { display: grid; grid-template-columns: 1fr; column-gap: 40px; } @media (min-width: 760px) { .kf-bars { grid-template-columns: 1fr 1fr; } }
+.kf-track { position: relative; height: 4px; margin: 10px 0 14px; border-radius: 3px; background: var(--line); }
+.kf-track i { position: absolute; top: 9px; width: 0; height: 0; transform: translateX(-50%); border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 9px solid var(--ink); }
+.kf-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 12px; margin: 4px 0 12px; } .kf-stat { display: flex; flex-direction: column; gap: 2px; min-width: 0; } .kf-stat b { font-size: 1rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.kf-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px; margin-bottom: 8px; }
+.kf-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 10px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent); } .kf-row span { color: var(--muted); font-size: .88rem; min-width: 0; } .kf-row b { font-size: .95rem; font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.kf-growth { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 8px 10px; align-items: baseline; margin-bottom: 8px; } .kf-growth small { text-transform: uppercase; letter-spacing: .05em; font-size: .7rem; text-align: right; } .kf-growth b { text-align: right; font-size: 1rem; } .kf-growth span { color: var(--muted); font-size: .88rem; }
+.kf-analyst { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; } .kf-analyst > div { display: flex; flex-direction: column; gap: 1px; min-width: 0; } .kf-analyst .r { align-items: flex-end; text-align: right; } .kf-analyst b { font-size: 1.02rem; }
+@media (max-width: 560px) { .kf-row.wide { grid-column: 1 / -1; } }
+@media (max-width: 480px) { .kf-row span { font-size: .84rem; } .kf-row b { font-size: .9rem; } .kf-list { column-gap: 18px; } }
+@media (max-width: 300px) { .kf-list { grid-template-columns: 1fr; } }
 .tm-about { line-height: 1.5; } .tm-about.clamp { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 @media (max-width: 480px) { .tm-figs { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tm-price b { font-size: 1.6rem; } }
 .tm-tools .chip-btn { min-width: 40px; } .mchart { touch-action: pan-y; user-select: none; -webkit-user-select: none; }
