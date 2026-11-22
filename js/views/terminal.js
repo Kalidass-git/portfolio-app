@@ -26,7 +26,7 @@ const vfmt = (v) => (v >= 1e7 ? (v / 1e7).toFixed(2) + ' Cr' : v >= 1e5 ? (v / 1
 const pxf = (v) => (v >= 1000 ? Math.round(v).toLocaleString('en-IN') : dec(v, v < 10 ? 2 : 1));
 const rs = (v, d = 2) => (v == null ? '–' : '₹' + dec(v, d));
 const pc = (v, d = 1) => (v == null ? '–' : (v * 100).toFixed(d) + '%');
-const crore = (v) => (v == null ? '–' : v >= 1e12 ? '₹' + (v / 1e12).toFixed(2) + ' L Cr' : '₹' + Math.round(v / 1e7).toLocaleString('en-IN') + ' Cr');
+const crore = (v) => (v == null ? '–' : (v < 0 ? '−₹' : '₹') + Math.round(Math.abs(v) / 1e7).toLocaleString('en-IN') + ' Cr');   // whole crores with Indian digit grouping, as brokers show it
 const ago = (t) => { const m = Math.max(0, Math.round((Date.now() - t) / 60000)); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' days ago'; };
 
 /** Daily rows [{d,o,h,l,c,v}] from whatever the backend gave (older backends give closes only). */
@@ -200,41 +200,76 @@ function chartCard({ symbol, name, yahoo, index, indexPe = '', avgCost, firstBuy
   return card;
 }
 
-const tile = (label, value, sub, cls = '') => h('div', { class: 'tm-fig' }, h('span', { class: 'tm-fl' }, label), h('b', { class: cls }, value == null || value === '' ? '–' : value), sub ? h('small', null, sub) : null);
-const rangeBar = (lo, hi, px) => (lo != null && hi != null && hi > lo && px != null ? h('span', { class: 'tm-rng' }, h('i', { style: { left: Math.max(0, Math.min(100, ((px - lo) / (hi - lo)) * 100)) + '%' } })) : null);
+// ---- Key figures card: Performance (range bars), Fundamentals (one label / value list), Growth, Analyst view, About ----
+const kfSec = (title, ...kids) => h('div', { class: 'kf-sec' }, h('h3', { class: 'kf-h' }, title), ...kids);
+/** A low ... high bar with a marker where the price is now. */
+const kfRange = (loLabel, lo, hiLabel, hi, px) => (lo == null || hi == null || !(hi > lo) ? null : h('div', { class: 'kf-range' },
+  h('div', { class: 'kf-ends' }, h('div', null, h('small', null, loLabel), h('b', null, dec(lo, 2))), h('div', { class: 'r' }, h('small', null, hiLabel), h('b', null, dec(hi, 2)))),
+  h('div', { class: 'kf-track', role: 'img', 'aria-label': px == null ? '' : `Price ${dec(px, 2)}, ${Math.round(Math.max(0, Math.min(1, (px - lo) / (hi - lo))) * 100)}% of the way from the low to the high` },
+    px == null ? null : h('i', { style: { left: Math.max(0, Math.min(100, ((px - lo) / (hi - lo)) * 100)) + '%' } }))));
+/** A small figure: muted label over a bold value, optional note under it. */
+const kfStat = (label, value, sub, cls = '') => h('div', { class: 'kf-stat' }, h('small', null, label), h('b', { class: cls }, value), sub ? h('small', { class: 'kf-sub' }, sub) : null);
+/** One row of the Fundamentals list: label on the left, value on the right. Rows with no figure are left out. */
+const kfRow = (label, value, cls = '', tip = '', wide = false) => (value == null || value === '' || value === '–' ? null : h('div', { class: 'kf-row' + (wide ? ' wide' : ''), title: tip || null }, h('span', null, label), h('b', { class: cls }, value)));
+const gcls = (v) => (v == null ? '' : v < 0 ? 'neg' : v > 0 ? 'pos' : '');
+const gpc = (v) => (v == null ? null : (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v * 100).toFixed(1) + '%');
 
 function figuresCard({ symbol, yahoo, index, price }) {
-  const body = h('div', null, h('p', { class: 'note' }, 'Loading the figures…'));
+  const body = h('div', { class: 'kf' }, h('p', { class: 'note' }, 'Loading the figures…'));
   const wrap = section('Key figures', body);
   const draw = (v) => {
     const { q, d } = v, px = price != null ? price : q && q.price;
-    const near = (x) => (x == null ? null : x);
-    const grid = [];
-    grid.push(tile('Day range', d && d.dayLow != null ? `${dec(d.dayLow, 2)} – ${dec(d.dayHigh, 2)}` : '–'),
-      tile('Previous close', q && q.prevClose != null ? dec(q.prevClose, 2) : '–'),
-      tile('52-week range', q && q.lo52 != null ? `${dec(q.lo52, 2)} – ${dec(q.hi52, 2)}` : '–', null), 
-      tile('From 52-week high', q && q.hi52 && px ? `${((px / q.hi52 - 1) * 100).toFixed(1)}%` : '–', q && q.lo52 && px ? `${((px / q.lo52 - 1) * 100).toFixed(1)}% above the low` : '', q && q.hi52 && px && px < q.hi52 * 0.9 ? 'neg' : ''),
-      tile('Volume', q && q.volume != null ? vfmt(q.volume) : '–', d && d.avgVolume != null ? 'avg ' + vfmt(d.avgVolume) : ''));
-    if (!index) {
-      grid.push(tile('Market cap', crore(q && q.mcap)), tile('P/E (trailing)', q && q.pe != null ? q.pe.toFixed(1) : '–', (q && q.fpe != null ? q.fpe : d && d.fpe) != null ? 'forward ' + (q && q.fpe != null ? q.fpe : d.fpe).toFixed(1) : 'profit-making companies only'),
-        tile('Price to book', q && q.pb != null ? q.pb.toFixed(2) : '–'), tile('EPS (12 months)', q && q.eps != null ? rs(q.eps) : '–'), tile('Book value', d && d.bookValue != null ? rs(d.bookValue) : '–'),
-        tile('Dividend yield', q && q.dy != null ? q.dy.toFixed(2) + '%' : '–'), tile('Beta', d && d.beta != null ? d.beta.toFixed(2) : '–'),
-        tile('Return on equity', pc(d && d.roe), null, d && d.roe < 0 ? 'neg' : ''), tile('Return on assets', pc(d && d.roa)), tile('Profit margin', pc(d && d.margin)), tile('Operating margin', pc(d && d.opMargin)),
-        tile('Revenue growth', pc(d && d.revGrowth), null, d && d.revGrowth < 0 ? 'neg' : ''), tile('Earnings growth', pc(d && d.earnGrowth), null, d && d.earnGrowth < 0 ? 'neg' : ''),
-        tile('Debt to equity', d && d.de != null ? (d.de / 100).toFixed(2) : '–'), tile('Current ratio', d && d.currentRatio != null ? d.currentRatio.toFixed(2) : '–'),
-        tile('Revenue', crore(d && d.revenue)), tile('Free cash flow', crore(d && d.fcf)),
-        tile('Analyst target', d && d.target != null ? rs(d.target) : '–', d && d.target && px ? `${((d.target / px - 1) * 100).toFixed(1)}% ${d.target >= px ? 'above' : 'below'} the price${d.analysts ? ' · ' + d.analysts + ' analysts' : ''}${d.recommendation ? ' · ' + d.recommendation : ''}` : '', d && d.target && px ? posNeg(d.target - px) : ''));
-      const bits = [d && d.sector, d && d.industry, d && d.employees ? Number(d.employees).toLocaleString('en-IN') + ' employees' : null].filter(Boolean);
-      body.replaceChildren(h('div', { class: 'tm-figs' }, grid), h('p', { class: 'note' }, 'From Yahoo Finance. Numbers can lag or be missing for some companies.'));
-      if (bits.length || (d && d.summary)) {
-        const long = d && d.summary ? d.summary : '';
-        const p = h('p', { class: 'tm-about clamp' }, long);
-        body.append(h('h4', null, 'About'), bits.length ? h('p', { class: 'note' }, bits.join(' · ')) : null, long ? p : null,
-          long.length > 260 ? h('button', { type: 'button', class: 'chip-btn small', onclick: (e) => { p.classList.toggle('clamp'); e.currentTarget.textContent = p.classList.contains('clamp') ? 'Read more' : 'Show less'; } }, 'Read more') : null);
-      }
-    } else body.replaceChildren(h('div', { class: 'tm-figs' }, grid), h('p', { class: 'note' }, 'An index has no P/E, earnings or company figures here; the chart shows its price level with the 50 and 200-day averages.'));
-    // the 52-week position bar is drawn inside its tile
-    const t = body.querySelectorAll('.tm-fig')[2]; const bar = q && rangeBar(q.lo52, q.hi52, px); if (t && bar) t.append(bar);
+    const has = (x) => x != null && isFinite(x);
+    // Performance: where the price sits today and over the year
+    const fromHi = q && q.hi52 && px ? px / q.hi52 - 1 : null, aboveLo = q && q.lo52 && px ? px / q.lo52 - 1 : null;
+    const stats = [q && has(q.prevClose) ? kfStat('Prev. close', dec(q.prevClose, 2)) : null,
+      q && has(q.volume) ? kfStat('Volume', vfmt(q.volume)) : null,
+      d && has(d.avgVolume) ? kfStat('Avg. volume', vfmt(d.avgVolume)) : null,
+      fromHi != null ? kfStat('From 52W high', pc(fromHi), null, fromHi < -0.1 ? 'neg' : '') : null,
+      aboveLo != null ? kfStat('Over 52W low', pc(aboveLo), null, 'pos') : null].filter(Boolean);
+    const dayBar = d && has(d.dayLow) && has(d.dayHigh) ? kfRange('Today’s low', d.dayLow, 'Today’s high', d.dayHigh, px) : null;
+    const yrBar = q ? kfRange('52-week low', q.lo52, '52-week high', q.hi52, px) : null;
+    const perf = dayBar || yrBar || stats.length ? kfSec('Performance', dayBar || yrBar ? h('div', { class: 'kf-bars' }, dayBar, yrBar) : null, stats.length ? h('div', { class: 'kf-stats' }, stats) : null) : null;
+    if (index) { body.replaceChildren(...[perf, h('p', { class: 'note' }, 'An index has no P/E, earnings or company figures here; the chart shows its price level with the 50 and 200-day averages.')].filter(Boolean)); return; }
+    // Fundamentals: everything about the company in one list, two columns (label left, value right)
+    const fpe = q && q.fpe != null ? q.fpe : d && d.fpe;
+    const rows = [
+      kfRow('Mkt cap', q && q.mcap != null ? crore(q.mcap) : null, '', 'Market capitalisation', true),
+      kfRow('Revenue', d && has(d.revenue) ? crore(d.revenue) : null, '', 'Total revenue, last twelve months', true),
+      kfRow('Free cash flow', d && has(d.fcf) ? crore(d.fcf) : null, gcls(d && d.fcf) === 'neg' ? 'neg' : '', 'Free cash flow: cash left after running and investing in the business', true),
+      kfRow('ROE', pc(d && d.roe) === '–' ? null : pc(d.roe), gcls(d && d.roe) === 'neg' ? 'neg' : '', 'Return on equity'),
+      kfRow('P/E (TTM)', q && q.pe != null ? q.pe.toFixed(1) : null, '', 'Price to earnings, last twelve months'),
+      kfRow('EPS (TTM)', q && q.eps != null ? rs(q.eps) : null, '', 'Earnings per share, last twelve months'),
+      kfRow('Forward P/E', fpe != null ? fpe.toFixed(1) : null, '', 'Price to expected earnings'),
+      kfRow('Div. yield', q && q.dy != null ? q.dy.toFixed(2) + '%' : null, '', 'Dividend yield'),
+      kfRow('P/B ratio', q && q.pb != null ? q.pb.toFixed(2) : null, '', 'Price to book value'),
+      kfRow('Book value', d && has(d.bookValue) ? rs(d.bookValue) : null),
+      kfRow('Debt to equity', d && has(d.de) ? (d.de / 100).toFixed(2) : null),
+      kfRow('Current ratio', d && has(d.currentRatio) ? d.currentRatio.toFixed(2) : null),
+      kfRow('ROA', pc(d && d.roa) === '–' ? null : pc(d.roa), '', 'Return on assets'),
+      kfRow('Beta', d && has(d.beta) ? d.beta.toFixed(2) : null, '', 'How much it moves compared with the market (1 = the same)'),
+      kfRow('Profit margin', pc(d && d.margin) === '–' ? null : pc(d.margin), gcls(d && d.margin) === 'neg' ? 'neg' : ''),
+      kfRow('Op. margin', pc(d && d.opMargin) === '–' ? null : pc(d.opMargin), gcls(d && d.opMargin) === 'neg' ? 'neg' : '', 'Operating margin'),
+    ].filter(Boolean);
+    const fund = kfSec('Fundamentals', rows.length ? h('div', { class: 'kf-list' }, rows) : h('p', { class: 'note' }, 'No company figures found for this share.'));
+    // Growth, like the revenue / profit table on a broker's page: the latest year on year change
+    const growth = d && (has(d.revGrowth) || has(d.earnGrowth)) ? kfSec('Growth', h('div', { class: 'kf-growth' },
+      h('span', null), h('small', null, 'Revenue'), h('small', null, 'Profit'),
+      h('span', null, 'Year on year'), h('b', { class: gcls(d.revGrowth) }, gpc(d.revGrowth) || '–'), h('b', { class: gcls(d.earnGrowth) }, gpc(d.earnGrowth) || '–'))) : null;
+    // Analyst view
+    const tgt = d && has(d.target) ? d.target : null;
+    const analyst = tgt ? kfSec('Analyst view', h('div', { class: 'kf-analyst' },
+      h('div', null, h('small', null, 'Average target'), h('b', null, rs(tgt))),
+      px ? h('div', { class: 'r' }, h('small', null, `${d.analysts ? d.analysts + ' analysts' : 'analysts'}${d.recommendation ? ' · ' + d.recommendation : ''}`), h('b', { class: posNeg(tgt - px) }, `${((tgt / px - 1) * 100).toFixed(1)}% ${tgt >= px ? 'above' : 'below'} the price`)) : null)) : null;
+    const bits = [d && d.sector, d && d.industry, d && d.employees ? Number(d.employees).toLocaleString('en-IN') + ' employees' : null].filter(Boolean);
+    const long = d && d.summary ? d.summary : '';
+    let about = null;
+    if (bits.length || long) {
+      const p = long ? h('p', { class: 'tm-about clamp' }, long) : null;
+      about = kfSec('About the company', bits.length ? h('p', { class: 'note' }, bits.join(' · ')) : null, p,
+        long.length > 260 ? h('button', { type: 'button', class: 'chip-btn small', onclick: (e) => { p.classList.toggle('clamp'); e.currentTarget.textContent = p.classList.contains('clamp') ? 'Read more' : 'Show less'; } }, 'Read more') : null);
+    }
+    body.replaceChildren(...[perf, fund, growth, analyst, about, h('p', { class: 'note' }, 'From Yahoo Finance. Figures it does not have for a company are left out, and numbers can lag.')].filter(Boolean));
   };
   stockInfo(symbol, yahoo).then(draw).catch((e) => body.replaceChildren(h('p', { class: 'empty' }, e.message || 'Could not load the figures.')));
   return wrap;

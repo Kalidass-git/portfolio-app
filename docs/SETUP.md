@@ -150,6 +150,14 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 9.10.0 – Key figures on a share's page, redesigned
+
+- A share's **Key figures** card (Shares & funds → tap a share; also a watchlist share) is now laid out like a broker's stock page instead of 25 equal tiles:
+  - **Performance:** Today's low–high bar and 52-week low–high bar, each with a marker where the price is now; then previous close, volume, average volume, how far below the 52-week high and above the low.
+  - **Fundamentals:** one two-column list, label on the left and figure on the right: market cap, revenue and free cash flow (in whole crores, Indian grouping), then ROE, P/E, EPS, forward P/E, dividend yield, P/B, book value, debt to equity, current ratio, ROA, beta, profit and operating margin. On a phone the three big crore figures take a full line each. A figure Yahoo does not have is left out instead of showing a dash.
+  - **Growth** (revenue and profit, year on year), **Analyst view** (average target and how far it is from the price) and **About the company** (Read more).
+- Same data and calculations as before, nothing new is stored. Funds' pages are unchanged. Not shown because the data source does not give them: open price, circuit limits, industry P/E.
+
 ## Release 9.9.2 – Budget sits under Expenses on the computer
 
 - On a computer, Home → This month in detail now shows the **Budget** part in the right column, **directly under Expenses**, with each category on its own row (stacked one under another) instead of two columns across the bottom.
