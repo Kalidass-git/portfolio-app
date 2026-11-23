@@ -42,9 +42,9 @@ export function strip(items, { fmt, total } = {}) {
   });
   return bar;
 }
-export function legend(items, { fmt, onSelect = null } = {}) {
+export function legend(items, { fmt, onSelect = null, selected = null } = {}) {
   const sum = items.reduce((a, x) => a + Math.max(0, x.value), 0);
-  return h('ul', { class: 'legend' }, items.map((it, i) => h('li', onSelect ? { class: 'click', tabindex: 0, onclick: () => onSelect(it, i), onkeydown: (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onSelect(it, i)) } : null,
+  return h('ul', { class: 'legend' }, items.map((it, i) => h('li', onSelect ? { class: 'click' + (selected != null ? (it.key === selected ? ' on' : ' dim') : ''), 'aria-pressed': selected != null ? String(it.key === selected) : null, tabindex: 0, onclick: () => onSelect(it, i), onkeydown: (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onSelect(it, i)) } : null,
     h('i', { style: { background: it.color || color(i) } }),
     h('span', { class: 'lg-name' }, it.label),
     h('span', { class: 'lg-val' }, fmt ? fmt(it.value) : it.value),
@@ -61,6 +61,28 @@ export function hbars(rows, { fmt = (v) => v, max, colorIndex = 0, onClick } = {
     h('span', { class: 'hb-track' + (r.mark > 0 ? ' mk' : '') }, h('span', { class: 'hb-fill' + (r.tone ? ' ' + r.tone : ''), style: { width: Math.max(1.5, (r.value / m) * 100) + '%', background: r.tone ? null : color(r.ci ?? colorIndex) } }),
       r.mark > 0 ? h('i', { class: 'hb-mark', style: { left: Math.min(100, (r.mark / m) * 100) + '%' }, 'aria-hidden': 'true' }) : null),
     h('span', { class: 'hb-val' }, fmt(r.value), r.tone ? h('small', { class: 'hb-g ' + r.tone, 'aria-label': { good: 'under the usual', warn: 'near the usual', bad: 'above the usual' }[r.tone] }, ' ' + glyph[r.tone]) : null))));
+}
+
+/**
+ * Horizontal bars where every bar is stacked by its parts (for example a company's bonds split into secured and unsecured).
+ * rows: [{ label, parts: { key: value } }], parts: [{ key, label, color }] in stacking order. Parts nobody has are left out of the key.
+ */
+export function hstack(rows, { parts, fmt = (v) => v, onClick = null } = {}) {
+  const tot = (r) => parts.reduce((a, p) => a + Math.max(0, r.parts[p.key] || 0), 0);
+  const m = Math.max(1, ...rows.map(tot));
+  const used = parts.filter((p) => rows.some((r) => (r.parts[p.key] || 0) > 0));
+  return h('div', { class: 'hstack' },
+    h('ul', { class: 'legend inline hs-key' }, used.map((p) => h('li', null, h('i', { style: { background: p.color } }), h('span', { class: 'lg-name' }, p.label)))),
+    h('ul', { class: 'hbars' }, rows.map((r) => {
+      const t = tot(r);
+      return h('li', { class: onClick ? 'click' : '', onclick: onClick ? () => onClick(r) : null },
+        h('span', { class: 'hb-label' }, r.label),
+        h('span', { class: 'hb-track' }, h('span', { class: 'hb-stack', style: { width: Math.max(1.5, (t / m) * 100) + '%' } }, used.map((p) => {
+          const v = Math.max(0, r.parts[p.key] || 0);
+          return v > 0 ? h('span', { class: 'hb-seg', style: { width: (v / t) * 100 + '%', background: p.color }, title: `${r.label} · ${p.label}: ${fmt(v)} (${Math.round((v / t) * 100)}%)` }) : null;
+        }))),
+        h('span', { class: 'hb-val' }, fmt(t)));
+    })));
 }
 
 /** Draw to about the size it will be shown at, so axis text stays readable on a phone. */
@@ -252,7 +274,7 @@ export function candleChart(rows, { height = 300, fmt = (v) => v.toFixed(2), vfm
 export const meter = (v, ci = 0) => h('span', { class: 'meter' }, h('span', { style: { width: Math.min(100, Math.max(0, v * 100)) + '%', background: color(ci) } }));
 
 /** Donut with the grand total in the middle. items: [{label, value}] (colors follow the list order, same as legend()). */
-export function donut(items, { fmt = (v) => v, center = '', sub = '', size = 200, onSelect = null } = {}) {
+export function donut(items, { fmt = (v) => v, center = '', sub = '', size = 200, onSelect = null, selected = null } = {}) {
   const sum = items.reduce((a, x) => a + Math.max(0, x.value), 0) || 1;
   const cx = 100, cy = 100, R = 92, r = 62;
   const root = svg('svg', { viewBox: '0 0 200 200', class: 'donut-svg', role: 'img', 'aria-label': items.map((i) => `${i.label} ${((i.value / sum) * 100).toFixed(1)}%`).join(', '), style: `max-width:${size}px` });
@@ -270,7 +292,7 @@ export function donut(items, { fmt = (v) => v, center = '', sub = '', size = 200
       const [x1, y1] = pt(R, s), [x2, y2] = pt(R, e), [x3, y3] = pt(r, e), [x4, y4] = pt(r, s), big = e - s > Math.PI ? 1 : 0;
       d = `M${x1.toFixed(2)},${y1.toFixed(2)}A${R},${R} 0 ${big} 1 ${x2.toFixed(2)},${y2.toFixed(2)}L${x3.toFixed(2)},${y3.toFixed(2)}A${r},${r} 0 ${big} 0 ${x4.toFixed(2)},${y4.toFixed(2)}Z`;
     }
-    const seg = svg('path', { d, fill: it.color || color(i), class: 'dseg' + (onSelect ? ' click' : ''), 'fill-rule': 'evenodd' });
+    const seg = svg('path', { d, fill: it.color || color(i), class: 'dseg' + (onSelect ? ' click' : '') + (selected != null ? (it.key === selected ? ' on' : ' dim') : ''), 'fill-rule': 'evenodd' });
     if (onSelect) { seg.addEventListener('click', () => onSelect(it, i)); seg.setAttribute('tabindex', '0'); seg.setAttribute('role', 'button'); seg.setAttribute('aria-label', 'Show what is inside ' + it.label); seg.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(it, i); } }); }
     hover(seg, () => [h('b', null, it.label), h('div', null, fmt(it.value) + '  ·  ' + ((it.value / sum) * 100).toFixed(1) + '%')]);
     root.append(seg);

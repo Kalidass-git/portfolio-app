@@ -2,7 +2,7 @@
 
 > **Starting a new session? Do this first.** 1) Read this file, then the top three entries of `docs/SETUP.md`. 2) Clone, branch `release-X.Y.Z` off `origin/main` (check which PRs the owner has merged: `git log origin/main`). 3) Say what you have read, list "Waiting for the owner" below, and ask what to build. 4) The owner works in short numbered requests; do them all in one release, test, bump, open one PR. He checks on his real data, which you never see: say how each rule works so he can check it.
 
-**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 9.10.0 (cache `family-wealth-v219`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
+**Repo:** https://github.com/Kalidass-git/portfolio-app (public), branch `main`. Latest release 9.11.0 (cache `family-wealth-v220`). Clone with `git clone https://github.com/Kalidass-git/portfolio-app.git`, run `python3 -m http.server 8765` in the folder, open http://localhost:8765. No build step.
 
 Read this first, then `docs/SETUP.md` (release notes, newest first) and `README.md`.
 
@@ -47,6 +47,12 @@ A no-build installable web app (PWA, vanilla ES modules) that mirrors the owner'
 
 ## Release process
 Branch off `origin/main` (`release-X.Y.Z`), change files, bump `js/version.js` and the cache name in `sw.js`, add notes at the top of the release list in `docs/SETUP.md`, push, and open a PR to `main` with `gh api` (GraphQL is blocked). The owner merges it. Always base on `origin/main` so stacked PRs do not leave main behind.
+
+## State after 9.11.0
+
+- js/views/fixed.js `bondInsights()`: By company uses the new `hstack()` (js/charts.js) over `firmStack`, parts `SEC_PARTS` (secured / unsecured / notset, colours --s3 / --s2 / --muted). The secured vs unsecured `donut()` and its `legend()` call `pickSecurity(key)`, which toggles `flt.bonds.security` ('all' | 'secured' | 'unsecured' | 'notset'), re-renders and scrolls to `#bond-list`.
+- `quickFilter(..., sorts, extra)` has a new optional `extra` predicate; the Bonds list passes the security test. `securityChip()` shows the "… bonds only · n bonds · Show all" bar above the list. `donut()` and `legend()` got a `selected` option (other parts fade). The filter lives in the module-level `flt` and so lasts for the session, not saved.
+- Ask the owner to check on real bonds: that every bond has secured / unsecured set (those without it show as grey "Not set"), and that the list total matches the slice.
 
 ## State after 9.10.0
 
