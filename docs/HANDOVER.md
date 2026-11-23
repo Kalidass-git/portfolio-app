@@ -48,6 +48,10 @@ A no-build installable web app (PWA, vanilla ES modules) that mirrors the owner'
 ## Release process
 Branch off `origin/main` (`release-X.Y.Z`), change files, bump `js/version.js` and the cache name in `sw.js`, add notes at the top of the release list in `docs/SETUP.md`, push, and open a PR to `main` with `gh api` (GraphQL is blocked). The owner merges it. Always base on `origin/main` so stacked PRs do not leave main behind.
 
+## State after 9.13.0
+
+- views/fixed.js: `pickHolder(label)` sets `flt.bonds.holder` (the same value as the Holder dropdown, so they stay in sync); the holder `donut()`/`legend()` get `key: label`, `onSelect`, `selected`. `securityChip()` now describes both pie filters (holder and/or secured) and "Show all" clears both. "Not set" is not clickable.
+
 ## State after 9.12.0
 
 - `js/claims.js` (pure): `markClaim`, `claimRows`, `claimSummary`, `applyRepayment` (oldest first, partial, new credit or link an existing one), `undoRepayment`, `cancelClaim`, `repayments`, `hasRepayments`. Fields are optional: debit `claim: {from, cat}` + category "Claim back"; credit `claimFor: [{id, amount}]` + `claimPrev` (null when created here).

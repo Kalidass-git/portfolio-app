@@ -376,26 +376,36 @@ function pickSecurity(key) {
   rerenderFixed();
   if (flt.bonds.security !== 'all') setTimeout(() => { const el = document.getElementById('bond-list'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 80);
 }
-/** Under the charts, above the bond list: says the list is filtered by the pie, with a way back. */
+/** Tap a slice of the "Who holds the bonds" pie: the list shows only that holder's bonds (same as the Holder filter above the list). Tap again to clear. */
+function pickHolder(label) {
+  if (label === 'Not set') return;
+  flt.bonds.holder = flt.bonds.holder === label ? 'all' : label;
+  rerenderFixed();
+  if (flt.bonds.holder !== 'all') setTimeout(() => { const el = document.getElementById('bond-list'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 80);
+}
+/** Under the charts, above the bond list: says the list is filtered by a pie (secured / unsecured and / or holder), with a way back. */
 function securityChip() {
-  const k = flt.bonds.security;
-  if (k === 'all') return null;
-  const p = SEC_PARTS.find((x) => x.key === k), n = S.all.bonds.filter((b) => securityKey(b) === k).length;
-  return h('div', { class: 'bond-filter', role: 'status' }, h('i', { style: { background: p.color } }), h('span', null, h('b', null, p.label + ' bonds only'), ` · ${n} ${n === 1 ? 'bond' : 'bonds'}`), btn('Show all', () => { flt.bonds.security = 'all'; rerenderFixed(); }));
+  const k = flt.bonds.security, hd = flt.bonds.holder;
+  if (k === 'all' && hd === 'all') return null;
+  const p = k === 'all' ? null : SEC_PARTS.find((x) => x.key === k);
+  const n = S.all.bonds.filter((b) => (k === 'all' || securityKey(b) === k) && (hd === 'all' || String(b.holder || '').trim() === hd)).length;
+  const what = [hd === 'all' ? null : hd + '’s', p ? p.label.toLowerCase() : null].filter(Boolean).join(' ');
+  const title = (what ? what.charAt(0).toUpperCase() + what.slice(1) + ' bonds' : 'Bonds') + ' only';
+  return h('div', { class: 'bond-filter', role: 'status' }, p ? h('i', { style: { background: p.color } }) : null, h('span', null, h('b', null, title), ` · ${n} ${n === 1 ? 'bond' : 'bonds'}`), btn('Show all', () => { flt.bonds.security = 'all'; flt.bonds.holder = 'all'; rerenderFixed(); }));
 }
 function bondInsights(all, data) {
   const group = (key) => { const m = new Map(); for (const b of all.bonds) { const k = String(b[key] || '').trim() || 'Not set'; m.set(k, (m.get(k) || 0) + b.principal); } return [...m.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value); };
   const secure = SEC_PARTS.map((p) => ({ key: p.key, label: p.label, color: p.color, value: all.bonds.filter((b) => securityKey(b) === p.key).reduce((a, b) => a + b.principal, 0) })).filter((x) => x.value > 0);
   // every company's bonds stacked by secured / unsecured, biggest company first
   const firmStack = (() => { const m = new Map(); for (const b of all.bonds) { const k = String(b.company || '').trim() || 'Not set'; const r = m.get(k) || { label: k, parts: {}, total: 0 }; r.parts[securityKey(b)] = (r.parts[securityKey(b)] || 0) + b.principal; r.total += b.principal; m.set(k, r); } return [...m.values()].sort((a, b) => b.total - a.total); })();
-  const owners = group('holder'), total = all.bonds.reduce((a, b) => a + b.principal, 0);
+  const owners = group('holder').map((o) => ({ ...o, key: o.label })), total = all.bonds.reduce((a, b) => a + b.principal, 0);
   const bn = C.bondNotify(data);
   const save = (patch) => { if (!canEdit()) return toast('This device has read-only access.'); mutate((d) => { d.settings = { ...d.settings, bondNotify: { ...C.bondNotify(d), ...patch } }; }); };
   const days = h('select', { 'aria-label': 'Days before', disabled: !canEdit() || !bn.on, onchange: (e) => save({ days: Number(e.target.value) }) });
   setOptions(days, [0, 1, 2, 3, 5, 7, 10, 14].map((n) => ({ value: n, label: n === 0 ? 'On the day itself' : n === 1 ? '1 day before' : n + ' days before' })), bn.days);
   return h('div', null,
     h('div', { class: 'grid2' },
-      section('Who holds the bonds', h('div', null, donut(owners, { fmt: money, center: compact(total), sub: 'invested', size: 190 }), legend(owners, { fmt: money }))),
+      section('Who holds the bonds', h('div', null, donut(owners, { fmt: money, center: compact(total), sub: 'invested', size: 190, onSelect: (it) => pickHolder(it.key), selected: flt.bonds.holder === 'all' ? null : flt.bonds.holder }), legend(owners, { fmt: money, onSelect: (it) => pickHolder(it.key), selected: flt.bonds.holder === 'all' ? null : flt.bonds.holder }), h('p', { class: 'note' }, 'Tap a part of the pie to see only that holder’s bonds in the list below.'))),
       section(firmView === 'company' ? 'Which companies' : 'Secured vs unsecured', h('div', null,
         h('div', { class: 'seg', role: 'tablist', style: { marginBottom: '10px' } }, [['company', 'By company'], ['security', 'Secured vs unsecured']].map(([k, l]) => h('button', { type: 'button', role: 'tab', class: firmView === k ? 'on' : '', 'aria-selected': String(firmView === k), onclick: () => { firmView = k; window.dispatchEvent(new Event('rerender')); } }, l))),
         firmView === 'company'
