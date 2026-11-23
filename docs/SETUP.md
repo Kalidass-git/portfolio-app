@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 9.13.0 – Bonds: "Who holds the bonds" pie filters the list
+
+- Tap a slice (or its legend row) of the **Who holds the bonds** pie: the bond list below shows only that holder's bonds. Tap it again, or press **Show all**, to clear. It works together with the secured / unsecured pie (for example "Priya's secured bonds only") and uses the same Holder filter above the list.
+- Bonds with no holder set show as "Not set" in the pie and cannot be tapped.
+- No data change.
+
 ## Release 9.12.0 – To claim back (company reimbursements and money owed by friends)
 
 - **Add or edit a transaction → "Claim back from"** (optional, expenses only). Type who will pay it back: your company for internet, a friend you sent money to. The entry moves to a protected "Claim back" category that is not counted, so it stays out of Spent, budgets and income.
