@@ -11,6 +11,7 @@ import { chitCards, isWallet } from '../monthinvest.js';
 import { sortFilterBar } from '../mobilebar.js';
 import { monthGroups } from '../ui.js';
 import { openSummary, closedSummary } from '../savingsummary.js';
+import * as CL from '../claims.js';
 
 /** Calendar and financial year (April to March) choices for the date filter. */
 const PERIODS = (asOf) => {
@@ -24,7 +25,7 @@ const inPeriod = (v, date, asOf) => { if (v === 'all') return true; if (v.starts
 let fAcct = 'all', fMonth = null, fText = '', fKind = 'all', limit = 60;
 let fCat = 'all', fAmtOp = 'any', fAmtVal = '', fSort = 'date', fDir = 'desc';
 let fCats = { mode: 'all', cats: [] }, fView = 'entries';   // fCats: tick several categories to show only them or to leave them out; fView: entries, by category or by description
-const TABS = [['accounts', 'Accounts'], ['ledger', 'Transactions']];
+const TABS = [['accounts', 'Accounts'], ['ledger', 'Transactions'], ['claims', 'To claim back']];
 /** Open the transactions list, optionally pre-filtered. Used by links from other screens. */
 export function openLedger({ text = '', month = null, acct = 'all', kind = 'all' } = {}) { fText = text; fMonth = month; fAcct = acct; fKind = kind; limit = 60; location.hash = '#/cash/ledger'; }
 
@@ -34,7 +35,7 @@ export function render() {
   if (old === 'savings' || old === 'closed') location.replace('#/savings' + (old === 'closed' ? '/closed' : ''));
   const tab = subTab(TABS.map((t) => t[0]));
   root.append(h('div', { class: 'pagebar' }, segTabs(TABS, tab, 'Cash views'), canEdit() ? h('span', { class: 'btn-row cash-btns' }, (() => { const b = btn('Import', () => openBankImport(categoryOptions)); b.classList.add('only-lg'); b.title = 'Import bank transactions from a CSV file'; return b; })(), (() => { const b = btn('Add many', () => bulkForm(), '', { keep: true }); b.classList.add('only-lg'); b.title = 'Add many income and expense entries in one go'; return b; })(), btn('Transfer', () => transferForm()), btn('Add transaction', () => txnForm(), 'primary')) : null));
-  root.append(tab === 'ledger' ? ledger() : accounts());
+  root.append(tab === 'ledger' ? ledger() : tab === 'claims' ? claimsTab() : accounts());
   if (canEdit()) root.append(cashFab(tab === 'ledger' ? fKind : 'accounts'));
   return root;
 }
@@ -128,7 +129,7 @@ function accounts() {
 export const NEW = '__new__';
 /** Category choices: money received shows income categories only, money paid out shows expenses (and investments). */
 export function categoryOptions(data, direction, current) {
-  const list = CAT.categoryList(data).filter((c) => c.name.toLowerCase() !== 'transfer' || (current || '').toLowerCase() === 'transfer');
+  const list = CAT.categoryList(data).filter((c) => (c.name.toLowerCase() !== 'transfer' || (current || '').toLowerCase() === 'transfer') && c.name !== CL.CLAIM_CAT);
   const names = (arr) => arr.map((c) => c.name).sort((a, b) => a.localeCompare(b));
   const keep = (c) => c.name === current;
   const opts = [];
@@ -249,11 +250,12 @@ export function splitForm(entry) {
 
 export function txnForm(entry, preset) {
   if (entry && entry.transferId) return transferForm(entry);
+  if (entry && entry.claimFor) { toast('This is money paid back to you. Undo it from To claim back.', 'bad'); location.hash = '#/cash/claims'; return; }
   const { data } = S;
   const accts = data.accounts.map((a) => ({ value: a.id, label: `${a.name} · ${a.holder}` }));
   const known = new Map(data.categories.map((c) => [c.desc.toLowerCase(), c.category]));
   const isNew = !entry;
-  const base = entry ? { ...entry, kind: entry.credit > 0 ? 'credit' : 'debit', amount: entry.credit > 0 ? entry.credit : entry.debit } : { acct: fAcct !== 'all' ? fAcct : accts[0].value, date: C.todayISO(), kind: (preset && preset.kind) || 'debit' };
+  const base = entry ? { ...entry, kind: entry.credit > 0 ? 'credit' : 'debit', amount: entry.credit > 0 ? entry.credit : entry.debit, ...(entry.claim ? { category: entry.claim.cat, claimFrom: entry.claim.from } : {}) } : { acct: fAcct !== 'all' ? fAcct : accts[0].value, date: C.todayISO(), kind: (preset && preset.kind) || 'debit' };
   const descListId = 'desc-list';
   let dl = document.getElementById(descListId);
   if (!dl) { dl = h('datalist', { id: descListId }); document.body.append(dl); }
@@ -269,25 +271,31 @@ export function txnForm(entry, preset) {
         onInput: (el, inputs) => { const c = known.get(el.value.trim().toLowerCase()); if (c && [...inputs.category.options].some((o) => o.value === c)) inputs.category.value = c; } },
       { key: 'category', label: 'Category', type: 'select', options: categoryOptions(data, base.kind, base.category), required: true },
       { key: 'acct', label: 'Account', type: 'select', options: accts, required: true },
+      { key: 'claimFrom', label: 'Claim back from (optional)', type: 'text', showIf: (v) => v.kind === 'debit' && v.category !== NEW, suggest: () => CL.claimPeople(data),
+        hint: 'A company that reimburses you, or a friend you sent money to. It is not counted as spending and stays under To claim back until it is paid back.' },
       { key: 'newCategory', label: 'Name of the new category', type: 'text', required: true, showIf: (v) => v.category === NEW, hint: 'It is added to your categories and can be changed later under Expenses → Categories.' },
       { key: 'newKind', label: 'This category is', type: 'select', default: 'expense', showIf: (v) => v.category === NEW && v.kind === 'debit',
         options: [{ value: 'expense', label: 'Expense' }, { value: 'investment', label: 'Investment (not an expense)' }] },
     ],
     onSave: (v) => {
+      if (entry && entry.claim && !(v.kind === 'debit' && String(v.claimFrom || '').trim()) && CL.hasRepayments(data, entry.id)) { toast('Money has already come back for this. Undo those repayments first.', 'bad'); return false; }
       mutate((d) => {
         let category = v.category;
         if (category === NEW) category = CAT.add(d, { name: v.newCategory, kind: v.kind === 'credit' ? 'income' : (v.newKind || 'expense') });
         else if (String(category).toLowerCase() === 'transfer') category = CAT.add(d, { name: 'Transfer', kind: 'transfer' });
         const rec = { acct: v.acct, date: v.date, desc: v.desc, debit: v.kind === 'debit' ? v.amount : 0, credit: v.kind === 'credit' ? v.amount : 0, category };
-        if (isNew) d.ledger.push({ id: Math.max(0, ...d.ledger.map((e) => e.id || 0)) + 1, ...rec });
-        else Object.assign(d.ledger.find((e) => e.id === entry.id), rec);
+        const from = v.kind === 'debit' ? String(v.claimFrom || '').trim() : '';
+        let row;
+        if (isNew) { row = { id: Math.max(0, ...d.ledger.map((e) => e.id || 0)) + 1, ...rec }; d.ledger.push(row); }
+        else { row = d.ledger.find((e) => e.id === entry.id); Object.assign(row, rec); }
+        if (from) { CL.ensureCategory(d, CAT); CL.markClaim(row, from, category); } else delete row.claim;
         // remember new descriptions so the next entry fills in automatically
-        if (!d.categories.some((c) => c.desc.toLowerCase() === v.desc.toLowerCase())) d.categories.push({ desc: v.desc, category, type: v.kind === 'credit' ? 'Income' : 'Expense' });
+        if (!from && !d.categories.some((c) => c.desc.toLowerCase() === v.desc.toLowerCase())) d.categories.push({ desc: v.desc, category, type: v.kind === 'credit' ? 'Income' : 'Expense' });
       });
       toast(isNew ? 'Transaction added' : 'Transaction updated');
     },
     onDelete: isNew ? null : () => mutate((d) => { d.ledger = d.ledger.filter((e) => e.id !== entry.id); }),
-    extraActions: isNew || !canEdit() || !(base.amount > 0) ? [] : [{ label: 'Split', onclick: () => splitForm(entry) }],
+    extraActions: isNew || !canEdit() || !(base.amount > 0) || entry.claim || entry.claimFor ? [] : [{ label: 'Split', onclick: () => splitForm(entry) }],
   });
 }
 
@@ -648,4 +656,55 @@ function openSaving(row) {
     { label: 'Add entry', class: 'primary', onclick: (c) => { c(); entryForm(S.data.savings.find((s) => s.id === sv.id)); } },
   ] : [];
   dialog(sv.name, h('div', null, h('p', { class: 'note' }, `${sv.type} · ${sv.holder} · balance ${money(row.principal)}`), sv.desc ? h('p', null, sv.desc) : null, list), acts);
+}
+
+// ----- to claim back: money paid for a company or a friend that is still to come back -----
+/** Record money coming back: pays the person's open claims oldest first. Can link a credit that is already in the bank list. */
+function receivedForm(person) {
+  const { data } = S, sum = CL.claimSummary(data);
+  if (!sum.people.length) { toast('Nothing is waiting to come back.', 'bad'); return; }
+  const first = person || sum.people[0].from;
+  const credits = data.ledger.filter((e) => e.credit > 0 && !e.transferId && !(e.claimFor && e.claimFor.length)).sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 40);
+  const accts = data.accounts.map((a) => ({ value: a.id, label: `${a.name} · ${a.holder}` }));
+  const owed = (name) => (sum.people.find((p) => p.from === name) || { pending: 0 }).pending;
+  formDialog({
+    title: 'Money received', saveLabel: 'Save', value: { from: first, credit: '', amount: owed(first), date: C.todayISO(), acct: accts[0].value },
+    fields: [
+      { key: 'from', label: 'Paid back by', type: 'select', options: sum.people.map((p) => ({ value: p.from, label: `${p.from} · ${money(p.pending)} due` })), required: true,
+        onInput: (el, inputs) => { if (inputs.amount && !inputs.credit.value) inputs.amount.value = owed(el.value); } },
+      { key: 'credit', label: 'Is it already in your bank list?', type: 'select', options: [{ value: '', label: 'No, add it as new money received' }, ...credits.map((e) => ({ value: String(e.id), label: `${dateStr(e.date)} · ${money(e.credit)} · ${e.desc}` }))] },
+      { key: 'amount', label: 'Amount (₹)', type: 'number', required: true, half: true, showIf: (v) => !v.credit, hint: 'Part payments are fine. The oldest claims are paid first.' },
+      { key: 'date', label: 'Date', type: 'date', required: true, half: true, showIf: (v) => !v.credit },
+      { key: 'acct', label: 'Received in account', type: 'select', options: accts, required: true, showIf: (v) => !v.credit },
+    ],
+    onSave: (v) => {
+      try {
+        mutate((d) => { CL.ensureCategory(d, CAT); CL.applyRepayment(d, { from: v.from, amount: Number(v.amount), date: v.date, acct: v.acct, creditId: v.credit ? Number(v.credit) : null }); });
+      } catch (e) { toast(e.message, 'bad'); return false; }
+      toast('Payment recorded');
+    },
+  });
+}
+
+export function claimsTab() {
+  const { data } = S, sum = CL.claimSummary(data), paid = CL.repayments(data);
+  const wrap = h('div');
+  if (!sum.people.length && !paid.length) {
+    wrap.append(h('div', { class: 'card' }, h('p', { class: 'empty' }, 'Nothing to claim back yet. When you pay something that a company or a friend will repay, add the transaction and fill “Claim back from”. It stays out of your spending and shows here until the money comes back.'),
+      canEdit() ? btn('Add transaction', () => txnForm(), 'primary') : null));
+    return wrap;
+  }
+  const oldest = sum.people.length ? sum.people.map((p) => p.oldest).sort()[0] : null;
+  wrap.append(h('div', { class: 'stats' }, stat('Yet to receive', money(sum.total), sum.people.length ? `from ${sum.people.length} ${sum.people.length === 1 ? 'person or company' : 'people and companies'}` : 'everything is paid back'),
+    oldest ? stat('Waiting since', dateStr(oldest), 'the oldest unpaid claim') : null));
+  for (const p of sum.people) {
+    wrap.append(section(`${p.from} · ${money(p.pending)} due`, h('div', null,
+      rowList(p.claims.map((c) => ({ title: c.desc, sub: `${dateStr(c.date)} · was ${c.cat}${c.received > 0 ? ` · ${money(c.received)} of ${money(c.amount)} received` : ''}`, value: money(c.pending), tone: 'warn',
+        onClick: canEdit() ? () => txnForm(data.ledger.find((e) => e.id === c.id)) : null }))),
+      canEdit() ? h('div', { class: 'btn-row', style: { marginTop: 10 } }, btn('Money received', () => receivedForm(p.from), 'primary')) : null)));
+  }
+  if (paid.length) wrap.append(section('Paid back', rowList(paid.slice(0, 30).map((r) => ({ title: `${r.from || 'Received'} · ${money(r.amount)}`, sub: `${dateStr(r.date)} · ${r.parts.map((x) => x.claim.desc).join(', ')}`, value: money(r.amount), tone: 'pos',
+    onClick: canEdit() ? async () => { if (await confirmDialog(`Undo this payment? ${money(r.amount)} from ${r.from} goes back to “yet to receive”.` + (r.linked ? ' The bank entry keeps its old category.' : ' The entry added for it is removed.'), 'Undo')) mutate((d) => CL.undoRepayment(d, r.id)); } : null }))
+    , { empty: 'Nothing paid back yet.' })));
+  return wrap;
 }

@@ -150,6 +150,14 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 9.12.0 – To claim back (company reimbursements and money owed by friends)
+
+- **Add or edit a transaction → "Claim back from"** (optional, expenses only). Type who will pay it back: your company for internet, a friend you sent money to. The entry moves to a protected "Claim back" category that is not counted, so it stays out of Spent, budgets and income.
+- **Cash & banks → To claim back** shows what is still to be received, per person or company, with the oldest claim date. **Money received** records a repayment: part payments are fine and the oldest claim is paid first. You can add the money as new, or link a credit already in your bank list. Tap **Paid back** rows to undo.
+- **Home → To claim back** card shows the total yet to receive, only while something is due.
+- To turn a claim back into a normal expense, edit it and clear "Claim back from" (not possible while money has already come back for it; undo the repayment first).
+- No data conversion. Only new optional fields (`claim` on a debit, `claimFor` on a credit). Older data files and the live data work unchanged.
+
 ## Release 9.11.0 – Bond charts: companies stacked, secured pie filters the list
 
 - Fixed income → Bonds → **Which companies → By company** is now a **stacked bar**: each company's bar is split into **secured** (green), **unsecured** (orange) and **not set** (grey), biggest company first, with a key above. Hover (or long-press) a part to see its amount and share.

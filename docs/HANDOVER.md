@@ -48,6 +48,13 @@ A no-build installable web app (PWA, vanilla ES modules) that mirrors the owner'
 ## Release process
 Branch off `origin/main` (`release-X.Y.Z`), change files, bump `js/version.js` and the cache name in `sw.js`, add notes at the top of the release list in `docs/SETUP.md`, push, and open a PR to `main` with `gh api` (GraphQL is blocked). The owner merges it. Always base on `origin/main` so stacked PRs do not leave main behind.
 
+## State after 9.12.0
+
+- `js/claims.js` (pure): `markClaim`, `claimRows`, `claimSummary`, `applyRepayment` (oldest first, partial, new credit or link an existing one), `undoRepayment`, `cancelClaim`, `repayments`, `hasRepayments`. Fields are optional: debit `claim: {from, cat}` + category "Claim back"; credit `claimFor: [{id, amount}]` + `claimPrev` (null when created here).
+- "Claim back" is kind `transfer` and in `PROTECTED` (categories.js), hidden from the category pickers (`categoryOptions` in views/cash.js). Money to receive (interest income projections) is NOT reused.
+- views/cash.js: `txnForm` has the `claimFrom` field; new tab `claims` (`claimsTab`, `receivedForm`); Split is hidden for claim entries; editing a repayment credit redirects to the tab. Home `claimCard()` shows only while something is due.
+- tests/claims.test.mjs (no data file needed). Ask the owner to try one real claim and a part repayment.
+
 ## State after 9.11.0
 
 - js/views/fixed.js `bondInsights()`: By company uses the new `hstack()` (js/charts.js) over `firmStack`, parts `SEC_PARTS` (secured / unsecured / notset, colours --s3 / --s2 / --muted). The secured vs unsecured `donut()` and its `legend()` call `pickSecurity(key)`, which toggles `flt.bonds.security` ('all' | 'secured' | 'unsecured' | 'notset'), re-renders and scrolls to `#bond-list`.
