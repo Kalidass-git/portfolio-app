@@ -2185,3 +2185,4 @@ body.pi-dragging, body.pi-dragging * { cursor: grabbing !important; user-select:
 .fs-box { overflow: hidden; touch-action: none; position: relative; cursor: zoom-in; } .fs-box.fs-zoomed { cursor: grab; }
 .chart-box { -webkit-tap-highlight-color: transparent; }
 @media (min-width: 900px) { .fs-box .chart { max-height: 72vh; } }
+.hc-moves { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; font-size: .9rem; line-height: 1.4; } .hc-moves li { padding-left: 12px; border-left: 3px solid var(--line, #d9dee3); }
