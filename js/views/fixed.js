@@ -153,7 +153,7 @@ const TABS = [['bonds', 'Bonds'], ['fds', 'FDs'], ['lending', 'Lendings'], ['loa
 /** Interest paid so far, after TDS: each payment whose due date has come, counted by days since the previous payment day. */
 const bondReceived = (b) => C.bondPaidSoFar(b, S.all.asOf, S.data.settings.tdsRate ?? 0.1);
 const shortD = (d) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-const flt = { bonds: { holder: 'all', via: 'all', sort: 'none', dir: 'asc', q: '', security: 'all' }, fds: { holder: 'all', via: 'all', q: '' }, lending: { holder: 'all', via: 'all', q: '' } };
+const flt = { bonds: { holder: 'all', via: 'all', sort: 'none', dir: 'asc', q: '', security: 'all', company: 'all' }, fds: { holder: 'all', via: 'all', q: '' }, lending: { holder: 'all', via: 'all', q: '' } };
 /** Everything written on a record (name, company, holder, platform, account ...) as one lower-case string, for the search box. */
 const haystack = (x) => Object.values(x).filter((v) => typeof v === 'string' || typeof v === 'number').join(' ').toLowerCase();
 const rerenderFixed = () => window.dispatchEvent(new Event('rerender'));
@@ -228,7 +228,7 @@ export function render() {
     { value: 'via', kind: 'text', label: 'Via', get: (b) => String(b.platform || '').trim().toLowerCase() },
     { value: 'maturity', kind: 'due', label: 'Maturity', get: (b) => b.maturityDate || '' },
   ];
-  const fb = tab === 'bonds' ? quickFilter('bonds', all.bonds, (b) => b.holder, (b) => b.platform, 'Via', bondSorts, (b) => flt.bonds.security === 'all' || securityKey(b) === flt.bonds.security) : tab === 'fds' ? quickFilter('fds', all.fds, (x) => x.account, (x) => x.issuer, 'Bank') : tab === 'lending' ? quickFilter('lending', all.lending, (x) => x.account, (x) => x.borrower, 'Borrower') : null;
+  const fb = tab === 'bonds' ? quickFilter('bonds', all.bonds, (b) => b.holder, (b) => b.platform, 'Via', bondSorts, (b) => (flt.bonds.security === 'all' || securityKey(b) === flt.bonds.security) && (flt.bonds.company === 'all' || companyKey(b) === flt.bonds.company)) : tab === 'fds' ? quickFilter('fds', all.fds, (x) => x.account, (x) => x.issuer, 'Bank') : tab === 'lending' ? quickFilter('lending', all.lending, (x) => x.account, (x) => x.borrower, 'Borrower') : null;
   if (tab === 'bonds') root.append(h('div', { id: 'bond-list' }, section('Bonds', h('div', null, securityChip(), fb.bar,
     table([
       { label: 'Bond', host: true, render: (b) => h('span', null, h('span', null, b.name), h('small', { class: 'muted', style: { display: 'block', fontWeight: 400, opacity: 0.75 } }, [b.holder, b.platform, SECURITY[b.security]].filter(Boolean).join(' · ') + (b.maturityDate ? ' · matures ' + dateStr(b.maturityDate) : ''))) },
@@ -369,6 +369,7 @@ function holderPie(all, data) {
   return section('Interest credited by holder', h('div', { class: 'hp' }, tabs, body));
 }
 const SEC_PARTS = [{ key: 'secured', label: 'Secured', color: 'var(--s3)' }, { key: 'unsecured', label: 'Unsecured', color: 'var(--s2)' }, { key: 'notset', label: 'Not set', color: 'var(--muted)' }];
+const companyKey = (b) => String(b.company || '').trim() || 'Not set';
 const securityKey = (b) => (b.security === 'secured' ? 'secured' : b.security === 'unsecured' ? 'unsecured' : 'notset');
 /** Tap a slice of the secured / unsecured pie: the bond list below shows only those bonds. Tap it again (or "Show all") to clear. */
 function pickSecurity(key) {
@@ -383,21 +384,27 @@ function pickHolder(label) {
   rerenderFixed();
   if (flt.bonds.holder !== 'all') setTimeout(() => { const el = document.getElementById('bond-list'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 80);
 }
+/** Tap a company's bar: the list shows only that company's bonds. Tap again to clear. */
+function pickCompany(key) {
+  flt.bonds.company = flt.bonds.company === key ? 'all' : key;
+  rerenderFixed();
+  if (flt.bonds.company !== 'all') setTimeout(() => { const el = document.getElementById('bond-list'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 80);
+}
 /** Under the charts, above the bond list: says the list is filtered by a pie (secured / unsecured and / or holder), with a way back. */
 function securityChip() {
-  const k = flt.bonds.security, hd = flt.bonds.holder;
-  if (k === 'all' && hd === 'all') return null;
+  const k = flt.bonds.security, hd = flt.bonds.holder, co = flt.bonds.company;
+  if (k === 'all' && hd === 'all' && co === 'all') return null;
   const p = k === 'all' ? null : SEC_PARTS.find((x) => x.key === k);
-  const n = S.all.bonds.filter((b) => (k === 'all' || securityKey(b) === k) && (hd === 'all' || String(b.holder || '').trim() === hd)).length;
-  const what = [hd === 'all' ? null : hd + '’s', p ? p.label.toLowerCase() : null].filter(Boolean).join(' ');
+  const n = S.all.bonds.filter((b) => (k === 'all' || securityKey(b) === k) && (hd === 'all' || String(b.holder || '').trim() === hd) && (co === 'all' || companyKey(b) === co)).length;
+  const what = [hd === 'all' ? null : hd + '’s', p ? p.label.toLowerCase() : null, co === 'all' ? null : co].filter(Boolean).join(' ');
   const title = (what ? what.charAt(0).toUpperCase() + what.slice(1) + ' bonds' : 'Bonds') + ' only';
-  return h('div', { class: 'bond-filter', role: 'status' }, p ? h('i', { style: { background: p.color } }) : null, h('span', null, h('b', null, title), ` · ${n} ${n === 1 ? 'bond' : 'bonds'}`), btn('Show all', () => { flt.bonds.security = 'all'; flt.bonds.holder = 'all'; rerenderFixed(); }));
+  return h('div', { class: 'bond-filter', role: 'status' }, p ? h('i', { style: { background: p.color } }) : null, h('span', null, h('b', null, title), ` · ${n} ${n === 1 ? 'bond' : 'bonds'}`), btn('Show all', () => { flt.bonds.security = 'all'; flt.bonds.holder = 'all'; flt.bonds.company = 'all'; rerenderFixed(); }));
 }
 function bondInsights(all, data) {
   const group = (key) => { const m = new Map(); for (const b of all.bonds) { const k = String(b[key] || '').trim() || 'Not set'; m.set(k, (m.get(k) || 0) + b.principal); } return [...m.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value); };
   const secure = SEC_PARTS.map((p) => ({ key: p.key, label: p.label, color: p.color, value: all.bonds.filter((b) => securityKey(b) === p.key).reduce((a, b) => a + b.principal, 0) })).filter((x) => x.value > 0);
   // every company's bonds stacked by secured / unsecured, biggest company first
-  const firmStack = (() => { const m = new Map(); for (const b of all.bonds) { const k = String(b.company || '').trim() || 'Not set'; const r = m.get(k) || { label: k, parts: {}, total: 0 }; r.parts[securityKey(b)] = (r.parts[securityKey(b)] || 0) + b.principal; r.total += b.principal; m.set(k, r); } return [...m.values()].sort((a, b) => b.total - a.total); })();
+  const firmStack = (() => { const m = new Map(); for (const b of all.bonds) { const k = companyKey(b); const r = m.get(k) || { label: k, key: k, parts: {}, total: 0 }; r.parts[securityKey(b)] = (r.parts[securityKey(b)] || 0) + b.principal; r.total += b.principal; m.set(k, r); } return [...m.values()].sort((a, b) => b.total - a.total); })();
   const owners = group('holder').map((o) => ({ ...o, key: o.label })), total = all.bonds.reduce((a, b) => a + b.principal, 0);
   const bn = C.bondNotify(data);
   const save = (patch) => { if (!canEdit()) return toast('This device has read-only access.'); mutate((d) => { d.settings = { ...d.settings, bondNotify: { ...C.bondNotify(d), ...patch } }; }); };
@@ -409,7 +416,7 @@ function bondInsights(all, data) {
       section(firmView === 'company' ? 'Which companies' : 'Secured vs unsecured', h('div', null,
         h('div', { class: 'seg', role: 'tablist', style: { marginBottom: '10px' } }, [['company', 'By company'], ['security', 'Secured vs unsecured']].map(([k, l]) => h('button', { type: 'button', role: 'tab', class: firmView === k ? 'on' : '', 'aria-selected': String(firmView === k), onclick: () => { firmView = k; window.dispatchEvent(new Event('rerender')); } }, l))),
         firmView === 'company'
-          ? (firmStack.length ? hstack(firmStack, { parts: SEC_PARTS, fmt: money }) : h('p', { class: 'empty' }, 'No issuer set on the bonds.'))
+          ? (firmStack.length ? h('div', null, hstack(firmStack, { parts: SEC_PARTS, fmt: money, onClick: (r) => pickCompany(r.key), selected: flt.bonds.company === 'all' ? null : flt.bonds.company }), h('p', { class: 'note' }, 'Tap a company to see only its bonds in the list below.')) : h('p', { class: 'empty' }, 'No issuer set on the bonds.'))
           : h('div', null, donut(secure, { fmt: money, center: compact(total), sub: 'invested', size: 190, onSelect: (it) => pickSecurity(it.key), selected: flt.bonds.security === 'all' ? null : flt.bonds.security }), legend(secure, { fmt: money, onSelect: (it) => pickSecurity(it.key), selected: flt.bonds.security === 'all' ? null : flt.bonds.security }),
               h('p', { class: 'note' }, 'Tap a part of the pie to see only those bonds in the list below.'),
               secure.length === 1 && secure[0].label === 'Not set' ? h('p', { class: 'note' }, 'Mark each bond as secured or unsecured when you add or edit it.') : null)))),
