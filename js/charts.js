@@ -67,7 +67,7 @@ export function hbars(rows, { fmt = (v) => v, max, colorIndex = 0, onClick } = {
  * Horizontal bars where every bar is stacked by its parts (for example a company's bonds split into secured and unsecured).
  * rows: [{ label, parts: { key: value } }], parts: [{ key, label, color }] in stacking order. Parts nobody has are left out of the key.
  */
-export function hstack(rows, { parts, fmt = (v) => v, onClick = null } = {}) {
+export function hstack(rows, { parts, fmt = (v) => v, onClick = null, selected = null } = {}) {
   const tot = (r) => parts.reduce((a, p) => a + Math.max(0, r.parts[p.key] || 0), 0);
   const m = Math.max(1, ...rows.map(tot));
   const used = parts.filter((p) => rows.some((r) => (r.parts[p.key] || 0) > 0));
@@ -75,7 +75,7 @@ export function hstack(rows, { parts, fmt = (v) => v, onClick = null } = {}) {
     h('ul', { class: 'legend inline hs-key' }, used.map((p) => h('li', null, h('i', { style: { background: p.color } }), h('span', { class: 'lg-name' }, p.label)))),
     h('ul', { class: 'hbars' }, rows.map((r) => {
       const t = tot(r);
-      return h('li', { class: onClick ? 'click' : '', onclick: onClick ? () => onClick(r) : null },
+      return h('li', { class: (onClick ? 'click' : '') + (selected != null ? (r.key === selected ? ' on' : ' dim') : ''), onclick: onClick ? () => onClick(r) : null, ...(onClick ? { tabindex: 0, role: 'button', 'aria-pressed': selected != null ? String(r.key === selected) : null, onkeydown: (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onClick(r)) } : {}) },
         h('span', { class: 'hb-label' }, r.label),
         h('span', { class: 'hb-track' }, h('span', { class: 'hb-stack', style: { width: Math.max(1.5, (t / m) * 100) + '%' } }, used.map((p) => {
           const v = Math.max(0, r.parts[p.key] || 0);

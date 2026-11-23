@@ -48,6 +48,10 @@ A no-build installable web app (PWA, vanilla ES modules) that mirrors the owner'
 ## Release process
 Branch off `origin/main` (`release-X.Y.Z`), change files, bump `js/version.js` and the cache name in `sw.js`, add notes at the top of the release list in `docs/SETUP.md`, push, and open a PR to `main` with `gh api` (GraphQL is blocked). The owner merges it. Always base on `origin/main` so stacked PRs do not leave main behind.
 
+## State after 9.14.0
+
+- views/fixed.js: `companyKey(b)`, `pickCompany(key)`, `flt.bonds.company`; the Bonds `extra` predicate checks security and company; `securityChip()` describes holder + security + company and "Show all" clears all three. charts.js `hstack()` got a `selected` option (rows need `key`) and keyboard support when `onClick` is set; css `.hbars li.dim/.on`.
+
 ## State after 9.13.0
 
 - views/fixed.js: `pickHolder(label)` sets `flt.bonds.holder` (the same value as the Holder dropdown, so they stay in sync); the holder `donut()`/`legend()` get `key: label`, `onSelect`, `selected`. `securityChip()` now describes both pie filters (holder and/or secured) and "Show all" clears both. "Not set" is not clickable.
