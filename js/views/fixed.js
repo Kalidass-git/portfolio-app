@@ -1,6 +1,6 @@
 import { S, mutate, nextId } from '../store.js';
 import * as C from '../calc.js';
-import { donut, legend, hbars } from '../charts.js';
+import { donut, legend, hbars, hstack } from '../charts.js';
 import { h, money, setOptions, dateStr, pct, section, table, btn, formDialog, canEdit, toast, stat, segTabs, subTab, dialog, confirmDialog, posNeg, datalistId, compact } from '../ui.js';
 import { closeForm, reopen, creditBank, bankOptions, removeCredits } from './closing.js';
 import { sortFilterBar } from '../mobilebar.js';
@@ -153,12 +153,12 @@ const TABS = [['bonds', 'Bonds'], ['fds', 'FDs'], ['lending', 'Lendings'], ['loa
 /** Interest paid so far, after TDS: each payment whose due date has come, counted by days since the previous payment day. */
 const bondReceived = (b) => C.bondPaidSoFar(b, S.all.asOf, S.data.settings.tdsRate ?? 0.1);
 const shortD = (d) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-const flt = { bonds: { holder: 'all', via: 'all', sort: 'none', dir: 'asc', q: '' }, fds: { holder: 'all', via: 'all', q: '' }, lending: { holder: 'all', via: 'all', q: '' } };
+const flt = { bonds: { holder: 'all', via: 'all', sort: 'none', dir: 'asc', q: '', security: 'all' }, fds: { holder: 'all', via: 'all', q: '' }, lending: { holder: 'all', via: 'all', q: '' } };
 /** Everything written on a record (name, company, holder, platform, account ...) as one lower-case string, for the search box. */
 const haystack = (x) => Object.values(x).filter((v) => typeof v === 'string' || typeof v === 'number').join(' ').toLowerCase();
 const rerenderFixed = () => window.dispatchEvent(new Event('rerender'));
 /** Quick filters above a list: account holder and where it was bought. Default is everything. Returns the bar and the rows that pass. */
-function quickFilter(tab, items, holderOf, viaOf, viaLabel, sorts) {
+function quickFilter(tab, items, holderOf, viaOf, viaLabel, sorts, extra = null) {
   const f = flt[tab];
   const uniq = (fn) => [...new Set(items.map(fn).map((x) => String(x || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const holders = uniq(holderOf), vias = uniq(viaOf);
@@ -166,7 +166,7 @@ function quickFilter(tab, items, holderOf, viaOf, viaLabel, sorts) {
   if (f.via !== 'all' && !vias.includes(f.via)) f.via = 'all';
   const mk = (label, key, opts) => { const sel = h('select', { class: 'month-select', 'aria-label': label, onchange: (e) => { f[key] = e.target.value; rerenderFixed(); } }); setOptions(sel, [{ value: 'all', label: `${label}: all` }, ...opts.map((o) => ({ value: o, label: o }))], f[key]); return sel; };
   const q = String(f.q || '').trim().toLowerCase(), words = q ? q.split(/\s+/) : [];
-  let rows = items.filter((x) => (!words.length || words.every((w) => haystack(x).includes(w))) && (f.holder === 'all' || String(holderOf(x) || '').trim() === f.holder) && (f.via === 'all' || String(viaOf(x) || '').trim() === f.via));
+  let rows = items.filter((x) => (!words.length || words.every((w) => haystack(x).includes(w))) && (f.holder === 'all' || String(holderOf(x) || '').trim() === f.holder) && (f.via === 'all' || String(viaOf(x) || '').trim() === f.via) && (!extra || extra(x)));
   // optional sorting: pick what to sort by and which way. Rows with nothing to sort on (no next due date) always go last.
   let sortBar = null;
   if (sorts) {
@@ -228,8 +228,8 @@ export function render() {
     { value: 'via', kind: 'text', label: 'Via', get: (b) => String(b.platform || '').trim().toLowerCase() },
     { value: 'maturity', kind: 'due', label: 'Maturity', get: (b) => b.maturityDate || '' },
   ];
-  const fb = tab === 'bonds' ? quickFilter('bonds', all.bonds, (b) => b.holder, (b) => b.platform, 'Via', bondSorts) : tab === 'fds' ? quickFilter('fds', all.fds, (x) => x.account, (x) => x.issuer, 'Bank') : tab === 'lending' ? quickFilter('lending', all.lending, (x) => x.account, (x) => x.borrower, 'Borrower') : null;
-  if (tab === 'bonds') root.append(section('Bonds', h('div', null, fb.bar,
+  const fb = tab === 'bonds' ? quickFilter('bonds', all.bonds, (b) => b.holder, (b) => b.platform, 'Via', bondSorts, (b) => flt.bonds.security === 'all' || securityKey(b) === flt.bonds.security) : tab === 'fds' ? quickFilter('fds', all.fds, (x) => x.account, (x) => x.issuer, 'Bank') : tab === 'lending' ? quickFilter('lending', all.lending, (x) => x.account, (x) => x.borrower, 'Borrower') : null;
+  if (tab === 'bonds') root.append(h('div', { id: 'bond-list' }, section('Bonds', h('div', null, securityChip(), fb.bar,
     table([
       { label: 'Bond', host: true, render: (b) => h('span', null, h('span', null, b.name), h('small', { class: 'muted', style: { display: 'block', fontWeight: 400, opacity: 0.75 } }, [b.holder, b.platform, SECURITY[b.security]].filter(Boolean).join(' · ') + (b.maturityDate ? ' · matures ' + dateStr(b.maturityDate) : ''))) },
       { label: 'Invested', cls: 'r', get: (b) => money(b.principal), total: (rs) => money(rs.reduce((a, b) => a + b.principal, 0)) },
@@ -245,7 +245,7 @@ export function render() {
         { label: 'Rate · Next due', main: (b) => pct(b.rate, 2), sub: (b) => { const d = C.bondNextDue(b, S.all.asOf); return String(b.credit || 'Monthly').toLowerCase() + (d ? ' · due ' + shortD(d) : ''); } },
         { label: 'Received · Matures', main: (b) => green(money(bondReceived(b))), sub: (b) => (b.maturityDate ? 'matures ' + dateStr(b.maturityDate) : null), total: (rs) => ({ main: green(money(rs.reduce((a, b) => a + bondReceived(b), 0))) }) },
       ] }, onRow: canEdit() ? (b) => bondForm(data.bonds.find((x) => x.id === b.id)) : null })),
-    canEdit() ? [btn('Add bond', () => bondForm(), 'primary')] : null));
+    canEdit() ? [btn('Add bond', () => bondForm(), 'primary')] : null)));
   if (tab === 'bonds' && (all.bonds.length || (all.closed && all.closed.bonds && all.closed.bonds.length))) root.append(holderPie(all, data));
 
   const depCols = [
@@ -368,10 +368,27 @@ function holderPie(all, data) {
       ], sel.bank.slice().sort((a, b) => (a.date < b.date ? -1 : 1)), { footer: { label: 'Total' } }) : h('p', { class: 'empty' }, 'No Income Bond credits in this holder\'s accounts in this period.'))) : null);
   return section('Interest credited by holder', h('div', { class: 'hp' }, tabs, body));
 }
+const SEC_PARTS = [{ key: 'secured', label: 'Secured', color: 'var(--s3)' }, { key: 'unsecured', label: 'Unsecured', color: 'var(--s2)' }, { key: 'notset', label: 'Not set', color: 'var(--muted)' }];
+const securityKey = (b) => (b.security === 'secured' ? 'secured' : b.security === 'unsecured' ? 'unsecured' : 'notset');
+/** Tap a slice of the secured / unsecured pie: the bond list below shows only those bonds. Tap it again (or "Show all") to clear. */
+function pickSecurity(key) {
+  flt.bonds.security = flt.bonds.security === key ? 'all' : key;
+  rerenderFixed();
+  if (flt.bonds.security !== 'all') setTimeout(() => { const el = document.getElementById('bond-list'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 80);
+}
+/** Under the charts, above the bond list: says the list is filtered by the pie, with a way back. */
+function securityChip() {
+  const k = flt.bonds.security;
+  if (k === 'all') return null;
+  const p = SEC_PARTS.find((x) => x.key === k), n = S.all.bonds.filter((b) => securityKey(b) === k).length;
+  return h('div', { class: 'bond-filter', role: 'status' }, h('i', { style: { background: p.color } }), h('span', null, h('b', null, p.label + ' bonds only'), ` · ${n} ${n === 1 ? 'bond' : 'bonds'}`), btn('Show all', () => { flt.bonds.security = 'all'; rerenderFixed(); }));
+}
 function bondInsights(all, data) {
   const group = (key) => { const m = new Map(); for (const b of all.bonds) { const k = String(b[key] || '').trim() || 'Not set'; m.set(k, (m.get(k) || 0) + b.principal); } return [...m.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value); };
-  const secure = (() => { const m = new Map(); for (const b of all.bonds) { const k = SECURITY[b.security] || 'Not set'; m.set(k, (m.get(k) || 0) + b.principal); } return ['Secured', 'Unsecured', 'Not set'].filter((k) => m.has(k)).map((label) => ({ label, value: m.get(label) })); })();
-  const owners = group('holder'), firms = group('company'), total = all.bonds.reduce((a, b) => a + b.principal, 0);
+  const secure = SEC_PARTS.map((p) => ({ key: p.key, label: p.label, color: p.color, value: all.bonds.filter((b) => securityKey(b) === p.key).reduce((a, b) => a + b.principal, 0) })).filter((x) => x.value > 0);
+  // every company's bonds stacked by secured / unsecured, biggest company first
+  const firmStack = (() => { const m = new Map(); for (const b of all.bonds) { const k = String(b.company || '').trim() || 'Not set'; const r = m.get(k) || { label: k, parts: {}, total: 0 }; r.parts[securityKey(b)] = (r.parts[securityKey(b)] || 0) + b.principal; r.total += b.principal; m.set(k, r); } return [...m.values()].sort((a, b) => b.total - a.total); })();
+  const owners = group('holder'), total = all.bonds.reduce((a, b) => a + b.principal, 0);
   const bn = C.bondNotify(data);
   const save = (patch) => { if (!canEdit()) return toast('This device has read-only access.'); mutate((d) => { d.settings = { ...d.settings, bondNotify: { ...C.bondNotify(d), ...patch } }; }); };
   const days = h('select', { 'aria-label': 'Days before', disabled: !canEdit() || !bn.on, onchange: (e) => save({ days: Number(e.target.value) }) });
@@ -382,8 +399,9 @@ function bondInsights(all, data) {
       section(firmView === 'company' ? 'Which companies' : 'Secured vs unsecured', h('div', null,
         h('div', { class: 'seg', role: 'tablist', style: { marginBottom: '10px' } }, [['company', 'By company'], ['security', 'Secured vs unsecured']].map(([k, l]) => h('button', { type: 'button', role: 'tab', class: firmView === k ? 'on' : '', 'aria-selected': String(firmView === k), onclick: () => { firmView = k; window.dispatchEvent(new Event('rerender')); } }, l))),
         firmView === 'company'
-          ? (firms.length ? hbars(firms, { fmt: money, colorIndex: 1 }) : h('p', { class: 'empty' }, 'No issuer set on the bonds.'))
-          : h('div', null, donut(secure, { fmt: money, center: compact(total), sub: 'invested', size: 190 }), legend(secure, { fmt: money }),
+          ? (firmStack.length ? hstack(firmStack, { parts: SEC_PARTS, fmt: money }) : h('p', { class: 'empty' }, 'No issuer set on the bonds.'))
+          : h('div', null, donut(secure, { fmt: money, center: compact(total), sub: 'invested', size: 190, onSelect: (it) => pickSecurity(it.key), selected: flt.bonds.security === 'all' ? null : flt.bonds.security }), legend(secure, { fmt: money, onSelect: (it) => pickSecurity(it.key), selected: flt.bonds.security === 'all' ? null : flt.bonds.security }),
+              h('p', { class: 'note' }, 'Tap a part of the pie to see only those bonds in the list below.'),
               secure.length === 1 && secure[0].label === 'Not set' ? h('p', { class: 'note' }, 'Mark each bond as secured or unsecured when you add or edit it.') : null)))),
     h('details', { class: 'card simple-settings' }, h('summary', null, 'Bond settings'),
       h('label', { style: { display: 'block', margin: '10px 0' } }, 'Tax deducted on interest (%) ', h('input', { type: 'number', step: 'any', min: '0', max: '100', value: String(Math.round((data.settings.tdsRate ?? 0.1) * 10000) / 100), disabled: !canEdit(), 'aria-label': 'Tax deducted on bond interest', style: { maxWidth: '6em' },

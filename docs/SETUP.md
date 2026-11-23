@@ -150,6 +150,12 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 9.11.0 – Bond charts: companies stacked, secured pie filters the list
+
+- Fixed income → Bonds → **Which companies → By company** is now a **stacked bar**: each company's bar is split into **secured** (green), **unsecured** (orange) and **not set** (grey), biggest company first, with a key above. Hover (or long-press) a part to see its amount and share.
+- **Secured vs unsecured** pie is now clickable. Tap a slice (or its row under the pie) and the **Bonds list below shows only those bonds**, with a bar saying "Secured bonds only · 4 bonds" and a **Show all** button. The page scrolls down to the list. Tap the same slice again to clear it. The chosen slice is highlighted and the others fade.
+- The filter works together with the Holder, Via, Sort and Find controls, and the list total follows what is shown. Presentation only: no data changed.
+
 ## Release 9.10.0 – Key figures on a share's page, redesigned
 
 - A share's **Key figures** card (Shares & funds → tap a share; also a watchlist share) is now laid out like a broker's stock page instead of 25 equal tiles:
