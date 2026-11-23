@@ -8,6 +8,7 @@ import * as R from '../risk.js';
 import { usualPace, paceSentence, lineTone } from '../spendpace.js';
 import { monthReport, statusOf } from '../budgetreport.js';
 import { budgetLines } from '../categories.js';
+import { claimSummary } from '../claims.js';
 import { rateHistory, ageText } from './gold.js';
 import { GROUPS } from './groupmix.js';
 import { allocationBody } from './allocview.js';
@@ -892,6 +893,15 @@ function thisMonth(data, all, months) {
     [monthPicker(months, selMonth, (m) => { selMonth = m; rerender(); })]);
 }
 
+/** Money paid for a company or a friend that has not come back yet. Not spending; shown only while something is due. */
+function claimCard(data) {
+  const sum = claimSummary(data);
+  if (!sum.people.length) return null;
+  const n = sum.people.reduce((a, p) => a + p.count, 0);
+  return section('To claim back · ' + money(sum.total), h('div', null,
+    rowList(sum.people.slice(0, 6).map((p) => ({ title: p.from, sub: `${p.count} ${p.count === 1 ? 'claim' : 'claims'} · since ${dateStr(p.oldest)}`, value: money(p.pending), tone: 'warn', onClick: () => { location.hash = '#/cash/claims'; } }))),
+    h('p', { class: 'note' }, `${n} ${n === 1 ? 'payment' : 'payments'} you made for others. They are not counted as spending or in budgets.`)));
+}
 export function render() {
   const { all, data } = S;
   const months = C.ledgerMonths(data);
@@ -906,6 +916,7 @@ export function render() {
     hero(all, series, ox), tiles(all, data, C.monthCashflow(data, all, C.monthKey(all.asOf)), plan),
     place(actionCentre(data, all), 'span-12'),
     place(thisMonth(data, all, months), 'span-12'),
+    place(claimCard(data), 'span-12'),
     place(investCard(data, all, plan), 'span-12'),
     place(allocation(all), 'span-7'), place(riskAlerts(all), 'span-5'),
     place(returnsCard(data, all, rets, ox), 'span-12'),

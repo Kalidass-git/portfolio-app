@@ -18,7 +18,7 @@ export const KINDS = [
 export const kindLabel = (k) => (KINDS.find((x) => x.key === k) || KINDS[0]).one;
 
 /** The Home screen groups these by name, so they cannot be renamed, merged or deleted. */
-export const PROTECTED = new Set(['salary', 'income bond', 'loan', 'tax', 'family budget', 'food', 'medical', 'travel', 'rent', 'utilities', 'cloths', 'entertainment', 'vacation', 'gifts', 'transfer', 'withdrawal']);
+export const PROTECTED = new Set(['salary', 'income bond', 'loan', 'tax', 'family budget', 'food', 'medical', 'travel', 'rent', 'utilities', 'cloths', 'entertainment', 'vacation', 'gifts', 'transfer', 'withdrawal', 'claim back']);
 export const isProtected = (name) => PROTECTED.has((name || '').toLowerCase());
 
 const lc = (s) => (s || '').trim().toLowerCase();
@@ -26,7 +26,7 @@ const lc = (s) => (s || '').trim().toLowerCase();
 export function deriveKind(name, types = []) {
   const n = lc(name);
   if (/^investment/.test(n)) return 'investment';
-  if (n === 'transfer' || n === 'withdrawal') return 'transfer';
+  if (n === 'transfer' || n === 'withdrawal' || n === 'claim back') return 'transfer';
   if (types.length && types.every((t) => t === 'Income')) return 'income';
   return 'expense';
 }
