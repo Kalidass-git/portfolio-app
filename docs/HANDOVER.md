@@ -48,6 +48,12 @@ A no-build installable web app (PWA, vanilla ES modules) that mirrors the owner'
 ## Release process
 Branch off `origin/main` (`release-X.Y.Z`), change files, bump `js/version.js` and the cache name in `sw.js`, add notes at the top of the release list in `docs/SETUP.md`, push, and open a PR to `main` with `gh api` (GraphQL is blocked). The owner merges it. Always base on `origin/main` so stacked PRs do not leave main behind.
 
+## State after 9.15.0
+
+- `js/health.js` (pure): `RULES` (all thresholds in one place), `assess()` (verdict + action + reasons), `moves()`, `overview()`, `trendFrom()`, `sma()`. tests/health.test.mjs needs no data file.
+- views/equity-insights.js: `healthCard()` on top of Insights; `healthRows()` (XIRR via `xirrFor`, return from lot cost, share of portfolio, sector), `soldRows()` (priced with `priceOfSymbol` and soldSettings), `loadExtra()` (opt-in, 4 at a time: `stockOhlc` for the trend, `stockInfo` for pe / roe / earnGrowth), kept in module `extra` until reload. Benchmark is a fixed 12% a year, not a live Nifty comparison.
+- Ask the owner to check on the real holdings that the verdicts feel right, and which thresholds to change.
+
 ## State after 9.14.0
 
 - views/fixed.js: `companyKey(b)`, `pickCompany(key)`, `flt.bonds.company`; the Bonds `extra` predicate checks security and company; `securityChip()` describes holder + security + company and "Show all" clears all three. charts.js `hstack()` got a `selected` option (rows need `key`) and keyboard support when `onClick` is set; css `.hbars li.dim/.on`.

@@ -8,6 +8,9 @@ import { symKey } from '../trades.js';
 import { classifyForm, priceOfSymbol, sellForm } from './eqshared.js';
 import * as prices from '../prices.js';
 import { toast } from '../ui.js';
+import { xirrFor } from '../trades.js';
+import * as HL from '../health.js';
+import { stockOhlc, stockInfo } from '../history.js';
 
 let scope = 'all';
 const rerender = () => window.dispatchEvent(new Event('rerender'));
@@ -25,6 +28,66 @@ function holdingsFor(all) {
 }
 const sumBy = (rows, key) => { const m = new Map(); for (const r of rows) m.set(r[key] || 'Other', (m.get(r[key] || 'Other') || 0) + r.value); return [...m.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value); };
 
+// ---------- Health check: how each share and ETF you hold is doing, and what to think about ----------
+const VERDICT = { well: ['Doing well', 'pos'], track: ['On track', ''], watch: ['Watch', 'warn'], review: ['Review', 'neg'] };
+const ACTION = { add: 'Add more', hold: 'Hold', trim: 'Trim', review: 'Review or exit' };
+const extra = new Map();   // symbol -> { trend, info } from the backend, kept until the page is reloaded
+let extraState = 'idle';   // idle | loading | done
+
+function healthRows(all) {
+  const eq = all.stocks.eq, items = all.stocks.items.filter((s) => s.current > 0), total = items.reduce((a, s) => a + s.current, 0) || 1;
+  const now = Number.isFinite(Date.parse(all.asOf)) ? Date.parse(all.asOf) : Date.now();
+  return items.map((s) => {
+    const sym = symKey(s.symbol), flows = eq ? eq.flows.get(sym) || [] : [], first = flows.length ? flows.map((f) => f.date).sort()[0] : null;
+    const h0 = eq ? eq.holdings.find((x) => x.symbol === sym) : null, c = classify(s), ex = extra.get(sym) || {};
+    const f = { key: s.id, name: s.name, symbol: s.symbol, yahoo: s.yahoo || '', sector: c.sector, value: s.current, invested: s.invested, ret: h0 && h0.cost > 0 ? s.current / h0.cost - 1 : Number.isFinite(s.ret) ? s.ret : null, price: s.livePrice, share: s.current / total,
+      heldDays: first ? Math.max(0, (now - Date.parse(first)) / 864e5) : 0, xirr: eq && first ? xirrFor(eq, [sym], s.current, all.asOf) : null, lots: h0 ? h0.lots : null, trend: ex.trend || null, info: ex.info || null };
+    return { ...f, ...HL.assess(f) };
+  });
+}
+function soldRows(data, all) {
+  const eq = all.stocks.eq; if (!eq) return [];
+  return eq.sold.map((s) => { const o = (data.soldSettings || {})[s.symbol] || {}, sym = (o.nowSymbol || s.nowSymbol).toUpperCase(), px = o.suppress ? (o.manualPrice > 0 ? o.manualPrice : null) : priceOfSymbol(sym); return { ...s, nowValue: px ? s.nowQty * px : null }; });
+}
+async function loadExtra(rows, onProgress) {
+  extraState = 'loading'; let done = 0; const queue = rows.slice();
+  const work = async () => {
+    for (let r = queue.shift(); r; r = queue.shift()) {
+      const sym = symKey(r.symbol), out = {};
+      try { out.trend = HL.trendFrom((await stockOhlc(r.symbol, r.yahoo)).rows); } catch (e) { /* no history for this one */ }
+      try { const v = await stockInfo(r.symbol, r.yahoo); out.info = { pe: v.q && v.q.pe, roe: v.d && v.d.roe, earnGrowth: v.d && v.d.earnGrowth }; } catch (e) { /* no figures */ }
+      extra.set(sym, out); onProgress(++done, rows.length);
+    }
+  };
+  await Promise.all([work(), work(), work(), work()]);
+  extraState = 'done';
+}
+
+function healthCard(all, data) {
+  const rows = healthRows(all);
+  if (!rows.length) return null;
+  const count = (a) => rows.filter((r) => r.action === a).length;
+  const order = { review: 0, trim: 1, add: 2, hold: 3 }, vo = { review: 0, watch: 1, track: 2, well: 3 };
+  const sorted = rows.slice().sort((a, b) => order[a.action] - order[b.action] || vo[a.verdict] - vo[b.verdict] || b.value - a.value);
+  const mv = HL.moves({ holdings: rows, sold: soldRows(data, all) }), ov = HL.overview(rows);
+  const live = !!(S.cfg && S.cfg.backendUrl);
+  const btnEl = live && extraState !== 'done' ? h('button', { type: 'button', class: 'refresh-btn small', disabled: extraState === 'loading', onclick: async (e) => {
+    const b = e.currentTarget, lb = b.querySelector('.lb'); b.disabled = true;
+    await loadExtra(rows, (d, n) => { lb.textContent = `Checking ${d} of ${n}…`; }); rerender();
+  } }, h('span', { class: 'lb' }, 'Add price trend and key figures')) : null;
+  const moveList = (list, none) => (list.length ? h('ul', { class: 'hc-moves' }, list.map((m) => h('li', null, h('b', null, m.title), ' ', m.text))) : h('p', { class: 'note' }, none));
+  return h('div', null,
+    section('Health check', h('div', null,
+      h('div', { class: 'stats' }, stat('Add more', count('add'), 'doing well, small share'), stat('Hold', count('hold'), 'nothing to do'), stat('Trim', count('trim'), 'too big a share'), stat('Review or exit', count('review'), 'long loss, weak signs')),
+      ov.length ? h('p', { class: 'note' }, ov.join(' ')) : null,
+      h('div', { class: 'row-actions', style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px', margin: '8px 0' } }, btnEl,
+        h('span', { class: 'stamp' }, extraState === 'done' ? 'Includes price trend and key figures' : live ? 'Based on your returns and holding sizes. Add the price trend and key figures for a fuller view.' : 'Based on your returns and holding sizes. Price trend and key figures need your backend.')),
+      rowList(sorted.map((r) => ({ title: r.name, sub: r.reasons.slice(0, 2).join('. '), value: ACTION[r.action], tone: VERDICT[r.verdict][1], valueSub: VERDICT[r.verdict][0] + (r.xirr != null && r.heldDays >= 365 ? ' · ' + pct(r.xirr, 0) + ' a year' : r.ret != null ? ' · ' + pct(r.ret, 0) : ''),
+        extra: r.reasons.length > 2 ? h('span', { class: 'rl-sub' }, r.reasons.slice(2).join('. ')) : null, onClick: () => { location.hash = '#/equity/holding?sym=' + encodeURIComponent(r.symbol); } }))),
+      h('p', { class: 'note' }, `Rules in plain words: a share held over a year is judged by its yearly return (${pct(HL.RULES.great, 0)}+ is doing well, ${pct(HL.RULES.benchmark, 0)} is the market's long-run pace, below ${pct(HL.RULES.weak, 0)} is weak), its price trend and its profit. “Add more” is for a good holding under ${pct(HL.RULES.addBelow, 0)} of your shares and ETFs, “Trim” for one over ${pct(HL.RULES.trimAbove, 0)}. These are observations from your own numbers, not investment advice.`))),
+    h('div', { class: 'grid2' }, section('Good moves', moveList(mv.good, 'Nothing stands out yet.')), section('Moves to learn from', moveList(mv.bad, 'No clear mistakes found. Press Refresh sold prices on the Sold tab to compare your sales with today.'))));
+}
+
 export function insights(root) {
   const { all } = S;
   const rows = holdingsFor(all);
@@ -32,6 +95,7 @@ export function insights(root) {
   root.append(h('div', { class: 'filters' }, h('label', { class: 'inline-label' }, 'Look at ', h('select', { 'aria-label': 'Scope', onchange: (e) => { scope = e.target.value; rerender(); } }, SCOPES.map(([v, l]) => h('option', { value: v, selected: v === scope }, l))))));
   if (!rows.length) { root.append(h('div', { class: 'card' }, h('p', { class: 'empty' }, 'Nothing in this selection yet.'))); return; }
 
+  const hc = healthCard(all, S.data); if (hc) root.append(hc);
   const groups = sumBy(rows, 'group');
   root.append(section('How the money is split', h('div', null, strip(groups, { fmt: money }), legend(groups, { fmt: money }),
     h('p', { class: 'note' }, `Total ${money(total)} across ${rows.length} holdings. Pick another selection above to look at only the shares, only the ETFs or only the funds.`))));

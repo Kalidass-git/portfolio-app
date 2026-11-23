@@ -150,6 +150,14 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 9.15.0 – Shares: Health check in Insights
+
+- **Shares & funds → Manage → Insights** now opens with a **Health check** for the shares and ETFs you hold. Each one gets a verdict (Doing well, On track, Watch, Review), a one-line reason and a suggested action: **Add more**, **Hold**, **Trim** or **Review or exit**. Tap a row to open the share.
+- It judges a share held over a year by its yearly return (XIRR) against the market's long-run pace (12%), by its position size (over 15% of your shares and ETFs: trim; a good one under 5%: room to add), and by how long it has been in loss. Younger holdings are not judged on yearly return.
+- **Add price trend and key figures** (button, needs your backend) adds the 50 / 200-day averages, distance from the 52-week high, return on equity, profit growth and P/E to the verdict.
+- **Good moves** and **Moves to learn from**: buying the dip that paid off, averaging down that has not worked, long losses held, sales that would be worth much more today (press Refresh sold prices on the Sold tab) and sales that were well timed.
+- Only your current holdings are looked at. No new stocks are suggested. These are observations from your own numbers, not investment advice. No data change.
+
 ## Release 9.14.0 – Bonds: "Which companies" bars filter the list
 
 - Tap a company's bar in **Which companies**: the bond list below shows only that company's bonds, and the other bars dim. Tap it again, or press **Show all**, to clear.
