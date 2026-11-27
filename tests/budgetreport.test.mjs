@@ -11,10 +11,10 @@ ok(monthFrac('2026-09', '2026-11-10') === 1 && monthFrac('2026-12', '2026-11-10'
 const oct = monthReport(data, '2026-10', '2026-11-10');
 const g = oct.lines.find((l) => l.name === 'Groceries');
 ok(g.spent === 8000 && g.budget === 10000 && g.left === 2000 && g.status === 'near', 'October groceries: 8,000 of 10,000 is 80%, near');
-ok(oct.lines.some((l) => l.name === 'Vacation' && l.yearlyOnly && l.budget === 5000 && l.spent === 30000 && l.status === 'over'), 'a yearly budget is spread over the months for the month view');
+ok(oct.lines.some((l) => l.name === 'Vacation' && l.yearlyOnly && l.budget === 60000 && l.spent === 30000 && l.ytd === 30000 && l.status === 'ok'), 'a yearly budget is a pool: judged against the whole year, not a twelfth');
 ok(!oct.lines.some((l) => l.name === 'SIP'), 'investments never use up a budget');
 ok(oct.unbudgeted.length === 1 && oct.unbudgeted[0].name === 'Pets' && oct.unbudgetedTotal === 700, 'spending with no budget is listed apart');
-ok(oct.budget === 10000 + 5000 + 5000 && oct.spent === 8000 + 30000, 'totals: budgeted categories only');
+ok(oct.budget === 10000 + 5000 && oct.spent === 8000, 'totals: monthly budgets only, yearly pools are left out');
 ok(oct.daily.length === 31 && oct.daily[11].amount === 30000 && oct.daily[30].cum === 38000, 'daily cells and the running total (only budgeted categories)');
 const nov = monthReport(data, '2026-11', '2026-11-10');
 ok(Math.abs(nov.frac - 10 / 30) < 1e-9 && Math.abs(nov.expected - nov.budget * 10 / 30) < 1e-6, 'the current month is judged by days gone');
@@ -25,6 +25,6 @@ ok(yg.budget === 120000 && yg.spent === 12000 + 8000 + 4000 && yg.cells.length =
 const yv = y.rows.find((r) => r.name === 'Vacation');
 ok(yv.yearlyOnly && yv.budget === 60000 && yv.spent === 30000 && yv.status === 'ok', 'yearly budget: 30,000 of 60,000');
 ok(y.totals[8].spent === 12000 && y.totals.length === 12, 'monthly totals');
-ok(y.overMonths >= 1 && y.doneMonths >= 2 && y.best && y.worst, 'stats: months over, best and worst');
+ok(y.overMonths === 0 && y.doneMonths >= 2 && y.best && y.worst, 'stats: months over, best and worst (a big yearly-pool spend no longer makes a month look over)');
 ok(y.unbudgetedTotal === 700, 'a year: spending with no budget');
 console.log(bad ? 'FAILED' : 'all passed'); process.exit(bad ? 1 : 0);

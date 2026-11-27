@@ -196,6 +196,10 @@ export function budgetLines(data, spentByCategory) {
     .sort((a, b) => b.used - a.used);
 }
 
+/** Yearly pools: expenses with a yearly budget and no monthly one. Spent any time in the year, so they are judged against the whole year, never a twelfth of it. */
+export function poolNames(data) {
+  return new Set(categoryList(data).filter((c) => c.kind === 'expense' && c.yearlyBudget > 0 && !(c.budget > 0)).map((c) => lc(c.name)));
+}
 /** Spending categories that have a yearly budget: spent so far this year against it. */
 export function yearlyLines(data, spentByCategory) {
   const spent = new Map(spentByCategory.map((x) => [lc(x.category), x.amount]));
