@@ -150,6 +150,11 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 9.17.0 – Home: This month in detail, no empty gaps
+
+- On wide screens the summary and **Income** stay on the left, and **Expenses | Budget** are sub tabs on the right. Expenses show first; tap Budget for the budget lines and yearly pools. This removes the blank band the budget addition had left under the summary.
+- Phones are unchanged (tabs Income | Expenses | Budget). Layout only, no data change.
+
 ## Release 9.16.0 – Yearly pools, interest vs spending for the year, suggested budgets
 
 - **Yearly pools.** An expense with a yearly budget and no monthly one (for example Lifestyle & household, ₹50,000 a year) is a pool: spend it any time in the year. It is judged against the whole year and never divided by 12. Home → This month in detail → Budget shows each pool as a balance ("₹23,000 left this year"). Pool spending still counts in the month's Spent, but it is not measured against the monthly budget, so one big month no longer looks like an overspend (Home says "+ ₹6,000 yearly pools"). The budget report's heat map, month cards and monthly totals follow the same rule. An expense with both a monthly and a yearly budget works as before.
