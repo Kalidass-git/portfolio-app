@@ -2,7 +2,7 @@
 import { evalAlerts, lineAlertsAuto } from '../watch.js';
 import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
-import { h, money, compact, pct, dateStr, monthLabel, section, stat, monthPicker, rowList, kpi, dateChip, btn, canEdit, dec, toast, dialog, icon as uiIcon, withMask } from '../ui.js';
+import { tapSheet, h, money, compact, pct, dateStr, monthLabel, section, stat, monthPicker, rowList, kpi, dateChip, btn, canEdit, dec, toast, dialog, icon as uiIcon, withMask } from '../ui.js';
 import { strip, legend, hbars, lineChart, donut, spark, color, riskColor } from '../charts.js';
 import * as R from '../risk.js';
 import { usualPace, paceSentence, lineTone } from '../spendpace.js';
@@ -917,12 +917,24 @@ function yearCard(data, all) {
   if (!(o.interest > 0) && !(o.spending > 0)) return null;
   const short = o.gap > 0, scale = Math.max(o.interest, o.spending, 1), w = (v) => Math.max(0, (v / scale) * 100).toFixed(2) + '%';
   const seg = (cls, v, label) => (v > 0.5 ? h('i', { class: 'yc-seg ' + cls, style: { width: w(v) }, title: `${label}: ${money(v)}` }) : null);
-  const row = (label, total, sub, ...segs) => h('div', { class: 'yc-row' }, h('div', { class: 'yc-head' }, h('b', null, label), h('b', null, money(total))), h('div', { class: 'yc-track', role: 'img', 'aria-label': `${label} ${money(total)}. ${sub}` }, ...segs), h('small', { class: 'yc-sub' }, sub));
+  const mon = (m) => monthLabel ? monthLabel(m) : m;
+  const sheetInterest = () => ({ title: `${o.year}: interest income`, note: `${money(o.interestSoFar)} received so far plus ${money(o.interestToCome)} still expected this year.`, rows: [
+    { group: 'By source', v: money(o.interest), tone: 'inc', rows: o.bySource.map((g) => ({ l: g.name, v: money(g.received + g.toCome), n: `${money(g.received)} received · ${money(g.toCome)} to come` })) },
+    { group: 'Received so far', v: money(o.interestSoFar), tone: 'inc', open: false, rows: o.byMonth.filter((x) => x.received > 0).map((x) => ({ l: mon(x.month), v: money(x.received) })) },
+    { group: 'Still to come', v: money(o.interestToCome), open: false, rows: o.byMonth.filter((x) => x.toCome > 0).map((x) => ({ l: mon(x.month), v: money(x.toCome) })) },
+  ], foot: 'Expected interest comes from your bonds, lending, deposits and other fixed income lines, month by month.' });
+  const sheetSpending = () => ({ title: `${o.year}: spending`, note: `${money(o.spentSoFar)} spent so far, plus ${money(o.regularLeft)} for the regular months left and ${money(o.poolLeft)} still unspent in yearly pools.`, rows: [
+    { group: 'Spent so far, by category', v: money(o.spentSoFar), tone: 'exp', rows: o.byCat.map((c) => ({ l: c.name, v: money(c.amount) })) },
+    { group: 'Spent so far, by month', v: money(o.spentSoFar), tone: 'exp', open: false, rows: o.byMonth.filter((x) => x.spent > 0).map((x) => ({ l: mon(x.month), v: money(x.spent) })) },
+    { group: 'Regular months left', v: money(o.regularLeft), open: false, rows: [{ l: 'A usual regular month', v: money(o.usual), n: o.hasHistory ? 'middle of your earlier months, yearly pools left out' : 'rough: too little history yet' }, { l: 'Months left', v: String(o.monthsLeft) }, { l: 'Rest of this month', v: money(Math.max(0, o.usual - o.curRegular)) }] },
+    o.poolLeft > 0.5 ? { group: 'Yearly pools still unspent', v: money(o.poolLeft), open: false, rows: o.pools.filter((p) => p.left > 0.5).map((p) => ({ l: p.name, v: money(p.left), n: `${money(p.spent)} of ${money(p.budget)} used` })) } : null,
+  ].filter(Boolean), foot: 'Counts the lines switched on for spending (Settings). Investments, transfers, claims and income are not spending.' });
+  const row = (label, total, sub, build, ...segs) => tapSheet(h('div', { class: 'yc-row' }, h('div', { class: 'yc-head' }, h('b', null, label, h('span', { class: 'yc-go', 'aria-hidden': 'true' }, ' ›')), h('b', null, money(total))), h('div', { class: 'yc-track', role: 'img', 'aria-label': `${label} ${money(total)}. ${sub}` }, ...segs), h('small', { class: 'yc-sub' }, sub)), build);
   const top = ideas.filter((i) => i.short).sort((a, b) => (b.gain || 0) - (a.gain || 0)).slice(0, 2);
   return section(`${o.year}: interest income vs spending`, h('div', { class: 'yc' },
     h('p', { class: 'big-line' }, h('b', { class: short ? 'neg' : 'pos' }, money(Math.abs(o.gap))), h('span', { class: 'muted' }, short ? ' short this year' : ' to spare this year'), h('span', { class: 'muted' }, ` · interest covers ${pct(Math.min(o.covered, 9.99), 0)}`)),
-    row('Interest', o.interest, `${money(o.interestSoFar)} received · ${money(o.interestToCome)} to come`, seg('yc-in', o.interestSoFar, 'Received so far'), seg('yc-in-l', o.interestToCome, 'Still to come'), short ? seg('yc-gap', o.gap, 'Shortfall') : null),
-    row('Spending', o.spending, `${money(o.spentSoFar)} spent · ${money(o.regularLeft + o.poolLeft)} still to spend`, seg('yc-sp', o.spentSoFar, 'Spent so far'), seg('yc-sp-l', o.regularLeft, 'Regular months left'), seg('yc-sp-p', o.poolLeft, 'Unspent in yearly pools'), !short ? seg('yc-spare', -o.gap, 'To spare') : null),
+    row('Interest', o.interest, `${money(o.interestSoFar)} received · ${money(o.interestToCome)} to come`, sheetInterest, seg('yc-in', o.interestSoFar, 'Received so far'), seg('yc-in-l', o.interestToCome, 'Still to come'), short ? seg('yc-gap', o.gap, 'Shortfall') : null),
+    row('Spending', o.spending, `${money(o.spentSoFar)} spent · ${money(o.regularLeft + o.poolLeft)} still to spend`, sheetSpending, seg('yc-sp', o.spentSoFar, 'Spent so far'), seg('yc-sp-l', o.regularLeft, 'Regular months left'), seg('yc-sp-p', o.poolLeft, 'Unspent in yearly pools'), !short ? seg('yc-spare', -o.gap, 'To spare') : null),
     h('div', { class: 'yc-key', 'aria-hidden': 'true' }, h('span', null, h('i', { class: 'k-in' }), 'interest'), h('span', null, h('i', { class: 'k-sp' }), 'spending'), h('span', null, h('i', { class: 'k-l' }), 'still to come'), o.poolLeft > 0.5 ? h('span', null, h('i', { class: 'k-p' }), 'yearly pools') : null, h('span', null, h('i', { class: short ? 'k-gap' : 'k-spare' }), short ? 'shortfall' : 'to spare')),
     top.length ? h('ul', { class: 'yc-ideas' }, top.map((i) => h('li', null, i.short))) : null,
     h('details', { class: 'yc-more' }, h('summary', null, 'How this is worked out' + (ideas.length ? ' and all ideas' : '')),

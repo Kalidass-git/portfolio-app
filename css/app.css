@@ -2214,3 +2214,6 @@ body.pi-dragging, body.pi-dragging * { cursor: grabbing !important; user-select:
 .k-in { background: var(--pos); } .k-sp { background: var(--s2); } .k-l { background: color-mix(in srgb, var(--muted) 35%, transparent); } .k-p { background: repeating-linear-gradient(45deg, var(--muted) 0 2px, transparent 2px 4px); } .k-gap { outline: 1.5px dashed var(--neg); outline-offset: -1.5px; } .k-spare { outline: 1.5px dashed var(--pos); outline-offset: -1.5px; }
 .yc-ideas { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; font-size: .9rem; } .yc-ideas li { padding-left: 12px; border-left: 3px solid var(--s3); }
 .yc-more > summary { cursor: pointer; font-size: .88rem; color: var(--brand); font-weight: 600; padding: 6px 0; } .yc-more[open] > summary { margin-bottom: 4px; }
+
+.yc-row.pop-trigger { border-bottom: 0; text-decoration: none; border-radius: 10px; margin-left: -6px; margin-right: -6px; padding: 4px 6px; } .yc-row.pop-trigger:hover, .yc-row.pop-trigger:focus-visible { background: var(--surface-2); outline: 0; }
+.yc-go { color: var(--muted); font-weight: 400; }
