@@ -26,8 +26,12 @@ export function pools(data, asOf) {
 export function yearOutlook(data, all) {
   const cur = C.monthKey(all.asOf), year = cur.slice(0, 4), months = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
   let interestSoFar = 0, interestToCome = 0, spentSoFar = 0; const regular = []; let curRegular = 0;
+  const byMonth = [], bySource = new Map(), byCat = new Map();   // detail behind the bars, for the tap-through sheet
   for (const m of months) {
     const mc = C.monthCashflow(data, all, m);
+    byMonth.push({ month: m, expected: r0(mc.totalExpected), received: r0(m <= cur ? mc.totalReceived : 0), toCome: r0(m < cur ? 0 : m === cur ? Math.max(0, mc.totalExpected - mc.totalReceived) : mc.totalExpected), spent: r0(m <= cur ? mc.totalSpent : 0) });
+    for (const x of mc.income) { const g = bySource.get(x.name) || { name: x.name, received: 0, toCome: 0 }; if (m <= cur) g.received += x.received; if (m === cur) g.toCome += Math.max(0, x.expected - x.received); else if (m > cur) g.toCome += x.expected; bySource.set(x.name, g); }
+    if (m <= cur) for (const l of mc.spend) if (l.amount > 0) byCat.set(l.name, (byCat.get(l.name) || 0) + l.amount);
     if (m <= cur) { interestSoFar += mc.totalReceived; spentSoFar += mc.totalSpent; }
     if (m === cur) { interestToCome += Math.max(0, mc.totalExpected - mc.totalReceived); curRegular = mc.totalSpent - mc.poolSpent; }
     else if (m > cur) interestToCome += mc.totalExpected;
@@ -40,7 +44,7 @@ export function yearOutlook(data, all) {
   const interest = interestSoFar + interestToCome, spending = spentSoFar + regularLeft + poolLeft, gap = spending - interest;
   const cap = all.cfTotal && all.cfTotal.capital > 0 ? all.cfTotal.capital : 0, rate = cap ? Math.min(0.12, Math.max(0.05, (all.cfTotal.perDay * 365) / cap)) : ASSUMED.fdRate;
   return { year, interestSoFar: r0(interestSoFar), interestToCome: r0(interestToCome), interest: r0(interest), spentSoFar: r0(spentSoFar), regularLeft: r0(regularLeft), poolLeft: r0(poolLeft), spending: r0(spending), gap: r0(gap),
-    covered: spending > 0 ? interest / spending : 1, usual: r0(usual), monthsLeft, rate, extraCapital: gap > 0 ? r0(gap / rate) : 0, extraPerMonth: gap > 0 ? r0(gap / Math.max(1, monthsLeft + 1)) : 0, hasHistory: regular.length >= 2 };
+    covered: spending > 0 ? interest / spending : 1, usual: r0(usual), monthsLeft, rate, extraCapital: gap > 0 ? r0(gap / rate) : 0, extraPerMonth: gap > 0 ? r0(gap / Math.max(1, monthsLeft + 1)) : 0, hasHistory: regular.length >= 2, byMonth, bySource: [...bySource.values()].map((g) => ({ ...g, received: r0(g.received), toCome: r0(g.toCome) })).filter((g) => g.received > 0 || g.toCome > 0).sort((a, b) => b.received + b.toCome - a.received - a.toCome), byCat: [...byCat].map(([name, amount]) => ({ name, amount: r0(amount) })).sort((a, b) => b.amount - a.amount), pools: pools(data, all.asOf), curRegular: r0(curRegular) };
 }
 
 /** Ways to earn more interest from what you already hold. Each: { id, title, text, gain? (a year) }. Only things that are true of your own data. */

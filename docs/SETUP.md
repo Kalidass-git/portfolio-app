@@ -150,6 +150,10 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 9.20.0 – Home year card: tap a bar for the detail
+
+Tap the Interest or the Spending bar (or its row) on the year card. A bottom sheet on a phone, a popup on a computer, shows what is behind the figure: interest by source, received and still to come by month; spending by category and by month, the usual regular month and months left, and each yearly pool still unspent. No data changes.
+
 ## Release 9.19.0 – Home: interest income vs spending as two bars
 
 The year card on Home used to be a wall of text. Now it shows one headline (short or to spare, and how much interest covers), two bars on the same scale (Interest: received and still to come; Spending: spent, regular months left, yearly pools left), the shortfall as a dashed red end on the interest bar or the spare as a dashed green end on the spending bar, and the two best ideas as one line each. "How this is worked out and all ideas" opens the full sentence, every idea and the not-advice note. No data changes.
