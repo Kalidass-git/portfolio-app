@@ -3,10 +3,11 @@
 import { S, mutate } from '../store.js';
 import * as C from '../calc.js';
 import * as CAT from '../categories.js';
-import { h, money, compact, pct, monthLabel, section, stat, dialog, canEdit, num, setOptions, monthGroups, btn } from '../ui.js';
+import { h, money, compact, pct, monthLabel, section, stat, dialog, canEdit, num, setOptions, monthGroups, btn, toast } from '../ui.js';
 import { lineChart, barChart } from '../charts.js';
 import { BANDS, bandOf } from '../monthdetail.js';
 import { spendIndex, monthReport, yearReport, budgetYears, hasBudget, monthBudget } from '../budgetreport.js';
+import { suggestBudgets } from '../budgetsuggest.js';
 
 let mode = 'month', month = null, year = null;
 const rerender = () => window.dispatchEvent(new Event('rerender'));
@@ -29,11 +30,17 @@ function setupDialog(data, idx) {
   const spent = new Map(); for (const [, mm] of idx.byMonth) for (const [k, v] of mm) spent.set(k, (spent.get(k) || 0) + v);
   const cats = CAT.categoryList(data).filter((c) => c.kind === 'expense').sort((a, b) => (hasBudget(b) - hasBudget(a)) || ((spent.get(b.name.toLowerCase()) || 0) - (spent.get(a.name.toLowerCase()) || 0)) || a.name.localeCompare(b.name));
   const inp = (v, label) => h('input', { type: 'number', inputmode: 'decimal', min: '0', step: '1', value: v || '', placeholder: '–', 'aria-label': label, disabled: !ed });
-  const rows = cats.map((c) => ({ c, m: inp(c.budget, c.name + ' monthly budget'), y: inp(c.yearlyBudget, c.name + ' yearly budget') }));
+  const rows = cats.map((c) => ({ c, m: inp(c.budget, c.name + ' monthly budget'), y: inp(c.yearlyBudget, c.name + ' yearly budget'), note: h('small', { class: 'muted', style: { display: 'block' } }) }));
   const body = h('div', { class: 'form' },
-    h('p', { class: 'note', style: { marginTop: 0 } }, 'Set a monthly budget, a yearly budget, or both, on any expense. The same budgets show in Categories and in the passive income plan, so you only enter them once. With both, the month budget is the monthly amount plus a twelfth of the yearly one.'),
+    h('p', { class: 'note', style: { marginTop: 0 } }, 'Set a monthly budget, a yearly budget, or both, on any expense. The same budgets show in Categories and in the passive income plan, so you only enter them once. A yearly budget on its own is a yearly pool: spend it any time in the year, it is never divided by month. With both, the month budget is the monthly amount plus a twelfth of the yearly one.'),
+    ed ? h('div', { class: 'btn-row' }, btn('Suggest from my last 12 months', () => {
+      const sug = suggestBudgets(data, S.all.asOf), by = new Map(rows.map((r) => [r.c.name.toLowerCase(), r]));
+      if (!sug.length) { toast('Not enough history yet. Suggestions need at least 3 months of spending.', 'bad'); return; }
+      let n = 0; for (const x of sug) { const r = by.get(x.name.toLowerCase()); if (!r) continue; (x.kind === 'monthly' ? r.m : r.y).value = x.amount; r.note.textContent = (x.kind === 'monthly' ? 'monthly' : 'yearly pool') + ': ' + x.text; n++; }
+      toast(n ? `Filled ${n} suggestions for expenses with no budget. Change anything, then Save.` : 'Every expense already has a budget.');
+    })) : null,
     h('div', { class: 'bd-setup' }, h('div', { class: 'bd-sh' }, h('span', null, 'Expense'), h('span', null, 'Monthly ₹'), h('span', null, 'Yearly ₹')),
-      rows.map((r) => h('label', { class: 'bd-sr' }, h('span', null, r.c.name), r.m, r.y))));
+      rows.map((r) => h('label', { class: 'bd-sr' }, h('span', null, r.c.name, r.note), r.m, r.y))));
   dialog('Set budgets', body, ed ? [{ label: 'Cancel', onclick: (c) => c() }, { label: 'Save', class: 'primary', onclick: (c) => {
     c();
     mutate((d) => { for (const r of rows) { const m = Math.max(0, Number(r.m.value) || 0), y = Math.max(0, Number(r.y.value) || 0); if (m !== (r.c.budget || 0) || y !== (r.c.yearlyBudget || 0)) CAT.update(d, r.c.name, { budget: m, yearlyBudget: y }); } });
@@ -41,9 +48,9 @@ function setupDialog(data, idx) {
 }
 
 const catCard = (l, cur) => h('div', { class: 'bd-row ' + STATUS[l.status][1] },
-  h('div', { class: 'bd-top' }, h('b', null, l.name, l.yearlyOnly ? h('small', { class: 'tag' }, 'yearly ÷ 12') : null), h('span', { class: 'bd-st ' + STATUS[l.status][1] }, STATUS[l.status][0])),
-  bar(l.used, cur ? l.expected / (l.budget || 1) : null),
-  h('div', { class: 'bd-nums' }, h('span', null, h('b', null, money(l.spent)), ' of ', money(l.budget), ' · ', pct(l.used, 0)), h('span', { class: l.left < 0 ? 'neg' : 'pos' }, l.left < 0 ? money(-l.left) + ' over' : money(l.left) + ' left')),
+  h('div', { class: 'bd-top' }, h('b', null, l.name, l.yearlyOnly ? h('small', { class: 'tag' }, 'yearly pool') : null), h('span', { class: 'bd-st ' + STATUS[l.status][1] }, STATUS[l.status][0])),
+  bar(l.used, cur && !l.yearlyOnly ? l.expected / (l.budget || 1) : null),
+  h('div', { class: 'bd-nums' }, h('span', null, h('b', null, money(l.yearlyOnly ? l.ytd : l.spent)), ' of ', money(l.budget), l.yearlyOnly ? ' a year' : '', ' · ', pct(l.used, 0)), h('span', { class: l.left < 0 ? 'neg' : 'pos' }, l.left < 0 ? money(-l.left) + ' over' : money(l.left) + ' left')),
   cur && l.ahead && l.status !== 'over' ? h('p', { class: 'bd-note' }, 'Ahead of an even pace: on course for ' + money(l.projected) + (l.projected > l.budget ? ', ' + money(l.projected - l.budget) + ' over.' : '.')) : null);
 
 function monthView(root, data, asOf, idx, cur) {
@@ -62,7 +69,7 @@ function monthView(root, data, asOf, idx, cur) {
   // running total against an even pace
   const labels = r.daily.map((d) => String(d.d)), pace = r.daily.map((d) => r.budget * d.d / r.days);
   root.append(section('Spent through the month', h('div', null,
-    lineChart({ labels, tipLabels: r.daily.map((d) => `${d.d} ${mon(month)}`), fmt: money, yMin: 0, height: 210, series: [{ name: 'Budget, even pace', values: pace, dashed: true, color: 2 }, { name: 'Spent so far', values: r.daily.map((d) => (d.future ? null : d.cum)), color: 0 }] }),
+    lineChart({ labels, tipLabels: r.daily.map((d) => `${d.d} ${mon(month)}`), fmt: money, yMin: 0, height: 210, series: [{ name: 'Budget (monthly pace + yearly pools in full)', values: pace, dashed: true, color: 2 }, { name: 'Spent so far', values: r.daily.map((d) => (d.future ? null : d.cum)), color: 0 }] }),
     h('p', { class: 'note' }, 'Spending of budgeted expenses added up day by day. Staying under the dashed line means you are within an even pace for the budget.'))));
   // heat calendar
   const first = new Date(+month.slice(0, 4), +month.slice(5, 7) - 1, 1).getDay(), lead = (first + 6) % 7;   // week starts Monday
@@ -97,16 +104,16 @@ function yearView(root, data, asOf, idx, cur) {
   const body = r.rows.map((row) => h('tr', null, h('th', { class: 'bd-h1', scope: 'row' }, row.name, row.yearlyOnly ? h('small', null, ' yearly') : null), row.cells.map(cell), h('td', { class: 'bd-hc hz hz-' + bandOf(row.used).id }, h('span', null, pct(row.used, 0)))));
   const tot = h('tr', { class: 'bd-total' }, h('th', { class: 'bd-h1', scope: 'row' }, 'All budgeted'), r.totals.map((t) => cell({ month: t.month, spent: t.spent, used: t.used, cur: t.cur })), h('td', { class: 'bd-hc hz hz-' + bandOf(r.used).id }, h('span', null, pct(r.used, 0))));
   root.append(section('Heat map: expense by month', h('div', null, h('div', { class: 'bd-hscroll' }, h('table', { class: 'bd-heat' }, h('thead', null, head), h('tbody', null, body, tot))),
-    legend('Each cell is that month’s spending as a share of the monthly budget. An expense that has only a yearly budget is judged by what is spent so far against the part of the year gone. The current month is judged by days gone.'))));
+    legend('Each cell is that month’s spending as a share of the monthly budget. An expense that has only a yearly budget (a yearly pool) is shown as the share of the whole year’s amount used so far, and is left out of the monthly totals. The current month is judged by days gone.'))));
   // monthly spend against budget
   root.append(section('Spent against budget, month by month', h('div', null,
     barChart({ groups: r.totals.map((t) => ({ label: mon(t.month), values: [t.spent, t.budget] })), names: ['Spent', 'Budget'], fmt: money, height: 220, colors: [0, 2] }),
     h('p', { class: 'note' }, 'Spending of budgeted expenses each month next to the total monthly budget.'))));
   // running year
-  let cum = 0; const budgetLine = r.totals.map((t, i) => r.budget * (i + 1) / 12);
+  let cum = 0; const poolsTotal = r.rows.filter((x) => x.yearlyOnly).reduce((a, x) => a + x.yearly, 0), monthlyPart = r.rows.filter((x) => !x.yearlyOnly).reduce((a, x) => a + x.budget, 0), budgetLine = r.totals.map((t, i) => monthlyPart * (i + 1) / 12 + poolsTotal);
   const run = r.totals.map((t) => { if (t.future) return null; cum += t.spent; return cum; });
   root.append(section('The year so far', h('div', null, lineChart({ labels: r.months.map(mon), fmt: money, yMin: 0, height: 210, series: [{ name: 'Budget, even pace', values: budgetLine, dashed: true, color: 2 }, { name: 'Spent so far', values: run, color: 0 }] }),
-    h('p', { class: 'note' }, 'Running total of spending on budgeted expenses against the yearly budget spread evenly over twelve months.'))));
+    h('p', { class: 'note' }, 'Running total of spending on budgeted expenses. The budget line rises month by month for monthly budgets; yearly pools are counted in full from the start, since they can be spent any time.'))));
   // per expense table
   root.append(section('Expense by expense, whole year', h('div', { class: 'bd-list' }, r.rows.map((row) => h('div', { class: 'bd-row ' + STATUS[row.status][1] },
     h('div', { class: 'bd-top' }, h('b', null, row.name), h('span', { class: 'bd-st ' + STATUS[row.status][1] }, STATUS[row.status][0])),

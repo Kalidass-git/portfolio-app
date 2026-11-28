@@ -9,6 +9,7 @@ import { usualPace, paceSentence, lineTone } from '../spendpace.js';
 import { monthReport, statusOf } from '../budgetreport.js';
 import { budgetLines } from '../categories.js';
 import { claimSummary } from '../claims.js';
+import { pools as yearPools, yearOutlook, interestIdeas } from '../yearcover.js';
 import { rateHistory, ageText } from './gold.js';
 import { GROUPS } from './groupmix.js';
 import { allocationBody } from './allocview.js';
@@ -326,9 +327,9 @@ function tiles(all, data, mc, plan) {
   const baseAll = (mk.total.dayPct ? mk.total.day / mk.total.dayPct : 0) + (gd ? all.gold.value - gd.total : 0);
   const dayPctAll = baseAll ? dayAll / baseAll : 0;
   const spent = mc.totalSpent;
-  const budget = mc.budget, used = budget ? spent / budget : 0;   // same budget as This month in detail
+  const budget = mc.budget, used = budget ? (spent - (mc.poolSpent || 0)) / budget : 0;   // same budget as This month in detail; yearly pools are not part of it
   const bar = budget ? h('div', { class: 'kt-barrow' }, h('div', { class: 'kt-bar', role: 'img', 'aria-label': `${pct(used, 0)} of the budget spent` }, h('i', { style: { width: Math.min(100, Math.max(2, used * 100)).toFixed(1) + '%' } })), h('b', { class: 'kt-pctl' }, pct(used, 0))) : null;
-  const spentSub = h('span', { class: 'kt-one' }, (budget ? `${pct(used, 0)} of ${money(budget)} budget` : 'no budget income yet') + (mc.notCounted > 0 ? ` · ${money(mc.notCounted)} not counted` : ''));
+  const spentSub = h('span', { class: 'kt-one' }, (budget ? `${pct(used, 0)} of ${money(budget)} budget` : 'no budget income yet') + (mc.poolSpent > 0.5 ? ` · ${money(mc.poolSpent)} yearly pools` : '') + (mc.notCounted > 0 ? ` · ${money(mc.notCounted)} not counted` : ''));
   const earnPerDay = all.cfTotal.perDay;
   return h('div', { class: 'kpis kpis-home span-12' },
     plan ? blueTile(italicValue(dress(tile('Investable balance', money(plan.current), h('span', null, `Invested so far ${money(plan.done)} this month`), { tone: plan.current >= 0 ? 'inv' : 'neg', sheet: () => showInvestable(plan) }), { kind: 'invest', ico: 'db' })))
@@ -774,7 +775,8 @@ function thisMonth(data, all, months) {
   const spend = mc.spend.filter((x) => x.amount > 0).sort((a, b) => b.amount - a.amount);
   const spent = mc.totalSpent, exp = mc.totalExpected, rec = mc.totalReceived;
   const bud = mc.budget, manual = mc.budgetSource === 'manual';   // the budget: interest income expected, or the amount fixed in Categories & budgets
-  const pend = Math.max(0, exp - rec), left = bud - spent;
+  const poolS = mc.poolSpent || 0, spentB = spent - poolS;   // spending from yearly pools is not measured against the monthly budget
+  const pend = Math.max(0, exp - rec), left = bud - spentB;
   const got = exp ? Math.min(1, rec / exp) : 0;
   const bar = (v, of, cls) => h('div', { class: 'pbar ' + (cls || '') }, h('span', { style: { width: (of > 0 ? Math.min(100, Math.max(0, (v / of) * 100)) : 0).toFixed(1) + '%' } }));
   const asOf = new Date(all.asOf), day = asOf.getUTCDate(), dim = new Date(Date.UTC(asOf.getUTCFullYear(), asOf.getUTCMonth() + 1, 0)).getUTCDate();
@@ -782,14 +784,14 @@ function thisMonth(data, all, months) {
   // the usual pace for this month (see spendpace.js); null when the month is over or there is not enough history
   const up = isCur && day < dim - 3 ? usualPace(data, mc, selMonth, day) : null;
   const pos = (v) => (bud > 0 ? Math.min(100, Math.max(0, (v / bud) * 100)).toFixed(1) + '%' : '0%');
-  const fillCls = spent > bud ? 'bad' : spent > rec ? 'warn' : '';
+  const fillCls = spentB > bud ? 'bad' : spentB > rec ? 'warn' : '';
   const budget = h('div', { class: 'md-hero' },
     h('span', { class: 'md-lab' }, left >= 0 ? 'Left to spend' : 'Over budget by'),
     h('b', { class: 'md-big ' + tone(left) }, money(Math.abs(left))),
-    h('div', { class: 'md-track', role: 'img', 'aria-label': `Spent ${money(spent)} of ${money(bud)} budget` + (up ? `; usually ${money(up.expectedNow)} by now` : '') },
-      bar(spent, bud, fillCls),
+    h('div', { class: 'md-track', role: 'img', 'aria-label': `Spent ${money(spentB)} of ${money(bud)} budget` + (up ? `; usually ${money(up.expectedNow)} by now` : '') },
+      bar(spentB, bud, fillCls),
       up && bud > 0 ? h('i', { class: 'md-tick', style: { left: pos(up.expectedNow) }, title: `Usual by day ${day}: ${money(up.expectedNow)}` }) : null),
-    h('div', { class: 'md-sub' }, h('span', null, `Spent ${money(spent)}`, bud ? ` · ${pct(spent / bud, 0)}` : ''), h('span', { title: manual ? 'Budget set by you in Categories & budgets' : 'Budget: the interest income expected this month' }, `Budget ${money(bud)}`, manual ? h('small', null, ' (set)') : null)),
+    h('div', { class: 'md-sub' }, h('span', null, `Spent ${money(spentB)}`, bud ? ` · ${pct(spentB / bud, 0)}` : '', poolS > 0.5 ? h('small', { title: 'Spent from yearly pools: counted under Yearly pools, not against this month’s budget' }, ` + ${money(poolS)} yearly pools`) : null), h('span', { title: manual ? 'Budget set by you in Categories & budgets' : 'Budget: the interest income expected this month' }, `Budget ${money(bud)}`, manual ? h('small', null, ' (set)') : null)),
     h('div', { class: 'md-stats' },
       h('div', null, h('small', null, 'Received'), h('b', { class: 'pos' }, money(rec))),
       pend > 0 ? h('div', null, h('small', null, 'To receive'), h('b', { class: 'warn' }, money(pend))) : null,
@@ -855,14 +857,20 @@ function thisMonth(data, all, months) {
       return { ...l, status: statusOf(l.used), expected, ahead: br.frac > 0 && br.frac < 1 && l.spent > expected * 1.1 && l.spent > 0 };
     });
   } catch (e) { br = null; bl = []; }
-  const hasBudgets = bl.length > 0;
+  const poolList = yearPools(data, all.asOf);
+  const hasBudgets = bl.length > 0 || poolList.length > 0;
+  const poolBlock = poolList.length ? h('div', { class: 'md-pools' }, h('h4', { class: 'md-sub-h' }, 'Yearly pools · ' + all.asOf.slice(0, 4)),
+    rowList(poolList.map((p) => ({ title: p.name, sub: `${money(p.spent)} of ${money(p.budget)} used · ${pct(p.used, 0)}`, value: p.left >= 0 ? money(p.left) : money(-p.left), tone: p.used > 1 ? 'neg' : '', valueSub: p.left >= 0 ? h('span', { class: p.used >= 0.8 ? 'warn' : 'pos' }, 'left this year') : h('span', { class: 'neg' }, 'over for the year'),
+      extra: h('span', { class: 'md-bmeter ' + (p.used > 1 ? 'bad' : p.used >= 0.8 ? 'warn' : 'good') }, h('i', { style: { width: Math.min(100, p.used * 100).toFixed(1) + '%' } })), onClick: () => expenseDrill(selMonth, p.name, [p.name]) }))),
+    h('p', { class: 'md-hint' }, 'Spend these any time in the year. They are not divided by month and are not part of the monthly budget above.')) : null;
   const budgetPanel = hasBudgets ? (() => {
+    if (!bl.length) return h('div', { class: 'md-panel md-budget' }, h('h3', { class: 'md-ph' }, 'Budget'), poolBlock, h('p', { class: 'md-hint' }, h('a', { href: '#/flow/categories' }, 'Edit budgets ›')));
     const tb = bl.reduce((a, l) => a + l.budget, 0), ts = bl.reduce((a, l) => a + l.spent, 0), used = tb ? ts / tb : 0, left = tb - ts;
     const nOver = bl.filter((l) => l.status === 'over').length, nNear = bl.filter((l) => l.status === 'near').length;
     const tone2 = statusOf(used) === 'over' ? 'bad' : statusOf(used) === 'near' ? 'warn' : 'good';
     const pastDay = isCur ? Math.min(day, br.days) : null;
     const inList = new Set(bl.map((l) => l.name.toLowerCase()));
-    const noMonthly = [...br.lines.filter((l) => !inList.has(l.name.toLowerCase())).map((l) => ({ name: l.name, spent: l.spent })), ...br.unbudgeted].filter((x) => x.spent > 0.5).sort((x, y) => y.spent - x.spent);
+    const noMonthly = [...br.lines.filter((l) => !inList.has(l.name.toLowerCase()) && !l.yearlyOnly).map((l) => ({ name: l.name, spent: l.spent })), ...br.unbudgeted].filter((x) => x.spent > 0.5).sort((x, y) => y.spent - x.spent);
     const noMonthlyTotal = noMonthly.reduce((a, x) => a + x.spent, 0);
     return h('div', { class: 'md-panel md-budget' }, h('h3', { class: 'md-ph' }, 'Budget'),
       h('p', { class: 'big-line' }, h('b', { class: left < 0 ? 'neg' : '' }, money(ts)), h('span', { class: 'muted' }, ` of ${money(tb)} monthly budgets · ${pct(used, 0)} used`)),
@@ -881,6 +889,7 @@ function thisMonth(data, all, months) {
         onClick: () => expenseDrill(selMonth, l.name, [l.name]),
       }))),
       noMonthlyTotal > 0.5 ? h('p', { class: 'md-hint' }, `${money(noMonthlyTotal)} went on categories with no monthly budget (${noMonthly.slice(0, 3).map((u) => u.name).join(', ')}${noMonthly.length > 3 ? ' and more' : ''}).`) : null,
+      poolBlock,
       h('p', { class: 'md-hint' }, 'Tap a line for details · ', h('a', { href: '#/flow/categories' }, 'Edit budgets ›')));
   })() : null;
   if (!hasBudgets && monthTab === 'budget') monthTab = 'expenses';
@@ -888,9 +897,25 @@ function thisMonth(data, all, months) {
   // phones: one list at a time under the tabs (Income, Expenses, Budget); wide screens: all lists at once (income under the summary, expenses beside it, budget below) so there is no empty space
   return section(isCur ? 'This month in detail' : monthLabel(selMonth) + ' in detail', h('div', { class: 'md' + (hasBudgets ? ' has-budget' : ''), 'data-tab': monthTab },
     budget, others,
-    h('div', { class: 'md-tabs', role: 'tablist' }, tabBtn('income', 'Income', compact(rec)), tabBtn('expenses', 'Expenses', compact(spent)), hasBudgets ? tabBtn('budget', 'Budget', pct(bl.reduce((a, l) => a + l.spent, 0) / bl.reduce((a, l) => a + l.budget, 0), 0)) : null),
+    h('div', { class: 'md-tabs', role: 'tablist' }, tabBtn('income', 'Income', compact(rec)), tabBtn('expenses', 'Expenses', compact(spent)), hasBudgets ? tabBtn('budget', 'Budget', bl.length ? pct(bl.reduce((a, l) => a + l.spent, 0) / bl.reduce((a, l) => a + l.budget, 0), 0) : 'Pools') : null),
     incomePanel, h('div', { class: 'md-right' }, expensePanel, budgetPanel)),
     [monthPicker(months, selMonth, (m) => { selMonth = m; rerender(); })]);
+}
+
+/** This year: interest income against spending, the shortfall, and ways to earn more interest. Read-only. */
+function yearCard(data, all) {
+  let o, ideas = [];
+  try { o = yearOutlook(data, all); ideas = interestIdeas(data, all, o); } catch (e) { return null; }
+  if (!(o.interest > 0) && !(o.spending > 0)) return null;
+  const short = o.gap > 0, ok = Math.min(100, o.covered * 100);
+  const line = (label, v, cls) => h('div', null, h('small', null, label), h('b', { class: cls || '' }, money(v)));
+  return section(`${o.year}: interest income vs spending`, h('div', { class: 'yc' },
+    h('p', { class: 'big-line' }, short ? h('b', { class: 'neg' }, money(o.gap)) : h('b', { class: 'pos' }, money(-o.gap)), h('span', { class: 'muted' }, short ? ' short this year' : ' to spare this year'), h('span', { class: 'muted' }, ` · interest covers ${pct(Math.min(o.covered, 9.99), 0)} of spending`)),
+    h('div', { class: 'pbar ' + (short ? 'warn' : '') }, h('span', { style: { width: ok.toFixed(1) + '%' } })),
+    h('div', { class: 'md-stats yc-stats' }, line('Interest so far', o.interestSoFar, 'pos'), line('Still to come', o.interestToCome), line('Spent so far', o.spentSoFar), line('Still to spend', o.regularLeft + o.poolLeft)),
+    h('p', { class: 'note' }, `Spending for the rest of the year = ${money(o.usual)} a regular month × ${o.monthsLeft} ${o.monthsLeft === 1 ? 'month' : 'months'} left${o.poolLeft > 0.5 ? ` + ${money(o.poolLeft)} still unspent in yearly pools` : ''}.` + (o.hasHistory ? '' : ' Too little history yet, so the usual month is rough.')),
+    ideas.length ? h('div', { class: 'yc-ideas' }, h('h4', { class: 'md-sub-h' }, short ? 'Ways to close the gap' : 'Ways to earn more interest'), h('ul', { class: 'hc-moves' }, ideas.map((i) => h('li', null, h('b', null, i.title), ' ', i.text))),
+      h('p', { class: 'note' }, 'Rule-based ideas from your own holdings, not investment advice. Check safety and lock-in before moving money.')) : null));
 }
 
 /** Money paid for a company or a friend that has not come back yet. Not spending; shown only while something is due. */
@@ -916,6 +941,7 @@ export function render() {
     hero(all, series, ox), tiles(all, data, C.monthCashflow(data, all, C.monthKey(all.asOf)), plan),
     place(actionCentre(data, all), 'span-12'),
     place(thisMonth(data, all, months), 'span-12'),
+    place(yearCard(data, all), 'span-12'),
     place(claimCard(data), 'span-12'),
     place(investCard(data, all, plan), 'span-12'),
     place(allocation(all), 'span-7'), place(riskAlerts(all), 'span-5'),

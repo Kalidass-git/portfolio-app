@@ -26,7 +26,7 @@ function categoryForm(cat, presetKind) {
       { key: 'name', label: 'Name', type: 'text', required: true, readonly: locked, hint: locked ? 'The Home screen groups its summary by this name, so the name cannot change. You can still change the budget.' : '' },
       { key: 'kind', label: 'Counts as', type: 'select', options: CAT.KINDS.map((k) => ({ value: k.key, label: k.one })), hint: 'Expenses are what you spent. Investments are money you put away, not spent. “Not counted” is for moves between your own accounts and cash withdrawals.' },
       { key: 'budget', label: 'Monthly budget (₹, optional)', type: 'number', showIf: (v) => v.kind === 'expense', hint: 'The Expenses screen shows how much of this is used each month.', half: true },
-      { key: 'yearlyBudget', label: 'Yearly budget (₹, optional)', type: 'number', showIf: (v) => v.kind === 'expense', half: true, hint: 'You can set either or both. You are warned on Expenses when 80% of a budget is used.' },
+      { key: 'yearlyBudget', label: 'Yearly budget (₹, optional)', type: 'number', showIf: (v) => v.kind === 'expense', half: true, hint: 'On its own this is a yearly pool: spend it any time in the year, it is not divided by month. You are warned when 80% of a budget is used.' },
       ...(!isNew && !locked && others.length ? [{ key: 'mergeInto', label: 'Merge into another category (optional)', type: 'select', options: [{ value: '', label: 'Keep as it is' }, ...others], hint: 'Moves all its entries and auto-fill rules into the chosen category and removes this one.' }] : []),
     ],
     onSave: (v) => {

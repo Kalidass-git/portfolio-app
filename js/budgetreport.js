@@ -37,13 +37,21 @@ const budgeted = (data) => categoryList(data).filter((c) => c.kind === 'expense'
 /** One month against the budgets. */
 export function monthReport(data, month, asOf, idx = spendIndex(data)) {
   const frac = monthFrac(month, asOf), sp = idx.byMonth.get(month) || new Map(), cats = budgeted(data), days = daysIn(month);
+  const yr = month.slice(0, 4);
   const lines = cats.map((c) => {
-    const budget = monthBudget(c), spent = sp.get(lc(c.name)) || 0, used = budget ? spent / budget : 0;
+    const yearlyOnly = !(c.budget > 0), spent = sp.get(lc(c.name)) || 0;
+    if (yearlyOnly) {
+      // a yearly pool: spent any time in the year, judged against the whole year (what is spent in the year up to this month), never a twelfth of it
+      let ytd = 0; for (const [m, mp] of idx.byMonth) if (m.slice(0, 4) === yr && m <= month) ytd += mp.get(lc(c.name)) || 0;
+      const used = ytd / c.yearlyBudget;
+      return { name: c.name, key: lc(c.name), budget: c.yearlyBudget, spent, ytd, left: c.yearlyBudget - ytd, used, status: statusOf(used), expected: 0, projected: spent, ahead: false, yearlyOnly: true };
+    }
+    const budget = monthBudget(c), used = budget ? spent / budget : 0;
     const expected = budget * frac, projected = frac > 0 && frac < 1 && Number(asOf.slice(8, 10)) >= 5 ? spent / frac : spent;
-    return { name: c.name, key: lc(c.name), budget, spent, left: budget - spent, used, status: statusOf(used), expected, projected, ahead: frac > 0 && frac < 1 && spent > expected * 1.1 && spent > 0, yearlyOnly: !(c.budget > 0) };
+    return { name: c.name, key: lc(c.name), budget, spent, left: budget - spent, used, status: statusOf(used), expected, projected, ahead: frac > 0 && frac < 1 && spent > expected * 1.1 && spent > 0, yearlyOnly: false };
   }).sort((a, b) => b.used - a.used);
   const keys = new Set(lines.map((l) => l.key));
-  const sum = (f) => lines.reduce((a, l) => a + f(l), 0), budget = sum((l) => l.budget), spent = sum((l) => l.spent);
+  const sum = (f) => lines.reduce((a, l) => a + f(l), 0), budget = sum((l) => (l.yearlyOnly ? 0 : l.budget)), spent = sum((l) => (l.yearlyOnly ? 0 : l.spent));   // yearly pools are not part of the monthly budget
   const unbudgeted = [...sp].filter(([k]) => !keys.has(k)).map(([k, amount]) => ({ key: k, name: idx.names.get(k) || k, spent: amount })).sort((a, b) => b.spent - a.spent);
   const daily = []; let cum = 0;
   for (let d = 1; d <= days; d++) {
@@ -65,14 +73,14 @@ export function yearReport(data, year, asOf, idx = spendIndex(data)) {
     const cells = months.map((m, i) => {
       const spent = (idx.byMonth.get(m) || new Map()).get(lc(c.name)) || 0, f = monthFrac(m, asOf); cum += spent;
       // monthly budget: this month's spending against it. yearly only: money spent so far in the year against the share of the year allowed so far
-      const allowed = yearlyOnly ? yb * (i + f) / 12 : mb * f, used = f === 0 ? null : yearlyOnly ? (allowed ? cum / allowed : null) : (mb ? spent / mb : null);
+      const allowed = yearlyOnly ? yb : mb * f, used = f === 0 ? null : yearlyOnly ? (allowed ? cum / allowed : null) : (mb ? spent / mb : null);   // a yearly pool: the share of the whole year's amount used so far
       return { month: m, spent, used, future: f === 0, cur: m === cur, cum };
     });
     const spent = cells.reduce((a, x) => a + x.spent, 0), projected = elapsed > 0 ? spent / elapsed * 12 : spent;
     return { name: c.name, key: lc(c.name), monthly: c.budget || 0, yearly: c.yearlyBudget || 0, budget: yb, spent, left: yb - spent, used: yb ? spent / yb : 0, status: statusOf(yb ? spent / yb : 0), projected, yearlyOnly, cells };
   }).sort((a, b) => b.used - a.used);
   const totals = months.map((m, i) => {
-    const f = monthFrac(m, asOf), spent = rows.reduce((a, r) => a + r.cells[i].spent, 0), budget = rows.reduce((a, r) => a + monthBudget({ budget: r.monthly, yearlyBudget: r.yearly }), 0);
+    const f = monthFrac(m, asOf), spent = rows.reduce((a, r) => a + (r.yearlyOnly ? 0 : r.cells[i].spent), 0), budget = rows.reduce((a, r) => a + (r.yearlyOnly ? 0 : monthBudget({ budget: r.monthly, yearlyBudget: r.yearly })), 0);   // yearly pools are left out of the month by month totals
     return { month: m, spent, budget, used: f === 0 || !budget ? null : spent / (budget * f), future: f === 0, cur: m === cur, full: spent / (budget || 1) };
   });
   const budget = rows.reduce((a, r) => a + r.budget, 0), spent = rows.reduce((a, r) => a + r.spent, 0);

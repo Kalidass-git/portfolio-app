@@ -48,6 +48,14 @@ A no-build installable web app (PWA, vanilla ES modules) that mirrors the owner'
 ## Release process
 Branch off `origin/main` (`release-X.Y.Z`), change files, bump `js/version.js` and the cache name in `sw.js`, add notes at the top of the release list in `docs/SETUP.md`, push, and open a PR to `main` with `gh api` (GraphQL is blocked). The owner merges it. Always base on `origin/main` so stacked PRs do not leave main behind.
 
+## State after 9.16.0
+
+- `categories.js poolNames()`: a pool is an expense with `yearlyBudget > 0` and no monthly `budget`. No new field. `calc.js monthCashflow` returns `poolSpent` (counted spending that came from pools); Home's hero and tile measure `totalSpent - poolSpent` against the monthly budget.
+- `budgetreport.js`: a pool line has `yearlyOnly`, `ytd`, `budget` = the yearly amount, and is left out of the monthly totals; the year heat map cell is the share of the whole year used so far. tests/budgetreport.test.mjs was updated for this.
+- `js/yearcover.js` (NOT yearplan.js, that name is the older projection module): `pools()`, `yearOutlook()` (interest so far + to come against spending so far + usual regular month × months left + unspent pools), `interestIdeas()` (idle cash, maturing, lowest-paying, gap). Assumptions are in `ASSUMED`. Home `yearCard()`.
+- `js/budgetsuggest.js`: `suggestBudgets()`; the button is in the Set budgets dialog (views/budgetreport.js). tests/yearcover.test.mjs.
+- The passive plan (passive.js) still uses monthly + yearly/12 on purpose (income needed per month).
+
 ## State after 9.15.0
 
 - `js/health.js` (pure): `RULES` (all thresholds in one place), `assess()` (verdict + action + reasons), `moves()`, `overview()`, `trendFrom()`, `sma()`. tests/health.test.mjs needs no data file.

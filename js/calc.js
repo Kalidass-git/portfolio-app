@@ -1,7 +1,7 @@
 // Pure financial calculations. No DOM, no network: runs in the browser and in Node tests.
 // Every formula here mirrors the workbook (Portfolio_2026_Lite.xlsx); sheet/cell references are noted in comments.
 
-import { kindOf } from './categories.js';
+import { kindOf, poolNames } from './categories.js';
 import { liveParity } from './goldlive.js';
 import { budgetFor } from './budget.js';
 import { modelFlows } from './epf.js';
@@ -753,9 +753,10 @@ export function monthCashflow(data, all, month) {
   const lifestyle = { name: 'Clothes, entertainment, vacation, gifts', amount: 0, cats: [] };   // kept so older code keeps working: the four lines are now separate lines above
   const notCounted = sum(lines.filter((l) => !l.counted), (l) => l.amount);
   const totalSpent = sum(spend, (x) => x.amount);
+  const pools = poolNames(data), poolSpent = sum(spend.filter((l) => l.cats.some((c) => pools.has(String(c).toLowerCase()))), (x) => x.amount);   // spending from yearly pools: counted in the month's spending, but not against the monthly budget
   // The budget to judge spending against: the interest income expected (default) or the amount the owner fixed for the month. Expected, received and spent above are not touched.
   const bud = budgetFor(data, month, monthKey(all.asOf), totalExpected);
-  return { month, income, totalExpected, totalReceived, yetToReceive: totalExpected - totalReceived, spend, lines, lifestyle, totalSpent, remaining: totalExpected - totalSpent, others, notCounted, budget: bud.amount, budgetSource: bud.source };
+  return { month, income, totalExpected, totalReceived, yetToReceive: totalExpected - totalReceived, spend, lines, lifestyle, totalSpent, poolSpent, remaining: totalExpected - totalSpent, others, notCounted, budget: bud.amount, budgetSource: bud.source };
 }
 
 /**
