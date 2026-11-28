@@ -2198,3 +2198,7 @@ body.pi-dragging, body.pi-dragging * { cursor: grabbing !important; user-select:
 .hc-moves { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; font-size: .9rem; line-height: 1.4; } .hc-moves li { padding-left: 12px; border-left: 3px solid var(--line, #d9dee3); }
 .yc-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; } @media (min-width: 720px) { .yc-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .yc-stats > div { border: 0; padding: 0; } .md-sub-h { margin: 14px 0 6px; font-size: .95rem; }
+
+.md-stabs { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; width: fit-content; max-width: 100%; margin: 0 0 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 3px; }
+.md-stab { display: flex; align-items: baseline; justify-content: center; gap: 8px; border: 0; background: none; font: inherit; font-weight: 700; color: var(--muted); padding: 7px 16px; border-radius: 9px; cursor: pointer; }
+.md-stab small { font-weight: 600; font-size: .8rem; } .md-stab.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.14); } .md-stab:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }

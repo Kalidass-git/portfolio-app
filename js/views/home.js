@@ -768,6 +768,7 @@ function toReceiveExtras(data, all, mc) {
       ? h('div', { class: 'bank-gap' }, rowList([{ title: 'Income Bond · not in the bank yet', sub: `due so far ${money(bankGap.due)}, bank shows ${money(bankGap.credited)} · tap for details`, onClick: () => bankGapDialog(bankGap), value: h('span', { class: 'warn' }, money(bankGap.gap)), valueSub: h('span', { class: 'warn' }, 'to check') }]))
       : h('p', { class: 'note bank-ok' }, '✓ Bank check: ', money(bankGap.due), ' of bond interest due so far, ', money(bankGap.credited), ' credited. ', h('a', { href: 'javascript:void 0', onclick: (e) => { e.preventDefault(); bankGapDialog(bankGap); } }, 'Details'))) : null);
 }
+let budgetSub = 'monthly';   // Budget list: monthly budgets or yearly pools (kept for this visit)
 let monthTab = 'expenses';   // which list shows under the month summary on Home (kept for this visit)
 function thisMonth(data, all, months) {
   const mc = C.monthCashflow(data, all, selMonth);
@@ -862,7 +863,7 @@ function thisMonth(data, all, months) {
   const poolBlock = poolList.length ? h('div', { class: 'md-pools' }, h('h4', { class: 'md-sub-h' }, 'Yearly pools · ' + all.asOf.slice(0, 4)),
     rowList(poolList.map((p) => ({ title: p.name, sub: `${money(p.spent)} of ${money(p.budget)} used · ${pct(p.used, 0)}`, value: p.left >= 0 ? money(p.left) : money(-p.left), tone: p.used > 1 ? 'neg' : '', valueSub: p.left >= 0 ? h('span', { class: p.used >= 0.8 ? 'warn' : 'pos' }, 'left this year') : h('span', { class: 'neg' }, 'over for the year'),
       extra: h('span', { class: 'md-bmeter ' + (p.used > 1 ? 'bad' : p.used >= 0.8 ? 'warn' : 'good') }, h('i', { style: { width: Math.min(100, p.used * 100).toFixed(1) + '%' } })), onClick: () => expenseDrill(selMonth, p.name, [p.name]) }))),
-    h('p', { class: 'md-hint' }, 'Spend these any time in the year. They are not divided by month and are not part of the monthly budget above.')) : null;
+    h('p', { class: 'md-hint' }, 'Spend these any time in the year. They are not divided by month and are not part of the monthly budget.')) : null;
   const budgetPanel = hasBudgets ? (() => {
     if (!bl.length) return h('div', { class: 'md-panel md-budget' }, h('h3', { class: 'md-ph' }, 'Budget'), poolBlock, h('p', { class: 'md-hint' }, h('a', { href: '#/flow/categories' }, 'Edit budgets ›')));
     const tb = bl.reduce((a, l) => a + l.budget, 0), ts = bl.reduce((a, l) => a + l.spent, 0), used = tb ? ts / tb : 0, left = tb - ts;
@@ -872,7 +873,7 @@ function thisMonth(data, all, months) {
     const inList = new Set(bl.map((l) => l.name.toLowerCase()));
     const noMonthly = [...br.lines.filter((l) => !inList.has(l.name.toLowerCase()) && !l.yearlyOnly).map((l) => ({ name: l.name, spent: l.spent })), ...br.unbudgeted].filter((x) => x.spent > 0.5).sort((x, y) => y.spent - x.spent);
     const noMonthlyTotal = noMonthly.reduce((a, x) => a + x.spent, 0);
-    return h('div', { class: 'md-panel md-budget' }, h('h3', { class: 'md-ph' }, 'Budget'),
+    const monthlyEls = [
       h('p', { class: 'big-line' }, h('b', { class: left < 0 ? 'neg' : '' }, money(ts)), h('span', { class: 'muted' }, ` of ${money(tb)} monthly budgets · ${pct(used, 0)} used`)),
       bar(ts, tb, tone2),
       h('p', { class: 'md-bsum' }, left >= 0 ? h('span', { class: 'pos' }, `${money(left)} left`) : h('span', { class: 'neg' }, `over by ${money(-left)}`),
@@ -889,7 +890,12 @@ function thisMonth(data, all, months) {
         onClick: () => expenseDrill(selMonth, l.name, [l.name]),
       }))),
       noMonthlyTotal > 0.5 ? h('p', { class: 'md-hint' }, `${money(noMonthlyTotal)} went on categories with no monthly budget (${noMonthly.slice(0, 3).map((u) => u.name).join(', ')}${noMonthly.length > 3 ? ' and more' : ''}).`) : null,
-      poolBlock,
+    ];
+    const both = !!poolBlock, sub = both && budgetSub === 'yearly' ? 'yearly' : 'monthly', pTot = poolList.reduce((a, x) => a + x.budget, 0);
+    const subBtn = (id, text, val) => h('button', { type: 'button', role: 'tab', class: 'md-stab' + (sub === id ? ' on' : ''), 'aria-selected': String(sub === id), onclick: () => { budgetSub = id; rerender(); } }, text, h('small', null, val));
+    return h('div', { class: 'md-panel md-budget' }, h('h3', { class: 'md-ph' }, 'Budget'),
+      both ? h('div', { class: 'md-stabs', role: 'tablist' }, subBtn('monthly', 'Monthly', pct(used, 0)), subBtn('yearly', 'Yearly', pct(pTot ? poolList.reduce((a, x) => a + x.spent, 0) / pTot : 0, 0))) : null,
+      ...(sub === 'yearly' ? [poolBlock] : monthlyEls),
       h('p', { class: 'md-hint' }, 'Tap a line for details · ', h('a', { href: '#/flow/categories' }, 'Edit budgets ›')));
   })() : null;
   if (!hasBudgets && monthTab === 'budget') monthTab = 'expenses';
