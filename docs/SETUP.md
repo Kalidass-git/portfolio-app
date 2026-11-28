@@ -150,6 +150,10 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 9.18.0 – Home: Budget has Monthly | Yearly sub tabs
+
+- In **This month in detail → Budget**, the monthly budget lines and the yearly pools are now sub tabs: **Monthly** (shown first) and **Yearly**. Each tab shows how much is used overall. When you have only one kind, it shows without the tabs. Phone and desktop. Layout only, no data change.
+
 ## Release 9.17.0 – Home: This month in detail, no empty gaps
 
 - On wide screens the summary and **Income** stay on the left, and **Expenses | Budget** are sub tabs on the right. Expenses show first; tap Budget for the budget lines and yearly pools. This removes the blank band the budget addition had left under the summary.

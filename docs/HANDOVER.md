@@ -48,6 +48,10 @@ A no-build installable web app (PWA, vanilla ES modules) that mirrors the owner'
 ## Release process
 Branch off `origin/main` (`release-X.Y.Z`), change files, bump `js/version.js` and the cache name in `sw.js`, add notes at the top of the release list in `docs/SETUP.md`, push, and open a PR to `main` with `gh api` (GraphQL is blocked). The owner merges it. Always base on `origin/main` so stacked PRs do not leave main behind.
 
+## State after 9.18.0
+
+- home.js `budgetPanel`: `monthlyEls` (array) or `poolBlock` chosen by module state `budgetSub` ('monthly' default) with `.md-stabs` / `.md-stab` buttons; the tabs show only when both monthly budgets and yearly pools exist.
+
 ## State after 9.17.0
 
 - Home `thisMonth` markup: `.md > .md-left(.md-sum(hero, others), tabs, income) + .md-right(.md-rtabs, expense, budget)`. Phones: `.md-left`/`.md-sum`/`.md-right` are `display: contents`, the Income | Expenses | Budget tabs show, `.md-rtabs` is hidden. From 900px: two columns, `.md-rtabs` (Expenses | Budget, shares the `monthTab` variable; Income tab value shows Expenses) switches the right side. Do not tie left and right rows together in the grid again: it caused the white gap.
