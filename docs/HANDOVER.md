@@ -48,6 +48,10 @@ A no-build installable web app (PWA, vanilla ES modules) that mirrors the owner'
 ## Release process
 Branch off `origin/main` (`release-X.Y.Z`), change files, bump `js/version.js` and the cache name in `sw.js`, add notes at the top of the release list in `docs/SETUP.md`, push, and open a PR to `main` with `gh api` (GraphQL is blocked). The owner merges it. Always base on `origin/main` so stacked PRs do not leave main behind.
 
+## State after 9.19.0
+
+- home.js `yearCard`: headline + two `.yc-row` bars (`.yc-seg` segments, widths relative to max(interest, spending)) + top 2 `short` ideas (new field in `interestIdeas`, js/yearcover.js) + `<details class="yc-more">` with the long text. CSS block at the end of app.css.
+
 ## State after 9.18.0
 
 - home.js `budgetPanel`: `monthlyEls` (array) or `poolBlock` chosen by module state `budgetSub` ('monthly' default) with `.md-stabs` / `.md-stab` buttons; the tabs show only when both monthly budgets and yearly pools exist.

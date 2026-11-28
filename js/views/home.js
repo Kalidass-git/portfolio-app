@@ -915,15 +915,20 @@ function yearCard(data, all) {
   let o, ideas = [];
   try { o = yearOutlook(data, all); ideas = interestIdeas(data, all, o); } catch (e) { return null; }
   if (!(o.interest > 0) && !(o.spending > 0)) return null;
-  const short = o.gap > 0, ok = Math.min(100, o.covered * 100);
-  const line = (label, v, cls) => h('div', null, h('small', null, label), h('b', { class: cls || '' }, money(v)));
+  const short = o.gap > 0, scale = Math.max(o.interest, o.spending, 1), w = (v) => Math.max(0, (v / scale) * 100).toFixed(2) + '%';
+  const seg = (cls, v, label) => (v > 0.5 ? h('i', { class: 'yc-seg ' + cls, style: { width: w(v) }, title: `${label}: ${money(v)}` }) : null);
+  const row = (label, total, sub, ...segs) => h('div', { class: 'yc-row' }, h('div', { class: 'yc-head' }, h('b', null, label), h('b', null, money(total))), h('div', { class: 'yc-track', role: 'img', 'aria-label': `${label} ${money(total)}. ${sub}` }, ...segs), h('small', { class: 'yc-sub' }, sub));
+  const top = ideas.filter((i) => i.short).sort((a, b) => (b.gain || 0) - (a.gain || 0)).slice(0, 2);
   return section(`${o.year}: interest income vs spending`, h('div', { class: 'yc' },
-    h('p', { class: 'big-line' }, short ? h('b', { class: 'neg' }, money(o.gap)) : h('b', { class: 'pos' }, money(-o.gap)), h('span', { class: 'muted' }, short ? ' short this year' : ' to spare this year'), h('span', { class: 'muted' }, ` · interest covers ${pct(Math.min(o.covered, 9.99), 0)} of spending`)),
-    h('div', { class: 'pbar ' + (short ? 'warn' : '') }, h('span', { style: { width: ok.toFixed(1) + '%' } })),
-    h('div', { class: 'md-stats yc-stats' }, line('Interest so far', o.interestSoFar, 'pos'), line('Still to come', o.interestToCome), line('Spent so far', o.spentSoFar), line('Still to spend', o.regularLeft + o.poolLeft)),
-    h('p', { class: 'note' }, `Spending for the rest of the year = ${money(o.usual)} a regular month × ${o.monthsLeft} ${o.monthsLeft === 1 ? 'month' : 'months'} left${o.poolLeft > 0.5 ? ` + ${money(o.poolLeft)} still unspent in yearly pools` : ''}.` + (o.hasHistory ? '' : ' Too little history yet, so the usual month is rough.')),
-    ideas.length ? h('div', { class: 'yc-ideas' }, h('h4', { class: 'md-sub-h' }, short ? 'Ways to close the gap' : 'Ways to earn more interest'), h('ul', { class: 'hc-moves' }, ideas.map((i) => h('li', null, h('b', null, i.title), ' ', i.text))),
-      h('p', { class: 'note' }, 'Rule-based ideas from your own holdings, not investment advice. Check safety and lock-in before moving money.')) : null));
+    h('p', { class: 'big-line' }, h('b', { class: short ? 'neg' : 'pos' }, money(Math.abs(o.gap))), h('span', { class: 'muted' }, short ? ' short this year' : ' to spare this year'), h('span', { class: 'muted' }, ` · interest covers ${pct(Math.min(o.covered, 9.99), 0)}`)),
+    row('Interest', o.interest, `${money(o.interestSoFar)} received · ${money(o.interestToCome)} to come`, seg('yc-in', o.interestSoFar, 'Received so far'), seg('yc-in-l', o.interestToCome, 'Still to come'), short ? seg('yc-gap', o.gap, 'Shortfall') : null),
+    row('Spending', o.spending, `${money(o.spentSoFar)} spent · ${money(o.regularLeft + o.poolLeft)} still to spend`, seg('yc-sp', o.spentSoFar, 'Spent so far'), seg('yc-sp-l', o.regularLeft, 'Regular months left'), seg('yc-sp-p', o.poolLeft, 'Unspent in yearly pools'), !short ? seg('yc-spare', -o.gap, 'To spare') : null),
+    h('div', { class: 'yc-key', 'aria-hidden': 'true' }, h('span', null, h('i', { class: 'k-in' }), 'interest'), h('span', null, h('i', { class: 'k-sp' }), 'spending'), h('span', null, h('i', { class: 'k-l' }), 'still to come'), o.poolLeft > 0.5 ? h('span', null, h('i', { class: 'k-p' }), 'yearly pools') : null, h('span', null, h('i', { class: short ? 'k-gap' : 'k-spare' }), short ? 'shortfall' : 'to spare')),
+    top.length ? h('ul', { class: 'yc-ideas' }, top.map((i) => h('li', null, i.short))) : null,
+    h('details', { class: 'yc-more' }, h('summary', null, 'How this is worked out' + (ideas.length ? ' and all ideas' : '')),
+      h('p', { class: 'note' }, `Spending for the rest of the year = ${money(o.usual)} a regular month × ${o.monthsLeft} ${o.monthsLeft === 1 ? 'month' : 'months'} left${o.poolLeft > 0.5 ? ` + ${money(o.poolLeft)} still unspent in yearly pools` : ''}.` + (o.hasHistory ? '' : ' Too little history yet, so the usual month is rough.')),
+      ideas.length ? h('ul', { class: 'hc-moves' }, ideas.map((i) => h('li', null, h('b', null, i.title), ' ', i.text))) : null,
+      ideas.length ? h('p', { class: 'note' }, 'Rule-based ideas from your own holdings, not investment advice. Check safety and lock-in before moving money.') : null)));
 }
 
 /** Money paid for a company or a friend that has not come back yet. Not spending; shown only while something is due. */

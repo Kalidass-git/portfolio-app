@@ -2202,3 +2202,15 @@ body.pi-dragging, body.pi-dragging * { cursor: grabbing !important; user-select:
 .md-stabs { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; width: fit-content; max-width: 100%; margin: 0 0 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 3px; }
 .md-stab { display: flex; align-items: baseline; justify-content: center; gap: 8px; border: 0; background: none; font: inherit; font-weight: 700; color: var(--muted); padding: 7px 16px; border-radius: 9px; cursor: pointer; }
 .md-stab small { font-weight: 600; font-size: .8rem; } .md-stab.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.14); } .md-stab:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+
+/* Home: year card (interest vs spending) as two bars */
+.yc-row { margin: 10px 0 14px; } .yc-head { display: flex; justify-content: space-between; align-items: baseline; font-size: .95rem; }
+.yc-track { display: flex; height: 18px; margin: 5px 0 4px; border-radius: 9px; overflow: hidden; background: var(--line-2); } .yc-seg { display: block; height: 100%; flex: none; }
+.yc-in { background: var(--pos); } .yc-in-l { background: color-mix(in srgb, var(--pos) 38%, transparent); }
+.yc-sp { background: var(--s2); } .yc-sp-l { background: color-mix(in srgb, var(--s2) 38%, transparent); } .yc-sp-p { background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--s2) 55%, transparent) 0 4px, color-mix(in srgb, var(--s2) 22%, transparent) 4px 8px); }
+.yc-gap { background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--neg) 60%, transparent) 0 4px, transparent 4px 8px); outline: 1.5px dashed var(--neg); outline-offset: -1.5px; } .yc-spare { background: transparent; outline: 1.5px dashed var(--pos); outline-offset: -1.5px; }
+.yc-sub { color: var(--muted); font-size: .82rem; }
+.yc-key { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: .78rem; color: var(--muted); margin: 0 0 10px; } .yc-key span { display: inline-flex; align-items: center; gap: 5px; } .yc-key i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.k-in { background: var(--pos); } .k-sp { background: var(--s2); } .k-l { background: color-mix(in srgb, var(--muted) 35%, transparent); } .k-p { background: repeating-linear-gradient(45deg, var(--muted) 0 2px, transparent 2px 4px); } .k-gap { outline: 1.5px dashed var(--neg); outline-offset: -1.5px; } .k-spare { outline: 1.5px dashed var(--pos); outline-offset: -1.5px; }
+.yc-ideas { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; font-size: .9rem; } .yc-ideas li { padding-left: 12px; border-left: 3px solid var(--s3); }
+.yc-more > summary { cursor: pointer; font-size: .88rem; color: var(--brand); font-weight: 600; padding: 6px 0; } .yc-more[open] > summary { margin-bottom: 4px; }
