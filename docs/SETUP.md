@@ -150,6 +150,10 @@ Settings has **Download backup** and **Restore from file**. Drive also keeps 30 
 - **Gold page:** a "Gold today" tile with the rupee and percentage change and the change per gram.
 - **Today's change** shows the percentage everywhere (Home tile and drop-down, Gold).
 
+## Release 9.19.0 – Home: interest income vs spending as two bars
+
+The year card on Home used to be a wall of text. Now it shows one headline (short or to spare, and how much interest covers), two bars on the same scale (Interest: received and still to come; Spending: spent, regular months left, yearly pools left), the shortfall as a dashed red end on the interest bar or the spare as a dashed green end on the spending bar, and the two best ideas as one line each. "How this is worked out and all ideas" opens the full sentence, every idea and the not-advice note. No data changes.
+
 ## Release 9.18.0 – Home: Budget has Monthly | Yearly sub tabs
 
 - In **This month in detail → Budget**, the monthly budget lines and the yearly pools are now sub tabs: **Monthly** (shown first) and **Yearly**. Each tab shows how much is used overall. When you have only one kind, it shows without the tabs. Phone and desktop. Layout only, no data change.

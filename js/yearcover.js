@@ -50,19 +50,19 @@ export function interestIdeas(data, all, o = yearOutlook(data, all)) {
   const rate = Math.max(A.fdRate, all.cfTotal && all.cfTotal.capital > 0 ? o.rate : 0);
   if (idle >= A.idleMin) {
     const put = Math.floor(idle / 5000) * 5000, gain = put * (rate - A.savingsRate);
-    out.push({ id: 'idle', title: 'Idle cash in bank accounts', gain: r0(gain),
+    out.push({ id: 'idle', title: 'Idle cash in bank accounts', gain: r0(gain), short: `Move ₹${grp(put)} of idle cash to a deposit: about +₹${grp(gain)} a year`,
       text: `Your bank accounts hold ₹${grp(all.cashTotal)}, about ${(all.cashTotal / Math.max(1, o.usual)).toFixed(1)} months of spending. Keeping ${A.bufferMonths} months (₹${grp(buffer)}) is enough; ₹${grp(put)} in a deposit at about ${pc(rate)} instead of a savings account (about ${pc(A.savingsRate)}) would add about ₹${grp(gain)} a year.` });
   }
   const today = all.asOf, until = new Date(Date.parse(today) + A.maturingDays * 864e5).toISOString().slice(0, 10);
   const fixed = [...all.bonds.map((b) => ({ ...b, kind: 'Bond' })), ...all.fds.map((f) => ({ ...f, kind: 'Deposit' }))].filter((x) => x.maturityDate && x.principal > 0 && x.rate > 0);
   const soon = fixed.filter((x) => x.maturityDate >= today && x.maturityDate <= until).sort((a, b) => (a.maturityDate < b.maturityDate ? -1 : 1));
-  if (soon.length) out.push({ id: 'maturing', title: 'Maturing soon: plan the reinvestment', text: `${soon.slice(0, 3).map((x) => `${x.name} (₹${grp(x.principal)}, ${pc(x.rate)}, ${x.maturityDate})`).join('; ')}${soon.length > 3 ? ` and ${soon.length - 3} more` : ''}. Money that waits after maturity earns savings-account interest only.` });
+  if (soon.length) out.push({ id: 'maturing', title: 'Maturing soon: plan the reinvestment', short: `${soon.length} ${soon.length === 1 ? 'holding matures' : 'holdings mature'} within ${A.maturingDays} days: plan the reinvestment`, text: `${soon.slice(0, 3).map((x) => `${x.name} (₹${grp(x.principal)}, ${pc(x.rate)}, ${x.maturityDate})`).join('; ')}${soon.length > 3 ? ` and ${soon.length - 3} more` : ''}. Money that waits after maturity earns savings-account interest only.` });
   const best = fixed.reduce((m, x) => Math.max(m, x.rate), 0), low = fixed.filter((x) => x.rate <= best - A.rateGap && x.maturityDate > today).sort((a, b) => (b.principal * (best - b.rate)) - (a.principal * (best - a.rate)));
   if (best > 0 && low.length) {
     const x = low[0], gain = x.principal * (best - x.rate);
-    out.push({ id: 'lowyield', title: 'Lowest-paying holding', gain: r0(gain), text: `${x.name} pays ${pc(x.rate)} on ₹${grp(x.principal)}, while your best pays ${pc(best)}. When it matures (${x.maturityDate}), a similar rate would add about ₹${grp(gain)} a year. Check the safety of the issuer first: a higher rate usually means more risk.` });
+    out.push({ id: 'lowyield', title: 'Lowest-paying holding', gain: r0(gain), short: `${x.name} pays ${pc(x.rate)}, your best ${pc(best)}: about +₹${grp(gain)} a year at maturity`, text: `${x.name} pays ${pc(x.rate)} on ₹${grp(x.principal)}, while your best pays ${pc(best)}. When it matures (${x.maturityDate}), a similar rate would add about ₹${grp(gain)} a year. Check the safety of the issuer first: a higher rate usually means more risk.` });
   }
-  if (o.gap > 0) out.push({ id: 'gap', title: 'To close the gap', text: `A shortfall of ₹${grp(o.gap)} needs about ₹${grp(o.extraCapital)} more in interest-paying holdings at about ${pc(o.rate)}, or about ₹${grp(o.extraPerMonth)} a month less spending for the rest of the year.` });
+  if (o.gap > 0) out.push({ id: 'gap', title: 'To close the gap', short: `Close the gap: ₹${grp(o.extraCapital)} more in interest holdings, or ₹${grp(o.extraPerMonth)} less spending a month`, text: `A shortfall of ₹${grp(o.gap)} needs about ₹${grp(o.extraCapital)} more in interest-paying holdings at about ${pc(o.rate)}, or about ₹${grp(o.extraPerMonth)} a month less spending for the rest of the year.` });
   return out;
 }
 const grp = (n) => Math.round(n).toLocaleString('en-IN');

@@ -39,6 +39,7 @@ ok(Array.isArray(ideas) && (o.gap <= 0 || ideas.some((i) => i.id === 'gap')), 'i
 const rich = { ...data, ledger: [...ledger, e(id++, '2026-01-01', 'Salary', 0, 2000000)], categoryList: data.categoryList };
 const allR = C.computeAll(rich, { asOf: '2026-11-15' }), idle = YP.interestIdeas(rich, allR).find((i) => i.id === 'idle');
 ok(idle && idle.gain > 0 && /deposit/.test(idle.text), 'idle cash idea with a yearly gain');
+ok(idle && /₹/.test(idle.short || '') && ideas.every((i) => typeof i.short === 'string' && i.short.length < 140), 'every idea has a one-line short text');
 const small = YP.interestIdeas(data, all).find((i) => i.id === 'idle'); ok(!small || small.gain >= 0, 'no idle idea without idle cash');
 // suggestions
 const sug = BS.suggestBudgets(data, '2026-11-15');
