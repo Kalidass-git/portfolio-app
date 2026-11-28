@@ -894,11 +894,13 @@ function thisMonth(data, all, months) {
   })() : null;
   if (!hasBudgets && monthTab === 'budget') monthTab = 'expenses';
   const tabBtn = (id, text, val) => h('button', { type: 'button', role: 'tab', class: 'md-tab md-tab-' + id + (monthTab === id ? ' on' : ''), 'aria-selected': monthTab === id ? 'true' : 'false', onclick: () => { monthTab = id; rerender(); } }, text, h('small', null, val));
-  // phones: one list at a time under the tabs (Income, Expenses, Budget); wide screens: all lists at once (income under the summary, expenses beside it, budget below) so there is no empty space
+  // phones: one list at a time under the tabs (Income, Expenses, Budget); wide screens: summary and Income on the left, Expenses | Budget as sub tabs on the right (Expenses first)
   return section(isCur ? 'This month in detail' : monthLabel(selMonth) + ' in detail', h('div', { class: 'md' + (hasBudgets ? ' has-budget' : ''), 'data-tab': monthTab },
-    budget, others,
+    h('div', { class: 'md-left' }, h('div', { class: 'md-sum' }, budget, others),
     h('div', { class: 'md-tabs', role: 'tablist' }, tabBtn('income', 'Income', compact(rec)), tabBtn('expenses', 'Expenses', compact(spent)), hasBudgets ? tabBtn('budget', 'Budget', bl.length ? pct(bl.reduce((a, l) => a + l.spent, 0) / bl.reduce((a, l) => a + l.budget, 0), 0) : 'Pools') : null),
-    incomePanel, h('div', { class: 'md-right' }, expensePanel, budgetPanel)),
+    incomePanel), h('div', { class: 'md-right' },
+      hasBudgets ? h('div', { class: 'md-rtabs', role: 'tablist' }, [['expenses', 'Expenses', compact(spent)], ['budget', 'Budget', bl.length ? pct(bl.reduce((a, l) => a + l.spent, 0) / bl.reduce((a, l) => a + l.budget, 0), 0) : 'Pools']].map(([id, text, val]) => h('button', { type: 'button', role: 'tab', class: 'md-rtab' + ((monthTab === 'budget') === (id === 'budget') ? ' on' : ''), 'aria-selected': String((monthTab === 'budget') === (id === 'budget')), onclick: () => { monthTab = id; rerender(); } }, text, h('small', null, val)))) : null,
+      expensePanel, budgetPanel)),
     [monthPicker(months, selMonth, (m) => { selMonth = m; rerender(); })]);
 }
 

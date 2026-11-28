@@ -1761,13 +1761,23 @@ body.tm-lock { overflow: hidden; }
 .md-bsum { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 8px; font-weight: 700; }
 .md-bmeter { display: block; height: 5px; margin-top: 6px; border-radius: 3px; background: color-mix(in srgb, var(--brand) 12%, var(--line-2)); overflow: hidden; }
 .md-bmeter i { display: block; height: 100%; border-radius: 3px; background: var(--pos); } .md-bmeter.warn i { background: var(--warn); } .md-bmeter.bad i { background: var(--neg); }
+.md-left, .md-sum { display: contents; }
 @media (min-width: 900px) {
-  .md { display: grid; grid-template-columns: minmax(300px, 400px) 1fr; column-gap: 24px; row-gap: 14px; align-items: start; }
-  .md-hero { grid-column: 1; grid-row: 1; } .md-other { grid-column: 1; grid-row: 2; margin-top: 0; }
+  /* wide screens: summary and income stack in the left column, expenses and budget in the right, so no column waits on another row (no empty gaps) */
+  .md { display: grid; grid-template-columns: minmax(300px, 400px) 1fr; column-gap: 24px; align-items: start; }
+  .md-left { display: flex; flex-direction: column; gap: 14px; grid-column: 1; min-width: 0; } .md-sum { display: flex; flex-direction: column; gap: 10px; } .md-other { margin-top: 0; }
   .md-tabs { display: none; } .md-ph { display: block; }
   .md[data-tab] .md-income, .md[data-tab] .md-expense, .md[data-tab] .md-budget { display: block; }
-  .md-income { grid-column: 1; grid-row: 3; }
-  .md-right { grid-column: 2; grid-row: 1 / span 3; display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+  .md-right { grid-column: 2; display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+}
+.md-rtabs { display: none; }
+@media (min-width: 900px) {
+  /* wide screens: Expenses | Budget sub tabs on the right (Expenses shown first); Income stays on the left */
+  .md-rtabs { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; width: fit-content; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 3px; }
+  .md-rtab { display: flex; align-items: baseline; gap: 8px; border: 0; background: none; font: inherit; font-weight: 700; color: var(--muted); padding: 8px 16px; border-radius: 9px; cursor: pointer; }
+  .md-rtab small { font-weight: 600; font-size: .8rem; } .md-rtab.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.14); } .md-rtab:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  .md-right .md-ph { display: none; }
+  .md[data-tab="budget"] .md-expense, .md:not([data-tab="budget"]) .md-budget { display: none; }
 }
 
 /* usual-spending marks on the expense bars: a tick at the usual amount, bar coloured by how the line compares */
